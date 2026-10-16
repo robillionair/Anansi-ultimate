@@ -52,8 +52,8 @@ test('State and foundation configuration reference real, trackable files', () =>
   assert.equal(state.schemaVersion, 1);
   assert.equal(state.activeMilestone, 'M0');
   assert.match(state.activeTask, /^M0\.\d+$/);
-  assert.match(state.nextTask, /^M0\.\d+$/);
-  assert.equal(state.milestoneComplete, false);
+  assert.match(state.nextTask, /^M(?:[0-9]|1[0-5])\.\d+$/);
+  assert.equal(typeof state.milestoneComplete, 'boolean');
   assert.equal(state.productImplementation, 'not started');
   for (const p of [state.plan, ...state.evidence]) assert.ok(fs.existsSync(path.join(root, p)), p);
   execFileSync('git', ['cat-file', '-e', `${state.lastVerifiedCommit}^{commit}`], { cwd: root });

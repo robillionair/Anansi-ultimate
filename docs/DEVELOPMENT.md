@@ -1,6 +1,6 @@
 # Development contract
 
-Current scope is M0.2 validation and foundation CI. There is no runnable desktop/web application, database migration, product test suite or installer. Follow the approved M0 plan; M0.2 owns root script repair/CI and M0.3 owns independent backup/restore. Do not interpret empty recursive script success as a product build.
+M0 repository foundation and source recovery are complete. Next is M1 detailed planning; implementation has not started. There is no runnable desktop/web application, database migration, product test suite or installer. Follow the approved M0 plan; M0.2 owns root script repair/CI and M0.3 owns independent backup/restore. Do not interpret empty recursive script success as a product build.
 
 ## Foundation setup and verification
 
@@ -20,7 +20,7 @@ git hash-object docs/MASTER_SPEC.md
 
 The version command must report 11.25.0 before lockfile operations. If absent, `npm exec --yes --package=pnpm@11.25.0 -- pnpm --version` and the same prefix with `install --frozen-lockfile --ignore-scripts` select an exact package without editing the global installation. This fallback is documented, not exercised in this environment. Resolve new dependencies only in an approved task and commit the manager-generated lockfile. Lifecycle scripts are disabled for foundation installs; revisit approved dependency build requirements when real packages are introduced.
 
-Root `pnpm check` / `pnpm check:docs` validate documentation, state and evidence paths; `pnpm test` runs all foundation tests and `pnpm test:docs` runs documentation fixtures. `pnpm build` exits 1 explaining that the product build is unavailable until M1. `pnpm backup:source` exits 1 without creating anything until M0.3 implements source recovery. The legacy validate-planning entrypoint delegates to validate-docs and preserves its self-test. Foundation CI runs Windows/Linux using exact Node/pnpm versions, SHA-pinned actions and contents:read permission. No Rust/frontend build is claimed.
+Root `pnpm check` / `pnpm check:docs` validate documentation, state and evidence paths; `pnpm test` runs all foundation tests and `pnpm test:docs` runs documentation fixtures. `pnpm build` exits 1 explaining that the product build is unavailable until M1. `pnpm backup:source -Destination <absolute-new-bundle-path>` creates and verifies an independent source backup from a clean committed checkout; `pnpm test:backup` runs the PowerShell safeguard/restore checks. See RECOVERY_AND_BACKUP.md for required parent paths and limits. The legacy validate-planning entrypoint delegates to validate-docs and preserves its self-test. Foundation CI runs Windows/Linux using exact Node/pnpm versions, SHA-pinned actions and contents:read permission. No Rust/frontend build is claimed.
 
 ## Observed toolchain and remediation
 
@@ -51,7 +51,7 @@ Text defaults to UTF-8 and LF; Windows .cmd/.bat use CRLF via attributes. Binary
 
 Keep real user workspaces under ignored root workspaces/local-data directories or outside the repository. Root backups/artifacts, database files, private keys, credentials, local npm configuration and environment files are ignored. Safe `.env.example`/`.env.*.example`, source, lockfiles and synthetic Markdown/JSON/SQL fixtures stay trackable. Database binary fixtures are deliberately ignored: prefer synthetic JSON/SQL generation inputs; any future binary fixture exception requires review. Ignore rules are prevention, not secret scanning or encryption; never force-add secrets or real memories. Root scripts must stay in tracked scripts, never in an ignored data directory.
 
-The state file records task completion, the next task and the prior verified checkpoint. A following metadata commit records a newly published checkpoint to avoid embedding a commit's own SHA. See [recovery](RECOVERY.md). M0 remains incomplete until CI/protection and independent source restore are actually verified.
+The state file records task completion, the next task and the prior verified checkpoint. A following metadata commit records a newly published checkpoint to avoid embedding a commit's own SHA. See [recovery](RECOVERY.md). M0 verification evidence includes actual CI/protection and independent source restore. New milestones require new tested checkpoints and backups.
 
 ## Publishing after M0.2
 

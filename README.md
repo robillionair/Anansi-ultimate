@@ -4,7 +4,7 @@ ANANSI is a local-first intelligence workspace planned for a shared Tauri deskto
 
 ## Repository status
 
-This repository contains the planning foundation and completed M0.1 hygiene plus M0.2 validation/Windows-Linux CI and branch protection. Next is M0.3 in [the approved M0 plan](plans/PHASE-000-foundation.md). Product implementation and desktop/web launch are not yet available. See [development instructions](docs/DEVELOPMENT.md), [the roadmap](docs/ROADMAP.md) and [coverage ledger](docs/SPEC_COVERAGE.md).
+M0 foundation is complete: repository hygiene, validation, Windows/Linux CI, branch protection and verified independent source recovery. The annotated m0-foundation-verified checkpoint marks the boundary. Next is detailed M1 planning and toolchain readiness; no M1 implementation has started. See [the completed M0 plan](plans/PHASE-000-foundation.md). Product implementation and desktop/web launch are not yet available. See [development instructions](docs/DEVELOPMENT.md), [the roadmap](docs/ROADMAP.md) and [coverage ledger](docs/SPEC_COVERAGE.md).
 
 ## Workspace layout
 

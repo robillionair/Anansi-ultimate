@@ -1,10 +1,10 @@
 # M0 — Source protection, repository integrity and recovery
 
-Status: approved implementation plan under the user's 2026-10-16 reconciliation instruction. Planning is complete; M0 implementation is not complete. This approval defines scope, not evidence of passed acceptance tests. Do not start M1 automatically.
+Status: approved implementation plan under the user's 2026-10-16 reconciliation instruction. M0.1-M0.3 implementation and verification are complete; see docs/evidence/M0.md and the annotated m0-foundation-verified completion checkpoint. This approval defines scope, not evidence of passed acceptance tests. Do not start M1 automatically.
 
 ## Objectives and scope
 
-Establish a recoverable, verifiable development repository before substantial product functionality (master sections 4, 5, 6, 71, 76, 82, 83, 88). Preserve the existing Git history, master specification, identity and remote. Prepare shared desktop/browser workspace boundaries without creating placeholder product features. Finish one numbered task at a time and checkpoint it; M0.1 is complete with evidence in docs/evidence/M0.md; M0.2 validation/CI/protection is complete with evidence in docs/evidence/M0.md; first unfinished task is M0.3. M0 remains incomplete.
+Establish a recoverable, verifiable development repository before substantial product functionality (master sections 4, 5, 6, 71, 76, 82, 83, 88). Preserve the existing Git history, master specification, identity and remote. Prepare shared desktop/browser workspace boundaries without creating placeholder product features. Finish one numbered task at a time and checkpoint it; M0.1 is complete with evidence in docs/evidence/M0.md; M0.2 validation/CI/protection is complete with evidence in docs/evidence/M0.md; M0.3 independent restore and CI is verified. No unfinished implementation task remains in M0; stop before M1.
 
 ## Dependencies and preflight
 
