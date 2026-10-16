@@ -48,3 +48,5 @@ Milestones now follow the approved canonical roadmap and master section 82. Plan
 | AN-033 | Export/ownership and synthetic provenance | M2–M15 | planned | Open-format exports, labels, seeded replay, no synthetic-to-confirmed promotion |
 
 Section-level coverage is complete for planning; bullet-level acceptance coverage is required at each detailed-plan gate. No rows are verified by documentation validation.
+
+M1.0 planning/readiness evidence is in docs/evidence/M1.md. Missing local Windows/Rust prerequisites block native implementation verification; this audit advances no product requirement to verified. The current M1 authorization does not alter later milestone ownership or the retained 90-section coverage ledger.

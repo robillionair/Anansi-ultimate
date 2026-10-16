@@ -1,12 +1,13 @@
 {
   "schemaVersion": 1,
-  "activeMilestone": "M0",
-  "activeTask": "M0.3",
-  "plan": "plans/PHASE-000-foundation.md",
-  "implementationStatus": "M0.1-M0.3 verified; foundation complete at annotated m0-foundation-verified checkpoint",
-  "lastVerifiedCommit": "d80bb19c2a4a5f253b0ad17f4af9dcdfc322b9cf",
+  "activeMilestone": "M1",
+  "activeTask": "M1.0",
+  "plan": "plans/PHASE-001-runnable-shell.md",
+  "implementationStatus": "M1.0 detailed plan and read-only readiness audit complete; M1.1 native prerequisites missing",
+  "lastVerifiedCommit": "268533e4c16bbf4693fd4e4981354a4f5f7eb273",
   "evidence": [
-    "docs/evidence/M0.md"
+    "docs/evidence/M0.md",
+    "docs/evidence/M1.md"
   ],
   "blockers": [
     {
@@ -14,7 +15,7 @@
       "detail": "Rust/Cargo not on PATH; Windows C++ build tools not found; registered Windows SDK headers not found in probed location. Recheck/install prerequisites before native work."
     }
   ],
-  "nextTask": "M1.0",
+  "nextTask": "M1.1",
   "productImplementation": "not started",
-  "milestoneComplete": true
+  "milestoneComplete": false
 }

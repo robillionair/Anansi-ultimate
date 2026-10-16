@@ -50,8 +50,8 @@ test('Git attributes distinguish text, Windows command files and binary assets',
 test('State and foundation configuration reference real, trackable files', () => {
   const state = JSON.parse(read('project-state.json'));
   assert.equal(state.schemaVersion, 1);
-  assert.equal(state.activeMilestone, 'M0');
-  assert.match(state.activeTask, /^M0\.\d+$/);
+  assert.match(state.activeMilestone, /^M(?:[0-9]|1[0-5])$/);
+  assert.ok(state.activeTask.startsWith(state.activeMilestone + '.'));
   assert.match(state.nextTask, /^M(?:[0-9]|1[0-5])\.\d+$/);
   assert.equal(typeof state.milestoneComplete, 'boolean');
   assert.equal(state.productImplementation, 'not started');

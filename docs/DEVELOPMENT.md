@@ -58,3 +58,9 @@ The state file records task completion, the next task and the prior verified che
 Master requires both Foundation checks with admin enforcement and no force push/deletion. Publish a codex/ task branch first and wait for both checks on its exact commit. Fast-forward master only with that checked SHA; never bypass or disable protection. If branch rules require a pull request, create one and merge only after required checks pass. Keep commits based on current master to satisfy strict checks. All status/evidence changes are checked too. An administrator can inspect the actual settings at the repository branch settings page; any future permissions failure remains an explicit blocker.
 
 The current validator intentionally supports repository Markdown inline/image/reference links and GitHub-style heading fragments outside fenced/inline code. Use simple Markdown links; it is not a full renderer. State validation checks required keys, milestone/task IDs, SHA format, plan/evidence existence and blocker structure; tests separately verify the checkpoint exists in Git history.
+
+## M1.0 toolchain commands
+
+Run `pnpm doctor:toolchain` (foundation readiness, exit 0 only when Git/Node/pinned pnpm are usable) and `pnpm doctor:native` (exit 1 until Windows native prerequisites are detected). Use these explicit script names: pnpm has its own built-in doctor command. Reports include read-only discovery and buildVerified=false; they never install anything or prove a native compile/runtime. Follow the M1 plan for actual installer/toolchain verification before product work.
+
+The current local probe finds Rust MSVC/Cargo/C++/SDK gaps; WebView2 directories alone do not verify embedding. Candidate frontend package versions were queried but not installed; M1.2 must pin and prove the actual combination. The user continuation authorizes M1 phase work; prior M0-only stop instructions are historical.

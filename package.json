@@ -5,11 +5,13 @@
   "packageManager": "pnpm@11.25.0",
   "scripts": {
     "check": "node scripts/validate-docs.mjs",
-    "test": "node --test tests/docs-validation.test.mjs tests/repository-hygiene.test.mjs && pnpm test:backup",
+    "test": "node --test tests/docs-validation.test.mjs tests/repository-hygiene.test.mjs tests/doctor.test.mjs && pnpm test:backup",
     "build": "node scripts/unavailable.mjs build",
     "check:docs": "node scripts/validate-docs.mjs",
     "test:docs": "node --test tests/docs-validation.test.mjs",
     "backup:source": "pwsh -NoProfile -File scripts/backup-source.ps1",
-    "test:backup": "pwsh -NoProfile -File tests/backup-source.Tests.ps1"
+    "test:backup": "pwsh -NoProfile -File tests/backup-source.Tests.ps1",
+    "doctor:native": "node scripts/doctor.mjs --require-native",
+    "doctor:toolchain": "node scripts/doctor.mjs"
   }
 }

@@ -1,6 +1,6 @@
 # ANANSI Ultimate — Approved Development Roadmap
 
-Approved planning baseline: user reconciliation instruction, 2026-10-16. Product scope remains [MASTER_SPEC.md](MASTER_SPEC.md); its section 82 numbering is retained. Only M0 has an approved detailed implementation plan. Later plans are tracked design tasks, not permission to start another milestone. Complete M0 and stop.
+Approved planning baseline: user reconciliation instruction, 2026-10-16. Product scope remains [MASTER_SPEC.md](MASTER_SPEC.md); its section 82 numbering is retained. M0 is verified complete. The user continuation authorizes M1, whose detailed implementation plan now exists. Work one gated task at a time; stop before M2. Later milestone plans remain tracked design tasks.
 
 | Milestone | Scope retained | Plan |
 |---|---|---|
