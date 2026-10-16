@@ -26,3 +26,7 @@ If a documentation checkpoint records the previous verified implementation commi
 Installer verification uses a fresh external temporary target and refuses existing ANANSI registration/remembered locations. A failed verification retains its exact target and installer-verification.json. Inspect that record and compare the registered InstallLocation and installed payload hash before running only the generated test uninstaller. Never remove a real application, edit its registration or delete data merely to unblock the test. Successful verification removes only its originally absent, test-owned remembered-location product key after exact location readback. Private workspace fixtures remain outside source.
 
 Development installer artifacts are rebuildable and are excluded from source bundles. CI release artifacts retain installer SHA256 and payload/build manifests for 14 days; they are unsigned development builds. No API service, model downloads, updater or signed-release guarantee is bundled. M2 requires its separate detailed plan and approval; do not start it at the M1 completion boundary.
+
+## M1 completion boundary
+
+M1 development desktop/browser foundation is verified complete; see [M1.5 evidence](evidence/M1-5.md). The completion tag is m1-desktop-foundation-verified, applied to the checked completion record after protected publication. Source and tag readback plus a final independent bundle are verified at that boundary. M2.0 remains a planning/approval gate only, not an implementation authorization.

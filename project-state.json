@@ -3,8 +3,8 @@
   "activeMilestone": "M1",
   "activeTask": "M1.5",
   "plan": "plans/PHASE-001-runnable-shell.md",
-  "implementationStatus": "M1.5 installer implemented; local acceptance and checkpoint certification in progress",
-  "lastVerifiedCommit": "710ad9ba8499d40ce06a47b350a457e945828010",
+  "implementationStatus": "M1 complete: installed development NSIS/native-browser workflows, CI release artifact and independent recovery verified; stop before M2",
+  "lastVerifiedCommit": "7eebcd0a7f6977a951757a65ff90a794b7c2867b",
   "evidence": [
     "docs/evidence/M0.md",
     "docs/evidence/M1.md",
@@ -17,5 +17,5 @@
   "nextTask": "M2.0",
   "nextTaskScope": "Detailed planning and approval only; M2 has not started",
   "productImplementation": "M1 development NSIS and shared browser/workspace foundation; memory, AI and signed production release remain later milestones",
-  "milestoneComplete": false
+  "milestoneComplete": true
 }
