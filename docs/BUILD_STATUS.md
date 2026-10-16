@@ -34,4 +34,4 @@ No product behavior, provider, migration, security control, installer or applica
 - Master Git blob hash before/after: `b95eae4a3813fb2cd87c00360fcdd9b2489cedec`.
 - Added a dependency-free planning audit at scripts/validate-planning.mjs for reproducible evidence. It is limited to reconciliation checks; M0.2 still owns broader state/evidence validation, test integration and CI.
 - Product tests/builds, application behavior, provider calls, GitHub CI, branch protection and independent backup restore: NOT RUN in this documentation task.
-- Checkpoint/push result will be recorded after successful publication; no M0 milestone tag is appropriate yet.
+- Verified planning checkpoint: d07f926, committed and successfully pushed to origin/master. This following status-only commit records that checkpoint; no M0 milestone tag is appropriate yet.
