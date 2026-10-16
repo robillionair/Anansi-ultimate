@@ -2,9 +2,9 @@
 
 ## Current state — 2026-10-16
 
-M0 and M1.0–M1.2 are verified complete. M1.3 implements local workspace create/open and durable reduced-motion settings through the actual Windows desktop and authenticated browser adapters. Local acceptance passes; exact-checkpoint CI and protected publication are pending. M1 remains incomplete and has no completion tag.
+M0 and M1.0–M1.3 are verified complete. M1.3 implements local workspace create/open and durable reduced-motion settings through the actual Windows desktop and authenticated browser adapters. Checkpoint 0f58a9f passed all three CI jobs in run 38902347007 and was published to protected master. M1 remains incomplete and has no completion tag.
 
-Prior verified checkpoint: 8024285db8f7d4ad0cc9bcb606914922a93692de. The completion record will reference the verified implementation SHA after CI to avoid self-reference. See [M1.3 evidence](evidence/M1-3.md), [M1.2 history](evidence/M1-2.md) and [active plan](../plans/PHASE-001-runnable-shell.md).
+Verified implementation checkpoint: 0f58a9f310294fb2dda3ce49c21b1814bb6d14b1. This completion record references the prior verified implementation SHA to avoid self-reference. See [M1.3 evidence](evidence/M1-3.md), [M1.2 history](evidence/M1-2.md) and [active plan](../plans/PHASE-001-runnable-shell.md). Independent source-bundle restore matched HEAD/tree; restored docs, frozen installation, types and seven client tests passed.
 
 ## M1.3 acceptance and verification
 

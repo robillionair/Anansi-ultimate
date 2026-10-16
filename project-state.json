@@ -3,8 +3,8 @@
   "activeMilestone": "M1",
   "activeTask": "M1.3",
   "plan": "plans/PHASE-001-runnable-shell.md",
-  "implementationStatus": "M1.3 implemented; local acceptance verified, checkpoint CI/publication pending",
-  "lastVerifiedCommit": "8024285db8f7d4ad0cc9bcb606914922a93692de",
+  "implementationStatus": "M1.3 complete: real native/browser workspace and settings workflows, all three CI jobs and protected publication verified",
+  "lastVerifiedCommit": "0f58a9f310294fb2dda3ce49c21b1814bb6d14b1",
   "evidence": [
     "docs/evidence/M0.md",
     "docs/evidence/M1.md",
