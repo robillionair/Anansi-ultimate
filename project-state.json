@@ -4,7 +4,7 @@
   "activeTask": "M1.1",
   "plan": "plans/PHASE-001-runnable-shell.md",
   "implementationStatus": "M1.1 complete: local Rust MSVC compile, link and executable output verified; M1.2 not started",
-  "lastVerifiedCommit": "9ad07ac10cc3f2130d9736cef854436bd63bbf70",
+  "lastVerifiedCommit": "7125d9cb329d0cbe19c50a5178f18e8f42a5fa80",
   "evidence": [
     "docs/evidence/M0.md",
     "docs/evidence/M1.md"
