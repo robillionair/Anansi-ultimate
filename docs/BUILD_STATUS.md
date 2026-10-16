@@ -2,9 +2,9 @@
 
 ## Current state — 2026-10-16
 
-M0 and M1.0–M1.3 are verified complete. M1.4 adds the shared first-run flow, navigation, privacy review, skippable AI setup and durable intent/motion settings. Local application acceptance passes; exact-checkpoint CI and protected publication are pending. M1 remains incomplete and has no completion tag.
+M0 and M1.0–M1.4 are verified complete. M1.4 adds the shared first-run flow, navigation, privacy review, skippable AI setup and durable intent/motion settings. Checkpoint 4f29dbf passed all three jobs in CI run 38908703118 and was published to protected master. M1 remains incomplete and has no completion tag.
 
-Prior verified checkpoint: 84e1d12c003c5ee3c56ada11e0ad16430ce8b159. A completion record will reference the verified implementation SHA after CI to avoid self-reference. See [M1.4 evidence](evidence/M1-4.md), [M1.3 history](evidence/M1-3.md) and [active plan](../plans/PHASE-001-runnable-shell.md).
+Verified implementation checkpoint: 4f29dbf596ce143cdd53556022373c4704be1143. This completion record references the prior verified implementation SHA to avoid self-reference. Independent source-bundle restore matched HEAD/tree and passed restored docs, frozen installation, types and 11 client/component tests. See [M1.4 evidence](evidence/M1-4.md), [M1.3 history](evidence/M1-3.md) and [active plan](../plans/PHASE-001-runnable-shell.md).
 
 ## M1.4 acceptance and verification
 

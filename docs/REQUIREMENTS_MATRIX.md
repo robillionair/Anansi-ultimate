@@ -35,7 +35,7 @@ Milestones now follow the approved canonical roadmap and master section 82. Plan
 | ID | Additional retained scope | Milestone | Status | Required evidence |
 |---|---|---|---|---|
 | AN-022 | Source protection, CI, repository recovery | M0 | verified | docs/evidence/M0.md: hygiene, Windows/Linux CI, protected master and actual independent bundle/restore with matching HEAD/tree and passing checks; annotated completion checkpoint |
-| AN-023 | Onboarding, local workspace, navigation/settings | M1 | in progress | M1.3 workspace/settings persistence and permissions: [evidence](evidence/M1-3.md); onboarding/navigation/provider skip remain M1.4 |
+| AN-023 | Onboarding, local workspace, navigation/settings | M1 | in progress | M1.3 storage/permissions and M1.4 local onboarding/navigation/AI skip: [evidence](evidence/M1-4.md); complete M1 installer certification remains M1.5; hardware/providers retained under M3/M5 |
 | AN-024 | Universal projects, artifacts, versioning/rollback | M2, M6, M7, M12 | planned | Durable cross-module project round trip and rollback |
 | AN-025 | All document formats, OCR/transcription, async ingestion | M13 | planned | Format fixtures, provenance, resumability/cancellation and privacy tests |
 | AN-026 | Zero-Cost Lock, routing, budgets/disclosure | M3, M4, M5; all inference milestones | planned | Deny unknown/paid fallback and unauthorized data; disclosure fixtures |

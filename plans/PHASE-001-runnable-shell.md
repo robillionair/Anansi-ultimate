@@ -1,6 +1,6 @@
 # M1 — Windows desktop .exe and web UI foundation
 
-Status: approved scope under the user's 2026-10-16 continuation instruction after verified M0. M1.0 through M1.3 are verified complete. M1.4 is implemented; its verification/publication state is recorded in build status. Next is M1.5; no full product requirement is complete. Follow one task at a time. Stop at the end of M1 and do not begin M2 automatically.
+Status: approved scope under the user's 2026-10-16 continuation instruction after verified M0. M1.0 through M1.4 are verified complete, including actual application workflows and all three CI jobs; publication is recorded in build status. Next is M1.5; no full product requirement is complete. Follow one task at a time. Stop at the end of M1 and do not begin M2 automatically.
 
 Authority: [master specification](../docs/MASTER_SPEC.md), sections 3–8, 63–64, 70–71, 74–75, 82–84; [roadmap](../docs/ROADMAP.md). M0 completion tag is m0-foundation-verified at 268533e. Preserve all source scope and M0 recovery/CI controls.
 
