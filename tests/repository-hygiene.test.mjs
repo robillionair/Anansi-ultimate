@@ -75,3 +75,9 @@ test('Planning audit resolves the new nested evidence document', () => {
   assert.match(output, /PASS: 7 negative validation fixtures rejected/);
   assert.match(output, /PASS: \d+ Markdown files/);
 });
+test('normal desktop configuration does not enable a remote debugging listener', () => {
+  const config=JSON.parse(read('apps/desktop/src-tauri/tauri.conf.json'));
+  assert.equal(config.app.windows.length,1);
+  for(const window of config.app.windows) assert.equal(window.additionalBrowserArgs,undefined);
+  assert.doesNotMatch(JSON.stringify(config),/remote-debugging/);
+});

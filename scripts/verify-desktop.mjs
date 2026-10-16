@@ -5,14 +5,20 @@ import fs from 'node:fs';
 import path from 'node:path';
 if(process.platform!=='win32')throw Error('Windows desktop verification requires Windows.');
 const port=19323;
-const child=spawn(path.resolve(process.argv[2]||'target/debug/anansi-desktop.exe'),[],{env:{...process.env,WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS:`--remote-debugging-port=${port}`},windowsHide:true,stdio:'ignore'});
+const env={...process.env};
+if(process.argv.includes('--configured-cdp'))delete env.WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS;
+else env.WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=`--remote-debugging-port=${port}`;
+const binary=process.argv.slice(2).find(argument=>!argument.startsWith('--'))||'target/debug/anansi-desktop.exe';
+const child=spawn(path.resolve(binary),[],{env,windowsHide:true,stdio:'ignore'});
 let browser;
 try{
+  let connected=false;
   for(let n=0;n<150;n++){
-    try{const response=await fetch(`http://127.0.0.1:${port}/json/version`);if(response.ok)break;}catch{}
+    try{const response=await fetch(`http://127.0.0.1:${port}/json/version`);if(response.ok){connected=true;break;}}catch{}
     if(child.exitCode!==null)throw Error('Desktop exited before WebView2 startup');
     await new Promise(resolve=>setTimeout(resolve,200));
   }
+  if(!connected)throw Error('Native UI test CDP endpoint unavailable. Elevated hosts require build-desktop-test.mjs; normal launch configuration has no debug flags.');
   browser=await chromium.connectOverCDP(`http://127.0.0.1:${port}`);
   console.log('Native WebView2 version:',browser.version());
   const context=browser.contexts()[0];

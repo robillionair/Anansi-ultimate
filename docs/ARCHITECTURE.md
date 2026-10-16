@@ -49,7 +49,7 @@ Private/sealed memories, credentials, OAuth tokens, MCP tools, local filesystem 
 - The restored specification defines memory metadata/states, privacy classes and an optional audited vault. Exact schema, migration and encryption-library designs remain M1/M2 planning decisions.
 - Exact vector index implementation awaits performance and data-shape requirements.
 - Section 14 lists candidate providers; official authentication/entitlement verification is required in M5. Section 70 specifies Windows Credential Manager and macOS Keychain; no credentials integration is implemented.
-- Tauri command/API parity needs contract tests in the first vertical slice.
+- M1.2 verifies readiness command/API parity. Each subsequent domain command must extend the same contract and cross-adapter tests.
 
 
 ## Reconciled ownership
@@ -60,4 +60,4 @@ M0.1 records [directory and contract ownership](DEVELOPMENT.md). Core owns domai
 
 ## M1.0 domain/transport design gate
 
-The M1 detailed plan chooses authoritative Rust DTOs with generated shared schemas/bindings, an authenticated loopback browser adapter with explicit pairing/ACL and Origin/Host tests, and direct scoped Tauri commands invoking the same core rules. M1.2 implements and tests these boundaries for the readiness command only; see evidence/M1-2.md. A read-only repository toolchain doctor is development infrastructure, not ANANSI Core/product readiness. M1.1 must prove native tool installation/compile-link before M1.2 starts the actual shared application slice.
+The M1 detailed plan chooses authoritative Rust DTOs with generated shared schemas/bindings, an authenticated loopback browser adapter with explicit pairing/ACL and Origin/Host tests, and direct scoped Tauri commands invoking the same core rules. M1.2 implements and tests these boundaries for the readiness command only; see evidence/M1-2.md. A read-only repository toolchain doctor is development infrastructure, not ANANSI Core/product readiness. M1.1 verified native compile/link before M1.2 used that toolchain for the application slice.
