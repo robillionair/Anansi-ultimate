@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-workspaces"
+description = "Choose managed workspaces by ID, create a workspace and update reduced motion in the configured app catalog only"
+commands.allow = ["workspace_command"]

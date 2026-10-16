@@ -1,6 +1,6 @@
 # M1 — Windows desktop .exe and web UI foundation
 
-Status: approved scope under the user's 2026-10-16 continuation instruction after verified M0. M1.0 through M1.2 are verified complete; next is M1.3 workspace/settings; no full product requirement is complete. Follow one task at a time. Stop at the end of M1 and do not begin M2 automatically.
+Status: approved scope under the user's 2026-10-16 continuation instruction after verified M0. M1.0 through M1.2 are verified complete. M1.3 workspace/settings is implemented with local acceptance evidence; checkpoint CI/publication is recorded in build status. Next is M1.4; no full product requirement is complete. Follow one task at a time. Stop at the end of M1 and do not begin M2 automatically.
 
 Authority: [master specification](../docs/MASTER_SPEC.md), sections 3–8, 63–64, 70–71, 74–75, 82–84; [roadmap](../docs/ROADMAP.md). M0 completion tag is m0-foundation-verified at 268533e. Preserve all source scope and M0 recovery/CI controls.
 
@@ -43,6 +43,8 @@ Dependencies: M1.2. Files: crates/core/src/{workspace.rs,storage.rs,settings.rs}
 Design: SQLite versioned forward migration with transactional application, foreign_keys=ON, WAL and busy timeout. Workspace metadata contains stable ID/name/schema version and settings; memory schema belongs to M2. Establish exactly one trusted configured storage root outside source checkout. Desktop chooser must have scoped permission; browser sends a workspace name/ID, never an absolute path. Reject invalid names/traversal, reparse escapes and duplicate/conflicting locations. No destructive reset or overwrite of an existing unknown database. Explicit user action creates workspace; each operation checks the configured root and permissions in Rust. Database schema version mismatch and migration failure must be recoverable without deleting originals.
 
 Acceptance: desktop and browser create and reopen the same workspace via their adapters; workspace IDs/settings survive application/API restart. Test transactional migration rollback, foreign keys, WAL, duplicate creation, invalid names/paths, concurrent opens, read-only directory and corrupt/newer-schema failure. Persist one meaningful setting (for example reduced motion/theme preference) with validation and identical behavior in both clients. No memory CRUD or encrypted-vault claim.
+
+Implementation interpretation: [ADR-0013](../docs/DECISIONS.md#adr-0013-managed-workspace-catalog-and-scoped-id-chooser) records one private SQLite catalog, a managed-ID chooser behind allow-workspaces, trusted process-level root selection and conservative recovery. Additional tracked files are crates/core/src/protect.ps1, packages/ui/src/WorkspacePanel.tsx, crates/api/tests/workspaces.rs, apps/desktop/src-tauri/permissions/workspaces.toml, scripts/verify-workspace.mjs and docs/evidence/M1-3.md. The native/browser verifier executes both adapters and process restarts against isolated synthetic storage. This does not add an arbitrary OS-folder picker or memory schema.
 
 ### M1.4 — First-run, navigation and shared accessible design
 

@@ -81,3 +81,6 @@ jobs:
           Write-Output ('Native test host elevated: ' + $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator))
           node scripts/build-desktop-test.mjs
       - run: node scripts/verify-desktop.mjs --configured-cdp
+      - run: node scripts/cargo.mjs build --locked -p anansi-api
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: node scripts/verify-workspace.mjs --configured-cdp

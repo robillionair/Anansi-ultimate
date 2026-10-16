@@ -1,5 +1,10 @@
 // Generated from Rust schemas.
-import type {Readiness,CommandError,ReadinessRequest} from './generated';
-export function validReadiness(value:unknown):value is Readiness;
+import type {CommandError,CreateWorkspaceRequest,OpenWorkspaceRequest,Readiness,ReadinessRequest,UpdateSettingsRequest,WorkspaceDetails,WorkspaceList} from './generated';
 export function validError(value:unknown):value is CommandError;
+export function validCreateWorkspaceRequest(value:unknown):value is CreateWorkspaceRequest;
+export function validOpenWorkspaceRequest(value:unknown):value is OpenWorkspaceRequest;
+export function validReadiness(value:unknown):value is Readiness;
 export function validReadinessRequest(value:unknown):value is ReadinessRequest;
+export function validUpdateSettingsRequest(value:unknown):value is UpdateSettingsRequest;
+export function validWorkspaceDetails(value:unknown):value is WorkspaceDetails;
+export function validWorkspaceList(value:unknown):value is WorkspaceList;

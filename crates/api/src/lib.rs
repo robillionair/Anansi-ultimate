@@ -4,7 +4,7 @@ use anansi_core::{CommandError, Core, ErrorCode};
 use axum::{
     Json, Router,
     body::Body,
-    extract::{DefaultBodyLimit, State},
+    extract::{DefaultBodyLimit, Path, State},
     http::{Request, StatusCode},
     middleware::{self},
     response::{IntoResponse, Response},
@@ -21,6 +21,7 @@ pub struct ApiState {
 pub fn router(state: Arc<ApiState>) -> Router {
     Router::new()
         .route("/v1/readiness", post(readiness))
+        .route("/v1/workspaces/{operation}", post(workspace))
         .fallback(|| async {
             error(
                 StatusCode::NOT_FOUND,
@@ -34,6 +35,62 @@ pub fn router(state: Arc<ApiState>) -> Router {
             auth::boundary,
         ))
         .with_state(state)
+}
+pub fn command_path(path: &str) -> bool {
+    matches!(
+        path,
+        "/v1/readiness"
+            | "/v1/workspaces/list"
+            | "/v1/workspaces/create"
+            | "/v1/workspaces/open"
+            | "/v1/workspaces/settings"
+    )
+}
+async fn workspace(
+    Path(operation): Path<String>,
+    State(state): State<Arc<ApiState>>,
+    request: Request<Body>,
+) -> Response {
+    let bytes = match axum::body::to_bytes(request.into_body(), 1024).await {
+        Ok(bytes) => bytes,
+        Err(_) => {
+            return error(
+                StatusCode::BAD_REQUEST,
+                ErrorCode::InvalidRequest,
+                "Use the supported workspace request.",
+            );
+        }
+    };
+    let input = match serde_json::from_slice(&bytes) {
+        Ok(input) => input,
+        Err(_) => {
+            return error(
+                StatusCode::BAD_REQUEST,
+                ErrorCode::InvalidRequest,
+                "Use the supported workspace request.",
+            );
+        }
+    };
+    match tokio::task::spawn_blocking(move || state.core.workspace_command(&operation, input)).await
+    {
+        Ok(Ok(value)) => Json(value).into_response(),
+        Ok(Err(error)) => {
+            let status = match error.code {
+                ErrorCode::WorkspaceNotFound | ErrorCode::NotFound => StatusCode::NOT_FOUND,
+                ErrorCode::WorkspaceExists
+                | ErrorCode::UnsupportedSchema
+                | ErrorCode::CorruptStorage => StatusCode::CONFLICT,
+                ErrorCode::StorageUnavailable => StatusCode::SERVICE_UNAVAILABLE,
+                _ => StatusCode::BAD_REQUEST,
+            };
+            (status, Json(error)).into_response()
+        }
+        Err(_) => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(anansi_core::storage::unavailable()),
+        )
+            .into_response(),
+    }
 }
 pub fn error(status: StatusCode, code: ErrorCode, message: &str) -> Response {
     (status, Json(CommandError::new(code, message))).into_response()

@@ -1,17 +1,18 @@
 {
   "schemaVersion": 1,
   "activeMilestone": "M1",
-  "activeTask": "M1.2",
+  "activeTask": "M1.3",
   "plan": "plans/PHASE-001-runnable-shell.md",
-  "implementationStatus": "M1.2 complete: real native/browser readiness and all CI jobs verified; published to protected master",
-  "lastVerifiedCommit": "a04b0173d745d1a9eb639ff9ca261b3808d8cbf6",
+  "implementationStatus": "M1.3 implemented; local acceptance verified, checkpoint CI/publication pending",
+  "lastVerifiedCommit": "8024285db8f7d4ad0cc9bcb606914922a93692de",
   "evidence": [
     "docs/evidence/M0.md",
     "docs/evidence/M1.md",
-    "docs/evidence/M1-2.md"
+    "docs/evidence/M1-2.md",
+    "docs/evidence/M1-3.md"
   ],
   "blockers": [],
-  "nextTask": "M1.3",
-  "productImplementation": "M1.2 readiness verified; workspace, memory, AI and installer not implemented",
+  "nextTask": "M1.4",
+  "productImplementation": "M1.3 local workspace catalog and durable reduced-motion settings; memory, AI, onboarding and installer remain later tasks",
   "milestoneComplete": false
 }

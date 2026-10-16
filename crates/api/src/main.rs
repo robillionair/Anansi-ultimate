@@ -23,7 +23,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let port = listener.local_addr()?.port();
     let session = Session::create(&root, port)?;
     let state = Arc::new(ApiState {
-        core: Core::default(),
+        core: Core::for_host(),
         token: session.token.clone(),
         host: format!("127.0.0.1:{port}"),
         origin: "http://127.0.0.1:1420".into(),

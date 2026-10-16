@@ -7,7 +7,13 @@
           "UNSUPPORTED_CONTRACT",
           "UNAUTHORIZED",
           "FORBIDDEN",
-          "NOT_FOUND"
+          "NOT_FOUND",
+          "INVALID_WORKSPACE",
+          "WORKSPACE_EXISTS",
+          "WORKSPACE_NOT_FOUND",
+          "STORAGE_UNAVAILABLE",
+          "UNSUPPORTED_SCHEMA",
+          "CORRUPT_STORAGE"
         ],
         "type": "string"
       }
@@ -27,6 +33,48 @@
       "message"
     ],
     "title": "CommandError",
+    "type": "object"
+  },
+  "CreateWorkspaceRequest": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "name": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "name"
+    ],
+    "title": "CreateWorkspaceRequest",
+    "type": "object"
+  },
+  "OpenWorkspaceRequest": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "id"
+    ],
+    "title": "OpenWorkspaceRequest",
     "type": "object"
   },
   "Readiness": {
@@ -89,6 +137,134 @@
       "contractVersion"
     ],
     "title": "ReadinessRequest",
+    "type": "object"
+  },
+  "UpdateSettingsRequest": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "id": {
+        "type": "string"
+      },
+      "reducedMotion": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "id",
+      "reducedMotion"
+    ],
+    "title": "UpdateSettingsRequest",
+    "type": "object"
+  },
+  "WorkspaceDetails": {
+    "$defs": {
+      "Workspace": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "type": "object"
+      },
+      "WorkspaceSettings": {
+        "additionalProperties": false,
+        "properties": {
+          "reducedMotion": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "reducedMotion"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "schemaVersion": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "settings": {
+        "$ref": "#/$defs/WorkspaceSettings"
+      },
+      "workspace": {
+        "$ref": "#/$defs/Workspace"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "schemaVersion",
+      "workspace",
+      "settings"
+    ],
+    "title": "WorkspaceDetails",
+    "type": "object"
+  },
+  "WorkspaceList": {
+    "$defs": {
+      "Workspace": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "workspaces": {
+        "items": {
+          "$ref": "#/$defs/Workspace"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "workspaces"
+    ],
+    "title": "WorkspaceList",
     "type": "object"
   }
 }

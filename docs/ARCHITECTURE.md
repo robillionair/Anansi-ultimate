@@ -38,7 +38,7 @@ plans/               phase plans
 tests/               cross-layer and acceptance tests
 ```
 
-M1.2 establishes this workspace shape for readiness only. Storage, search, policy and provider subsystems remain target architecture.
+M1.2 establishes this workspace shape for readiness. M1.3 adds the shared SQLite workspace metadata/settings catalog; search, memory policy and provider subsystems remain target architecture. Both adapters use the same bounded core operations and trusted storage configuration; see ADR-0013 and evidence/M1-3.md.
 
 ## Security boundaries
 
@@ -46,10 +46,10 @@ Private/sealed memories, credentials, OAuth tokens, MCP tools, local filesystem 
 
 ## Open architectural decisions
 
-- The restored specification defines memory metadata/states, privacy classes and an optional audited vault. Exact schema, migration and encryption-library designs remain M1/M2 planning decisions.
+- The restored specification defines memory metadata/states, privacy classes and an optional audited vault. M1.3's schema/migration covers workspace metadata/settings only; memory and encryption-library designs remain M2 planning decisions.
 - Exact vector index implementation awaits performance and data-shape requirements.
 - Section 14 lists candidate providers; official authentication/entitlement verification is required in M5. Section 70 specifies Windows Credential Manager and macOS Keychain; no credentials integration is implemented.
-- M1.2 verifies readiness command/API parity. Each subsequent domain command must extend the same contract and cross-adapter tests.
+- M1.2 verifies readiness command/API parity; M1.3 extends the same generated contracts and real cross-adapter tests to workspace/settings commands. Each subsequent command must preserve these boundaries.
 
 
 ## Reconciled ownership

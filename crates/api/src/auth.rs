@@ -28,9 +28,9 @@ pub async fn boundary(
             "This browser origin or host is not allowed.",
         );
     }
-    // Preflight discloses no domain data and permits exactly this single command.
+    // Preflight discloses no domain data and permits only approved domain commands.
     if request.method() == Method::OPTIONS {
-        if request.uri().path() != "/v1/readiness"
+        if !crate::command_path(request.uri().path())
             || request.uri().query().is_some()
             || one("access-control-request-method") != Some("POST")
             || !one("access-control-request-headers").is_some_and(|s| {

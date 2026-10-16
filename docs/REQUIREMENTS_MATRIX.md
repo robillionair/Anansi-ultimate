@@ -35,7 +35,7 @@ Milestones now follow the approved canonical roadmap and master section 82. Plan
 | ID | Additional retained scope | Milestone | Status | Required evidence |
 |---|---|---|---|---|
 | AN-022 | Source protection, CI, repository recovery | M0 | verified | docs/evidence/M0.md: hygiene, Windows/Linux CI, protected master and actual independent bundle/restore with matching HEAD/tree and passing checks; annotated completion checkpoint |
-| AN-023 | Onboarding, local workspace, navigation/settings | M1 | planned | Desktop/browser launch, provider skip, persistence and permission tests |
+| AN-023 | Onboarding, local workspace, navigation/settings | M1 | in progress | M1.3 workspace/settings persistence and permissions: [evidence](evidence/M1-3.md); onboarding/navigation/provider skip remain M1.4 |
 | AN-024 | Universal projects, artifacts, versioning/rollback | M2, M6, M7, M12 | planned | Durable cross-module project round trip and rollback |
 | AN-025 | All document formats, OCR/transcription, async ingestion | M13 | planned | Format fixtures, provenance, resumability/cancellation and privacy tests |
 | AN-026 | Zero-Cost Lock, routing, budgets/disclosure | M3, M4, M5; all inference milestones | planned | Deny unknown/paid fallback and unauthorized data; disclosure fixtures |
@@ -54,3 +54,5 @@ M1.0 planning/readiness evidence is in docs/evidence/M1.md. Missing local Window
 M1.1 partial progress: Rust/Cargo installed and pinned; actual local metadata compile passes, full MSVC link fails because link.exe/C++ SDK is missing. Prepared admin installation and real native verification commands are tracked, with evidence in docs/evidence/M1.md. No product row is advanced to verified; AN-001/002/003 and the native workflow remain open.
 
 M1.1 resolution: user completed Microsoft installation and local native doctor plus actual compile/link/run passed. Rust/MSVC/SDK prerequisites are verified with logs and SDK-discovery regression coverage in docs/evidence/M1.md. Earlier M1.0/M1.1 missing-tool notes are historical. No desktop/browser/installer requirement is marked verified by this toolchain-only task.
+
+M1.3 coverage: AN-002/003/018/020 now include actual native/browser workspace create/reopen, validated persistent reduced-motion settings, bounded commands and storage-permission/migration failure tests; [evidence](evidence/M1-3.md). AN-023 advances to in progress for this verified subset; onboarding/navigation/provider skip remain M1.4. AN-004 memory, AN-019 automatic application-data backups, AN-031 vault/encryption and AN-001 installer remain planned. No full product row is completed by this increment, and the 90-section ledger remains unchanged.

@@ -1,6 +1,6 @@
 {
   "identifier": "main",
-  "description": "Local main window may request core readiness only. No remote access or filesystem/process plugins.",
+  "description": "Local main window may read readiness and manage workspace metadata/settings in the configured app catalog. No remote access or filesystem/process plugins.",
   "windows": ["main"],
-  "permissions": ["allow-readiness"]
+  "permissions": ["allow-readiness", "allow-workspaces"]
 }

@@ -20,7 +20,7 @@ pub struct Readiness {
     pub uptime_ms: u64,
 }
 
-#[derive(Debug, Serialize, Deserialize, JsonSchema, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum ErrorCode {
     InvalidRequest,
@@ -28,9 +28,15 @@ pub enum ErrorCode {
     Unauthorized,
     Forbidden,
     NotFound,
+    InvalidWorkspace,
+    WorkspaceExists,
+    WorkspaceNotFound,
+    StorageUnavailable,
+    UnsupportedSchema,
+    CorruptStorage,
 }
 
-#[derive(Debug, Serialize, Deserialize, JsonSchema, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct CommandError {
     pub code: ErrorCode,
@@ -46,17 +52,44 @@ impl CommandError {
     }
 }
 
+#[derive(Clone)]
 pub struct Core {
     started: Instant,
+    workspace_storage: Result<crate::storage::Storage, CommandError>,
 }
 impl Default for Core {
     fn default() -> Self {
         Self {
             started: Instant::now(),
+            workspace_storage: Err(crate::storage::unavailable()),
         }
     }
 }
 impl Core {
+    pub fn with_storage_root(root: std::path::PathBuf) -> Self {
+        Self {
+            started: Instant::now(),
+            workspace_storage: crate::storage::Storage::new(root),
+        }
+    }
+    pub fn for_host() -> Self {
+        let configured = std::env::var_os("ANANSI_STORAGE_ROOT").map(std::path::PathBuf::from);
+        let root = configured.or_else(|| {
+            if cfg!(windows) {
+                std::env::var_os("LOCALAPPDATA")
+                    .map(|p| std::path::PathBuf::from(p).join("ANANSI/workspaces"))
+            } else {
+                std::env::var_os("HOME")
+                    .map(|p| std::path::PathBuf::from(p).join(".local/share/anansi/workspaces"))
+            }
+        });
+        root.map(Self::with_storage_root).unwrap_or_default()
+    }
+    pub(crate) fn storage(&self) -> Result<&crate::storage::Storage, CommandError> {
+        self.workspace_storage
+            .as_ref()
+            .map_err(|_| crate::storage::unavailable())
+    }
     pub fn readiness(&self, input: serde_json::Value) -> Result<Readiness, CommandError> {
         let request: ReadinessRequest = serde_json::from_value(input).map_err(|_| {
             CommandError::new(
