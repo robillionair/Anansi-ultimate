@@ -2,9 +2,9 @@
 
 ## Current state — 2026-10-16
 
-M0, M1.0, M1.1 and M1.2 are locally verified complete. M1.2 delivers shared readiness through a real Windows Tauri application and authenticated local browser API. Both Foundation jobs passed on 570b4c0; its additional native CI window verifier failed on unavailable CDP. A debug-only test-config repair passes locally and awaits its CI rerun. Protected publication remains pending. M1 remains incomplete and has no completion tag.
+M0, M1.0, M1.1 and M1.2 are verified complete. M1.2 delivers shared readiness through a real Windows Tauri application and authenticated local browser API. Checkpoint a04b017 passed both Foundation platforms and the actual native CI window check in run 38850910632; protected master accepted that exact SHA. The initial CI debugging failure is resolved and retained in the evidence history. M1 remains incomplete and has no completion tag.
 
-Prior verified checkpoint: 91f53fcf7f13897951766afe6376c4cd1e5d6b1b. The following metadata checkpoint will record the newly published source SHA after actual CI succeeds. See [M1.1 history](evidence/M1.md) and [M1.2 evidence](evidence/M1-2.md).
+Verified implementation checkpoint: a04b0173d745d1a9eb639ff9ca261b3808d8cbf6. This completion record deliberately references the prior verified source SHA to avoid self-reference. See [M1.1 history](evidence/M1.md) and [M1.2 evidence](evidence/M1-2.md).
 
 ## M1.2 acceptance and verification
 
@@ -16,4 +16,4 @@ Prior verified checkpoint: 91f53fcf7f13897951766afe6376c4cd1e5d6b1b. The followi
 
 ## Remaining scope and next task
 
-No local blocker remains. M1.3 SQLite workspace create/reopen and durable settings is next and has not started. No database migration, memory, inference, provider, onboarding/navigation or installer completion is claimed. M1.4/M1.5 and M2–M15 retain their approved scope. Requirement areas AN-002/003/018/020 remain in progress, with readiness evidence rather than full-requirement completion.
+No current blocker remains. Independent source-bundle restore matched the verified commit/tree; restored frozen installation, docs, types and client tests passed. M1.3 SQLite workspace create/reopen and durable settings is next and has not started. No database migration, memory, inference, provider, onboarding/navigation or installer completion is claimed. M1.4/M1.5 and M2–M15 retain their approved scope. Requirement areas AN-002/003/018/020 remain in progress, with readiness evidence rather than full-requirement completion.

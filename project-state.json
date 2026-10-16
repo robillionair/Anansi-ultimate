@@ -3,8 +3,8 @@
   "activeMilestone": "M1",
   "activeTask": "M1.2",
   "plan": "plans/PHASE-001-runnable-shell.md",
-  "implementationStatus": "M1.2 locally complete: real native/browser readiness verified; protected CI publication pending",
-  "lastVerifiedCommit": "91f53fcf7f13897951766afe6376c4cd1e5d6b1b",
+  "implementationStatus": "M1.2 complete: real native/browser readiness and all CI jobs verified; published to protected master",
+  "lastVerifiedCommit": "a04b0173d745d1a9eb639ff9ca261b3808d8cbf6",
   "evidence": [
     "docs/evidence/M0.md",
     "docs/evidence/M1.md",
