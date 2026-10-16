@@ -4,7 +4,7 @@ ANANSI is a local-first intelligence workspace planned for a shared Tauri deskto
 
 ## Repository status
 
-M0 source recovery/CI and M1.0–M1.3 foundations are verified. M1.4 adds shared first-run onboarding, privacy review, skippable AI setup, navigation and durable intent/motion settings; see [build status](docs/BUILD_STATUS.md) for verification and checkpoint results. Memory, AI and the installer remain later tasks. See [development instructions](docs/DEVELOPMENT.md), [the roadmap](docs/ROADMAP.md) and [coverage ledger](docs/SPEC_COVERAGE.md).
+M0 recovery/CI and M1.0–M1.4 foundations are verified. M1.5 adds an actual per-user Windows NSIS development installer for the shared onboarding/workspace/settings application; see [build status](docs/BUILD_STATUS.md) for certification and checkpoint results. Memory, AI and signed production release remain later milestones. See [development instructions](docs/DEVELOPMENT.md), [the roadmap](docs/ROADMAP.md) and [coverage ledger](docs/SPEC_COVERAGE.md).
 
 ## Workspace layout
 

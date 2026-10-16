@@ -51,7 +51,7 @@ jobs:
   native-toolchain:
     name: Windows native toolchain smoke
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -84,3 +84,20 @@ jobs:
       - run: node scripts/cargo.mjs build --locked -p anansi-api
       - run: pnpm exec playwright install --with-deps chromium
       - run: node scripts/verify-workspace.mjs --configured-cdp
+      - name: Build unsigned development NSIS release installer
+        run: pnpm build:installer
+      - name: Verify release package installation and uninstall (UI covered separately)
+        run: |
+          pwsh -NoProfile -File tests/installer-preflight.Tests.ps1
+          pwsh -NoProfile -File scripts/verify-installer.ps1 -SkipUi
+      - name: Preserve release installer and checksum evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: anansi-windows-development-${{ github.sha }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            target/release/bundle/nsis/*-setup.exe
+            target/release/bundle/nsis/SHA256SUMS
+            target/release/bundle/nsis/packaging.json
+            target/release/bundle/nsis/installer-verification.json

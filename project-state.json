@@ -1,19 +1,21 @@
 {
   "schemaVersion": 1,
   "activeMilestone": "M1",
-  "activeTask": "M1.4",
+  "activeTask": "M1.5",
   "plan": "plans/PHASE-001-runnable-shell.md",
-  "implementationStatus": "M1.4 complete: actual native/browser onboarding, all three CI jobs and protected publication verified",
-  "lastVerifiedCommit": "4f29dbf596ce143cdd53556022373c4704be1143",
+  "implementationStatus": "M1.5 installer implemented; local acceptance and checkpoint certification in progress",
+  "lastVerifiedCommit": "710ad9ba8499d40ce06a47b350a457e945828010",
   "evidence": [
     "docs/evidence/M0.md",
     "docs/evidence/M1.md",
     "docs/evidence/M1-2.md",
     "docs/evidence/M1-3.md",
-    "docs/evidence/M1-4.md"
+    "docs/evidence/M1-4.md",
+    "docs/evidence/M1-5.md"
   ],
   "blockers": [],
-  "nextTask": "M1.5",
-  "productImplementation": "M1.4 shared onboarding, navigation and durable workspace settings; memory, AI and installer remain later tasks",
+  "nextTask": "M2.0",
+  "nextTaskScope": "Detailed planning and approval only; M2 has not started",
+  "productImplementation": "M1 development NSIS and shared browser/workspace foundation; memory, AI and signed production release remain later milestones",
   "milestoneComplete": false
 }

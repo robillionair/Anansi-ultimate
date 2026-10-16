@@ -1,6 +1,6 @@
 # M1 — Windows desktop .exe and web UI foundation
 
-Status: approved scope under the user's 2026-10-16 continuation instruction after verified M0. M1.0 through M1.4 are verified complete, including actual application workflows and all three CI jobs; publication is recorded in build status. Next is M1.5; no full product requirement is complete. Follow one task at a time. Stop at the end of M1 and do not begin M2 automatically.
+Status: approved scope under the user's 2026-10-16 continuation instruction after verified M0. M1.0 through M1.4 are verified complete. M1.5 development installer is implemented; certification/publication is recorded in build status. Follow one task at a time. Stop at the end of M1 and do not begin M2 automatically; its detailed planning/approval gate is separate.
 
 Authority: [master specification](../docs/MASTER_SPEC.md), sections 3–8, 63–64, 70–71, 74–75, 82–84; [roadmap](../docs/ROADMAP.md). M0 completion tag is m0-foundation-verified at 268533e. Preserve all source scope and M0 recovery/CI controls.
 
@@ -63,6 +63,8 @@ Implementation details: schema migration crates/core/migrations/0002_onboarding.
 Dependencies: all preceding tasks. Files: installer configuration in apps/desktop/src-tauri/tauri.conf.json, CI Windows build/artifact jobs, docs/evidence/M1.md, docs/DEVELOPMENT.md and recovery/status/state records. Preserve both existing Foundation required check names; add real Rust/frontend build jobs rather than replacing checks with empty recursion. Pin new CI actions by verified SHA and keep least privilege. Rust/API core tests run on Windows/Linux; native packaging is Windows-only until the later macOS milestone.
 
 Acceptance: generate actual NSIS .exe, verify artifact checksum, install to a separate test location/user profile, launch, perform workspace/settings flow, quit/relaunch and verify persistence. Inspect uninstallation without deleting private workspace data. Document unsigned development trust prompts honestly; signed distribution, updater and clean-machine release certification remain mandatory M15 work. Confirm browser production build plus authenticated local API workflow, security tests, offline behavior, cross-adapter contracts and all regressions. No claim of clean-machine/signed certification from a local development install.
+
+Tracked support: scripts/installer-artifact.mjs, scripts/installer-checksums.mjs, scripts/verify-installer.ps1, scripts/verify-ports.mjs, tests/installer.test.mjs, tests/installer-preflight.Tests.ps1 and docs/evidence/M1-5.md. Keep build:desktop unbundled; build:installer creates release NSIS/checksum evidence. CI packages release artifacts, tests install/uninstall with explicit -SkipUi on elevated hosts and retains its separate actual native UI checks. Local non-elevated installed-release UI verification is mandatory. See [ADR-0015](../docs/DECISIONS.md#adr-0015-per-user-unsigned-nsis-development-packaging) and [evidence](../docs/evidence/M1-5.md).
 
 ## Required commands and evidence
 

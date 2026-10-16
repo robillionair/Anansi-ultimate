@@ -2,6 +2,8 @@
 
 Status: tracked planning task; detailed implementation design and acceptance approval required before coding. This is not an implemented feature or a complete technical design.
 
+Gate identifier: M2.0 — detailed planning and acceptance approval only. Completion of M1 does not start this gate or authorize Memory OS implementation automatically.
+
 Authority: [master specification](../docs/MASTER_SPEC.md), sections 9–10, 74–76, 79–80; [canonical roadmap](../docs/ROADMAP.md).
 
 Required scope: Memory lifecycle, notes, projects, tasks, people, organizations, decisions, events, documents, relationships, Markdown, backups and restore. All applicable cross-cutting constraints and section 82 milestone items remain mandatory.

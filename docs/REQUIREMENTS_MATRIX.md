@@ -4,7 +4,7 @@ Status vocabulary: `provisional`, `planned`, `in progress`, `verified`, `blocked
 
 | ID | Requirement area | Subsystem | Priority | Dependencies | Milestone | Status | Test / evidence required |
 |---|---|---|---|---|---|---|---|
-| AN-001 | Windows Tauri 2 installer producing an NSIS `.exe` | Desktop/release | P0 | Toolchain, app shell | M1, M15 | planned | Build installer, install on clean Windows VM, launch |
+| AN-001 | Windows Tauri 2 installer producing an NSIS `.exe` | Desktop/release | P0 | Toolchain, app shell | M1, M15 | in progress | Actual M1 development NSIS/install/launch/persistence/uninstall: [evidence](evidence/M1-5.md); clean-machine signed release remains M15 |
 | AN-002 | Responsive browser application | Web/UI | P0 | Shared UI, local API | M1, M2, M15 | in progress | Browser smoke test and responsive checks; M1.2 readiness evidence: [record](evidence/M1-2.md), full scope still open |
 | AN-003 | Shared visual design system | UI | P0 | Product UX spec | M1 | in progress | Component tests and visual review; M1.2 readiness evidence: [record](evidence/M1-2.md), full scope still open |
 | AN-004 | Memory OS data model and lifecycle | Core/memory | P0 | Master spec, SQLite | M2 | planned | Create/read/update/archive workflow |

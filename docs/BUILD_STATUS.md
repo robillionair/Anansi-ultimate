@@ -2,17 +2,18 @@
 
 ## Current state — 2026-10-16
 
-M0 and M1.0–M1.4 are verified complete. M1.4 adds the shared first-run flow, navigation, privacy review, skippable AI setup and durable intent/motion settings. Checkpoint 4f29dbf passed all three jobs in CI run 38908703118 and was published to protected master. M1 remains incomplete and has no completion tag.
+M0 and M1.0–M1.4 are verified complete. M1.5 delivers an actual current-user x64 NSIS development installer. Local installed-release acceptance passes; exact-checkpoint CI/artifact publication and independent source recovery are pending. M1 has no completion tag yet; do not start M2.
 
-Verified implementation checkpoint: 4f29dbf596ce143cdd53556022373c4704be1143. This completion record references the prior verified implementation SHA to avoid self-reference. Independent source-bundle restore matched HEAD/tree and passed restored docs, frozen installation, types and 11 client/component tests. See [M1.4 evidence](evidence/M1-4.md), [M1.3 history](evidence/M1-3.md) and [active plan](../plans/PHASE-001-runnable-shell.md).
+Prior verified checkpoint: 710ad9ba8499d40ce06a47b350a457e945828010. The completion record will reference the verified installer-source checkpoint after CI. See [M1.5 evidence](evidence/M1-5.md), [M1.4 history](evidence/M1-4.md) and [active plan](../plans/PHASE-001-runnable-shell.md).
 
-## M1.4 acceptance and verification
+## M1.5 acceptance and verification
 
-- Both editions offer the five specified intent choices, local workspace create/open, truthful privacy review, AI setup skip and working workspace/settings/connection navigation. Completed onboarding and changeable intent persist per workspace.
-- Actual optimized Windows application and production browser pass onboarding, cross-adapter settings parity and both-process restart. Keyboard-only browser onboarding/settings, labeled native controls and focus, skip link, OS/saved reduced motion, 390px/1280px layouts and error recovery are verified. Actual screenshots are inspected; no manual assistive-technology certification is claimed.
-- Schema 2 adds constrained intent/completion columns transactionally. Version-1 fixture migration preserves IDs/names/motion under concurrent opens; failed forward migration rolls back original rows/version. Existing security/permissions/corrupt/newer-schema tests remain passing.
-- 26 Rust tests, 11 client/component tests, 7 browser workflows, 36 Node foundation tests and 13 source-recovery checks passed. Actual release desktop build, native readiness/schema rejection/shell denial, types, formatting, Clippy, contract generation/drift, frozen install, docs/coverage and whitespace checks are recorded in evidence.
+- Actual unsigned NSIS setup built (4.28 MiB); installer and installed-payload checksums are recorded. Per-user installation needs no requested elevation, blocks downgrades, and embeds the Microsoft WebView2 bootstrapper.
+- Installed into a separate generated temporary location. Actual installed Windows application and browser passed onboarding, workspace/settings, cross-adapter intent/motion and both-process restart. Uninstall removed executable/uninstaller/registration and retained byte-identical private synthetic catalog files. Actual screenshots inspected.
+- Altered-checksum/existing-install preflight refusals and occupied-port refusal passed. Initial bundle-marker checksum and overlapping-test failures were diagnosed and repaired; originals/failure records retained externally.
+- 40 Node foundation/tool tests, 13 source-recovery checks, 26 Rust tests, 11 client/component tests and seven production-browser workflows passed. Native doctor and actual MSVC compile/link/run passed. Types, formatting, Clippy with warnings denied, contract drift, frozen install, docs and whitespace checks are recorded in evidence.
+- CI preserves Foundation Windows/Linux names, adds release packaging/install/uninstall checks and pinned artifact upload. Elevated CI explicitly skips installed-release UI; its separate native UI tests remain. Local installed-release UI was actually tested.
 
-## Remaining scope and next task
+## Remaining scope and next gate
 
-Next approved task is M1.5 development Windows installer and milestone certification; it has not started. M3 hardware/model setup and M5 provider connections remain retained dependencies, shown unavailable with no fabricated success. Memory, inference, vault/encryption and automatic user-data backups remain future work. AN-002/003/018/020/023 remain in progress; no full product row is advanced by planned navigation entries. Source/master specification and all 90 section owners, 16 plans and 33 requirements are preserved.
+M2.0 is the detailed planning/approval gate only and has not started. Memory, inference, model/provider setup, encryption/vault and automatic user-data backups remain future work. AN-001 signed/clean-machine release, browser release, broader security and M15 certification remain open. The unsigned development installer is not a signed release or updater. Existing WebView2 supports offline operation; without it the embedded bootstrapper needs internet. Master specification and all 90 section owners, 16 plans and 33 requirements are preserved.

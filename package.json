@@ -5,7 +5,7 @@
   "packageManager": "pnpm@11.25.0",
   "scripts": {
     "check": "node scripts/validate-docs.mjs",
-    "test": "node --test tests/docs-validation.test.mjs tests/repository-hygiene.test.mjs tests/doctor.test.mjs tests/native-setup.test.mjs && pnpm test:backup",
+    "test": "node --test tests/docs-validation.test.mjs tests/repository-hygiene.test.mjs tests/doctor.test.mjs tests/native-setup.test.mjs tests/installer.test.mjs && pnpm test:backup",
     "check:docs": "node scripts/validate-docs.mjs",
     "test:docs": "node --test tests/docs-validation.test.mjs",
     "backup:source": "pwsh -NoProfile -File scripts/backup-source.ps1",
@@ -16,6 +16,8 @@
     "setup:msvc": "pwsh -NoProfile -File scripts/install-msvc.ps1",
     "contracts:generate": "node scripts/contracts.mjs",
     "build:desktop": "pnpm build:web && node scripts/desktop.mjs build",
+    "build:installer": "pnpm build:web && node scripts/desktop.mjs installer && node scripts/installer-checksums.mjs",
+    "verify:installer": "pwsh -NoProfile -File scripts/verify-installer.ps1",
     "build": "pnpm build:web",
     "dev:desktop": "node scripts/desktop.mjs dev",
     "test:e2e": "playwright test",
