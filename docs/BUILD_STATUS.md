@@ -2,26 +2,30 @@
 
 ## Current state
 
-- Phase: M0 planning/foundation
+- Phase: M0 planning/foundation; implementation blocked by plan reconciliation.
 - Date: 2026-10-16
 - Source implementation: not started
-- Desktop build: not available
-- Web build: not available
-- Installer: not available
-- Tests: not configured
-- Last verified commit: none (repository has no commits)
-- Checkpoint attempt: staged foundation files; commit blocked because local Git `user.name` and `user.email` are not configured.
+- Desktop/web builds and installer: not available
+- Tests: not configured; no product tests or application workflow can be run
+- Last verified commit: `3f7571a` (documentation/source inspection only; no product verification)
+- Remote: origin/master, https://github.com/robillionair/Anansi-ultimate.git
+- Pull: successful fast-forward from `0b79f28` to `3f7571a`; full master specification restored.
+- Checkpoint: pending Git author configuration; local user.name and user.email are absent.
 
-## Completed in this phase
+## Current task and acceptance criteria
 
-- Repository inspected; only an empty Git repository was present.
-- Durable instruction, architecture, matrix, roadmap, recovery, decision, and phase-plan documents created.
-- Missing master specification recorded as a blocker.
+Resume M0 by checking restored requirements and the first approved unfinished task before coding. Acceptance: inspect repository and recovery instructions, verify the master specification is present, resolve the active detailed plan, record conflicts and requirement coverage, and preserve a recoverable checkpoint where possible.
 
-## Required before coding
+## Verified evidence
 
-Restore the complete `docs/MASTER_SPEC.md`, review provisional requirements, approve Phase 1, and verify the installed toolchain or install the approved project dependencies.
+- Initial working tree was clean; `git pull --ff-only` succeeded.
+- Read AGENTS.md, architecture, roadmap, requirements matrix, decisions, recovery guide, foundation and shell plan pointers, and master specification.
+- `plans/00-foundation.md` references missing `plans/PHASE-000-foundation.md`.
+- `plans/01-desktop-and-web.md` references missing `plans/PHASE-001-runnable-shell.md`.
+- Master specification section 82 defines M0–M15; docs/ROADMAP.md defines M0–M9 with different scopes (for example M2).
+- No task-level approval or complete active detailed plan is recorded. Recovery guide step 6 requires stopping implementation and recording requirements conflicts.
+- No product code, dependency installation, generated software execution, paid inference, or product verification performed.
 
-## Evidence
+## Required next task
 
-Inspection command showed no tracked source files and available commands included Git, Node, npm, and pnpm; Rust/Cargo/Tauri were not found on PATH.
+Reconcile the roadmap with master specification section 82 and restore an explicitly approved M0 detailed task plan. Complete source-protection work under sections 4 and 83 before advancing to desktop foundation. Do not start M1 automatically.

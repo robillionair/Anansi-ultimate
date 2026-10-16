@@ -28,6 +28,6 @@ Status vocabulary: `provisional`, `planned`, `in progress`, `verified`, `blocked
 
 ## Matrix notes
 
-All rows are provisional because the detailed master specification is missing. The first implementation phase may only verify toolchain and an explicitly approved foundation slice; it must not silently reduce these rows.
+The complete master specification was restored in commit `3f7571a`. Rows remain provisional pending full specification mapping and reconciliation of the conflicting milestone sequences (ADR-0004). Existing blocked rows also require their subsystem dependencies and approved detailed plans; restoring the specification alone does not verify any feature. No requirement status was advanced during this inspection.
 
 Coverage vocabulary explicitly includes: Windows installer, Web UI, Memory OS, Hybrid search, Ask ANANSI, AI Matrix, OAuth and API keys, Local LLMs, Context Compiler, Big Brain, Product Forge, LEXI-COLLIDER, SwarmTank 3D, SOMNIA, GHOST-PROMPT, MCP, Privacy and security, Backups and restoration, ANANSI Core readiness, and Enterprise architecture.
