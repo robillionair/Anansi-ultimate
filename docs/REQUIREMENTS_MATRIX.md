@@ -7,7 +7,7 @@ Status vocabulary: `provisional`, `planned`, `in progress`, `verified`, `blocked
 | AN-001 | Windows Tauri 2 installer producing an NSIS `.exe` | Desktop/release | P0 | Toolchain, app shell | M1, M15 | in progress | Actual M1 development NSIS/install/launch/persistence/uninstall: [evidence](evidence/M1-5.md); clean-machine signed release remains M15 |
 | AN-002 | Responsive browser application | Web/UI | P0 | Shared UI, local API | M1, M2, M15 | in progress | Browser smoke test and responsive checks; M1.2 readiness evidence: [record](evidence/M1-2.md), full scope still open |
 | AN-003 | Shared visual design system | UI | P0 | Product UX spec | M1 | verified | Shared native/browser foundation tokens/components, keyboard/focus/motion/responsive workflows and actual visual review: [M1 record](evidence/M1-5.md); future modules must preserve these standards |
-| AN-004 | Memory OS data model and lifecycle | Core/memory | P0 | Master spec, SQLite | M2 | planned | Create/read/update/archive workflow |
+| AN-004 | Memory OS data model and lifecycle | Core/memory | P0 | Master spec, SQLite | M2 | in progress | M2.1 create/read/revise/history and restart: [evidence](evidence/M2-1.md); notes/lifecycle/archive remain M2.2 |
 | AN-005 | Hybrid lexical/vector search | Core/search | P0 | Memory model, FTS5, vector index | M3, M4 | planned | Precision/recall fixture tests and UI workflow |
 | AN-006 | Ask ANANSI | AI/orchestration | P0 | Search, providers, context | M3, M4 | planned | Grounded answer workflow with citations/provenance |
 | AN-007 | AI Matrix | AI/orchestration | P1 | Provider contracts | M5 | planned | Multi-provider routing and failure tests |
@@ -43,9 +43,9 @@ Milestones now follow the approved canonical roadmap and master section 82. Plan
 | AN-028 | Unified lifecycle and Launch Studio | M12 | planned | Section 85 workflow; real approval before publishing |
 | AN-029 | Persistent jobs and recovery | M2, M3, M6, M13 | planned | Restart/retry/cancellation/resource-limit tests |
 | AN-030 | Native macOS/Apple Silicon, updates/credential vaults | M14, M15 | planned | Native signed installation/update and offline verification |
-| AN-031 | Encryption, privacy classes, optional audited vault | M2, M15 | planned | Vault/recovery and authorization tests; clear disk-encryption distinction |
+| AN-031 | Encryption, privacy classes, optional audited vault | M2, M15 | in progress | M2.1 native privacy, Sealed refusal and plaintext disclosure: [evidence](evidence/M2-1.md); audited vault remains M2.6/M2.7 |
 | AN-032 | Performance, accessibility, engine evaluation | M3–M15 | planned | 1k/10k/100k datasets, engine suites, keyboard/2D fallback evidence |
-| AN-033 | Export/ownership and synthetic provenance | M2–M15 | planned | Open-format exports, labels, seeded replay, no synthetic-to-confirmed promotion |
+| AN-033 | Export/ownership and synthetic provenance | M2–M15 | in progress | M2.1 readable Markdown/user provenance/Proposed state: [evidence](evidence/M2-1.md); exports/engine scope remain later tasks |
 
 Section-level coverage is complete for planning; bullet-level acceptance coverage is required at each detailed-plan gate. No rows are verified by documentation validation.
 

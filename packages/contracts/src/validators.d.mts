@@ -1,7 +1,14 @@
 // Generated from Rust schemas.
-import type {CommandError,CreateWorkspaceRequest,OpenWorkspaceRequest,Readiness,ReadinessRequest,UpdateSettingsRequest,WorkspaceDetails,WorkspaceList} from './generated';
+import type {CommandError,CreateWorkspaceRequest,MemoryDetails,MemoryDraft,MemoryList,MemoryListRequest,MemoryMetadata,MemoryReadRequest,MemoryWriteRequest,OpenWorkspaceRequest,Readiness,ReadinessRequest,UpdateSettingsRequest,WorkspaceDetails,WorkspaceList} from './generated';
 export function validError(value:unknown):value is CommandError;
 export function validCreateWorkspaceRequest(value:unknown):value is CreateWorkspaceRequest;
+export function validMemoryDetails(value:unknown):value is MemoryDetails;
+export function validMemoryDraft(value:unknown):value is MemoryDraft;
+export function validMemoryList(value:unknown):value is MemoryList;
+export function validMemoryListRequest(value:unknown):value is MemoryListRequest;
+export function validMemoryMetadata(value:unknown):value is MemoryMetadata;
+export function validMemoryReadRequest(value:unknown):value is MemoryReadRequest;
+export function validMemoryWriteRequest(value:unknown):value is MemoryWriteRequest;
 export function validOpenWorkspaceRequest(value:unknown):value is OpenWorkspaceRequest;
 export function validReadiness(value:unknown):value is Readiness;
 export function validReadinessRequest(value:unknown):value is ReadinessRequest;

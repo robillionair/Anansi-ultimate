@@ -1,3 +1,7 @@
+use anansi_core::memory::{
+    MemoryDetails, MemoryDraft, MemoryList, MemoryListRequest, MemoryMetadata, MemoryReadRequest,
+    MemoryWriteRequest,
+};
 use anansi_core::workspace::{
     CreateWorkspaceRequest, OpenWorkspaceRequest, UpdateSettingsRequest, WorkspaceDetails,
     WorkspaceList,
@@ -5,6 +9,13 @@ use anansi_core::workspace::{
 use anansi_core::{CommandError, Readiness, ReadinessRequest};
 fn main() {
     let schemas = serde_json::json!({
+        "MemoryDraft":schemars::schema_for!(MemoryDraft),
+        "MemoryMetadata":schemars::schema_for!(MemoryMetadata),
+        "MemoryDetails":schemars::schema_for!(MemoryDetails),
+        "MemoryList":schemars::schema_for!(MemoryList),
+        "MemoryListRequest":schemars::schema_for!(MemoryListRequest),
+        "MemoryReadRequest":schemars::schema_for!(MemoryReadRequest),
+        "MemoryWriteRequest":schemars::schema_for!(MemoryWriteRequest),
         "Readiness":schemars::schema_for!(Readiness),
         "ReadinessRequest":schemars::schema_for!(ReadinessRequest),
         "CommandError":schemars::schema_for!(CommandError),

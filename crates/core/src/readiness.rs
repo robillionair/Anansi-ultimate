@@ -34,6 +34,11 @@ pub enum ErrorCode {
     StorageUnavailable,
     UnsupportedSchema,
     CorruptStorage,
+    InvalidMemory,
+    MemoryNotFound,
+    RevisionConflict,
+    ContentIntegrity,
+    VaultUnavailable,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]

@@ -13,7 +13,12 @@
           "WORKSPACE_NOT_FOUND",
           "STORAGE_UNAVAILABLE",
           "UNSUPPORTED_SCHEMA",
-          "CORRUPT_STORAGE"
+          "CORRUPT_STORAGE",
+          "INVALID_MEMORY",
+          "MEMORY_NOT_FOUND",
+          "REVISION_CONFLICT",
+          "CONTENT_INTEGRITY",
+          "VAULT_UNAVAILABLE"
         ],
         "type": "string"
       }
@@ -54,6 +59,684 @@
       "name"
     ],
     "title": "CreateWorkspaceRequest",
+    "type": "object"
+  },
+  "MemoryDetails": {
+    "$defs": {
+      "MemoryMetadata": {
+        "additionalProperties": false,
+        "properties": {
+          "confidence": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "eventDate": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "generatorModel": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "privacy": {
+            "$ref": "#/$defs/Privacy"
+          },
+          "projectId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "provenance": {
+            "type": "string"
+          },
+          "relationships": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "revisionId": {
+            "type": "string"
+          },
+          "sourceReferences": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "status": {
+            "type": "string"
+          },
+          "supersedes": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          },
+          "validFrom": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "validUntil": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "validationStatus": {
+            "type": "string"
+          },
+          "version": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "workspaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "workspaceId",
+          "kind",
+          "revisionId",
+          "version",
+          "title",
+          "createdAt",
+          "updatedAt",
+          "status",
+          "privacy",
+          "provenance",
+          "sourceReferences",
+          "validationStatus",
+          "relationships"
+        ],
+        "type": "object"
+      },
+      "Privacy": {
+        "enum": [
+          "sealed",
+          "private",
+          "standard",
+          "public"
+        ],
+        "type": "string"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "body": {
+        "type": "string"
+      },
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "memory": {
+        "$ref": "#/$defs/MemoryMetadata"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "memory",
+      "body"
+    ],
+    "title": "MemoryDetails",
+    "type": "object"
+  },
+  "MemoryDraft": {
+    "$defs": {
+      "Privacy": {
+        "enum": [
+          "sealed",
+          "private",
+          "standard",
+          "public"
+        ],
+        "type": "string"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "body": {
+        "type": "string"
+      },
+      "confidence": {
+        "format": "double",
+        "type": [
+          "number",
+          "null"
+        ]
+      },
+      "eventDate": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "privacy": {
+        "$ref": "#/$defs/Privacy",
+        "default": "private"
+      },
+      "sourceReferences": {
+        "default": [],
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "title": {
+        "type": "string"
+      },
+      "validFrom": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "validUntil": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "title",
+      "body"
+    ],
+    "title": "MemoryDraft",
+    "type": "object"
+  },
+  "MemoryList": {
+    "$defs": {
+      "MemoryMetadata": {
+        "additionalProperties": false,
+        "properties": {
+          "confidence": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "eventDate": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "generatorModel": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "privacy": {
+            "$ref": "#/$defs/Privacy"
+          },
+          "projectId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "provenance": {
+            "type": "string"
+          },
+          "relationships": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "revisionId": {
+            "type": "string"
+          },
+          "sourceReferences": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "status": {
+            "type": "string"
+          },
+          "supersedes": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          },
+          "validFrom": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "validUntil": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "validationStatus": {
+            "type": "string"
+          },
+          "version": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "workspaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "workspaceId",
+          "kind",
+          "revisionId",
+          "version",
+          "title",
+          "createdAt",
+          "updatedAt",
+          "status",
+          "privacy",
+          "provenance",
+          "sourceReferences",
+          "validationStatus",
+          "relationships"
+        ],
+        "type": "object"
+      },
+      "Privacy": {
+        "enum": [
+          "sealed",
+          "private",
+          "standard",
+          "public"
+        ],
+        "type": "string"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "memories": {
+        "items": {
+          "$ref": "#/$defs/MemoryMetadata"
+        },
+        "type": "array"
+      },
+      "nextOffset": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "contractVersion",
+      "memories"
+    ],
+    "title": "MemoryList",
+    "type": "object"
+  },
+  "MemoryListRequest": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "id": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "limit": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "offset": {
+        "default": 0,
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "workspaceId"
+    ],
+    "title": "MemoryListRequest",
+    "type": "object"
+  },
+  "MemoryMetadata": {
+    "$defs": {
+      "Privacy": {
+        "enum": [
+          "sealed",
+          "private",
+          "standard",
+          "public"
+        ],
+        "type": "string"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "confidence": {
+        "format": "double",
+        "type": [
+          "number",
+          "null"
+        ]
+      },
+      "createdAt": {
+        "type": "string"
+      },
+      "eventDate": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "generatorModel": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "id": {
+        "type": "string"
+      },
+      "kind": {
+        "type": "string"
+      },
+      "privacy": {
+        "$ref": "#/$defs/Privacy"
+      },
+      "projectId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "provenance": {
+        "type": "string"
+      },
+      "relationships": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "revisionId": {
+        "type": "string"
+      },
+      "sourceReferences": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "status": {
+        "type": "string"
+      },
+      "supersedes": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "title": {
+        "type": "string"
+      },
+      "updatedAt": {
+        "type": "string"
+      },
+      "validFrom": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "validUntil": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "validationStatus": {
+        "type": "string"
+      },
+      "version": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "id",
+      "workspaceId",
+      "kind",
+      "revisionId",
+      "version",
+      "title",
+      "createdAt",
+      "updatedAt",
+      "status",
+      "privacy",
+      "provenance",
+      "sourceReferences",
+      "validationStatus",
+      "relationships"
+    ],
+    "title": "MemoryMetadata",
+    "type": "object"
+  },
+  "MemoryReadRequest": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "id": {
+        "type": "string"
+      },
+      "revisionId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "workspaceId",
+      "id"
+    ],
+    "title": "MemoryReadRequest",
+    "type": "object"
+  },
+  "MemoryWriteRequest": {
+    "$defs": {
+      "MemoryDraft": {
+        "additionalProperties": false,
+        "properties": {
+          "body": {
+            "type": "string"
+          },
+          "confidence": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "eventDate": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "privacy": {
+            "$ref": "#/$defs/Privacy",
+            "default": "private"
+          },
+          "sourceReferences": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "title": {
+            "type": "string"
+          },
+          "validFrom": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "validUntil": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "title",
+          "body"
+        ],
+        "type": "object"
+      },
+      "Privacy": {
+        "enum": [
+          "sealed",
+          "private",
+          "standard",
+          "public"
+        ],
+        "type": "string"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "confirmPrivacyChange": {
+        "default": false,
+        "type": "boolean"
+      },
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "draft": {
+        "$ref": "#/$defs/MemoryDraft"
+      },
+      "expectedRevision": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "id": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "workspaceId",
+      "draft"
+    ],
+    "title": "MemoryWriteRequest",
     "type": "object"
   },
   "OpenWorkspaceRequest": {

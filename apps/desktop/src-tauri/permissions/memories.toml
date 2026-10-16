@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-memories"
+description = "Create, read and revise managed local memories by workspace and record ID only"
+commands.allow = ["memory_command"]

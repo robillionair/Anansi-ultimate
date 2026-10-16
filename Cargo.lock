@@ -60,11 +60,13 @@ dependencies = [
 name = "anansi-core"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "getrandom 0.4.3",
  "rusqlite",
  "schemars 1.2.3",
  "serde",
  "serde_json",
+ "sha2",
  "tempfile",
 ]
 

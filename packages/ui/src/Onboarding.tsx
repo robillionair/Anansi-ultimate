@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { Intent, WorkspaceDetails } from '@anansi/contracts';
 
 export const intents: {id:Intent;label:string;description:string}[] = [
-  {id:'second_memory',label:'Build my second memory',description:'Start with a place for your knowledge. Memory tools arrive in a later update.'},
+  {id:'second_memory',label:'Build my second memory',description:'Start with a place for your knowledge. Save and reopen local memories.'},
   {id:'invent_product',label:'Invent a product',description:'Prepare your workspace. Innovation tools are still in development.'},
   {id:'build_application',label:'Build an application',description:'Prepare your workspace. Product Forge is still in development.'},
   {id:'connect_ai',label:'Connect AI models',description:'Start locally. Model and provider connections are not available yet.'},
@@ -16,7 +16,7 @@ export function PrivacyReview() {
     <li>Workspace names and preferences stay on this computer. This edition makes no AI or cloud requests.</li>
     <li>The browser uses your paired local service. Pairing is kept in this tab’s memory and is forgotten on reload.</li>
     <li>Local file permissions protect access; this is not an encrypted vault. Application lock and disk encryption are different.</li>
-    <li>Memory privacy classes (Sealed, Private, Standard, Public), an encrypted vault and automatic data backups are not available yet.</li>
+    <li>Private, Standard and Public memory labels do not grant sharing consent or encrypt files. Sealed storage, an encrypted vault and automatic data backups are not available yet.</li>
     <li>Continuing does not authorize future cloud sharing, model downloads or recording of drafts. Those require separate choices.</li>
   </ul></div>;
 }

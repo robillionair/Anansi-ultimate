@@ -192,7 +192,7 @@ fn newer_live_wal_and_unknown_sqlite_are_inspected_read_only() {
     let file = root.join(DATABASE_NAME);
     {
         let connection = rusqlite::Connection::open(&file).unwrap();
-        connection.pragma_update(None, "user_version", 3).unwrap();
+        connection.pragma_update(None, "user_version", 99).unwrap();
         let wal = root.join(format!("{DATABASE_NAME}-wal"));
         let before = fs::read(&file).unwrap();
         let log = fs::read(&wal).unwrap();
@@ -348,10 +348,10 @@ fn v1_migration_preserves_original_workspace_and_onboarding_survives_restart() {
     assert!(
         reopened
             .iter()
-            .all(|workspace| workspace.schema_version == 2 && workspace.settings.reduced_motion)
+            .all(|workspace| workspace.schema_version == 3 && workspace.settings.reduced_motion)
     );
     let original = reopened.pop().unwrap();
-    assert_eq!(original.schema_version, 2);
+    assert_eq!(original.schema_version, 3);
     assert_eq!(original.workspace.name, "Original");
     assert!(original.settings.reduced_motion);
     assert_eq!(

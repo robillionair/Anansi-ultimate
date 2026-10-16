@@ -1,6 +1,6 @@
 # Development contract
 
-M0, M1.0 and M1.1 are verified. M1.2 introduces real desktop/browser readiness and generated contracts; current acceptance results are in BUILD_STATUS.md and evidence/M1-2.md. No database, workspace, memory, inference or installer is included yet.
+M0/M1 are verified; M2.1 adds local memory revisions through the shared desktop/browser core. Read BUILD_STATUS.md for current verification/publication and the sections below as historical context. Inference, encrypted vault and automated backups remain unimplemented.
 
 ## Foundation setup and verification
 
@@ -129,3 +129,11 @@ Run `pnpm verify:installer` from a non-elevated PowerShell 7 host after building
 CI uses `pwsh -NoProfile -File tests/installer-preflight.Tests.ps1` to verify checksum/existing-install refusals, then `pwsh -NoProfile -File scripts/verify-installer.ps1 -SkipUi` for package/binary/uninstall checks. Its record explicitly says UI skipped; the separate native job tests actual debug UI, while the local full verifier tests installed release UI. Successful CI uploads only release setup, checksum and JSON evidence for 14 days. Verify SHA256 before using an artifact; artifacts are unsigned development builds, not GitHub Releases or signed production distributions.
 
 Keep workspace storage separate from installation and WebView profile/cache folders. Normal uninstall was tested preserving the external catalog; preserve the whole closed root before manual recovery. Source backups exclude installers, credentials and private catalogs; artifacts can be rebuilt from source.
+
+## M2.1 local memories
+
+M2.1 extends the existing workspace with Memory navigation and shared literal-text create/list/read/revise/history. Each save creates a Proposed user-authored revision with optional UTC event/validity dates, confidence and source references. No confirmation/archive/notes/AI/export/vault workflow is claimed. Private is plaintext; Standard/Public do not publish; Sealed is unavailable. Local metadata uses schema 3; bodies are immutable UTF-8 Markdown under content/workspace-ID/memory-ID/revision-ID.md. Never edit/delete these files to resolve a conflict.
+
+Run the common tests/builds, then node scripts/build-desktop-test.mjs and node scripts/verify-memory.mjs --configured-cdp for actual native/browser create/edit/conflict/history and both-process restart checks. Use only the isolated test build for that debug argument. Normal production configuration remains free of debugging flags. The verifier retains synthetic external storage and private verification.json; screenshots stay ignored under test-results. Run it sequentially with other UI verifiers due to ports 1420/19323. The network assertion permits Tauri's built-in http://ipc.localhost bridge only in native pages; it does not whitelist it for the browser.
+
+A stale edit keeps the editor draft and reports a conflict; Reopen latest revision explicitly reloads committed content. History is read-only in M2.1. File sync precedes transactional publication with an expected-revision recheck. Interrupted/failed saves can leave unreferenced files; never auto-import/delete them. Preserve the complete closed root for recovery, including Markdown and SQLite sidecars. See [M2.1 evidence](evidence/M2-1.md).

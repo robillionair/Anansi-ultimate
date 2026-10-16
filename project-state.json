@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
   "activeMilestone": "M2",
-  "activeTask": "M2.0",
+  "activeTask": "M2.1",
   "plan": "plans/02-memory-system.md",
-  "implementationStatus": "M2.0 plan prepared for acceptance approval; M2 product implementation unstarted",
-  "lastVerifiedCommit": "97babb3ae9f3dc20b5602a7b46a947e833943eb2",
+  "implementationStatus": "M2.1 local native/browser memory revision acceptance verified; protected publication/recovery pending final handoff; stop before M2.2",
+  "lastVerifiedCommit": "861021b51ea18c37411266f1bcae328015304525",
   "evidence": [
     "docs/evidence/M0.md",
     "docs/evidence/M1.md",
@@ -12,16 +12,12 @@
     "docs/evidence/M1-3.md",
     "docs/evidence/M1-4.md",
     "docs/evidence/M1-5.md",
-    "docs/evidence/M2-0.md"
+    "docs/evidence/M2-0.md",
+    "docs/evidence/M2-1.md"
   ],
-  "blockers": [
-    {
-      "scope": "M2.1 acceptance approval",
-      "detail": "Detailed M2 plan prepared; acceptance approval required before product coding."
-    }
-  ],
-  "nextTask": "M2.1",
-  "nextTaskScope": "Implement only after approval of the concrete M2 plan; later vault design approval remains mandatory",
-  "productImplementation": "M1 development NSIS and shared browser/workspace foundation; memory, AI and signed production release remain later milestones",
+  "blockers": [],
+  "nextTask": "M2.2",
+  "nextTaskScope": "Notes and lifecycle only after M2.1 checkpoint publication",
+  "productImplementation": "M1 foundation plus M2.1 Proposed memory revisions; notes/lifecycle/vault/jobs/export/backups remain later tasks",
   "milestoneComplete": false
 }

@@ -12,7 +12,7 @@ use std::{
 };
 
 const APPLICATION_ID: i64 = 0x414e414e;
-const SCHEMA_VERSION: i64 = 2;
+const SCHEMA_VERSION: i64 = 3;
 const ROOT_MARKER: &[u8] = b"ANANSI workspace root v1\n";
 pub const DATABASE_NAME: &str = "workspaces.sqlite3";
 
@@ -109,7 +109,7 @@ fn validate_root(root: &Path) -> Result<(), CommandError> {
 }
 #[derive(Clone)]
 pub struct Storage {
-    root: PathBuf,
+    pub(crate) root: PathBuf,
 }
 impl Storage {
     pub fn new(root: PathBuf) -> Result<Self, CommandError> {
@@ -159,7 +159,7 @@ impl Storage {
         }
         Ok(true)
     }
-    fn connection(&self, create: bool) -> Result<Option<Connection>, CommandError> {
+    pub(crate) fn connection(&self, create: bool) -> Result<Option<Connection>, CommandError> {
         if !self.root_ready(create)? {
             return Ok(None);
         }
@@ -227,7 +227,9 @@ impl Storage {
                 concat!(
                     include_str!("../migrations/0001_workspace.sql"),
                     "\n",
-                    include_str!("../migrations/0002_onboarding.sql")
+                    include_str!("../migrations/0002_onboarding.sql"),
+                    "\n",
+                    include_str!("../migrations/0003_memory.sql")
                 ),
             )
             .map_err(|_| corrupt())?;
@@ -249,15 +251,19 @@ impl Storage {
         let version: i64 = connection
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .map_err(|_| corrupt())?;
-        if version == 1 {
+        if version < SCHEMA_VERSION {
             let tx = connection
                 .transaction_with_behavior(TransactionBehavior::Immediate)
                 .map_err(|_| unavailable())?;
             let locked_version: i64 = tx
                 .pragma_query_value(None, "user_version", |row| row.get(0))
                 .map_err(|_| corrupt())?;
-            if locked_version == 1 {
-                tx.execute_batch(include_str!("../migrations/0002_onboarding.sql"))
+            if (1..SCHEMA_VERSION).contains(&locked_version) {
+                if locked_version == 1 {
+                    tx.execute_batch(include_str!("../migrations/0002_onboarding.sql"))
+                        .map_err(|_| corrupt())?;
+                }
+                tx.execute_batch(include_str!("../migrations/0003_memory.sql"))
                     .map_err(|_| corrupt())?;
                 tx.pragma_update(None, "user_version", SCHEMA_VERSION)
                     .map_err(|_| corrupt())?;

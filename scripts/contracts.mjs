@@ -16,7 +16,7 @@ types=types.replace(/export type (\w+) = [\s\S]*?;\n/g,(declaration,name)=>{
   if(previous&&previous!==declaration)throw Error('Conflicting generated alias: '+name);
   aliases.set(name,declaration);return previous?'':declaration;
 });
-const ajv=new Ajv2020({strict:false,formats:{uint8:true,uint32:true,uint64:true},code:{source:true,esm:true}});
+const ajv=new Ajv2020({strict:false,formats:{uint8:true,uint32:true,uint64:true,double:true},code:{source:true,esm:true}});
 for(const [name,schema] of Object.entries(schemas))ajv.addSchema(schema,name);
 const names=Object.keys(schemas);
 const validatorName=name=>'valid'+(name==='CommandError'?'Error':name);

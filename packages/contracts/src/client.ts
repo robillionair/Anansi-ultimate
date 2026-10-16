@@ -1,8 +1,12 @@
-import { validReadiness, validError, validWorkspaceDetails, validWorkspaceList } from './validators.mjs';
+import { validReadiness, validError, validWorkspaceDetails, validWorkspaceList, validMemoryDetails, validMemoryList } from './validators.mjs';
 import { invoke } from '@tauri-apps/api/core';
-import type { Readiness, WorkspaceDetails, WorkspaceList, Intent } from './generated';
-export type { Readiness, WorkspaceDetails, WorkspaceList, Intent } from './generated';
+import type { Readiness, WorkspaceDetails, WorkspaceList, Intent, MemoryDraft, MemoryDetails, MemoryList, MemoryMetadata, Privacy } from './generated';
+export type { Readiness, WorkspaceDetails, WorkspaceList, Intent, MemoryDraft, MemoryDetails, MemoryList, MemoryMetadata, Privacy } from './generated';
 export interface Client {
+  listMemories(workspaceId:string, options?:{id?:string;offset?:number;limit?:number}): Promise<MemoryList>;
+  readMemory(workspaceId:string,id:string,revisionId?:string): Promise<MemoryDetails>;
+  createMemory(workspaceId:string,draft:MemoryDraft): Promise<MemoryDetails>;
+  reviseMemory(workspaceId:string,id:string,expectedRevision:string,draft:MemoryDraft,confirmPrivacyChange?:boolean): Promise<MemoryDetails>;
   readiness(): Promise<Readiness>;
   listWorkspaces(): Promise<WorkspaceList>;
   createWorkspace(name: string): Promise<WorkspaceDetails>;
@@ -17,6 +21,11 @@ export function decodeReadiness(value:unknown):Readiness {return decode(value,va
 function failure(value:unknown):Error {
   if(validError(value)){
     switch(value.code){
+      case 'INVALID_MEMORY': return new Error('Check the memory fields and privacy confirmation. Use a title up to 200 characters, text up to 256 KiB, UTC dates and confidence from 0 to 1.');
+      case 'MEMORY_NOT_FOUND': return new Error('Memory not found in this workspace. Refresh the list.');
+      case 'REVISION_CONFLICT': return new Error('This memory changed. Your draft was kept. Reopen the latest revision before saving again.');
+      case 'CONTENT_INTEGRITY': return new Error('Memory content failed integrity verification. Preserve the storage root and restore a verified copy.');
+      case 'VAULT_UNAVAILABLE': return new Error('Sealed memories require the future encrypted vault. No plaintext fallback was used.');
       case 'UNAUTHORIZED': return new Error('Pairing was rejected. Enter the current session token.');
       case 'FORBIDDEN': return new Error('This browser address is not allowed. Open http://127.0.0.1:1420.');
       case 'UNSUPPORTED_CONTRACT': return new Error('The core uses a different contract version. Update both applications.');
@@ -33,6 +42,10 @@ function failure(value:unknown):Error {
 type Call=(operation:string,request:Record<string,unknown>)=>Promise<unknown>;
 function client(call:Call):Client {
   return {
+    listMemories:async(workspaceId,options={})=>decode(await call('memories/list',{workspaceId,...options}),validMemoryList),
+    readMemory:async(workspaceId,id,revisionId)=>decode(await call('memories/read',{workspaceId,id,revisionId}),validMemoryDetails),
+    createMemory:async(workspaceId,draft)=>decode(await call('memories/create',{workspaceId,draft}),validMemoryDetails),
+    reviseMemory:async(workspaceId,id,expectedRevision,draft,confirmPrivacyChange=false)=>decode(await call('memories/revise',{workspaceId,id,expectedRevision,draft,confirmPrivacyChange}),validMemoryDetails),
     readiness:async()=>decodeReadiness(await call('readiness',{})),
     listWorkspaces:async()=>decode(await call('list',{}),validWorkspaceList),
     createWorkspace:async name=>decode(await call('create',{name}),validWorkspaceDetails),
@@ -47,7 +60,7 @@ export function httpClient(endpoint:string,token:string):Client {
   if(!/^[a-f0-9]{64}$/.test(token))throw new Error('Enter the 64-character token from the current private pairing file.');
   return client(async(operation,request)=>{
     let response:Response;
-    try{response=await fetch(`${url.origin}/v1/${operation==='readiness'?'readiness':'workspaces/'+operation}`,{method:'POST',credentials:'omit',cache:'no-store',redirect:'error',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({contractVersion:1,...request}),signal:AbortSignal.timeout(15000)});}
+    try{response=await fetch(`${url.origin}/v1/${operation.startsWith('memories/')?operation:operation==='readiness'?'readiness':'workspaces/'+operation}`,{method:'POST',credentials:'omit',cache:'no-store',redirect:'error',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({contractVersion:1,...request}),signal:AbortSignal.timeout(15000)});}
     catch{throw new Error('Local core unavailable. Start the API, then retry or pair with its new session.');}
     let value:unknown;try{value=await response.json();}catch{throw new Error('The core returned an unreadable response. Try again.');}
     if(!response.ok)throw failure(value);return value;
@@ -55,7 +68,7 @@ export function httpClient(endpoint:string,token:string):Client {
 }
 export function nativeClient():Client {
   return client(async(operation,request)=>{
-    try{return operation==='readiness'?await invoke('get_readiness',{request:{contractVersion:1}}):await invoke('workspace_command',{command:operation,request:{contractVersion:1,...request}});}
+    try{return operation.startsWith('memories/')?await invoke('memory_command',{command:operation.slice(9),request:{contractVersion:1,...request}}):operation==='readiness'?await invoke('get_readiness',{request:{contractVersion:1}}):await invoke('workspace_command',{command:operation,request:{contractVersion:1,...request}});}
     catch(error){throw failure(error);}
   });
 }

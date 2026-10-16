@@ -2,6 +2,18 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { decodeReadiness, httpClient, nativeClient } from '../packages/contracts/src/client.ts';
 const actual={applicationName:'ANANSI Ultimate',applicationVersion:'0.1.0',apiVersion:null,contractVersion:1,coreVersion:'0.1.0',operatingSystem:'windows',uptimeMs:5};
+test('memory HTTP/native operations use scoped commands, validated DTOs and sanitized errors',async()=>{
+  const original=globalThis.fetch;let address='';let body:Record<string,unknown>={};
+  try{
+    globalThis.fetch=async(url,options)=>{address=String(url);body=JSON.parse(options!.body as string);return new Response(JSON.stringify({contractVersion:1,memories:[],nextOffset:null}));};
+    const client=httpClient('http://127.0.0.1:1451','a'.repeat(64));await client.listMemories('a'.repeat(32),{offset:50});assert.equal(new URL(address).pathname,'/v1/memories/list');assert.equal(body.workspaceId,'a'.repeat(32));assert.equal(body.offset,50);assert.ok(!('path' in body));
+    globalThis.fetch=async()=>new Response(JSON.stringify({contractVersion:1,memory:{id:'fake'},body:'text'}));await assert.rejects(client.readMemory('a'.repeat(32),'b'.repeat(32)),/incompatible/);
+    for(const [code,message] of [['REVISION_CONFLICT','draft was kept'],['VAULT_UNAVAILABLE','future encrypted vault'],['CONTENT_INTEGRITY','integrity verification']]){globalThis.fetch=async()=>new Response(JSON.stringify({code,message:'private path must not appear'}),{status:409});await assert.rejects(client.createMemory('a'.repeat(32),{title:'X',body:'text'}),new RegExp(message));}
+  }finally{globalThis.fetch=original;}
+  const window=Object.getOwnPropertyDescriptor(globalThis,'window');let command='',args:unknown;
+  Object.defineProperty(globalThis,'window',{configurable:true,value:{__TAURI_INTERNALS__:{invoke:async(c:string,a:unknown)=>{command=c;args=a;return {contractVersion:1,memories:[],nextOffset:null};}}}});
+  try{await nativeClient().listMemories('a'.repeat(32));assert.equal(command,'memory_command');assert.deepEqual(args,{command:'list',request:{contractVersion:1,workspaceId:'a'.repeat(32)}});}finally{if(window)Object.defineProperty(globalThis,'window',window);else Reflect.deleteProperty(globalThis,'window');}
+});
 test('runtime schema accepts a readiness DTO and rejects malformed and unknown fields',()=>{
   assert.deepEqual(decodeReadiness(actual),actual);
   for(const value of [{...actual,uptimeMs:'5'},{...actual,secret:'unknown'},{...actual,contractVersion:2},null,{}])assert.throws(()=>decodeReadiness(value));

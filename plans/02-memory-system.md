@@ -1,6 +1,6 @@
 # M2 — Memory OS
 
-Status: M2.0 detailed plan prepared for acceptance approval under the user's continuation after M1. No M2 product behavior is implemented. Approve this concrete plan before M2.1. Later security gates still apply.
+Status: the user accepted M2.0 and authorized M2.1. Local native/browser memory revision acceptance passes; protected publication is required before final handoff. Stop before M2.2. Later vault security approval remains required.
 
 Gate identifier: M2.0 — detailed planning and acceptance approval only. Verified baseline: 97babb3ae9f3dc20b5602a7b46a947e833943eb2, tag m1-desktop-foundation-verified. Preserve the master and existing verified history.
 
@@ -56,7 +56,7 @@ Every product task inherits the commands, recovery and Done rules below. Listed 
 
 ### M2.1 — Save, reopen and revise one memory
 
-Dependency: acceptance approval of M2.0. Create crates/core/src/memory.rs, crates/core/src/content.rs, crates/core/src/privacy.rs, crates/core/migrations/0003_memory.sql, crates/core/tests/memory_roundtrip.rs, crates/api/tests/memories.rs, packages/ui/src/Memory.tsx, tests/e2e/memory.spec.ts, scripts/verify-memory.mjs and docs/evidence/M2-1.md.
+Dependency satisfied by user approval. Local implementation/evidence: docs/evidence/M2-1.md. Files created: crates/core/src/memory.rs, crates/core/src/content.rs, crates/core/src/privacy.rs, crates/core/migrations/0003_memory.sql, crates/core/tests/memory_roundtrip.rs, crates/api/tests/memories.rs, packages/ui/src/Memory.tsx, tests/e2e/memory.spec.ts, scripts/verify-memory.mjs and docs/evidence/M2-1.md.
 
 Extend existing core storage/lib/readiness errors, API lib/auth allowlist, Rust contract generator and generated outputs, shared client/App/Navigation/tokens, desktop lib.rs and new permissions/memories.toml scoped to local default capability. Use a separate 320 KiB memory request limit; do not globally enlarge workspace limits or remote capabilities.
 
