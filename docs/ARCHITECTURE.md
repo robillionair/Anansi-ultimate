@@ -46,7 +46,12 @@ Private/sealed memories, credentials, OAuth tokens, MCP tools, local filesystem 
 
 ## Open architectural decisions
 
-- Exact schema and encryption model await the missing master specification.
+- The restored specification defines memory metadata/states, privacy classes and an optional audited vault. Exact schema, migration and encryption-library designs remain M1/M2 planning decisions.
 - Exact vector index implementation awaits performance and data-shape requirements.
-- OAuth provider set and secret-storage mechanism await provider requirements.
+- Section 14 lists candidate providers; official authentication/entitlement verification is required in M5. Section 70 specifies Windows Credential Manager and macOS Keychain; no credentials integration is implemented.
 - Tauri command/API parity needs contract tests in the first vertical slice.
+
+
+## Reconciled ownership
+
+[The canonical roadmap](ROADMAP.md) follows master section 82. M0 prepares repository tooling only. M1 owns shared DTO/command contracts, local API authentication design, desktop/browser launch and SQLite/workspace foundations. Rust domain rules remain common to Tauri and Axum adapters; the browser never receives native process/filesystem capabilities. Axum and the proposed layout are accepted targets requiring validation, not master-mandated implementation details. Vector implementation, sandbox technology, provider details and Big Brain behavior remain explicit design gates. See ADR-0005.

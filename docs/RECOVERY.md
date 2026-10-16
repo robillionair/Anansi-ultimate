@@ -8,3 +8,9 @@
 6. If requirements conflict, stop implementation and record the conflict in `docs/DECISIONS.md`.
 
 Recovery checkpoints should contain source, tests, and the corresponding status/documentation updates. Never treat a build artifact alone as a recoverable project state.
+
+## Reconciled resume entrypoint
+
+Begin with [the approved M0 plan](../plans/PHASE-000-foundation.md), task M0.1, and [the canonical roadmap](ROADMAP.md). Milestone IDs follow master section 82; legacy numeric plan filenames do not define milestone numbers. Run `node scripts/validate-planning.mjs --self-test` for the current planning audit; this does not run product tests or replace M0 CI/restore checks.
+
+If a documentation checkpoint records the previous verified implementation commit, inspect subsequent metadata commits as well. Never reset to a recorded SHA just because it is older than HEAD. Fresh recovery uses `git clone https://github.com/robillionair/Anansi-ultimate.git`; bundle recovery uses `git bundle verify <bundle>` followed by `git clone <bundle> <new-directory>`. M0 must still prove the independent backup/restore workflow before claiming recovery complete.

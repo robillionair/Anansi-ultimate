@@ -1,3 +1,3 @@
-# Phase 00 — Foundation
+# M0 plan entrypoint
 
-This phase is documented in [PHASE-000-foundation.md](PHASE-000-foundation.md). It establishes durable project memory, requirements traceability, architecture, recovery conventions, and the implementation roadmap.
+The approved implementation plan is [PHASE-000-foundation.md](PHASE-000-foundation.md). Reconciliation is complete; implementation acceptance criteria remain open.

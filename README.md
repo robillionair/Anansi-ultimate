@@ -4,7 +4,7 @@ ANANSI is a local-first intelligence workspace planned for a shared Tauri deskto
 
 ## Repository status
 
-This repository currently contains the planning and architecture foundation. Product implementation begins with `plans/01-desktop-and-web.md` after the complete master specification is restored.
+This repository currently contains the planning and architecture foundation. The master specification is restored and milestone reconciliation is complete. Begin the approved M0 implementation at [plans/PHASE-000-foundation.md](plans/PHASE-000-foundation.md), task M0.1. Product implementation and desktop/web launch are not yet available. See [the roadmap](docs/ROADMAP.md) and [coverage ledger](docs/SPEC_COVERAGE.md).
 
 ## Workspace layout
 

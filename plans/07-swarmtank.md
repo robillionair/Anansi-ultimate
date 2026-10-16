@@ -1,3 +1,11 @@
-# Phase 07 — SwarmTank
+# M9 — SwarmTank 3D
 
-Implement the SwarmTank 3D experience using the shared UI system and Three.js performance constraints.
+Status: tracked planning task; detailed implementation design and acceptance approval required before coding. This is not an implemented feature or a complete technical design.
+
+Authority: [master specification](../docs/MASTER_SPEC.md), sections 34–41, 65–67, 73, 77–78; [canonical roadmap](../docs/ROADMAP.md).
+
+Required scope: Synthetic personas, seeded decisions, sensitivity controls, reports, accessible 2D/3D, approved product improvement loop. All applicable cross-cutting constraints and section 82 milestone items remain mandatory.
+
+Dependencies: complete the preceding milestone and verify relevant shared contracts. Before implementation, inventory every bullet in the cited sections, define task-sized vertical slices, exact files, security boundaries, migrations, tests, observable workflow evidence, rollback and acceptance criteria. Record unresolved design choices in decisions; do not invent integrations or claim mocks are live verification.
+
+Planning completion requires requirement-level traceability, explicit deferred sub-slices with rationale, current official dependency/provider verification where relevant, executable verification commands and reviewable Definition of Done. Stop at each approved task boundary. M0 is the current implementation phase; do not start this milestone during reconciliation.

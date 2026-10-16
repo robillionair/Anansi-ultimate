@@ -1,5 +1,3 @@
-# Phase 01 — Desktop and Web
+# M1 plan entrypoint
 
-Build the first runnable shared desktop/web shell described in `plans/PHASE-001-runnable-shell.md`.
-
-Acceptance criteria include a launched Tauri desktop app, a launched browser app, a shared readiness contract, shared UI primitives, local API separation, automated tests, and CI checks.
+See [PHASE-001-runnable-shell.md](PHASE-001-runnable-shell.md) for the canonical tracked design task. The detailed M1 implementation plan remains to be authored after M0 verification.
