@@ -2,10 +2,12 @@
 import { chromium, expect } from '@playwright/test';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 if(process.platform!=='win32')throw Error('Windows desktop verification requires Windows.');
 const port=19323;
-const env={...process.env};
+const fixture=fs.mkdtempSync(path.join(os.tmpdir(),'anansi-native-readiness-'));
+const env={...process.env,ANANSI_STORAGE_ROOT:path.join(fixture,'storage')};
 if(process.argv.includes('--configured-cdp'))delete env.WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS;
 else env.WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=`--remote-debugging-port=${port}`;
 const binary=process.argv.slice(2).find(argument=>!argument.startsWith('--'))||'target/debug/anansi-desktop.exe';

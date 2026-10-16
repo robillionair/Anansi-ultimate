@@ -6,7 +6,7 @@ import path from 'node:path';
 let child:ChildProcess, root:string, file:string, pairing:{endpoint:string,token:string};
 test.beforeAll(async()=>{
   root=fs.mkdtempSync(path.join(os.tmpdir(),'anansi-browser-test-'));
-  child=spawn(path.resolve('target/debug/anansi-api'+(process.platform==='win32'?'.exe':'')),['--port','0','--pairing-root',root],{windowsHide:true,stdio:['ignore','pipe','pipe']});
+  child=spawn(path.resolve('target/debug/anansi-api'+(process.platform==='win32'?'.exe':'')),['--port','0','--pairing-root',root],{windowsHide:true,env:{...process.env,ANANSI_STORAGE_ROOT:path.join(root,'storage')},stdio:['ignore','pipe','pipe']});
   await new Promise<void>((resolve,reject)=>{
     const timer=setTimeout(()=>reject(Error('API startup timed out')),15000);let output='';
     child.stdout!.on('data',data=>{output+=data.toString();const match=output.match(/Pairing file: (.+)\r?\n/);if(match){file=match[1].trim();pairing=JSON.parse(fs.readFileSync(file,'utf8'));clearTimeout(timer);resolve();}});
