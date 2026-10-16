@@ -39,7 +39,7 @@ test('fences and inline examples are ignored; real anchors, duplicates, assets a
 test('longer fenced blocks require a matching closing fence', () => {
   assert.equal(prose('~~~~js\n[bad](missing)\n~~~\n~~~~\n# Visible'),'\n\n\n\n# Visible');
 });
-for (const operation of ['build','backup']) test(`${operation} reports unavailable with nonzero status`, () => {
+for (const operation of ['build']) test(`${operation} reports unavailable with nonzero status`, () => {
   const result=spawnSync(process.execPath,['scripts/unavailable.mjs',operation],{cwd:root,encoding:'utf8'});
   assert.equal(result.status,1);
   assert.match(result.stderr,/not (available|implemented)/);

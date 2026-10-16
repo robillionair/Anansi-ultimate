@@ -28,3 +28,7 @@ M0.3 must implement and prove independent source backup/restore; no M0 completio
 Rust/Cargo and standard Windows native tools remain future M1 prerequisite gaps. No product behavior, inference or private data processing tested. AN-022 remains in progress until all source recovery requirements pass.
 
 Current master protection applies to administrators. Publish/check a task branch before updating master; do not bypass protection. Final completion records are published separately from the implementation checkpoint and verified in the task report.
+
+## M0.3 in progress
+
+Source backup command and safeguard tests are implemented; pnpm test now includes 27 Node tests and 13 PowerShell checks. Actual ANANSI bundle/restore and protected CI publication are pending; no M0 tag created yet. project-state selects M0.3; stop before M1.
