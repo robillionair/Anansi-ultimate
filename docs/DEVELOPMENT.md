@@ -1,6 +1,6 @@
 # Development contract
 
-Current scope is M0.1 repository hygiene. There is no runnable desktop/web application, database migration, product test suite or installer. Follow the approved M0 plan; M0.2 owns root script repair/CI and M0.3 owns independent backup/restore. Do not interpret empty recursive script success as a product build.
+Current scope is M0.2 validation and foundation CI. There is no runnable desktop/web application, database migration, product test suite or installer. Follow the approved M0 plan; M0.2 owns root script repair/CI and M0.3 owns independent backup/restore. Do not interpret empty recursive script success as a product build.
 
 ## Foundation setup and verification
 
@@ -20,7 +20,7 @@ git hash-object docs/MASTER_SPEC.md
 
 The version command must report 11.25.0 before lockfile operations. If absent, `npm exec --yes --package=pnpm@11.25.0 -- pnpm --version` and the same prefix with `install --frozen-lockfile --ignore-scripts` select an exact package without editing the global installation. This fallback is documented, not exercised in this environment. Resolve new dependencies only in an approved task and commit the manager-generated lockfile. Lifecycle scripts are disabled for foundation installs; revisit approved dependency build requirements when real packages are introduced.
 
-Existing root `check`, `test`, and `build` recursively search an empty workspace and currently return success with “No projects matched”. They are unchanged in M0.1 because wiring honest root commands belongs to M0.2. Run the explicit commands above for meaningful checks. `check:docs`, `test:docs`, backup commands and CI do not exist yet.
+Root `pnpm check` / `pnpm check:docs` validate documentation, state and evidence paths; `pnpm test` runs all foundation tests and `pnpm test:docs` runs documentation fixtures. `pnpm build` exits 1 explaining that the product build is unavailable until M1. `pnpm backup:source` exits 1 without creating anything until M0.3 implements source recovery. The legacy validate-planning entrypoint delegates to validate-docs and preserves its self-test. Foundation CI runs Windows/Linux using exact Node/pnpm versions, SHA-pinned actions and contents:read permission. No Rust/frontend build is claimed.
 
 ## Observed toolchain and remediation
 

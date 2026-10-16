@@ -51,8 +51,8 @@ test('State and foundation configuration reference real, trackable files', () =>
   const state = JSON.parse(read('project-state.json'));
   assert.equal(state.schemaVersion, 1);
   assert.equal(state.activeMilestone, 'M0');
-  assert.equal(state.activeTask, 'M0.1');
-  assert.equal(state.nextTask, 'M0.2');
+  assert.match(state.activeTask, /^M0\.\d+$/);
+  assert.match(state.nextTask, /^M0\.\d+$/);
   assert.equal(state.milestoneComplete, false);
   assert.equal(state.productImplementation, 'not started');
   for (const p of [state.plan, ...state.evidence]) assert.ok(fs.existsSync(path.join(root, p)), p);

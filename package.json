@@ -4,8 +4,11 @@
   "version": "0.1.0",
   "packageManager": "pnpm@11.25.0",
   "scripts": {
-    "check": "pnpm -r check",
-    "test": "pnpm -r test",
-    "build": "pnpm -r build"
+    "check": "node scripts/validate-docs.mjs",
+    "test": "node --test tests/docs-validation.test.mjs tests/repository-hygiene.test.mjs",
+    "build": "node scripts/unavailable.mjs build",
+    "check:docs": "node scripts/validate-docs.mjs",
+    "test:docs": "node --test tests/docs-validation.test.mjs",
+    "backup:source": "node scripts/unavailable.mjs backup"
   }
 }

@@ -33,3 +33,7 @@ Next approved task: M0.2 executable validation and CI. Then M0.3 independent sou
 No M0.1 blocker remains. Rust/Cargo and standard Windows C++ tools were not found; registered SDK headers were not found. Recheck/install prerequisites before M1. WebView2 directories exist but runtime behavior is untested. Existing remote history protects committed source; independent local restore remains unverified.
 
 Last verified implementation checkpoint: 4b3bc0a1077148e8b6191267a7c706bf95dd1090. Successfully pushed and matched origin/master. This following metadata commit records publication; recovery must inspect later metadata commits rather than reset to an older SHA.
+
+## M0.2 execution in progress
+
+Local validation and root-command wiring are implemented; 28 tests passed. Real CI/protection verification is pending. Do not interpret the M0.1 summary above as the current active task: project-state.json now selects M0.2. Stop before M0.3.

@@ -43,3 +43,10 @@
 - **Policies:** UTF-8/LF defaults, CRLF command files and binary attributes; no bulk renormalization of existing files. Ignore runtime data/secrets/builds; preserve source, safe environment examples and synthetic JSON/SQL/Markdown fixtures. Ignore files do not provide secret scanning or encryption.
 - **Boundary:** Root script wiring, broader validators, CI/protection and independent backup/restore stay in M0.2/M0.3. This task adds direct Node tests for its own behavior only. Shared Rust core/transport ownership remains as previously approved.
 - **Status:** accepted for M0.1; native build prerequisites remain unverified/incomplete for M1. See docs/evidence/M0.md for actual command evidence.
+
+## ADR-0007: Executable foundation checks and CI boundary
+
+- Decision: Promote the planning audit to dependency-free validate-docs, retain its compatibility entrypoint, use Node's built-in test runner and make root commands report their actual scope. Build and source backup intentionally fail with an explanatory message until their own tasks exist.
+- Links: inline/image and reference Markdown links, relative files, GitHub-style heading anchors including duplicate headings are checked outside fenced/inline code. Repository paths come from Git's tracked/nonignored inventory; no symlinks are followed. This is a repository documentation convention checker, not a full Markdown renderer or product completion validator.
+- CI: Windows/Linux matrix, exact Node/pnpm versions and official action commit pins, least privilege and no product scaffolds. Branch protection will require both actual foundation check names; protection state and CI evidence must be verified separately.
+- Scope: backup script/restore drill remain M0.3. Choose dependency-free PowerShell assertions for the future backup test script. No application architecture or privacy capability has changed.
