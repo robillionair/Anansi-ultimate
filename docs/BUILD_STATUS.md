@@ -4,7 +4,7 @@
 
 M0 verified complete. M1.0 plan/doctor complete. M1.1 has partial progress and an actual administrator-install blocker. M1.2/product implementation has not started.
 
-Entering verified source checkpoint a6a848e7c2786bc73c56d2337b6f9fa171514290. Active task and next task remain M1.1. No M1 completion tag or product capability completion is claimed.
+Verified partial M1.1 source checkpoint 2f540586431729410dd18fd49749f7523cd2129b, pushed after CI. Active task and next task remain M1.1. No M1 completion tag or product capability completion is claimed.
 
 ## M1.1 implemented
 
@@ -17,7 +17,7 @@ Entering verified source checkpoint a6a848e7c2786bc73c56d2337b6f9fa171514290. Ac
 
 Rust/Cargo/component version checks succeeded. Rust metadata compilation succeeded. Full local MSVC linking failed: link.exe not found. Doctor native mode still returns 1 for missing C++/SDK. Default install plan passed; -Install correctly refused the non-elevated process before installing. No local smoke executable exists or has been run.
 
-[M1 evidence](evidence/M1.md) records exact hashes, commands, installer signature, versions and retained logs. Existing master specification remains intact. Tests/CI/publication results are recorded after actual execution.
+[M1 evidence](evidence/M1.md) records exact hashes, commands, installer signature, versions and retained logs. Existing master specification remains intact. Local documentation checks and 35 Node plus 13 PowerShell recovery checks passed. CI run 38843440571 passed Windows/Linux Foundation and the separate Windows native compile/link/run smoke job. This runner success does not clear the local administrator-install blocker.
 
 ## Required next action
 

@@ -4,7 +4,7 @@
   "activeTask": "M1.1",
   "plan": "plans/PHASE-001-runnable-shell.md",
   "implementationStatus": "M1.1 partially implemented: Rust 1.99.1 MSVC installed; local MSVC link blocked by missing administrator-installed C++ tools/SDK",
-  "lastVerifiedCommit": "a6a848e7c2786bc73c56d2337b6f9fa171514290",
+  "lastVerifiedCommit": "2f540586431729410dd18fd49749f7523cd2129b",
   "evidence": [
     "docs/evidence/M0.md",
     "docs/evidence/M1.md"
