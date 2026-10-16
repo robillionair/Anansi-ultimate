@@ -42,12 +42,15 @@ test('native transport validates DTOs and sanitizes rejected or unavailable IPC'
 });
 test('workspace HTTP contracts validate settings and never send paths',async()=>{
   const original=globalThis.fetch;const calls:{url:string,body:Record<string,unknown>}[]=[];
-  const details={contractVersion:1,schemaVersion:1,workspace:{id:'1'.repeat(32),name:'Synthetic'},settings:{reducedMotion:true}};
+  const details={contractVersion:1,schemaVersion:2,workspace:{id:'1'.repeat(32),name:'Synthetic'},settings:{reducedMotion:true,intent:'explore',onboardingComplete:false}};
   try{
     globalThis.fetch=async(url,options)=>{calls.push({url:String(url),body:JSON.parse(options!.body as string)});return new Response(JSON.stringify(String(url).endsWith('/list')?{contractVersion:1,workspaces:[details.workspace]}:details));};
     const api=httpClient('http://127.0.0.1:1451','a'.repeat(64));await api.listWorkspaces();await api.createWorkspace('Synthetic');await api.openWorkspace(details.workspace.id);assert.deepEqual(await api.updateSettings(details.workspace.id,true),details);
     assert.deepEqual(calls.map(call=>new URL(call.url).pathname),['/v1/workspaces/list','/v1/workspaces/create','/v1/workspaces/open','/v1/workspaces/settings']);
     assert.deepEqual(calls[3].body,{contractVersion:1,id:details.workspace.id,reducedMotion:true});assert.ok(calls.every(call=>!('path' in call.body)));
+    await api.updateSettings(details.workspace.id,true,{intent:'invent_product',onboardingComplete:true});
+    assert.deepEqual(calls[4].body,{contractVersion:1,id:details.workspace.id,reducedMotion:true,intent:'invent_product',onboardingComplete:true});
+    globalThis.fetch=async()=>new Response(JSON.stringify({...details,settings:{...details.settings,intent:'invalid'}}));await assert.rejects(api.openWorkspace(details.workspace.id),/incompatible/);
     globalThis.fetch=async()=>new Response(JSON.stringify({...details,settings:{reducedMotion:'true'}}));await assert.rejects(api.openWorkspace(details.workspace.id),/incompatible/);
     globalThis.fetch=async()=>new Response(JSON.stringify({code:'CORRUPT_STORAGE',message:'private path must not be echoed'}),{status:409});await assert.rejects(api.listWorkspaces(),/Keep the original files/);
   }finally{globalThis.fetch=original;}

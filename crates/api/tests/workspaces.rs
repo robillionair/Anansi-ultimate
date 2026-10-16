@@ -55,10 +55,12 @@ async fn authenticated_workspace_http_matches_core_and_preserves_settings() {
     let (_, updated) = call(
         s.clone(),
         "settings",
-        json!({"contractVersion":1,"id":id,"reducedMotion":true}),
+        json!({"contractVersion":1,"id":id,"reducedMotion":true,"intent":"invent_product","onboardingComplete":true}),
     )
     .await;
     assert_eq!(updated["settings"]["reducedMotion"], true);
+    assert_eq!(updated["settings"]["intent"], "invent_product");
+    assert_eq!(updated["settings"]["onboardingComplete"], true);
     assert_eq!(
         updated,
         s.core

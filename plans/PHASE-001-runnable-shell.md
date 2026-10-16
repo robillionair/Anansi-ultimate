@@ -1,6 +1,6 @@
 # M1 — Windows desktop .exe and web UI foundation
 
-Status: approved scope under the user's 2026-10-16 continuation instruction after verified M0. M1.0 through M1.3 are verified complete, including actual native/browser workflows and all three CI jobs; checkpoint publication is recorded in build status. Next is M1.4; no full product requirement is complete. Follow one task at a time. Stop at the end of M1 and do not begin M2 automatically.
+Status: approved scope under the user's 2026-10-16 continuation instruction after verified M0. M1.0 through M1.3 are verified complete. M1.4 is implemented; its verification/publication state is recorded in build status. Next is M1.5; no full product requirement is complete. Follow one task at a time. Stop at the end of M1 and do not begin M2 automatically.
 
 Authority: [master specification](../docs/MASTER_SPEC.md), sections 3–8, 63–64, 70–71, 74–75, 82–84; [roadmap](../docs/ROADMAP.md). M0 completion tag is m0-foundation-verified at 268533e. Preserve all source scope and M0 recovery/CI controls.
 
@@ -55,6 +55,8 @@ Onboarding retains five intent choices from section 7, local workspace creation/
 Use graphite/warm-white/violet shared tokens, strong contrast/typography, restrained motion, visible focus and keyboard semantics. Native/web share the same components. No external fonts or telemetry required for basic offline use.
 
 Acceptance: a new user chooses an intent, creates a workspace, reviews privacy, skips providers, enters workspace/settings and changes/reloads a preference in both editions. Keyboard-only and screen-reader labels, reduced motion, narrow/wide layouts and error recovery verified in the actual UI. Show current action/result/next step, with no fake dashboard data. Run component/E2E tests and record visual inspection evidence.
+
+Implementation details: schema migration crates/core/migrations/0002_onboarding.sql persists typed intent/onboarding preferences through the existing scoped settings command and generated contracts. Split the earlier WorkspacePanel into the planned components; keep root commands and native/browser verifiers current. Component tests live in packages/ui/tests/components.test.tsx to resolve the UI package's existing React dependencies. [ADR-0014](../docs/DECISIONS.md#adr-0014-durable-first-run-preferences-and-small-shared-navigation) records the migration, navigation and consent boundaries; [M1.4 evidence](../docs/evidence/M1-4.md) records actual outcomes. Full hardware/model/provider onboarding is retained under M3/M5.
 
 ### M1.5 — Development Windows installer and milestone certification
 

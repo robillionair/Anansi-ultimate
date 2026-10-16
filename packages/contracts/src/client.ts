@@ -1,13 +1,13 @@
 import { validReadiness, validError, validWorkspaceDetails, validWorkspaceList } from './validators.mjs';
 import { invoke } from '@tauri-apps/api/core';
-import type { Readiness, WorkspaceDetails, WorkspaceList } from './generated';
-export type { Readiness, WorkspaceDetails, WorkspaceList } from './generated';
+import type { Readiness, WorkspaceDetails, WorkspaceList, Intent } from './generated';
+export type { Readiness, WorkspaceDetails, WorkspaceList, Intent } from './generated';
 export interface Client {
   readiness(): Promise<Readiness>;
   listWorkspaces(): Promise<WorkspaceList>;
   createWorkspace(name: string): Promise<WorkspaceDetails>;
   openWorkspace(id: string): Promise<WorkspaceDetails>;
-  updateSettings(id: string, reducedMotion: boolean): Promise<WorkspaceDetails>;
+  updateSettings(id: string, reducedMotion: boolean, preferences?: {intent?:Intent;onboardingComplete?:boolean}): Promise<WorkspaceDetails>;
 }
 function decode<T extends {contractVersion:number}>(value:unknown, validate:(value:unknown)=>value is T):T {
   if(!validate(value)||value.contractVersion!==1)throw new Error('The core returned an incompatible response. Update both applications.');
@@ -37,7 +37,7 @@ function client(call:Call):Client {
     listWorkspaces:async()=>decode(await call('list',{}),validWorkspaceList),
     createWorkspace:async name=>decode(await call('create',{name}),validWorkspaceDetails),
     openWorkspace:async id=>decode(await call('open',{id}),validWorkspaceDetails),
-    updateSettings:async(id,reducedMotion)=>decode(await call('settings',{id,reducedMotion}),validWorkspaceDetails),
+    updateSettings:async(id,reducedMotion,preferences={})=>decode(await call('settings',{id,reducedMotion,...preferences}),validWorkspaceDetails),
   };
 }
 export function httpClient(endpoint:string,token:string):Client {

@@ -34,27 +34,40 @@ async function pairBrowser(){
   await webPage.getByRole('button',{name:'Connect to core'}).click();await expect(webPage.locator('.badge')).toHaveText('Connected');
   await expect(webPage.getByRole('button',{name:'Refresh workspaces'})).toBeEnabled({timeout:15000});
 }
-async function create(page,name){await page.getByLabel('New workspace name').fill(name);await page.getByRole('button',{name:'Create workspace'}).click();await expect(page.getByRole('heading',{name})).toBeVisible({timeout:15000});await expect(page.getByRole('button',{name:'Close workspace'})).toBeEnabled({timeout:15000});return page.locator('.workspace-id code').innerText();}
+async function create(page,name){
+  if(await page.getByRole('button',{name:'Continue to workspace'}).isVisible()){
+    await page.getByRole('radio',{name:/Build an application/}).check();await page.getByRole('button',{name:'Continue to workspace'}).click();
+  }
+  await page.getByLabel('New workspace name').fill(name);await page.getByRole('button',{name:'Create workspace'}).click();
+  await expect(page.getByRole('heading',{name:'Review your privacy'})).toBeFocused({timeout:15000});
+  await expect(page.getByRole('button',{name:'Continue to AI setup'})).toBeDisabled();
+  await page.getByLabel('I have reviewed these privacy limits').focus();await page.keyboard.press('Space');await expect(page.getByRole('button',{name:'Continue to AI setup'})).toBeEnabled({timeout:15000});await page.keyboard.press('Tab');await page.keyboard.press('Enter');
+  await expect(page.getByRole('heading',{name:'Choose AI setup'})).toBeFocused();
+  await page.getByRole('button',{name:'Skip AI setup and enter ANANSI'}).click();
+  await expect(page.getByRole('heading',{name,exact:true})).toBeVisible({timeout:15000});
+  return page.locator('.workspace-id code').innerText();
+}
 async function open(page,id){await page.getByRole('button',{name:'Refresh workspaces'}).click();await expect(page.getByRole('button',{name:'Refresh workspaces'})).toBeEnabled({timeout:15000});await page.getByLabel('Existing workspace').selectOption(id);await page.getByRole('button',{name:'Open workspace',exact:true}).click();await expect(page.locator('.workspace-id code')).toHaveText(id,{timeout:15000});}
-async function close(page){await page.getByRole('button',{name:'Close workspace'}).click();await expect(page.getByRole('button',{name:'Refresh workspaces'})).toBeEnabled({timeout:15000});}
-async function motion(page,on){await page.getByRole('button',{name:on?'Turn reduced motion on':'Turn reduced motion off'}).click();await expect(page.getByRole('button',{name:on?'Turn reduced motion off':'Turn reduced motion on'})).toBeEnabled({timeout:15000});}
+async function close(page){await page.getByRole('button',{name:'Workspace',exact:true}).click();await page.getByRole('button',{name:'Close workspace'}).click();await expect(page.getByRole('button',{name:'Refresh workspaces'})).toBeEnabled({timeout:15000});}
+async function motion(page,on){await page.getByRole('button',{name:'Settings',exact:true}).click();await page.getByRole('button',{name:on?'Turn reduced motion on':'Turn reduced motion off'}).click();await expect(page.getByRole('button',{name:on?'Turn reduced motion off':'Turn reduced motion on'})).toBeEnabled({timeout:15000});}
 try{
   preview=spawn(process.execPath,[path.resolve('apps/web/node_modules/vite/bin/vite.js'),'preview','--host','127.0.0.1','--port','1420','--strictPort'],{cwd:path.resolve('apps/web'),windowsHide:true,stdio:'ignore'});
   await waitFor('http://127.0.0.1:1420',preview);await startApi();await startDesktop();
   webBrowser=await chromium.launch();webPage=await webBrowser.newPage({reducedMotion:'no-preference'});
   const nativeId=await create(nativePage,'Synthetic native workspace');await motion(nativePage,true);
-  await pairBrowser();await open(webPage,nativeId);await expect(webPage.getByRole('button',{name:'Turn reduced motion off'})).toBeVisible();await motion(webPage,false);
-  await close(nativePage);await open(nativePage,nativeId);await expect(nativePage.getByRole('button',{name:'Turn reduced motion on'})).toBeVisible();
+  await nativePage.getByRole('radio',{name:/Invent a product/}).check();await nativePage.getByRole('button',{name:'Save starting point'}).click();await expect(nativePage.getByRole('status').filter({hasText:'Workspace preferences saved.'})).toBeVisible({timeout:15000});
+  await pairBrowser();await open(webPage,nativeId);await webPage.getByRole('button',{name:'Settings',exact:true}).click();await expect(webPage.getByRole('radio',{name:/Invent a product/})).toBeChecked();await expect(webPage.getByRole('button',{name:'Turn reduced motion off'})).toBeVisible();await motion(webPage,false);
+  await close(nativePage);await open(nativePage,nativeId);await nativePage.getByRole('button',{name:'Settings',exact:true}).click();await expect(nativePage.getByRole('button',{name:'Turn reduced motion on'})).toBeVisible();
   await close(webPage);const browserId=await create(webPage,'Synthetic browser workspace');await motion(webPage,true);
-  await close(nativePage);await open(nativePage,browserId);await expect(nativePage.getByRole('button',{name:'Turn reduced motion off'})).toBeVisible();
+  await close(nativePage);await open(nativePage,browserId);await nativePage.getByRole('button',{name:'Settings',exact:true}).click();await expect(nativePage.getByRole('button',{name:'Turn reduced motion off'})).toBeVisible();
   await stopDesktop();await stopApi();await startApi();await startDesktop();await pairBrowser();
-  await open(nativePage,browserId);await expect(nativePage.getByRole('button',{name:'Turn reduced motion off'})).toBeVisible();
-  await open(webPage,nativeId);await expect(webPage.getByRole('button',{name:'Turn reduced motion on'})).toBeVisible();
+  await open(nativePage,browserId);await nativePage.getByRole('button',{name:'Settings',exact:true}).click();await expect(nativePage.getByRole('button',{name:'Turn reduced motion off'})).toBeVisible();
+  await open(webPage,nativeId);await webPage.getByRole('button',{name:'Settings',exact:true}).click();await expect(webPage.getByRole('button',{name:'Turn reduced motion on'})).toBeVisible();
   await expect.poll(()=>nativePage.evaluate(()=>document.documentElement.dataset.reducedMotion)).toBe('true');
   await expect.poll(()=>nativePage.locator('.badge').evaluate(element=>getComputedStyle(element).transitionDuration)).toBe('0s');
   const stored=await webPage.evaluate(()=>localStorage.length+sessionStorage.length);if(stored!==0)throw Error('Unexpected browser persistence');
-  fs.mkdirSync('test-results',{recursive:true});await nativePage.screenshot({path:'test-results/native-workspace.png',fullPage:true});await webPage.screenshot({path:'test-results/cross-browser-workspace.png',fullPage:true});
-  console.log('PASS: actual desktop/browser creation and shared reopening, settings parity, both process restarts and live reduced-motion CSS.');
+  await expect(webPage.getByRole('radio',{name:/Invent a product/})).toBeChecked();await nativePage.setViewportSize({width:390,height:844});if(!await nativePage.evaluate(()=>document.documentElement.scrollWidth<=innerWidth))throw Error('Native narrow overflow');await nativePage.screenshot({path:'test-results/native-onboarding-narrow.png',fullPage:true});await nativePage.setViewportSize({width:1280,height:900});fs.mkdirSync('test-results',{recursive:true});await nativePage.screenshot({path:'test-results/native-workspace.png',fullPage:true});await webPage.screenshot({path:'test-results/cross-browser-workspace.png',fullPage:true});
+  console.log('PASS: actual desktop/browser onboarding, privacy review, skip AI, intent/motion settings parity, process restarts, narrow layout and live reduced-motion CSS.');
 }finally{
   if(webBrowser)await webBrowser.close();await stopDesktop();await stopApi();await kill(preview);
   // Retain only private synthetic catalog data outside source for recovery inspection.

@@ -30,6 +30,7 @@ try{
   page.on('requestfailed',request=>{if(request.failure()?.errorText!=='net::ERR_ABORTED')console.error('Native resource failed:',request.url(),request.failure()?.errorText);});
   await page.reload();
   await expect(page.getByRole('status')).toHaveText('Connected',{timeout:20000});
+  await page.getByRole('button',{name:'Connection',exact:true}).click();
   await expect(page.getByText('Windows desktop',{exact:false})).toBeVisible();
   await expect(page.locator('dd').filter({hasText:'windows'})).toBeVisible();
   const first=Number((await page.locator('dd').nth(3).innerText()).replace(' ms',''));

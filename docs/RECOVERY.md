@@ -11,9 +11,11 @@ Recovery checkpoints should contain source, tests, and the corresponding status/
 
 ## Reconciled resume entrypoint
 
-Begin with [the active M1 plan](../plans/PHASE-001-runnable-shell.md), the active/next task in project-state.json, and [the canonical roadmap](ROADMAP.md). M0.1-M0.3 and M1.0–M1.3 are complete; next is M1.4 first-run/navigation. Check BUILD_STATUS.md for the protected publication checkpoint. Read the detailed acceptance plan before coding. Milestone IDs follow master section 82; legacy numeric plan filenames do not define milestone numbers. Run `node --test tests/repository-hygiene.test.mjs` and `node scripts/validate-planning.mjs --self-test` for current foundation checks; these do not run product tests or replace M0 CI/restore checks.
+Begin with [the active M1 plan](../plans/PHASE-001-runnable-shell.md), the active/next task in project-state.json, and [the canonical roadmap](ROADMAP.md). M0.1-M0.3 and M1.0–M1.3 are complete; M1.4 is the current increment and M1.5 development installer is next. Check BUILD_STATUS.md for actual acceptance/publication. Read the detailed acceptance plan before coding. Milestone IDs follow master section 82; legacy numeric plan filenames do not define milestone numbers. Run `node --test tests/repository-hygiene.test.mjs` and `node scripts/validate-planning.mjs --self-test` for current foundation checks; these do not run product tests or replace M0 CI/restore checks.
 
 ## Workspace data recovery after M1.3
+
+M1.4 uses schema 2. Recognized schema-1 catalogs migrate forward without removing original workspace fields; an older binary cannot open schema 2. Preserve a complete closed-root copy before manual application rollback. Do not downgrade user_version or copy only selected rows/files. Onboarding-complete is only a UI preference and grants no cloud-sharing/recording consent.
 
 Source bundles exclude application data. Close both desktop and API before preserving the entire configured storage root, including .anansi-root, workspaces.sqlite3 and any WAL/SHM/journal files. Keep the original unchanged outside Git and use only a verified compatible copy for manual recovery. Never copy just the main database while a client is running, delete a failed initialization, lower a schema version or reset an unknown catalog automatically. Read-only, corrupt and newer-schema failures leave a recoverable error; interrupted first initialization may require inspection and manual recovery. Automatic user-data backup/restore remains future work. See [M1.3 evidence](evidence/M1-3.md).
 

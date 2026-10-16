@@ -12,7 +12,7 @@ use std::{
 };
 
 const APPLICATION_ID: i64 = 0x414e414e;
-const SCHEMA_VERSION: i64 = 1;
+const SCHEMA_VERSION: i64 = 2;
 const ROOT_MARKER: &[u8] = b"ANANSI workspace root v1\n";
 pub const DATABASE_NAME: &str = "workspaces.sqlite3";
 
@@ -224,7 +224,11 @@ impl Storage {
         if fresh {
             migrate(
                 &mut connection,
-                include_str!("../migrations/0001_workspace.sql"),
+                concat!(
+                    include_str!("../migrations/0001_workspace.sql"),
+                    "\n",
+                    include_str!("../migrations/0002_onboarding.sql")
+                ),
             )
             .map_err(|_| corrupt())?;
         }
@@ -240,6 +244,27 @@ impl Storage {
                 .is_some()
         {
             return Err(corrupt());
+        }
+        // Only the recognized v1 catalog may move forward; migration is atomic.
+        let version: i64 = connection
+            .pragma_query_value(None, "user_version", |row| row.get(0))
+            .map_err(|_| corrupt())?;
+        if version == 1 {
+            let tx = connection
+                .transaction_with_behavior(TransactionBehavior::Immediate)
+                .map_err(|_| unavailable())?;
+            let locked_version: i64 = tx
+                .pragma_query_value(None, "user_version", |row| row.get(0))
+                .map_err(|_| corrupt())?;
+            if locked_version == 1 {
+                tx.execute_batch(include_str!("../migrations/0002_onboarding.sql"))
+                    .map_err(|_| corrupt())?;
+                tx.pragma_update(None, "user_version", SCHEMA_VERSION)
+                    .map_err(|_| corrupt())?;
+            } else if locked_version != SCHEMA_VERSION {
+                return Err(corrupt());
+            }
+            tx.commit().map_err(|_| unavailable())?;
         }
         connection.prepare("SELECT w.id, w.name, w.name_key, s.reduced_motion FROM workspaces w JOIN workspace_settings s ON s.workspace_id = w.id").map_err(|_| corrupt())?;
         let journal: String = connection
@@ -313,6 +338,15 @@ impl Storage {
         Self::details(&connection, id)
     }
     pub fn update(&self, id: &str, reduced_motion: bool) -> Result<WorkspaceDetails, CommandError> {
+        self.update_preferences(id, reduced_motion, None, None)
+    }
+    pub fn update_preferences(
+        &self,
+        id: &str,
+        reduced_motion: bool,
+        intent: Option<crate::settings::Intent>,
+        onboarding_complete: Option<bool>,
+    ) -> Result<WorkspaceDetails, CommandError> {
         crate::workspace::validate_id(id)?;
         let mut connection = self.connection(false)?.ok_or_else(not_found)?;
         let tx = connection
@@ -320,8 +354,8 @@ impl Storage {
             .map_err(|_| unavailable())?;
         let changed = tx
             .execute(
-                "UPDATE workspace_settings SET reduced_motion=?1 WHERE workspace_id=?2",
-                params![reduced_motion, id],
+                "UPDATE workspace_settings SET reduced_motion=?1, intent=COALESCE(?3,intent), onboarding_complete=COALESCE(?4,onboarding_complete) WHERE workspace_id=?2",
+                params![reduced_motion, id, intent.map(|value| value.as_str()), onboarding_complete],
             )
             .map_err(|_| corrupt())?;
         if changed != 1 {
@@ -332,7 +366,11 @@ impl Storage {
         Ok(details)
     }
     fn details(connection: &Connection, id: &str) -> Result<WorkspaceDetails, CommandError> {
-        connection.query_row("SELECT w.id,w.name,s.reduced_motion FROM workspaces w JOIN workspace_settings s ON s.workspace_id=w.id WHERE w.id=?1", [id], |row| Ok(WorkspaceDetails { contract_version:1, schema_version:1, workspace: Workspace { id:row.get(0)?, name:row.get(1)? }, settings:WorkspaceSettings { reduced_motion:row.get(2)? } })).optional().map_err(|_| corrupt())?.ok_or_else(not_found)
+        connection.query_row("SELECT w.id,w.name,s.reduced_motion,s.intent,s.onboarding_complete FROM workspaces w JOIN workspace_settings s ON s.workspace_id=w.id WHERE w.id=?1", [id], |row| {
+            let intent: String = row.get(3)?;
+            let intent = serde_json::from_value(serde_json::Value::String(intent)).map_err(|_| rusqlite::Error::InvalidQuery)?;
+            Ok(WorkspaceDetails { contract_version:1, schema_version:SCHEMA_VERSION as u32, workspace: Workspace { id:row.get(0)?, name:row.get(1)? }, settings:WorkspaceSettings { reduced_motion:row.get(2)?, intent, onboarding_complete:row.get(4)? } })
+        }).optional().map_err(|_| corrupt())?.ok_or_else(not_found)
     }
 }
 fn not_found() -> CommandError {
@@ -351,7 +389,7 @@ fn check_identity(connection: &Connection) -> Result<(), CommandError> {
     let version: i64 = connection
         .pragma_query_value(None, "user_version", |row| row.get(0))
         .map_err(|_| corrupt())?;
-    if version != SCHEMA_VERSION {
+    if !(1..=SCHEMA_VERSION).contains(&version) {
         return Err(CommandError::new(
             ErrorCode::UnsupportedSchema,
             "Storage uses an unsupported schema version. Keep the original files and use a compatible ANANSI version.",

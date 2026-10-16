@@ -40,6 +40,8 @@ pub struct UpdateSettingsRequest {
     pub contract_version: u8,
     pub id: String,
     pub reduced_motion: bool,
+    pub intent: Option<crate::settings::Intent>,
+    pub onboarding_complete: Option<bool>,
 }
 fn input<T: DeserializeOwned>(value: serde_json::Value) -> Result<T, CommandError> {
     if value
@@ -124,10 +126,12 @@ impl Core {
             "settings" => {
                 let request: UpdateSettingsRequest = input(value)?;
                 validate_id(&request.id)?;
-                serde_json::to_value(
-                    self.storage()?
-                        .update(&request.id, request.reduced_motion)?,
-                )
+                serde_json::to_value(self.storage()?.update_preferences(
+                    &request.id,
+                    request.reduced_motion,
+                    request.intent,
+                    request.onboarding_complete,
+                )?)
                 .map_err(|_| crate::storage::unavailable())
             }
             _ => Err(CommandError::new(ErrorCode::NotFound, "Command not found.")),

@@ -8,6 +8,14 @@ if(result.status!==0)throw Error(result.stderr||'Contract generator failed');
 const schemas=JSON.parse(result.stdout);
 let types='// Generated from Rust serde DTOs. Run pnpm contracts:generate.\n';
 for(const [name,schema] of Object.entries(schemas))types+=await compile(schema,name,{bannerComment:'',additionalProperties:false});
+// Independently compiled DTOs can share named enum definitions. Keep one identical
+// declaration and reject collisions rather than emitting duplicate type aliases.
+const aliases=new Map();
+types=types.replace(/export type (\w+) = [\s\S]*?;\n/g,(declaration,name)=>{
+  const previous=aliases.get(name);
+  if(previous&&previous!==declaration)throw Error('Conflicting generated alias: '+name);
+  aliases.set(name,declaration);return previous?'':declaration;
+});
 const ajv=new Ajv2020({strict:false,formats:{uint8:true,uint32:true,uint64:true},code:{source:true,esm:true}});
 for(const [name,schema] of Object.entries(schemas))ajv.addSchema(schema,name);
 const names=Object.keys(schemas);

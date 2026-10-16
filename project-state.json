@@ -1,18 +1,19 @@
 {
   "schemaVersion": 1,
   "activeMilestone": "M1",
-  "activeTask": "M1.3",
+  "activeTask": "M1.4",
   "plan": "plans/PHASE-001-runnable-shell.md",
-  "implementationStatus": "M1.3 complete: real native/browser workspace and settings workflows, all three CI jobs and protected publication verified",
-  "lastVerifiedCommit": "0f58a9f310294fb2dda3ce49c21b1814bb6d14b1",
+  "implementationStatus": "M1.4 implemented; verification and checkpoint publication in progress",
+  "lastVerifiedCommit": "84e1d12c003c5ee3c56ada11e0ad16430ce8b159",
   "evidence": [
     "docs/evidence/M0.md",
     "docs/evidence/M1.md",
     "docs/evidence/M1-2.md",
-    "docs/evidence/M1-3.md"
+    "docs/evidence/M1-3.md",
+    "docs/evidence/M1-4.md"
   ],
   "blockers": [],
-  "nextTask": "M1.4",
-  "productImplementation": "M1.3 local workspace catalog and durable reduced-motion settings; memory, AI, onboarding and installer remain later tasks",
+  "nextTask": "M1.5",
+  "productImplementation": "M1.4 shared onboarding, navigation and durable workspace settings; memory, AI and installer remain later tasks",
   "milestoneComplete": false
 }

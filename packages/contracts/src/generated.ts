@@ -36,11 +36,16 @@ export interface Readiness {
 export interface ReadinessRequest {
   contractVersion: number;
 }
+export type Intent = "second_memory" | "invent_product" | "build_application" | "connect_ai" | "explore";
+
 export interface UpdateSettingsRequest {
   contractVersion: number;
   id: string;
+  intent?: Intent | null;
+  onboardingComplete?: boolean | null;
   reducedMotion: boolean;
 }
+
 export interface WorkspaceDetails {
   contractVersion: number;
   schemaVersion: number;
@@ -48,6 +53,8 @@ export interface WorkspaceDetails {
   workspace: Workspace;
 }
 export interface WorkspaceSettings {
+  intent: Intent;
+  onboardingComplete: boolean;
   reducedMotion: boolean;
 }
 export interface Workspace {

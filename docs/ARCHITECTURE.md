@@ -61,3 +61,5 @@ M0.1 records [directory and contract ownership](DEVELOPMENT.md). Core owns domai
 ## M1.0 domain/transport design gate
 
 The M1 detailed plan chooses authoritative Rust DTOs with generated shared schemas/bindings, an authenticated loopback browser adapter with explicit pairing/ACL and Origin/Host tests, and direct scoped Tauri commands invoking the same core rules. M1.2 implements and tests these boundaries for the readiness command only; see evidence/M1-2.md. A read-only repository toolchain doctor is development infrastructure, not ANANSI Core/product readiness. M1.1 verified native compile/link before M1.2 used that toolchain for the application slice.
+
+M1.4 extends the shared settings contract with typed intent and onboarding completion. Recognized schema-1 catalogs migrate transactionally to schema 2 with preserved workspace fields. These UI preferences grant no cloud/native capability; the permission/transport boundary is unchanged. Shared onboarding, navigation, workspace and settings components follow ADR-0014; hardware/providers, memory and installer remain their approved tasks.

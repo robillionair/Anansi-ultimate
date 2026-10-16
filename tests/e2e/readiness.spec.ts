@@ -22,6 +22,7 @@ async function connect(page:import('@playwright/test').Page){
   await page.goto('/');await page.getByLabel('Local API address').fill(pairing.endpoint);
   await page.getByLabel('Session token').fill(pairing.token);await page.getByRole('button',{name:'Connect to core'}).click();
   await expect(page.getByRole('status')).toHaveText('Connected');
+  await page.getByRole('button',{name:'Connection',exact:true}).click();
 }
 test('real browser pairs, refreshes live core, forgets and stores no token',async({page})=>{
   await connect(page);await expect(page.getByText('ANANSI Ultimate',{exact:true})).toBeVisible();

@@ -192,7 +192,7 @@ fn newer_live_wal_and_unknown_sqlite_are_inspected_read_only() {
     let file = root.join(DATABASE_NAME);
     {
         let connection = rusqlite::Connection::open(&file).unwrap();
-        connection.pragma_update(None, "user_version", 2).unwrap();
+        connection.pragma_update(None, "user_version", 3).unwrap();
         let wal = root.join(format!("{DATABASE_NAME}-wal"));
         let before = fs::read(&file).unwrap();
         let log = fs::read(&wal).unwrap();
@@ -300,4 +300,147 @@ fn rejects_windows_storage_junction_escapes() {
     );
     assert!(Storage::new(alias.join("storage")).is_err());
     fs::remove_dir(alias).unwrap();
+}
+
+#[test]
+fn v1_migration_preserves_original_workspace_and_onboarding_survives_restart() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().join("store");
+    // Establish the owned private root, then install a synthetic historical v1 catalog.
+    let storage = Storage::new(root.clone()).unwrap();
+    storage.create("Seed").unwrap();
+    let file = root.join(DATABASE_NAME);
+    fs::remove_file(&file).unwrap();
+    {
+        let connection = rusqlite::Connection::open(&file).unwrap();
+        connection
+            .execute_batch(include_str!("../migrations/0001_workspace.sql"))
+            .unwrap();
+        connection
+            .pragma_update(None, "application_id", 0x414e414e)
+            .unwrap();
+        connection.pragma_update(None, "user_version", 1).unwrap();
+        connection
+            .execute(
+                "INSERT INTO workspaces VALUES(?1,'Original','original')",
+                ["a".repeat(32)],
+            )
+            .unwrap();
+        connection
+            .execute(
+                "INSERT INTO workspace_settings VALUES(?1,1)",
+                ["a".repeat(32)],
+            )
+            .unwrap();
+    }
+    private_permissions(&file, false, false).unwrap();
+    fs::copy(&file, temp.path().join("preserved-v1.sqlite3")).unwrap();
+    let workers: Vec<_> = (0..3)
+        .map(|_| {
+            let storage = storage.clone();
+            std::thread::spawn(move || storage.open(&"a".repeat(32)).unwrap())
+        })
+        .collect();
+    let mut reopened = workers
+        .into_iter()
+        .map(|worker| worker.join().unwrap())
+        .collect::<Vec<_>>();
+    assert!(
+        reopened
+            .iter()
+            .all(|workspace| workspace.schema_version == 2 && workspace.settings.reduced_motion)
+    );
+    let original = reopened.pop().unwrap();
+    assert_eq!(original.schema_version, 2);
+    assert_eq!(original.workspace.name, "Original");
+    assert!(original.settings.reduced_motion);
+    assert_eq!(
+        original.settings.intent,
+        anansi_core::settings::Intent::Explore
+    );
+    assert!(!original.settings.onboarding_complete);
+    let core = Core::with_storage_root(root.clone());
+    for intent in [
+        "second_memory",
+        "invent_product",
+        "build_application",
+        "connect_ai",
+        "explore",
+    ] {
+        let updated=core.workspace_command("settings",json!({"contractVersion":1,"id":original.workspace.id,"reducedMotion":true,"intent":intent,"onboardingComplete":true})).unwrap();
+        assert_eq!(updated["settings"]["intent"], intent);
+    }
+    for (field, value) in [
+        ("intent", json!("made_up")),
+        ("onboardingComplete", json!("true")),
+    ] {
+        let mut request =
+            json!({"contractVersion":1,"id":original.workspace.id,"reducedMotion":false});
+        request[field] = value;
+        assert_eq!(
+            core.workspace_command("settings", request)
+                .unwrap_err()
+                .code,
+            ErrorCode::InvalidRequest
+        );
+    }
+    let reopened = Core::with_storage_root(root)
+        .workspace_command(
+            "open",
+            json!({"contractVersion":1,"id":original.workspace.id}),
+        )
+        .unwrap();
+    assert_eq!(
+        reopened["settings"],
+        json!({"reducedMotion":true,"intent":"explore","onboardingComplete":true})
+    );
+    let old = rusqlite::Connection::open(temp.path().join("preserved-v1.sqlite3")).unwrap();
+    assert_eq!(
+        old.pragma_query_value(None, "user_version", |row| row.get::<_, i64>(0))
+            .unwrap(),
+        1
+    );
+}
+
+#[test]
+fn failed_v1_forward_migration_rolls_back_and_keeps_original_rows_and_version() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().join("store");
+    let storage = Storage::new(root.clone()).unwrap();
+    let original = storage.create("Preserved").unwrap();
+    let file = root.join(DATABASE_NAME);
+    // A malformed v1 fixture has a conflicting second column. The first ALTER
+    // must roll back when the second fails, retaining its original row.
+    {
+        let connection = rusqlite::Connection::open(&file).unwrap();
+        connection
+            .execute_batch(
+                "ALTER TABLE workspace_settings DROP COLUMN intent; PRAGMA user_version=1;",
+            )
+            .unwrap();
+    }
+    fs::copy(&file, temp.path().join("preserved-malformed-v1.sqlite3")).unwrap();
+    assert_eq!(
+        storage.open(&original.workspace.id).unwrap_err().code,
+        ErrorCode::CorruptStorage
+    );
+    let connection = rusqlite::Connection::open(&file).unwrap();
+    assert_eq!(
+        connection
+            .pragma_query_value(None, "user_version", |row| row.get::<_, i64>(0))
+            .unwrap(),
+        1
+    );
+    assert!(
+        connection
+            .prepare("SELECT intent FROM workspace_settings")
+            .is_err()
+    );
+    assert_eq!(
+        connection
+            .query_row("SELECT name FROM workspaces", [], |row| row
+                .get::<_, String>(0))
+            .unwrap(),
+        "Preserved"
+    );
 }

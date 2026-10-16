@@ -20,16 +20,19 @@ async function connect(page:import('@playwright/test').Page){
 }
 test('workspace creation, duplicate recovery, durable motion setting and API restart',async({page})=>{
   test.setTimeout(90000);await page.emulateMedia({reducedMotion:'no-preference'});await connect(page);
+  await page.getByRole('button',{name:'Continue to workspace'}).click();
   await page.getByLabel('New workspace name').fill('Synthetic browser workspace');await page.getByRole('button',{name:'Create workspace'}).click();
-  await expect(page.getByRole('heading',{name:'Synthetic browser workspace'})).toBeVisible({timeout:15000});
+  await expect(page.getByRole('heading',{name:'Review your privacy'})).toBeVisible({timeout:15000});
+  await page.getByLabel('I have reviewed these privacy limits').check();await page.getByRole('button',{name:'Continue to AI setup'}).click();await page.getByRole('button',{name:'Skip AI setup and enter ANANSI'}).click();
   const id=(await page.locator('.workspace-id code').innerText());expect(id).toMatch(/^[a-f0-9]{32}$/);
+  await page.getByRole('button',{name:'Settings',exact:true}).click();
   await page.getByRole('button',{name:'Turn reduced motion on'}).click();await expect(page.getByRole('button',{name:'Turn reduced motion off'})).toBeEnabled({timeout:15000});
   await expect.poll(()=>page.locator('.badge').evaluate(element=>getComputedStyle(element).transitionDuration)).toBe('0s');
-  await page.getByRole('button',{name:'Close workspace'}).click();await expect(page.getByRole('button',{name:'Refresh workspaces'})).toBeEnabled({timeout:15000});
+  await page.getByRole('button',{name:'Workspace',exact:true}).click();await page.getByRole('button',{name:'Close workspace'}).click();await expect(page.getByRole('button',{name:'Refresh workspaces'})).toBeEnabled({timeout:15000});
   await page.getByLabel('New workspace name').fill('synthetic browser workspace');await page.getByRole('button',{name:'Create workspace'}).click();await expect(page.getByRole('alert')).toContainText('already exists',{timeout:15000});
   await stop();await start();await connect(page);
   await page.getByLabel('Existing workspace').selectOption(id);await page.getByRole('button',{name:'Open workspace',exact:true}).click();
-  await expect(page.locator('.workspace-id code')).toHaveText(id,{timeout:15000});await expect(page.getByRole('button',{name:'Turn reduced motion off'})).toBeVisible();
+  await expect(page.locator('.workspace-id code')).toHaveText(id,{timeout:15000});await page.getByRole('button',{name:'Settings',exact:true}).click();await expect(page.getByRole('button',{name:'Turn reduced motion off'})).toBeVisible();
   await expect.poll(()=>page.evaluate(()=>document.documentElement.dataset.reducedMotion)).toBe('true');
   expect(await page.evaluate(()=>({local:localStorage.length,session:sessionStorage.length}))).toEqual({local:0,session:0});
   await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);

@@ -140,6 +140,18 @@
     "type": "object"
   },
   "UpdateSettingsRequest": {
+    "$defs": {
+      "Intent": {
+        "enum": [
+          "second_memory",
+          "invent_product",
+          "build_application",
+          "connect_ai",
+          "explore"
+        ],
+        "type": "string"
+      }
+    },
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
     "properties": {
@@ -151,6 +163,22 @@
       },
       "id": {
         "type": "string"
+      },
+      "intent": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/Intent"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "onboardingComplete": {
+        "type": [
+          "boolean",
+          "null"
+        ]
       },
       "reducedMotion": {
         "type": "boolean"
@@ -166,6 +194,16 @@
   },
   "WorkspaceDetails": {
     "$defs": {
+      "Intent": {
+        "enum": [
+          "second_memory",
+          "invent_product",
+          "build_application",
+          "connect_ai",
+          "explore"
+        ],
+        "type": "string"
+      },
       "Workspace": {
         "additionalProperties": false,
         "properties": {
@@ -185,12 +223,20 @@
       "WorkspaceSettings": {
         "additionalProperties": false,
         "properties": {
+          "intent": {
+            "$ref": "#/$defs/Intent"
+          },
+          "onboardingComplete": {
+            "type": "boolean"
+          },
           "reducedMotion": {
             "type": "boolean"
           }
         },
         "required": [
-          "reducedMotion"
+          "reducedMotion",
+          "intent",
+          "onboardingComplete"
         ],
         "type": "object"
       }
