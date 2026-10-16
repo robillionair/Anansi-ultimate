@@ -1,6 +1,6 @@
 # M2 — Memory OS
 
-Status: the user accepted M2.0 and authorized M2.1. Local native/browser memory revision acceptance passes; protected publication is required before final handoff. Stop before M2.2. Later vault security approval remains required.
+Status: the user accepted M2.0 and authorized M2.1. M2.1 acceptance, all three implementation CI jobs, protected source publication and independent restore passed at 39b0e5a; see docs/evidence/M2-1.md. Stop before M2.2. Later vault security approval remains required.
 
 Gate identifier: M2.0 — detailed planning and acceptance approval only. Verified baseline: 97babb3ae9f3dc20b5602a7b46a947e833943eb2, tag m1-desktop-foundation-verified. Preserve the master and existing verified history.
 

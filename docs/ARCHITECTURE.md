@@ -38,7 +38,7 @@ plans/               phase plans
 tests/               cross-layer and acceptance tests
 ```
 
-M1.2 establishes this workspace shape for readiness. M1.3 adds the shared SQLite workspace metadata/settings catalog; search, memory policy and provider subsystems remain target architecture. Both adapters use the same bounded core operations and trusted storage configuration; see ADR-0013 and evidence/M1-3.md.
+M1.2 establishes this workspace shape for readiness. M1.3 adds the shared SQLite workspace metadata/settings catalog; M2.1 adds local memory revisions and native privacy classification. Search, full lifecycle, encrypted vault and provider subsystems remain later tasks. Both adapters use the same bounded core operations and trusted storage configuration; see ADR-0013, ADR-0017 and evidence/M2-1.md.
 
 ## Security boundaries
 
@@ -46,7 +46,7 @@ Private/sealed memories, credentials, OAuth tokens, MCP tools, local filesystem 
 
 ## Open architectural decisions
 
-- M1.3/M1.4's schema covers workspace metadata/settings only. The [M2 plan](../plans/02-memory-system.md) now proposes immutable Markdown bodies with transactional SQLite revision pointers, scoped ownership and native privacy policy. This is a proposal pending acceptance, not implemented memory storage. Audited vault library/key/recovery design remains the explicit M2.6 gate and blocks M2 completion until M2.7 verification.
+- M2.1's schema-3 memory storage implements the accepted [M2 plan](../plans/02-memory-system.md) subset: immutable Markdown bodies, transactional SQLite revision pointers, scoped ownership and native plaintext privacy policy. Audited vault library/key/recovery design remains the explicit M2.6 gate and blocks M2 completion until M2.7 verification.
 - Exact vector index implementation awaits performance and data-shape requirements.
 - Section 14 lists candidate providers; official authentication/entitlement verification is required in M5. Section 70 specifies Windows Credential Manager and macOS Keychain; no credentials integration is implemented.
 - M1.2 verifies readiness command/API parity; M1.3 extends the same generated contracts and real cross-adapter tests to workspace/settings commands. Each subsequent command must preserve these boundaries.
