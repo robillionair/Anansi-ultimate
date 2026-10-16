@@ -11,8 +11,8 @@
   ],
   "blockers": [
     {
-      "scope": "M1",
-      "detail": "Rust/Cargo not on PATH; Windows C++ build tools not found; registered Windows SDK headers not found in probed location. Recheck/install prerequisites before native work."
+      "scope": "M1.1",
+      "detail": "Rust MSVC/Cargo, C++ build tools and SDK headers/x64 libraries missing. Current process is not elevated; initial Visual Studio tools installation requires an administrator-capable context. Native compile/link not verified."
     }
   ],
   "nextTask": "M1.1",

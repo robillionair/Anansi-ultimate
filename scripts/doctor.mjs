@@ -6,7 +6,7 @@ export function evaluate(report) {
   const missing = [];
   if (!report.git?.ok) missing.push('Git');
   const [major, minor] = (report.node ?? '').replace(/^v/,'').split('.').map(Number);
-  if (!(major > 22 || major === 22 && minor >= 12 || major === 20 && minor >= 19)) missing.push('Node compatible with the selected Vite baseline');
+  if (!(major > 22 || major === 22 && minor >= 13)) missing.push('Node >=22.13 for pinned pnpm and Vite');
   if (report.pnpm !== '11.25.0') missing.push('pnpm 11.25.0');
   const nativeMissing = [];
   if (report.platform !== 'win32') nativeMissing.push('Windows build host (this probe does not assess Linux/macOS Tauri prerequisites)');

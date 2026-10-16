@@ -35,9 +35,10 @@ test('registered SDK without headers/libraries and directory-only WebView eviden
   assert.deepEqual(actual.nativeMissing,['Windows SDK headers and x64 libraries']);
   assert.equal(actual.buildVerified,false);
 });
-test('Vite Node floor rejects early Node 22 and accepts supported patch lines',()=>{
+test('combined pnpm/Vite Node floor enforces the stricter package-manager minimum',()=>{
   assert.equal(evaluate({...complete,node:'v22.0.0'}).foundationReady,false);
-  assert.equal(evaluate({...complete,node:'v22.12.0'}).foundationReady,true);
+  assert.equal(evaluate({...complete,node:'v22.12.0'}).foundationReady,false);
+  assert.equal(evaluate({...complete,node:'v22.13.0'}).foundationReady,true);
   assert.equal(evaluate({...complete,node:'v20.18.0'}).foundationReady,false);
-  assert.equal(evaluate({...complete,node:'v20.19.0'}).foundationReady,true);
+  assert.equal(evaluate({...complete,node:'v20.19.0'}).foundationReady,false);
 });
