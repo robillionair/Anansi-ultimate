@@ -11,7 +11,7 @@ Recovery checkpoints should contain source, tests, and the corresponding status/
 
 ## Reconciled resume entrypoint
 
-Begin with [the active M1 plan](../plans/PHASE-001-runnable-shell.md), the active/next task in project-state.json, and [the canonical roadmap](ROADMAP.md). M0.1-M0.3 and M1.0–M1.4 are complete; M1.5 development installer is next. Check BUILD_STATUS.md for actual acceptance/publication. Read the detailed acceptance plan before coding. Milestone IDs follow master section 82; legacy numeric plan filenames do not define milestone numbers. Run `node --test tests/repository-hygiene.test.mjs` and `node scripts/validate-planning.mjs --self-test` for current foundation checks; these do not run product tests or replace M0 CI/restore checks.
+Begin with [the completed M1 plan](../plans/PHASE-001-runnable-shell.md), the active/next task in project-state.json, and [the canonical roadmap](ROADMAP.md). M0 and M1.0–M1.5 are complete. Next is M2.0 detailed planning and approval only; do not implement Memory OS automatically. Check BUILD_STATUS.md for actual acceptance/publication. Read the detailed acceptance plan before coding. Milestone IDs follow master section 82; legacy numeric plan filenames do not define milestone numbers. Run `node --test tests/repository-hygiene.test.mjs` and `node scripts/validate-planning.mjs --self-test` for current foundation checks; these do not run product tests or replace M0 CI/restore checks.
 
 ## Workspace data recovery after M1.3
 

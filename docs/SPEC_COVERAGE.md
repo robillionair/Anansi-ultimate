@@ -1,6 +1,6 @@
 # Master specification coverage ledger
 
-All original numbered sections are retained verbatim in MASTER_SPEC.md. This ledger assigns planning ownership, not tested completion. Every bullet within each section remains binding; detailed milestone plans must expand these section-level anchors into acceptance cases before coding. Cross-cutting ownership does not waive enforcement in earlier features. No product behavior is verified.
+All original numbered sections are retained verbatim in MASTER_SPEC.md. This ledger assigns planning ownership, not tested completion. Every bullet within each section remains binding; detailed milestone plans must expand these section-level anchors into acceptance cases before coding. Cross-cutting ownership does not waive enforcement in earlier features. The planned labels below describe section ownership rather than implementation status. Verified M0/M1 foundation workflows and remaining requirement coverage are recorded in [BUILD_STATUS.md](BUILD_STATUS.md), [REQUIREMENTS_MATRIX.md](REQUIREMENTS_MATRIX.md) and [M1 evidence](evidence/M1-5.md); they do not imply completion of whole master sections or future features.
 
 | Section | Original title | Planning owner / gate | Status |
 |---|---|---|---|
