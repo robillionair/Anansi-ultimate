@@ -3,8 +3,8 @@
   "activeMilestone": "M0",
   "activeTask": "M0.2",
   "plan": "plans/PHASE-000-foundation.md",
-  "implementationStatus": "M0.2 local validation passed; CI and branch protection verification pending",
-  "lastVerifiedCommit": "e6140005d22353d803a3daa4294d824018677070",
+  "implementationStatus": "M0.2 complete; M0.3 not started",
+  "lastVerifiedCommit": "873f10b1c4789a4202130ef3b59c5997dac9212d",
   "evidence": [
     "docs/evidence/M0.md"
   ],
@@ -14,7 +14,7 @@
       "detail": "Rust/Cargo not on PATH; Windows C++ build tools not found; registered Windows SDK headers not found in probed location. Recheck/install prerequisites before native work."
     }
   ],
-  "nextTask": "M0.2",
+  "nextTask": "M0.3",
   "productImplementation": "not started",
   "milestoneComplete": false
 }

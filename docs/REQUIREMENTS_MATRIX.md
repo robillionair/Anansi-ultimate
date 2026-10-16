@@ -34,7 +34,7 @@ Milestones now follow the approved canonical roadmap and master section 82. Plan
 
 | ID | Additional retained scope | Milestone | Status | Required evidence |
 |---|---|---|---|---|
-| AN-022 | Source protection, CI, repository recovery | M0 | in progress | M0.1 hygiene/lockfile checks in docs/evidence/M0.md; CI/protection and independent restore remain unverified in M0.2/M0.3 |
+| AN-022 | Source protection, CI, repository recovery | M0 | in progress | M0.1 hygiene plus M0.2 Windows/Linux CI and protection verified in docs/evidence/M0.md; independent restore remains unverified in M0.3 |
 | AN-023 | Onboarding, local workspace, navigation/settings | M1 | planned | Desktop/browser launch, provider skip, persistence and permission tests |
 | AN-024 | Universal projects, artifacts, versioning/rollback | M2, M6, M7, M12 | planned | Durable cross-module project round trip and rollback |
 | AN-025 | All document formats, OCR/transcription, async ingestion | M13 | planned | Format fixtures, provenance, resumability/cancellation and privacy tests |

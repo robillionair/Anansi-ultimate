@@ -4,14 +4,14 @@ Status: approved implementation plan under the user's 2026-10-16 reconciliation 
 
 ## Objectives and scope
 
-Establish a recoverable, verifiable development repository before substantial product functionality (master sections 4, 5, 6, 71, 76, 82, 83, 88). Preserve the existing Git history, master specification, identity and remote. Prepare shared desktop/browser workspace boundaries without creating placeholder product features. Finish one numbered task at a time and checkpoint it; M0.1 is complete with evidence in docs/evidence/M0.md; first unfinished task is M0.2. M0 remains incomplete.
+Establish a recoverable, verifiable development repository before substantial product functionality (master sections 4, 5, 6, 71, 76, 82, 83, 88). Preserve the existing Git history, master specification, identity and remote. Prepare shared desktop/browser workspace boundaries without creating placeholder product features. Finish one numbered task at a time and checkpoint it; M0.1 is complete with evidence in docs/evidence/M0.md; M0.2 validation/CI/protection is complete with evidence in docs/evidence/M0.md; first unfinished task is M0.3. M0 remains incomplete.
 
 ## Dependencies and preflight
 
 - Read AGENTS.md, master specification, roadmap, coverage, architecture, status, decisions and recovery guide.
 - Confirm origin is the authorized robillionair/Anansi-ultimate remote and master is the default branch. Inspect local changes before fast-forward pull; never reset or force-push to resolve divergence.
 - Inventory Git, Node, pnpm/Corepack, Rust/Cargo, Windows C++ build tools, Windows SDK and WebView2 using actual versions. Recheck official tool documentation when choosing/installing versions. Do not infer availability from an earlier session. Rust/native tools are M1 prerequisites; record a missing tool with remediation rather than claiming a desktop build.
-- Existing package.json pins pnpm 10.0.0 but this is not a verified compatibility claim. Confirm or explicitly revise this pin in a recorded decision. No provider accounts, credentials, model downloads or inference are needed.
+- Package manager pin is pnpm 11.25.0 as measured and recorded in ADR-0006; verify the selected command honors this pin. No provider accounts, credentials, model downloads or inference are needed.
 - GitHub branch protection requires suitable account rights; use existing authentication only. A permissions failure is a recorded open acceptance item, not a reason to fabricate protection or block independent local work.
 
 ## Exact deliverables
