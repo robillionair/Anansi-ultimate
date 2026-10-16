@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import os from 'node:os';
+import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 export function evaluate(report) {
@@ -31,6 +32,18 @@ function run(command, args) {
 export function rustCandidates(tool, platform, cargoHome, userHome) {
   return [tool, path.join(cargoHome || path.join(userHome,'.cargo'),'bin',tool + (platform==='win32' ? '.exe' : ''))];
 }
+export function findWindowsSdk(roots, io=fs) {
+  for (const root of new Set(roots.filter(r=>typeof r==='string' && r))) {
+    let versions;
+    try { versions=io.readdirSync(path.join(root,'Include'),{withFileTypes:true}); } catch { continue; }
+    for (const version of versions.filter(v=>v.isDirectory())) {
+      const files=[['Include',version.name,'um','Windows.h'],['Include',version.name,'ucrt','stdio.h'],
+        ['Lib',version.name,'um','x64','kernel32.lib'],['Lib',version.name,'ucrt','x64','ucrt.lib']];
+      if (files.every(parts=>io.existsSync(path.join(root,...parts)))) return {root,version:version.name};
+    }
+  }
+  return null;
+}
 function runRust(tool,args) {
   for (const candidate of rustCandidates(tool,process.platform,process.env.CARGO_HOME,os.homedir())) {
     const result=run(candidate,args);
@@ -51,22 +64,24 @@ if (Test-Path -LiteralPath $vswhere) {
   $instances = & $vswhere -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
   $cpp = $LASTEXITCODE -eq 0 -and [bool]($instances | Select-Object -First 1)
 }
-$sdk = $false
 $sdkRoot = (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows Kits\Installed Roots' -ErrorAction SilentlyContinue).KitsRoot10
-if ($sdkRoot) {
-  foreach ($version in @(Get-ChildItem -LiteralPath (Join-Path $sdkRoot 'Include') -Directory -ErrorAction SilentlyContinue)) {
-    if ((Test-Path -LiteralPath (Join-Path $version.FullName 'um/Windows.h')) -and
-        (Test-Path -LiteralPath (Join-Path $sdkRoot ('Lib/' + $version.Name + '/um/x64/kernel32.lib')))) { $sdk = $true }
-  }
+$sdkRoot32 = (Get-ItemProperty 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows Kits\Installed Roots' -ErrorAction SilentlyContinue).KitsRoot10
+$sdkRoots = @($sdkRoot, $sdkRoot32)
+foreach ($base in @([Environment]::GetFolderPath('ProgramFilesX86'), [Environment]::GetFolderPath('ProgramFiles'))) {
+  if ($base) { $sdkRoots += Join-Path $base 'Windows Kits/10' }
 }
 $versions = @()
 foreach ($base in @([Environment]::GetFolderPath('ProgramFilesX86'), [Environment]::GetFolderPath('ProgramFiles'), $env:LOCALAPPDATA)) {
   if ($base) { $versions += @(Get-ChildItem -LiteralPath (Join-Path $base 'Microsoft/EdgeWebView/Application') -Directory -ErrorAction SilentlyContinue | Where-Object Name -Match '^\d+\.\d+\.\d+\.\d+$' | Select-Object -ExpandProperty Name) }
 }
-@{cpp=$cpp; sdk=$sdk; sdkRoot=$sdkRoot; webview=($versions.Count -gt 0); webviewVersions=@($versions | Sort-Object -Unique)} | ConvertTo-Json -Compress
+@{cpp=$cpp; registeredSdkRoot=$sdkRoot; sdkRoots=@($sdkRoots | Where-Object {$_} | Select-Object -Unique); webview=($versions.Count -gt 0); webviewVersions=@($versions | Sort-Object -Unique)} | ConvertTo-Json -Compress
 `;
     const result=run('pwsh',['-NoProfile','-NonInteractive','-Command',script]);
-    try { native=JSON.parse(result.output); } catch { native={probeError:'Windows prerequisite discovery failed; inspect PowerShell availability and paths'}; }
+    try {
+      native=JSON.parse(result.output);
+      native.sdkEvidence=findWindowsSdk(native.sdkRoots ?? []);
+      native.sdk=!!native.sdkEvidence;
+    } catch { native={probeError:'Windows prerequisite discovery failed; inspect PowerShell availability and paths'}; }
   }
   return {platform:process.platform,node:process.version,pnpm,git:run('git',['--version']),rust:runRust('rustc',['-vV']),cargo:runRust('cargo',['--version']),native};
 }

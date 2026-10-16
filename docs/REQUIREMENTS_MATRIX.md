@@ -52,3 +52,5 @@ Section-level coverage is complete for planning; bullet-level acceptance coverag
 M1.0 planning/readiness evidence is in docs/evidence/M1.md. Missing local Windows/Rust prerequisites block native implementation verification; this audit advances no product requirement to verified. The current M1 authorization does not alter later milestone ownership or the retained 90-section coverage ledger.
 
 M1.1 partial progress: Rust/Cargo installed and pinned; actual local metadata compile passes, full MSVC link fails because link.exe/C++ SDK is missing. Prepared admin installation and real native verification commands are tracked, with evidence in docs/evidence/M1.md. No product row is advanced to verified; AN-001/002/003 and the native workflow remain open.
+
+M1.1 resolution: user completed Microsoft installation and local native doctor plus actual compile/link/run passed. Rust/MSVC/SDK prerequisites are verified with logs and SDK-discovery regression coverage in docs/evidence/M1.md. Earlier M1.0/M1.1 missing-tool notes are historical. No desktop/browser/installer requirement is marked verified by this toolchain-only task.

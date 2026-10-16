@@ -2,25 +2,20 @@
 
 ## Current state — 2026-10-16
 
-M0 verified complete. M1.0 plan/doctor complete. M1.1 has partial progress and an actual administrator-install blocker. M1.2/product implementation has not started.
+M0 verified complete. M1.0 and M1.1 are complete; next task is M1.2 shared desktop/browser readiness. M1 as a whole remains incomplete; no M1 completion tag. No product application has been implemented.
 
-Verified partial M1.1 source checkpoint 2f540586431729410dd18fd49749f7523cd2129b, pushed after CI. Active task and next task remain M1.1. No M1 completion tag or product capability completion is claimed.
+Entering verified source checkpoint: 9ad07ac10cc3f2130d9736cef854436bd63bbf70. Current verification records are published after required CI. Project-state records completed M1.1 and next M1.2 with no current toolchain blocker.
 
-## M1.1 implemented
+## M1.1 acceptance passed locally
 
-- Installed official-checksum-verified Rust 1.99.1 x86_64-pc-windows-msvc with Cargo/rustfmt/clippy in user-local directories. Pinned rust-toolchain.toml; no global PATH changes, package workspace or Cargo.lock.
-- Doctor now discovers user-local Rust/CARGO_HOME tools. Native verification compiles a known synthetic program and attempts linking/execution, with logs retained outside checkout.
-- Prepared tracked Microsoft C++ installation command with read-only default, explicit -Install/admin guard, Microsoft signature verification and no auto-elevation/restart.
-- Added Windows native toolchain smoke CI job alongside both existing protected Foundation checks. CI success is separate from local readiness.
+- User completed the Microsoft C++ installation, exit 0; no automatic restart. vswhere confirms complete installation, no reboot required.
+- Rust/Cargo 1.99.1 MSVC with rustfmt/Clippy; VS Build Tools 17.14.42, MSVC 14.44.35207, Windows SDK 10.0.26100.0 measured.
+- `pnpm doctor:native`: exit 0, no missing prerequisites. Fixed stale SDK registry-root detection and added regression test requiring real UM/UCRT headers/libraries.
+- `pnpm verify:native`: exit 0; actual compile, link and execution returns ANANSI_NATIVE_SMOKE_OK. Logs retained outside source; paths and versions in [M1 evidence](evidence/M1.md).
+- Doctor discovery alone still does not claim a verified build. The separate smoke executable supplies build evidence.
 
-## Actual verification and open acceptance
+## Verification and remaining scope
 
-Rust/Cargo/component version checks succeeded. Rust metadata compilation succeeded. Full local MSVC linking failed: link.exe not found. Doctor native mode still returns 1 for missing C++/SDK. Default install plan passed; -Install correctly refused the non-elevated process before installing. No local smoke executable exists or has been run.
+Run full documentation/foundation/recovery regressions and required CI for this checkpoint; actual results are recorded below after completion. Original master specification and architecture preserved. No new system installation or restart by this session.
 
-[M1 evidence](evidence/M1.md) records exact hashes, commands, installer signature, versions and retained logs. Existing master specification remains intact. Local documentation checks and 35 Node plus 13 PowerShell recovery checks passed. CI run 38843440571 passed Windows/Linux Foundation and the separate Windows native compile/link/run smoke job. This runner success does not clear the local administrator-install blocker.
-
-## Required next action
-
-M1.1 requires an administrator-capable PowerShell to run scripts/install-msvc.ps1 -Install, followed by local pnpm doctor:native and pnpm verify:native. Current machine process is not elevated; no UAC request or security-setting change is initiated. Follow [development setup](DEVELOPMENT.md) for the concrete command.
-
-Until both local checks pass, do not start M1.2. No desktop/browser runtime, installer, storage, provider integration or paid inference has been implemented/tested. Work remains within M1; later milestones unchanged.
+M1.2 is the next approved task. Real Tauri/WebView2 embedding, authenticated local API, shared contracts/UI, persistence and development installer acceptance are not yet implemented or verified. Toolchain success does not complete those product requirements. M2 and later scope unchanged.

@@ -3,7 +3,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { spawnSync } from 'node:child_process';
 import { root } from '../scripts/validate-docs.mjs';
-import { rustCandidates } from '../scripts/doctor.mjs';
+import { rustCandidates, findWindowsSdk } from '../scripts/doctor.mjs';
 
 test('Rust discovery respects CARGO_HOME without modifying PATH',()=>{
   assert.deepEqual(rustCandidates('cargo','win32','custom-cargo','unused'),['cargo',path.join('custom-cargo','bin','cargo.exe')]);
@@ -18,4 +18,14 @@ test('MSVC installer default mode is read-only and explicitly scoped',()=>{
   assert.ok(p.arguments.includes('--norestart'));
   assert.ok(p.arguments.includes('Microsoft.VisualStudio.Workload.VCTools'));
   assert.match(p.next,/already elevated/);
+});
+test('SDK probe falls back from stale registry root to actual headers and libraries',()=>{
+  const valid='standard-sdk';
+  const names=[['Include','10.0.26100.0','um','Windows.h'],['Include','10.0.26100.0','ucrt','stdio.h'],
+    ['Lib','10.0.26100.0','um','x64','kernel32.lib'],['Lib','10.0.26100.0','ucrt','x64','ucrt.lib']];
+  const present=new Set(names.map(p=>path.join(valid,...p)));
+  const io={readdirSync:p=>{if(p===path.join('stale-sdk','Include')) throw Error('absent');return [{name:'10.0.26100.0',isDirectory:()=>true}];},existsSync:p=>present.has(p)};
+  assert.deepEqual(findWindowsSdk(['stale-sdk',valid],io),{root:valid,version:'10.0.26100.0'});
+  present.delete(path.join(valid,...names[3]));
+  assert.equal(findWindowsSdk([valid],io),null,'SDK without UCRT library must not pass');
 });

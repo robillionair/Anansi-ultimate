@@ -1,6 +1,6 @@
 # Development contract
 
-M0 and M1.0 are complete. M1.1 has user-local Rust installed; local MSVC linking needs the remaining administrator-installed C++ tools/SDK. Product implementation has not started. There is no runnable desktop/web application, database migration, product test suite or installer. Follow the approved M0 plan; M0.2 owns root script repair/CI and M0.3 owns independent backup/restore. Do not interpret empty recursive script success as a product build.
+M0, M1.0 and M1.1 are complete. Local Rust MSVC compile/link/execution and prerequisite discovery pass. Next is M1.2. Product implementation has not started. There is no runnable desktop/web application, database migration, product test suite or installer. Follow the approved M0 plan; M0.2 owns root script repair/CI and M0.3 owns independent backup/restore. Do not interpret empty recursive script success as a product build.
 
 ## Foundation setup and verification
 
@@ -24,7 +24,7 @@ Root `pnpm check` / `pnpm check:docs` validate documentation, state and evidence
 
 ## Observed toolchain and remediation
 
-Inspected 2026-10-16; [M0 evidence](evidence/M0.md) records commands and limits. Git 2.53.0.windows.2, shell Node 26.7.0, npm 11.19.0 and pnpm 11.25.0 are present. Corepack, rustc, cargo and cl are absent from PATH. The standard Visual Studio installer/vswhere path is absent. Windows SDK registry points to a directory whose Include headers were not found. WebView2 application directories exist (154.0.4258.53, 154.0.4258.62, 155.0.4283.45); launching/embedding WebView2 is untested. These probes do not prove no custom compiler/SDK installation exists.
+Historical pre-installation M0 inspection on 2026-10-16; [M0 evidence](evidence/M0.md) records those commands and limits. Native tool gaps below were resolved in M1.1; see the verification section at the end. Git 2.53.0.windows.2, shell Node 26.7.0, npm 11.19.0 and pnpm 11.25.0 are present. Corepack, rustc, cargo and cl are absent from PATH. The standard Visual Studio installer/vswhere path is absent. Windows SDK registry points to a directory whose Include headers were not found. WebView2 application directories exist (154.0.4258.53, 154.0.4258.62, 155.0.4283.45); launching/embedding WebView2 is untested. These probes do not prove no custom compiler/SDK installation exists.
 
 Before M1, follow the [official Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) to install or locate Rust with the MSVC toolchain, Windows C++ build tools/SDK and WebView2; re-run version/header/compiler probes. This task does not install native tools. Browser/React compatibility and native builds must be verified when actual targets exist. pnpm's [official installation guidance](https://pnpm.io/installation) and registry metadata were checked; pnpm 11.25.0 requires Node >=22.13. The actual available Node runtimes meet that requirement; no claim of a full frontend compatibility matrix is made.
 
@@ -78,3 +78,9 @@ pwsh -NoProfile -File 'C:\Users\robin\Documents\ChatGPT\Anansi ultimate\scripts\
 The script downloads from Microsoft, verifies its publisher, installs the VCTools workload with recommended components, and never self-elevates/restarts. If setup requests a restart (3010), handle that explicitly before verification. Then in the repository run `pnpm doctor:native` and `pnpm verify:native`. Both must pass locally before M1.1 is complete. The latter retains synthetic source/compile/link logs and executes its known output test only after successful linking. Current local linker attempt failed with link.exe not found; CI runner success is not a replacement for local acceptance.
 
 User Rust tools may be run directly at %USERPROFILE%\.cargo\bin; set CARGO_HOME if using another supported per-user location. User-managed uninstall is rustup self uninstall; no automatic uninstall or rollback is performed. No Cargo.lock exists until a real workspace is introduced.
+
+## M1.1 verification after administrator installation
+
+The user completed the Microsoft installer (exit 0). Local verification passes: Visual Studio Build Tools 2022 17.14.42 (17.14.37806.7), MSVC toolset 14.44.35207, Windows SDK 10.0.26100.0, Rust/Cargo 1.99.1. `pnpm doctor:native` exits 0; `pnpm verify:native` compiles, links and runs ANANSI_NATIVE_SMOKE_OK. Previous missing-linker/admin blockers are resolved, not current setup requirements. Reinstallation is unnecessary.
+
+SDK discovery checks both registry views and standard Program Files roots, requiring actual UM/UCRT headers and x64 libraries. An obsolete registry entry must not mask a valid SDK. The doctor still reports buildVerified=false because discovery alone is not a build; the separate actual smoke verifier is the build evidence. WebView2 directory evidence is not actual Tauri embedding; that remains M1.2.

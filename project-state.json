@@ -3,19 +3,14 @@
   "activeMilestone": "M1",
   "activeTask": "M1.1",
   "plan": "plans/PHASE-001-runnable-shell.md",
-  "implementationStatus": "M1.1 partially implemented: Rust 1.99.1 MSVC installed; local MSVC link blocked by missing administrator-installed C++ tools/SDK",
-  "lastVerifiedCommit": "2f540586431729410dd18fd49749f7523cd2129b",
+  "implementationStatus": "M1.1 complete: local Rust MSVC compile, link and executable output verified; M1.2 not started",
+  "lastVerifiedCommit": "9ad07ac10cc3f2130d9736cef854436bd63bbf70",
   "evidence": [
     "docs/evidence/M0.md",
     "docs/evidence/M1.md"
   ],
-  "blockers": [
-    {
-      "scope": "M1.1",
-      "detail": "Local link.exe and Windows SDK headers/libraries missing. install-msvc.ps1 -Install refuses this non-elevated process; administrator must run the prepared signed-installer command, then doctor:native and verify:native must pass."
-    }
-  ],
-  "nextTask": "M1.1",
+  "blockers": [],
+  "nextTask": "M1.2",
   "productImplementation": "not started",
   "milestoneComplete": false
 }

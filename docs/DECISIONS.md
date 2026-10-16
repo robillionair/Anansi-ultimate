@@ -74,3 +74,9 @@ M0.2 external verification completed: both actual runners passed and master prot
 - Keep MSVC installation explicit: plan mode is read-only, -Install requires an already elevated shell and a valid Microsoft signer, no self-elevation, no security-setting changes, no automatic restart. Current non-admin install refusal and real link.exe failure remain blockers.
 - Native verifier compiles/links/runs only a tiny known synthetic test in a unique retained temp directory. A separate Windows CI job proves runner readiness; it cannot certify this machine, Tauri/WebView2 embedding or an installer. No product crates/workspaces created to mask tool gaps.
 - M1.1 partial progress is checkpointed honestly. M1.2 requires the local native task gate, which is still unsatisfied.
+
+## ADR-0011: Verify SDK files across registered and standard installation roots
+
+- Observation: the user completed the signed Microsoft tools installation. Actual local native compilation/link/execution passed, but the doctor incorrectly relied on one obsolete SDK root. A failing detector is not evidence of a failed installation.
+- Decision: inspect both SDK registry views and canonical Program Files roots; require actual UM/UCRT headers and x64 kernel32/UCRT libraries. Return the concrete root/version as evidence and retain the original registry value for diagnosis. Add a deterministic stale-root/missing-library regression fixture.
+- Resolution: local doctor and synthetic MSVC compile/link/run now pass; ADR-0010's installation/linker blockers are resolved. No security boundary or product scope change. M1.1 complete; M1.2 is next, with real Tauri/API/UI verification still required.
