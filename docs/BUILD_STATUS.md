@@ -2,22 +2,25 @@
 
 ## Current state — 2026-10-16
 
-M0 remains verified complete at annotated tag m0-foundation-verified (268533e4c16bbf4693fd4e4981354a4f5f7eb273). Current authorized phase is M1 under the user's continuation instruction. M1.0 detailed planning and read-only readiness audit is complete; M1 is not complete. Next task is M1.1 native toolchain installation/compile-link verification.
+M0 verified complete. M1.0 plan/doctor complete. M1.1 has partial progress and an actual administrator-install blocker. M1.2/product implementation has not started.
 
-Last verified M1.0 implementation checkpoint: 08a59dd85571e48c7a2e0fb654ba8477f3d6253a, pushed to protected master after both CI runners passed. Following metadata commits retain that tested SHA deliberately.
+Entering verified source checkpoint a6a848e7c2786bc73c56d2337b6f9fa171514290. Active task and next task remain M1.1. No M1 completion tag or product capability completion is claimed.
 
-## M1.0 implementation and verification
+## M1.1 implemented
 
-- Detailed plan in plans/PHASE-001-runnable-shell.md preserves Tauri/React, browser/API boundary, SQLite/workspace/settings, onboarding/design/navigation and actual development NSIS .exe acceptance. Six gated tasks; no M2 work.
-- Tracked read-only toolchain doctor has foundation and required-native modes; six fixture tests cover missing/version/platform/SDK and Node floor behavior. It never claims buildVerified=true.
-- Actual doctor:toolchain exit 0; doctor:native exit 1 with missing Rust MSVC host, Cargo, C++ tools and SDK headers/x64 libraries. WebView2 version directories detected, runtime launch untested. The nonzero native result is an open prerequisite gap, not a passed native build.
-- No system tools installed and no runtime/product packages or dependencies added. Product build remains unavailable. Full test/CI evidence in [M1 evidence](evidence/M1.md).
-- M0 foundation recovery/tests preserved; master specification content unchanged, 90 sections and 33 requirements retained. No product requirement marked complete by the audit.
+- Installed official-checksum-verified Rust 1.99.1 x86_64-pc-windows-msvc with Cargo/rustfmt/clippy in user-local directories. Pinned rust-toolchain.toml; no global PATH changes, package workspace or Cargo.lock.
+- Doctor now discovers user-local Rust/CARGO_HOME tools. Native verification compiles a known synthetic program and attempts linking/execution, with logs retained outside checkout.
+- Prepared tracked Microsoft C++ installation command with read-only default, explicit -Install/admin guard, Microsoft signature verification and no auto-elevation/restart.
+- Added Windows native toolchain smoke CI job alongside both existing protected Foundation checks. CI success is separate from local readiness.
 
-## Next task, blockers and recovery
+## Actual verification and open acceptance
 
-M1.1 must install or locate official Windows/Rust prerequisites and prove compile/link; then M1.2 builds the first actual shared readiness workflow. Do not skip the security/transport gates or present a mock app as implemented. Current native gaps are recorded in project-state.json. No desktop/browser app, local API, persistence, installer or provider integration is implemented.
+Rust/Cargo/component version checks succeeded. Rust metadata compilation succeeded. Full local MSVC linking failed: link.exe not found. Doctor native mode still returns 1 for missing C++/SDK. Default install plan passed; -Install correctly refused the non-elevated process before installing. No local smoke executable exists or has been run.
 
-Use the protected CI branch flow and scripts/backup-source.ps1 after clean commits. Preserve M0 tag and existing source; future checkpoints must not overwrite earlier bundles. Stop at task boundaries and before another milestone.
+[M1 evidence](evidence/M1.md) records exact hashes, commands, installer signature, versions and retained logs. Existing master specification remains intact. Tests/CI/publication results are recorded after actual execution.
 
-Actual M1.0 CI: https://github.com/robillionair/Anansi-ultimate/actions/runs/38841799110 — Windows and Linux success, 33 Node tests plus 13 PowerShell recovery checks. Native prerequisite probe still fails as expected. Current Windows process has no administrator token; initial Visual Studio tool installation needs an administrator-capable context. No installer was launched in M1.0.
+## Required next action
+
+M1.1 requires an administrator-capable PowerShell to run scripts/install-msvc.ps1 -Install, followed by local pnpm doctor:native and pnpm verify:native. Current machine process is not elevated; no UAC request or security-setting change is initiated. Follow [development setup](DEVELOPMENT.md) for the concrete command.
+
+Until both local checks pass, do not start M1.2. No desktop/browser runtime, installer, storage, provider integration or paid inference has been implemented/tested. Work remains within M1; later milestones unchanged.

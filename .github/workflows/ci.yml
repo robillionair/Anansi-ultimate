@@ -36,3 +36,17 @@ jobs:
         run: |
           git show --format= --check HEAD
           git diff --exit-code -- pnpm-lock.yaml
+  native-toolchain:
+    name: Windows native toolchain smoke
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Install exact Rust MSVC toolchain
+        shell: pwsh
+        run: rustup toolchain install 1.99.1 --profile minimal --component rustfmt --component clippy
+      - name: Compile, link and execute the synthetic MSVC smoke fixture
+        shell: pwsh
+        run: pwsh -NoProfile -File scripts/verify-native.ps1

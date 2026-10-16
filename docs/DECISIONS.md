@@ -67,3 +67,10 @@ M0.2 external verification completed: both actual runners passed and master prot
 - Doctor: read-only independent foundation/native detection, exact package-manager check, actual MSVC/SDK file evidence and WebView2 directory evidence. Detected prerequisites never prove compile/link/runtime success. Missing tools are a next-task blocker, not a failing documentation plan or permission question.
 - Contracts/security: adopt Rust DTOs as authoritative and generate shared schema/TypeScript in M1.2; implement authenticated loopback API and native capability isolation with explicit pairing/ACL tests before exposing browser domain operations. Detailed tool/library versions are verified at implementation; no provider credentials or integrations invented.
 - Status: M1.0 plan and doctor implemented; M1.1 native toolchain not ready locally. Machine installations and product implementation have not occurred in this increment.
+
+## ADR-0010: Pinned user-local Rust and explicit native setup permission boundary
+
+- Pin Rust 1.99.1 MSVC with rustfmt/clippy after verifying official stable metadata and rustup checksum. User-local install leaves global PATH unchanged; development doctor checks CARGO_HOME/default user tool paths as a fallback. This changes tool discovery, not native capability exposure.
+- Keep MSVC installation explicit: plan mode is read-only, -Install requires an already elevated shell and a valid Microsoft signer, no self-elevation, no security-setting changes, no automatic restart. Current non-admin install refusal and real link.exe failure remain blockers.
+- Native verifier compiles/links/runs only a tiny known synthetic test in a unique retained temp directory. A separate Windows CI job proves runner readiness; it cannot certify this machine, Tauri/WebView2 embedding or an installer. No product crates/workspaces created to mask tool gaps.
+- M1.1 partial progress is checkpointed honestly. M1.2 requires the local native task gate, which is still unsatisfied.

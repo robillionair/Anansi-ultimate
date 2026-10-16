@@ -1,6 +1,6 @@
 # Development contract
 
-M0 repository foundation and source recovery are complete. Next is M1 detailed planning; implementation has not started. There is no runnable desktop/web application, database migration, product test suite or installer. Follow the approved M0 plan; M0.2 owns root script repair/CI and M0.3 owns independent backup/restore. Do not interpret empty recursive script success as a product build.
+M0 and M1.0 are complete. M1.1 has user-local Rust installed; local MSVC linking needs the remaining administrator-installed C++ tools/SDK. Product implementation has not started. There is no runnable desktop/web application, database migration, product test suite or installer. Follow the approved M0 plan; M0.2 owns root script repair/CI and M0.3 owns independent backup/restore. Do not interpret empty recursive script success as a product build.
 
 ## Foundation setup and verification
 
@@ -64,3 +64,17 @@ The current validator intentionally supports repository Markdown inline/image/re
 Run `pnpm doctor:toolchain` (foundation readiness, exit 0 only when Git/Node/pinned pnpm are usable) and `pnpm doctor:native` (exit 1 until Windows native prerequisites are detected). Use these explicit script names: pnpm has its own built-in doctor command. Reports include read-only discovery and buildVerified=false; they never install anything or prove a native compile/runtime. Follow the M1 plan for actual installer/toolchain verification before product work.
 
 The current local probe finds Rust MSVC/Cargo/C++/SDK gaps; WebView2 directories alone do not verify embedding. Candidate frontend package versions were queried but not installed; M1.2 must pin and prove the actual combination. The user continuation authorizes M1 phase work; prior M0-only stop instructions are historical.
+
+## M1.1 native setup and verification
+
+Rust 1.99.1 MSVC with rustfmt/clippy is installed under the user's .cargo/.rustup directories and pinned in rust-toolchain.toml. Global PATH was intentionally unchanged. Doctor checks CARGO_HOME/default user bin as a fallback, so repository commands do not require a shell restart.
+
+Run `pnpm setup:msvc` for the read-only installation plan. To perform the remaining Microsoft C++/SDK installation, open an administrator PowerShell and run:
+
+~~~powershell
+pwsh -NoProfile -File 'C:\Users\robin\Documents\ChatGPT\Anansi ultimate\scripts\install-msvc.ps1' -Install
+~~~
+
+The script downloads from Microsoft, verifies its publisher, installs the VCTools workload with recommended components, and never self-elevates/restarts. If setup requests a restart (3010), handle that explicitly before verification. Then in the repository run `pnpm doctor:native` and `pnpm verify:native`. Both must pass locally before M1.1 is complete. The latter retains synthetic source/compile/link logs and executes its known output test only after successful linking. Current local linker attempt failed with link.exe not found; CI runner success is not a replacement for local acceptance.
+
+User Rust tools may be run directly at %USERPROFILE%\.cargo\bin; set CARGO_HOME if using another supported per-user location. User-managed uninstall is rustup self uninstall; no automatic uninstall or rollback is performed. No Cargo.lock exists until a real workspace is introduced.

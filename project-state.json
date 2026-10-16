@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
   "activeMilestone": "M1",
-  "activeTask": "M1.0",
+  "activeTask": "M1.1",
   "plan": "plans/PHASE-001-runnable-shell.md",
-  "implementationStatus": "M1.0 detailed plan and read-only readiness audit complete; M1.1 native prerequisites missing",
-  "lastVerifiedCommit": "08a59dd85571e48c7a2e0fb654ba8477f3d6253a",
+  "implementationStatus": "M1.1 partially implemented: Rust 1.99.1 MSVC installed; local MSVC link blocked by missing administrator-installed C++ tools/SDK",
+  "lastVerifiedCommit": "a6a848e7c2786bc73c56d2337b6f9fa171514290",
   "evidence": [
     "docs/evidence/M0.md",
     "docs/evidence/M1.md"
@@ -12,7 +12,7 @@
   "blockers": [
     {
       "scope": "M1.1",
-      "detail": "Rust MSVC/Cargo, C++ build tools and SDK headers/x64 libraries missing. Current process is not elevated; initial Visual Studio tools installation requires an administrator-capable context. Native compile/link not verified."
+      "detail": "Local link.exe and Windows SDK headers/libraries missing. install-msvc.ps1 -Install refuses this non-elevated process; administrator must run the prepared signed-installer command, then doctor:native and verify:native must pass."
     }
   ],
   "nextTask": "M1.1",

@@ -50,3 +50,5 @@ Milestones now follow the approved canonical roadmap and master section 82. Plan
 Section-level coverage is complete for planning; bullet-level acceptance coverage is required at each detailed-plan gate. No rows are verified by documentation validation.
 
 M1.0 planning/readiness evidence is in docs/evidence/M1.md. Missing local Windows/Rust prerequisites block native implementation verification; this audit advances no product requirement to verified. The current M1 authorization does not alter later milestone ownership or the retained 90-section coverage ledger.
+
+M1.1 partial progress: Rust/Cargo installed and pinned; actual local metadata compile passes, full MSVC link fails because link.exe/C++ SDK is missing. Prepared admin installation and real native verification commands are tracked, with evidence in docs/evidence/M1.md. No product row is advanced to verified; AN-001/002/003 and the native workflow remain open.

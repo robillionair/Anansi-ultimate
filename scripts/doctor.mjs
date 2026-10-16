@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
+import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 
 export function evaluate(report) {
@@ -26,6 +27,16 @@ export function evaluate(report) {
 function run(command, args) {
   const result = spawnSync(command,args,{encoding:'utf8',timeout:20000,windowsHide:true});
   return {ok:result.status===0,output:result.stdout?.trim() || null};
+}
+export function rustCandidates(tool, platform, cargoHome, userHome) {
+  return [tool, path.join(cargoHome || path.join(userHome,'.cargo'),'bin',tool + (platform==='win32' ? '.exe' : ''))];
+}
+function runRust(tool,args) {
+  for (const candidate of rustCandidates(tool,process.platform,process.env.CARGO_HOME,os.homedir())) {
+    const result=run(candidate,args);
+    if (result.ok) return {...result,command:candidate};
+  }
+  return {ok:false,output:null};
 }
 export function collect() {
   let pnpm = process.env.npm_config_user_agent?.match(/pnpm\/([^\s]+)/)?.[1];
@@ -57,7 +68,7 @@ foreach ($base in @([Environment]::GetFolderPath('ProgramFilesX86'), [Environmen
     const result=run('pwsh',['-NoProfile','-NonInteractive','-Command',script]);
     try { native=JSON.parse(result.output); } catch { native={probeError:'Windows prerequisite discovery failed; inspect PowerShell availability and paths'}; }
   }
-  return {platform:process.platform,node:process.version,pnpm,git:run('git',['--version']),rust:run('rustc',['-vV']),cargo:run('cargo',['--version']),native};
+  return {platform:process.platform,node:process.version,pnpm,git:run('git',['--version']),rust:runRust('rustc',['-vV']),cargo:runRust('cargo',['--version']),native};
 }
 export function main() {
   const report=collect();
