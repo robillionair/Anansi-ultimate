@@ -1,0 +1,41 @@
+# Dependency stores and build output, at any workspace depth.
+node_modules/
+.pnpm-store/
+target/
+dist/
+coverage/
+*.log
+
+# Local configuration and credentials. Only sanitized examples belong in Git.
+.env
+.env.*
+!.env.example
+!.env.*.example
+.npmrc
+.netrc
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+secrets.json
+
+# Local user data and source backup payloads (not implementation directories).
+/workspaces/
+/local-data/
+/backups/
+/artifacts/
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.sqlite3-*
+*.bundle
+*.patch
+
+# OS/editor-local state.
+.DS_Store
+Thumbs.db
+.vs/
+*.user

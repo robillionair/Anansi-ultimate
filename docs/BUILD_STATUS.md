@@ -2,36 +2,34 @@
 
 ## Current state — 2026-10-16
 
-- Phase: M0 planning complete; ready for M0.1 implementation. M0 is not implemented or verified complete.
-- Last verified commit entering this task: 56ca6e2 (documentation checkpoint only).
-- Source implementation, desktop/web builds, installer, application tests: not available.
-- Reconciliation approval: user's UNBLOCK DEVELOPMENT request; scope is documentation/planning only.
-- Remote: origin/master, https://github.com/robillionair/Anansi-ultimate.git; fast-forward pull was already up to date.
-- Git identity: existing repository-local identity retained.
+- Phase: M0.1 complete; M0 as a whole remains incomplete. Stop here; next task is M0.2.
+- Entering verified checkpoint: cd8f9323c111e95b1c5db4d347144a2175fb3675.
+- Current authorization: user EXECUTE M0.1 request including commit/push; M0.2/M1 not executed.
+- Product implementation, desktop/web builds, installer, migrations and provider integrations: not available.
+- Origin/default branch: https://github.com/robillionair/Anansi-ultimate.git, master. Pull already up to date; configured identity preserved.
+- project-state.json records completed active task, next task and the prior verified SHA until publication is recorded.
 
-## Acceptance for this planning task
+## M0.1 result and acceptance
 
-Read the complete master, reconcile all milestone/plan mappings, restore a bounded approved M0 plan, retain source scope, create later planning tasks, validate coverage and links, preserve master content, commit and verify push. No product implementation or M1 execution.
+Repository ignore/editor/attribute policies, generated lockfile, directory/contract ownership, development setup and native-tool remediation are in place. Exact pnpm pin revised from 10.0.0 to registry-verified 11.25.0 (ADR-0006). No dependencies or placeholder application packages added. Required development scripts/tests are in tracked repository paths.
 
-## Result and evidence
+All M0.1 acceptance criteria pass: actual tool gaps documented, real Git ignore/trackability tests pass, state is truthful, lockfile generated/frozen and master/history preserved. No product implementation. AN-022 is in progress, not verified; all original source sections remain assigned.
 
-- ROADMAP now follows master section 82 M0–M15 with legacy mapping and explained ambiguities (ADR-0005).
-- All 90 original sections have planning owners in SPEC_COVERAGE; coarse requirements AN-001–021 retained and AN-022–033 add previously implicit areas. No product requirement is verified.
-- PHASE-000 detailed M0 plan covers hygiene/toolchain, lockfile, CI/protection, independent source backup/restore, state/evidence and checkpoint gates. All later milestones have existing tracked planning files.
-- Required alternate roadmap/recovery document paths now exist. project-state.json and executable foundation tooling are M0 implementation deliverables, not fabricated in this planning task.
-- Validation outcome is recorded below after running the reconciliation checks.
+## Verification
 
-## Remaining and next task
+- Repository hygiene tests: 5 passed, 0 failed/skipped.
+- Planning audit: 31 Markdown files, 90 section owners, 16 milestone plans, 33 requirement IDs, local links and 7 rejected invalid fixtures passed.
+- Lockfile generation and frozen installation passed with no dependencies; SHA256 recorded in [M0 evidence](evidence/M0.md).
+- git fsck exit 0 (dangling trees only, preserved); whitespace checks passed.
+- Master blob unchanged: b95eae4a3813fb2cd87c00360fcdd9b2489cedec.
+- Baseline recursive check/test/build returned no matching projects; these are not product verification. Root script repair remains M0.2.
+- Initial planning audit failed on nested evidence lookup; recursive discovery repair and regression test now pass.
+- CI/protection, independent backup/restore, native/browser builds and application behavior: not run, later task scope.
 
-Begin M0.1 only: inspect current prerequisites and repository, implement source hygiene/development contract, truthful project state and resolved lockfile. M0.2 adds validation/CI/protection; M0.3 verifies independent backup/restore. Missing external tool/permission access must remain explicit blockers to M0 completion. Later detailed plans are not implementation approval.
+## Remaining and recovery
 
-No product behavior, provider, migration, security control, installer or application launch was tested. Existing recursive package scripts over no packages are not proof of working software. The existing .git bundle is a local convenience; independent source recovery is still unverified.
+Next approved task: M0.2 executable validation and CI. Then M0.3 independent source backup/restoration. No M0 completion tag is appropriate.
 
-## Reconciliation validation — executed 2026-10-16
+No M0.1 blocker remains. Rust/Cargo and standard Windows C++ tools were not found; registered SDK headers were not found. Recheck/install prerequisites before M1. WebView2 directories exist but runtime behavior is untested. Existing remote history protects committed source; independent local restore remains unverified.
 
-- `node scripts/validate-planning.mjs --self-test`: PASS, 29 Markdown files, 90 titled section owners, 16 canonical milestone plans, 33 requirement IDs, local Markdown links, unchanged master Git hash; 7 invalid in-memory fixtures rejected.
-- `git diff --check`: PASS (line-ending conversion notices are Git configuration warnings, not test failures).
-- Master Git blob hash before/after: `b95eae4a3813fb2cd87c00360fcdd9b2489cedec`.
-- Added a dependency-free planning audit at scripts/validate-planning.mjs for reproducible evidence. It is limited to reconciliation checks; M0.2 still owns broader state/evidence validation, test integration and CI.
-- Product tests/builds, application behavior, provider calls, GitHub CI, branch protection and independent backup restore: NOT RUN in this documentation task.
-- Verified planning checkpoint: d07f926, committed and successfully pushed to origin/master. This following status-only commit records that checkpoint; no M0 milestone tag is appropriate yet.
+Publication checkpoint will be recorded after successful commit/push. Recovery must inspect later metadata commits rather than reset to an older SHA.

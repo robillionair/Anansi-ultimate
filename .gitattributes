@@ -1,0 +1,14 @@
+# New text is canonical LF in Git and on checkout. Do not bulk-renormalize history.
+* text=auto eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.woff2 binary
+*.zip binary
+*.exe binary
+*.bundle binary

@@ -5,8 +5,14 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const paths = ['README.md', ...['docs', 'plans'].flatMap(dir =>
-  fs.readdirSync(path.join(root, dir)).filter(f => f.endsWith('.md')).map(f => `${dir}/${f}`))];
+function markdownPaths(dir) {
+  return fs.readdirSync(path.join(root, dir), { withFileTypes: true }).flatMap(entry => {
+    const name = `${dir}/${entry.name}`;
+    if (entry.isDirectory()) return markdownPaths(name);
+    return entry.isFile() && entry.name.endsWith('.md') ? [name] : [];
+  });
+}
+const paths = ['README.md', ...['docs', 'plans'].flatMap(markdownPaths)];
 const files = new Map(paths.map(p => [p, fs.readFileSync(path.join(root, p), 'utf8')]));
 
 function validate(snapshot) {

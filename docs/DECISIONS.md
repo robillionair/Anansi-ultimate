@@ -35,3 +35,11 @@
 - **Repository contradictions:** Empty-repository wording is historical. Existing master/default branch and source history are preserved. Default branch protection applies to master; rename is unnecessary. Required alternate documentation filenames now link to canonical records. Missing detailed M0 plan restored; M1 target restored as an explicitly incomplete design task.
 - **Approval boundary:** PHASE-000-foundation.md is the approved M0 implementation scope. First task M0.1 may begin next session. Other milestone files are tracked planning tasks requiring detailed design before coding. Do not start M1 automatically.
 - **Status:** accepted planning baseline; no product or M0 implementation acceptance criterion is asserted complete.
+
+## ADR-0006: M0.1 repository policies and measured package manager
+
+- **Decision:** Revise packageManager from pnpm 10.0.0 to exactly 11.25.0, matching the actual environment command and registry-verified package (Node >=22.13). Both available Node runtimes meet the metadata requirement. Generate a real dependency-free workspace lockfile and verify frozen installation; no app packages or dependencies are invented.
+- **Reason:** The environment's pnpm wrapper ignores the earlier pin and executes 11.25.0. Explicit version verification and exact npm-exec fallback are documented to avoid pretending the 10.0.0 pin was honored. No global installation is changed. This is a measured foundation baseline, not a product compatibility claim.
+- **Policies:** UTF-8/LF defaults, CRLF command files and binary attributes; no bulk renormalization of existing files. Ignore runtime data/secrets/builds; preserve source, safe environment examples and synthetic JSON/SQL/Markdown fixtures. Ignore files do not provide secret scanning or encryption.
+- **Boundary:** Root script wiring, broader validators, CI/protection and independent backup/restore stay in M0.2/M0.3. This task adds direct Node tests for its own behavior only. Shared Rust core/transport ownership remains as previously approved.
+- **Status:** accepted for M0.1; native build prerequisites remain unverified/incomplete for M1. See docs/evidence/M0.md for actual command evidence.

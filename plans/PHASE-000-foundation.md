@@ -4,7 +4,7 @@ Status: approved implementation plan under the user's 2026-10-16 reconciliation 
 
 ## Objectives and scope
 
-Establish a recoverable, verifiable development repository before substantial product functionality (master sections 4, 5, 6, 71, 76, 82, 83, 88). Preserve the existing Git history, master specification, identity and remote. Prepare shared desktop/browser workspace boundaries without creating placeholder product features. Finish one numbered task at a time and checkpoint it; first unfinished task is M0.1.
+Establish a recoverable, verifiable development repository before substantial product functionality (master sections 4, 5, 6, 71, 76, 82, 83, 88). Preserve the existing Git history, master specification, identity and remote. Prepare shared desktop/browser workspace boundaries without creating placeholder product features. Finish one numbered task at a time and checkpoint it; M0.1 is complete with evidence in docs/evidence/M0.md; first unfinished task is M0.2. M0 remains incomplete.
 
 ## Dependencies and preflight
 
