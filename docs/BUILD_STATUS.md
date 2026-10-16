@@ -4,7 +4,7 @@
 
 M0 remains verified complete at annotated tag m0-foundation-verified (268533e4c16bbf4693fd4e4981354a4f5f7eb273). Current authorized phase is M1 under the user's continuation instruction. M1.0 detailed planning and read-only readiness audit is complete; M1 is not complete. Next task is M1.1 native toolchain installation/compile-link verification.
 
-Last entering verified checkpoint: 268533e4c16bbf4693fd4e4981354a4f5f7eb273. Current M1.0 publication/evidence is recorded after CI succeeds; metadata may retain a prior verified SHA deliberately.
+Last verified M1.0 implementation checkpoint: 08a59dd85571e48c7a2e0fb654ba8477f3d6253a, pushed to protected master after both CI runners passed. Following metadata commits retain that tested SHA deliberately.
 
 ## M1.0 implementation and verification
 
@@ -19,3 +19,5 @@ Last entering verified checkpoint: 268533e4c16bbf4693fd4e4981354a4f5f7eb273. Cur
 M1.1 must install or locate official Windows/Rust prerequisites and prove compile/link; then M1.2 builds the first actual shared readiness workflow. Do not skip the security/transport gates or present a mock app as implemented. Current native gaps are recorded in project-state.json. No desktop/browser app, local API, persistence, installer or provider integration is implemented.
 
 Use the protected CI branch flow and scripts/backup-source.ps1 after clean commits. Preserve M0 tag and existing source; future checkpoints must not overwrite earlier bundles. Stop at task boundaries and before another milestone.
+
+Actual M1.0 CI: https://github.com/robillionair/Anansi-ultimate/actions/runs/38841799110 — Windows and Linux success, 33 Node tests plus 13 PowerShell recovery checks. Native prerequisite probe still fails as expected. Current Windows process has no administrator token; initial Visual Studio tool installation needs an administrator-capable context. No installer was launched in M1.0.

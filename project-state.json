@@ -4,7 +4,7 @@
   "activeTask": "M1.0",
   "plan": "plans/PHASE-001-runnable-shell.md",
   "implementationStatus": "M1.0 detailed plan and read-only readiness audit complete; M1.1 native prerequisites missing",
-  "lastVerifiedCommit": "268533e4c16bbf4693fd4e4981354a4f5f7eb273",
+  "lastVerifiedCommit": "08a59dd85571e48c7a2e0fb654ba8477f3d6253a",
   "evidence": [
     "docs/evidence/M0.md",
     "docs/evidence/M1.md"
