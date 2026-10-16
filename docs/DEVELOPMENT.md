@@ -1,6 +1,6 @@
 # Development contract
 
-M0, M1.0 and M1.1 are complete. Local Rust MSVC compile/link/execution and prerequisite discovery pass. Next is M1.2. Product implementation has not started. There is no runnable desktop/web application, database migration, product test suite or installer. Follow the approved M0 plan; M0.2 owns root script repair/CI and M0.3 owns independent backup/restore. Do not interpret empty recursive script success as a product build.
+M0, M1.0 and M1.1 are verified. M1.2 introduces real desktop/browser readiness and generated contracts; current acceptance results are in BUILD_STATUS.md and evidence/M1-2.md. No database, workspace, memory, inference or installer is included yet.
 
 ## Foundation setup and verification
 
@@ -20,7 +20,7 @@ git hash-object docs/MASTER_SPEC.md
 
 The version command must report 11.25.0 before lockfile operations. If absent, `npm exec --yes --package=pnpm@11.25.0 -- pnpm --version` and the same prefix with `install --frozen-lockfile --ignore-scripts` select an exact package without editing the global installation. This fallback is documented, not exercised in this environment. Resolve new dependencies only in an approved task and commit the manager-generated lockfile. Lifecycle scripts are disabled for foundation installs; revisit approved dependency build requirements when real packages are introduced.
 
-Root `pnpm check` / `pnpm check:docs` validate documentation, state and evidence paths; `pnpm test` runs all foundation tests and `pnpm test:docs` runs documentation fixtures. `pnpm build` exits 1 explaining that the product build is unavailable until M1. `pnpm backup:source -Destination <absolute-new-bundle-path>` creates and verifies an independent source backup from a clean committed checkout; `pnpm test:backup` runs the PowerShell safeguard/restore checks. See RECOVERY_AND_BACKUP.md for required parent paths and limits. The legacy validate-planning entrypoint delegates to validate-docs and preserves its self-test. Foundation CI runs Windows/Linux using exact Node/pnpm versions, SHA-pinned actions and contents:read permission. No Rust/frontend build is claimed.
+Root `pnpm check` / `pnpm check:docs` validate documentation, state and evidence paths; `pnpm test` runs all foundation tests and `pnpm test:docs` runs documentation fixtures. `pnpm build` builds the browser production target. `pnpm backup:source -Destination <absolute-new-bundle-path>` creates and verifies an independent source backup from a clean committed checkout; `pnpm test:backup` runs the PowerShell safeguard/restore checks. See RECOVERY_AND_BACKUP.md for required parent paths and limits. The legacy validate-planning entrypoint delegates to validate-docs and preserves its self-test. Foundation CI runs Windows/Linux using exact Node/pnpm versions, SHA-pinned actions and contents:read permission. M1.2 adds actual Rust tests, generated-contract checks, frontend builds and browser workflows to CI.
 
 ## Observed toolchain and remediation
 
@@ -63,7 +63,7 @@ The current validator intentionally supports repository Markdown inline/image/re
 
 Run `pnpm doctor:toolchain` (foundation readiness, exit 0 only when Git/Node/pinned pnpm are usable) and `pnpm doctor:native` (exit 1 until Windows native prerequisites are detected). Use these explicit script names: pnpm has its own built-in doctor command. Reports include read-only discovery and buildVerified=false; they never install anything or prove a native compile/runtime. Follow the M1 plan for actual installer/toolchain verification before product work.
 
-The current local probe finds Rust MSVC/Cargo/C++/SDK gaps; WebView2 directories alone do not verify embedding. Candidate frontend package versions were queried but not installed; M1.2 must pin and prove the actual combination. The user continuation authorizes M1 phase work; prior M0-only stop instructions are historical.
+Historical M1.0 audit found native gaps; M1.1 resolved those gaps. M1.2 pins the actual frontend/native dependency combination and verifies embedding separately. The user continuation authorizes M1 phase work; prior M0-only stop instructions are historical.
 
 ## M1.1 native setup and verification
 
@@ -84,3 +84,18 @@ User Rust tools may be run directly at %USERPROFILE%\.cargo\bin; set CARGO_HOME 
 The user completed the Microsoft installer (exit 0). Local verification passes: Visual Studio Build Tools 2022 17.14.42 (17.14.37806.7), MSVC toolset 14.44.35207, Windows SDK 10.0.26100.0, Rust/Cargo 1.99.1. `pnpm doctor:native` exits 0; `pnpm verify:native` compiles, links and runs ANANSI_NATIVE_SMOKE_OK. Previous missing-linker/admin blockers are resolved, not current setup requirements. Reinstallation is unnecessary.
 
 SDK discovery checks both registry views and standard Program Files roots, requiring actual UM/UCRT headers and x64 libraries. An obsolete registry entry must not mask a valid SDK. The doctor still reports buildVerified=false because discovery alone is not a build; the separate actual smoke verifier is the build evidence. WebView2 directory evidence is not actual Tauri embedding; that remains M1.2.
+
+
+## M1.2 commands and local pairing
+
+Install pinned dependencies with `pnpm install --frozen-lockfile --ignore-scripts`. The tracked cargo wrapper finds CARGO_HOME/default user-local Rust without modifying global PATH.
+
+- `pnpm contracts:generate` regenerates schemas, declarations and static validators from Rust; `pnpm contracts:check` rejects drift.
+- `pnpm typecheck`, `pnpm test:ui`, `pnpm test:rust` verify types, contract client and Rust workspace. Run `node scripts/cargo.mjs fmt --all --check` and `node scripts/cargo.mjs clippy --workspace --all-targets --locked -- -D warnings`.
+- `pnpm build:web` (also root build) creates apps/web/dist. `pnpm dev:web` serves the browser on http://127.0.0.1:1420; `pnpm --filter @anansi/web preview` serves the production build there.
+- In another terminal, `pnpm dev:api` starts the authenticated loopback service on 127.0.0.1:1451. Open the private pairing.json path printed by that process with your own local editor, and copy its token to the browser pairing form. Do not paste it into chat, commands, URLs or logs. API startup never prints the token. Leave the process running; Ctrl+C exits gracefully and removes its session file. A restart requires pairing with the new token. A forced kill can leave an owner-only stale file; its token no longer authorizes a new session.
+- `pnpm dev:desktop` runs Tauri against a separately running dev:web. `pnpm build:desktop` builds the real Windows application without bundling an installer. The bundled application calls Rust directly and needs no API process or browser token. Native runs need the verified MSVC/WebView2 toolchain.
+- For a repeatable bundled debug test: `pnpm build:web`, then `node scripts/cargo.mjs build -p anansi-desktop --features custom-protocol --locked`, then `node scripts/verify-desktop.mjs`. The verifier launches the real application and attaches test-only CDP; it closes the window on completion. No CDP argument is set in normal product launch.
+- Before `pnpm test:e2e`, build the web and API: `pnpm build:web`, `node scripts/cargo.mjs build -p anansi-api --locked`, `pnpm exec playwright install chromium`. Tests start production preview on 1420 and an isolated API with a random port/private external temp pairing directory. Keep port 1420 free. They remove their synthetic session files; no real user data is used. Screenshots under ignored test-results show real connected views after the password input is gone. Traces are disabled to avoid retaining credentials.
+
+The only domain operation is readiness. No workspace, setting, memory, provider or installer capability is implied. Use [M1.2 evidence](evidence/M1-2.md) for actually executed checks and [the plan](../plans/PHASE-001-runnable-shell.md) for remaining tasks.

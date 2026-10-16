@@ -6,7 +6,6 @@
   "scripts": {
     "check": "node scripts/validate-docs.mjs",
     "test": "node --test tests/docs-validation.test.mjs tests/repository-hygiene.test.mjs tests/doctor.test.mjs tests/native-setup.test.mjs && pnpm test:backup",
-    "build": "node scripts/unavailable.mjs build",
     "check:docs": "node scripts/validate-docs.mjs",
     "test:docs": "node --test tests/docs-validation.test.mjs",
     "backup:source": "pwsh -NoProfile -File scripts/backup-source.ps1",
@@ -14,6 +13,28 @@
     "doctor:native": "node scripts/doctor.mjs --require-native",
     "doctor:toolchain": "node scripts/doctor.mjs",
     "verify:native": "pwsh -NoProfile -File scripts/verify-native.ps1",
-    "setup:msvc": "pwsh -NoProfile -File scripts/install-msvc.ps1"
+    "setup:msvc": "pwsh -NoProfile -File scripts/install-msvc.ps1",
+    "contracts:generate": "node scripts/contracts.mjs",
+    "build:desktop": "pnpm build:web && node scripts/desktop.mjs build",
+    "build": "pnpm build:web",
+    "dev:desktop": "node scripts/desktop.mjs dev",
+    "test:e2e": "playwright test",
+    "typecheck": "tsc --noEmit",
+    "dev:web": "pnpm --filter @anansi/web dev",
+    "contracts:check": "node scripts/contracts.mjs --check",
+    "build:web": "pnpm --filter @anansi/web build",
+    "dev:api": "node scripts/cargo.mjs run --locked -p anansi-api",
+    "test:rust": "node scripts/cargo.mjs test --workspace --locked",
+    "test:ui": "node --import tsx --test tests/contracts.test.ts"
+  },
+  "devDependencies": {
+    "typescript": "7.0.2",
+    "@types/node": "26.6.5",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "json-schema-to-typescript": "16.0.0",
+    "@playwright/test": "1.64.1",
+    "tsx": "4.23.15",
+    "ajv": "8.20.0"
   }
 }

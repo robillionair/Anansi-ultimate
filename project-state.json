@@ -1,16 +1,17 @@
 {
   "schemaVersion": 1,
   "activeMilestone": "M1",
-  "activeTask": "M1.1",
+  "activeTask": "M1.2",
   "plan": "plans/PHASE-001-runnable-shell.md",
-  "implementationStatus": "M1.1 complete: local Rust MSVC compile, link and executable output verified; M1.2 not started",
-  "lastVerifiedCommit": "7125d9cb329d0cbe19c50a5178f18e8f42a5fa80",
+  "implementationStatus": "M1.2 locally complete: real native/browser readiness verified; protected CI publication pending",
+  "lastVerifiedCommit": "91f53fcf7f13897951766afe6376c4cd1e5d6b1b",
   "evidence": [
     "docs/evidence/M0.md",
-    "docs/evidence/M1.md"
+    "docs/evidence/M1.md",
+    "docs/evidence/M1-2.md"
   ],
   "blockers": [],
-  "nextTask": "M1.2",
-  "productImplementation": "not started",
+  "nextTask": "M1.3",
+  "productImplementation": "M1.2 readiness verified; workspace, memory, AI and installer not implemented",
   "milestoneComplete": false
 }

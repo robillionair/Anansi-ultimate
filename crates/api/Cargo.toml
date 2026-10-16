@@ -1,0 +1,15 @@
+[package]
+name = "anansi-api"
+version.workspace = true
+edition.workspace = true
+[dependencies]
+anansi-core = { path = "../core" }
+serde.workspace = true
+serde_json.workspace = true
+axum = "=0.8.9"
+tokio = { version = "=1.53.3", features = ["rt-multi-thread", "macros", "net", "signal"] }
+getrandom = "=0.4.3"
+subtle = "=2.6.1"
+[dev-dependencies]
+tower = { version = "=0.5.3", features = ["util"] }
+tempfile = "=3.27.0"

@@ -1,0 +1,8 @@
+[package]
+name = "anansi-contracts"
+version.workspace = true
+edition.workspace = true
+[dependencies]
+anansi-core = { path = "../core" }
+serde_json.workspace = true
+schemars.workspace = true

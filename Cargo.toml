@@ -1,0 +1,14 @@
+[workspace]
+members = ["crates/core", "crates/api", "crates/contracts", "apps/desktop/src-tauri"]
+default-members = ["crates/core", "crates/api", "crates/contracts"]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "UNLICENSED"
+
+[workspace.dependencies]
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.154"
+schemars = "=1.2.3"

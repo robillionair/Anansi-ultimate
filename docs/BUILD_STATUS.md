@@ -2,20 +2,18 @@
 
 ## Current state — 2026-10-16
 
-M0 verified complete. M1.0 and M1.1 are complete; next task is M1.2 shared desktop/browser readiness. M1 as a whole remains incomplete; no M1 completion tag. No product application has been implemented.
+M0, M1.0, M1.1 and M1.2 are locally verified complete. M1.2 delivers shared readiness through a real Windows Tauri application and authenticated local browser API. Protected CI publication is pending for this new checkpoint. M1 remains incomplete and has no completion tag.
 
-Verified M1.1 source checkpoint: 7125d9cb329d0cbe19c50a5178f18e8f42a5fa80, published to protected master after required CI. Project-state records completed M1.1 and next M1.2 with no current toolchain blocker.
+Prior verified checkpoint: 91f53fcf7f13897951766afe6376c4cd1e5d6b1b. The following metadata checkpoint will record the newly published source SHA after actual CI succeeds. See [M1.1 history](evidence/M1.md) and [M1.2 evidence](evidence/M1-2.md).
 
-## M1.1 acceptance passed locally
+## M1.2 acceptance and verification
 
-- User completed the Microsoft C++ installation, exit 0; no automatic restart. vswhere confirms complete installation, no reboot required.
-- Rust/Cargo 1.99.1 MSVC with rustfmt/Clippy; VS Build Tools 17.14.42, MSVC 14.44.35207, Windows SDK 10.0.26100.0 measured.
-- `pnpm doctor:native`: exit 0, no missing prerequisites. Fixed stale SDK registry-root detection and added regression test requiring real UM/UCRT headers/libraries.
-- `pnpm verify:native`: exit 0; actual compile, link and execution returns ANANSI_NATIVE_SMOKE_OK. Logs retained outside source; paths and versions in [M1 evidence](evidence/M1.md).
-- Doctor discovery alone still does not claim a verified build. The separate smoke executable supplies build evidence.
+- Shared Rust DTOs/domain validation, deterministic schema/TypeScript/static validator generation, direct scoped native command and authenticated loopback HTTP transport work.
+- Actual production browser workflows passed: pairing/live refresh, wrong-token/unavailable recovery, forget/reload without credential persistence, keyboard form and narrow layout.
+- Actual debug and release Tauri/WebView2 windows passed live readiness/refresh, contract rejection and explicit shell ACL denial. Screenshots inspected; CSP remains strict without unsafe-eval.
+- Root desktop build produced an optimized executable; it is not an installer. Release SHA256 and precise commands are recorded in evidence.
+- 12 Rust tests, 6 contract/client tests, 3 browser workflows, 35 foundation Node tests and 13 recovery checks passed. Formatting, Clippy with warnings denied, TypeScript, contract drift, frozen installation, documentation and whitespace checks passed. Original master hash preserved; all 90 sections, 16 plans and 33 requirements retained.
 
-## Verification and remaining scope
+## Remaining scope and next task
 
-Full local documentation/foundation/recovery regressions passed: 36 Node tests, 13 PowerShell recovery checks, frozen install and whitespace checks. Actual CI run 38847062467 passed both Foundation runners and Windows native smoke. Original master specification and architecture preserved. No new system installation or restart by this session.
-
-M1.2 is the next approved task. Real Tauri/WebView2 embedding, authenticated local API, shared contracts/UI, persistence and development installer acceptance are not yet implemented or verified. Toolchain success does not complete those product requirements. M2 and later scope unchanged.
+No local blocker remains. M1.3 SQLite workspace create/reopen and durable settings is next and has not started. No database migration, memory, inference, provider, onboarding/navigation or installer completion is claimed. M1.4/M1.5 and M2–M15 retain their approved scope. Requirement areas AN-002/003/018/020 remain in progress, with readiness evidence rather than full-requirement completion.

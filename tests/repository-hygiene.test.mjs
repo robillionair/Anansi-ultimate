@@ -11,11 +11,12 @@ const read = p => fs.readFileSync(path.join(root, p), 'utf8');
 test('Git ignores representative secrets, private data and generated output', () => {
   const fixtures = [
     '.env', 'apps/web/.env.production', '.npmrc', 'crates/api/credentials.json',
-    'private.pem', 'signing.pfx', 'secrets.json', 'local-data/memory.md',
+    'private.pem', 'signing.pfx', 'secrets.json', 'pairing.json', 'local-data/memory.md',
     'workspaces/personal/note.md', 'backups/source.bundle', 'source.bundle',
     'data/memory.sqlite3-wal', 'data/memory.db-shm', 'data/memory.sqlite',
     'node_modules/example/index.js', 'apps/web/node_modules/example/index.js',
     'apps/web/dist/index.html', 'crates/core/target/debug/core.exe',
+    'apps/desktop/src-tauri/gen/schemas/windows-schema.json',
   ];
   const ignored = execFileSync('git', ['check-ignore', '--no-index', '--stdin'], {
     cwd: root, input: fixtures.join('\n') + '\n', encoding: 'utf8',
@@ -54,13 +55,14 @@ test('State and foundation configuration reference real, trackable files', () =>
   assert.ok(state.activeTask.startsWith(state.activeMilestone + '.'));
   assert.match(state.nextTask, /^M(?:[0-9]|1[0-5])\.\d+$/);
   assert.equal(typeof state.milestoneComplete, 'boolean');
-  assert.equal(state.productImplementation, 'not started');
+  assert.equal(typeof state.productImplementation, 'string');
+  assert.ok(state.productImplementation.length > 0);
   for (const p of [state.plan, ...state.evidence]) assert.ok(fs.existsSync(path.join(root, p)), p);
   execFileSync('git', ['cat-file', '-e', `${state.lastVerifiedCommit}^{commit}`], { cwd: root });
   const pkg = JSON.parse(read('package.json'));
   assert.equal(pkg.packageManager, 'pnpm@11.25.0');
   assert.equal(Object.keys(pkg.dependencies ?? {}).length, 0);
-  assert.equal(Object.keys(pkg.devDependencies ?? {}).length, 0);
+  for (const version of Object.values(pkg.devDependencies ?? {})) assert.match(version, /^\d+\.\d+\.\d+$/);
   assert.match(read('pnpm-lock.yaml'), /lockfileVersion:/);
   assert.match(read('.editorconfig'), /charset = utf-8/);
   assert.match(read('.editorconfig'), /end_of_line = lf/);

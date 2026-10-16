@@ -1,0 +1,6 @@
+{
+  "identifier": "main",
+  "description": "Local main window may request core readiness only. No remote access or filesystem/process plugins.",
+  "windows": ["main"],
+  "permissions": ["allow-readiness"]
+}

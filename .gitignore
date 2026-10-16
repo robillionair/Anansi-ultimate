@@ -5,6 +5,9 @@ target/
 dist/
 coverage/
 *.log
+test-results/
+playwright-report/
+/apps/desktop/src-tauri/gen/schemas/
 
 # Local configuration and credentials. Only sanitized examples belong in Git.
 .env
@@ -19,6 +22,7 @@ coverage/
 *.pfx
 credentials.json
 secrets.json
+pairing.json
 
 # Local user data and source backup payloads (not implementation directories).
 /workspaces/

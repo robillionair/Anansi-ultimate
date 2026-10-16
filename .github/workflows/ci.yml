@@ -8,7 +8,7 @@ jobs:
   foundation:
     name: Foundation (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 10
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
@@ -32,6 +32,18 @@ jobs:
           pnpm install --frozen-lockfile --ignore-scripts
       - run: pnpm check
       - run: pnpm test
+      - name: Install pinned Rust for shared core and API
+        run: rustup toolchain install 1.99.1 --profile minimal --component rustfmt --component clippy
+      - run: node scripts/cargo.mjs fmt --all --check
+      - run: node scripts/cargo.mjs test --locked
+      - run: node scripts/cargo.mjs clippy --all-targets --locked -- -D warnings
+      - run: pnpm contracts:check
+      - run: pnpm typecheck
+      - run: pnpm test:ui
+      - run: pnpm build:web
+      - run: node scripts/cargo.mjs build --locked -p anansi-api
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:e2e
       - name: Check committed whitespace and unchanged lockfile
         run: |
           git show --format= --check HEAD
@@ -39,7 +51,7 @@ jobs:
   native-toolchain:
     name: Windows native toolchain smoke
     runs-on: windows-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -50,3 +62,16 @@ jobs:
       - name: Compile, link and execute the synthetic MSVC smoke fixture
         shell: pwsh
         run: pwsh -NoProfile -File scripts/verify-native.ps1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24.19.0
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+        with:
+          version: 11.25.0
+          run_install: false
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: pnpm build:web
+      - run: node scripts/cargo.mjs test --workspace --locked
+      - run: node scripts/cargo.mjs clippy --workspace --all-targets --locked -- -D warnings
+      - run: node scripts/cargo.mjs build --locked -p anansi-desktop --features custom-protocol
+      - run: node scripts/verify-desktop.mjs

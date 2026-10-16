@@ -38,7 +38,7 @@ plans/               phase plans
 tests/               cross-layer and acceptance tests
 ```
 
-This is a target shape, not an implemented claim. The first coding phase must validate the toolchain and choose the minimum viable workspace layout.
+M1.2 establishes this workspace shape for readiness only. Storage, search, policy and provider subsystems remain target architecture.
 
 ## Security boundaries
 
@@ -60,4 +60,4 @@ M0.1 records [directory and contract ownership](DEVELOPMENT.md). Core owns domai
 
 ## M1.0 domain/transport design gate
 
-The M1 detailed plan chooses authoritative Rust DTOs with generated shared schemas/bindings, an authenticated loopback browser adapter with explicit pairing/ACL and Origin/Host tests, and direct scoped Tauri commands invoking the same core rules. These are planned boundaries, not implemented security claims. A read-only repository toolchain doctor is development infrastructure, not ANANSI Core/product readiness. M1.1 must prove native tool installation/compile-link before M1.2 starts the actual shared application slice.
+The M1 detailed plan chooses authoritative Rust DTOs with generated shared schemas/bindings, an authenticated loopback browser adapter with explicit pairing/ACL and Origin/Host tests, and direct scoped Tauri commands invoking the same core rules. M1.2 implements and tests these boundaries for the readiness command only; see evidence/M1-2.md. A read-only repository toolchain doctor is development infrastructure, not ANANSI Core/product readiness. M1.1 must prove native tool installation/compile-link before M1.2 starts the actual shared application slice.

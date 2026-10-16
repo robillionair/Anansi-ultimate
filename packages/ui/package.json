@@ -1,0 +1,16 @@
+{
+  "name": "@anansi/ui",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/App.tsx",
+    "./tokens.css": "./src/tokens.css"
+  },
+  "dependencies": {
+    "@anansi/contracts": "workspace:*",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "@tauri-apps/api": "2.12.4"
+  }
+}

@@ -5,8 +5,8 @@ Status vocabulary: `provisional`, `planned`, `in progress`, `verified`, `blocked
 | ID | Requirement area | Subsystem | Priority | Dependencies | Milestone | Status | Test / evidence required |
 |---|---|---|---|---|---|---|---|
 | AN-001 | Windows Tauri 2 installer producing an NSIS `.exe` | Desktop/release | P0 | Toolchain, app shell | M1, M15 | planned | Build installer, install on clean Windows VM, launch |
-| AN-002 | Responsive browser application | Web/UI | P0 | Shared UI, local API | M1, M2, M15 | planned | Browser smoke test and responsive checks |
-| AN-003 | Shared visual design system | UI | P0 | Product UX spec | M1 | planned | Component tests and visual review |
+| AN-002 | Responsive browser application | Web/UI | P0 | Shared UI, local API | M1, M2, M15 | in progress | Browser smoke test and responsive checks; M1.2 readiness evidence: [record](evidence/M1-2.md), full scope still open |
+| AN-003 | Shared visual design system | UI | P0 | Product UX spec | M1 | in progress | Component tests and visual review; M1.2 readiness evidence: [record](evidence/M1-2.md), full scope still open |
 | AN-004 | Memory OS data model and lifecycle | Core/memory | P0 | Master spec, SQLite | M2 | planned | Create/read/update/archive workflow |
 | AN-005 | Hybrid lexical/vector search | Core/search | P0 | Memory model, FTS5, vector index | M3, M4 | planned | Precision/recall fixture tests and UI workflow |
 | AN-006 | Ask ANANSI | AI/orchestration | P0 | Search, providers, context | M3, M4 | planned | Grounded answer workflow with citations/provenance |
@@ -21,9 +21,9 @@ Status vocabulary: `provisional`, `planned`, `in progress`, `verified`, `blocked
 | AN-015 | SOMNIA | AI/workflow | P1 | Memory, local-first policy | M10 | planned | Workflow tests and privacy review |
 | AN-016 | GHOST-PROMPT | AI/workflow | P1 | Context policy, providers | M11 | planned | Prompt transformation tests and audit trail |
 | AN-017 | MCP | Integrations/security | P1 | Permission model, contracts | M13 | planned | Allow/deny, timeout, and audit tests |
-| AN-018 | Privacy and security | Cross-cutting | P0 | All privileged features | M0–M15 | planned | Threat model, redaction, permission and penetration checks |
+| AN-018 | Privacy and security | Cross-cutting | P0 | All privileged features | M0–M15 | in progress | Threat model, redaction, permission and penetration checks; M1.2 readiness evidence: [record](evidence/M1-2.md), full scope still open |
 | AN-019 | Backups and restoration | Core/recovery | P0 | Storage schema, encryption | M0, M2, M15 | planned | Backup/restore round trip and corruption handling |
-| AN-020 | ANANSI Core readiness | Core/platform | P0 | Shared contracts, policy | M1 (contracts), M14 (appliance) | planned | Core API contract suite and readiness checklist |
+| AN-020 | ANANSI Core readiness | Core/platform | P0 | Shared contracts, policy | M1 (contracts), M14 (appliance) | in progress | Core API contract suite and readiness checklist; M1.2 readiness evidence: [record](evidence/M1-2.md), full scope still open |
 | AN-021 | Enterprise architecture | Platform/deployment | P2 | Security review, tenancy model | M14 (design gate), M15 (review) | deferred | Architecture review, isolation and migration tests |
 
 ## Matrix notes

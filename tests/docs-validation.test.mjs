@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { spawnSync } from 'node:child_process';
-import { loadRepository, validate, prose, root } from '../scripts/validate-docs.mjs';
+import { loadRepository, validate, prose } from '../scripts/validate-docs.mjs';
 
 const base = loadRepository();
 test('actual repository documentation and state validate', () => assert.deepEqual(validate(base), []));
@@ -38,9 +37,4 @@ test('fences and inline examples are ignored; real anchors, duplicates, assets a
 });
 test('longer fenced blocks require a matching closing fence', () => {
   assert.equal(prose('~~~~js\n[bad](missing)\n~~~\n~~~~\n# Visible'),'\n\n\n\n# Visible');
-});
-for (const operation of ['build']) test(`${operation} reports unavailable with nonzero status`, () => {
-  const result=spawnSync(process.execPath,['scripts/unavailable.mjs',operation],{cwd:root,encoding:'utf8'});
-  assert.equal(result.status,1);
-  assert.match(result.stderr,/not (available|implemented)/);
 });

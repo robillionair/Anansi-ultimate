@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-readiness"
+description = "Read the live core readiness in the local main window"
+commands.allow = ["get_readiness"]

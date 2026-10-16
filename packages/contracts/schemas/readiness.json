@@ -1,0 +1,94 @@
+{
+  "CommandError": {
+    "$defs": {
+      "ErrorCode": {
+        "enum": [
+          "INVALID_REQUEST",
+          "UNSUPPORTED_CONTRACT",
+          "UNAUTHORIZED",
+          "FORBIDDEN",
+          "NOT_FOUND"
+        ],
+        "type": "string"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "code": {
+        "$ref": "#/$defs/ErrorCode"
+      },
+      "message": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "code",
+      "message"
+    ],
+    "title": "CommandError",
+    "type": "object"
+  },
+  "Readiness": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "apiVersion": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "applicationName": {
+        "type": "string"
+      },
+      "applicationVersion": {
+        "type": "string"
+      },
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "coreVersion": {
+        "type": "string"
+      },
+      "operatingSystem": {
+        "type": "string"
+      },
+      "uptimeMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "applicationName",
+      "applicationVersion",
+      "coreVersion",
+      "operatingSystem",
+      "uptimeMs"
+    ],
+    "title": "Readiness",
+    "type": "object"
+  },
+  "ReadinessRequest": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "contractVersion"
+    ],
+    "title": "ReadinessRequest",
+    "type": "object"
+  }
+}
