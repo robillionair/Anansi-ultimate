@@ -4,7 +4,7 @@
   "activeTask": "M0.1",
   "plan": "plans/PHASE-000-foundation.md",
   "implementationStatus": "M0.1 complete; M0.2 and M0.3 not started",
-  "lastVerifiedCommit": "cd8f9323c111e95b1c5db4d347144a2175fb3675",
+  "lastVerifiedCommit": "4b3bc0a1077148e8b6191267a7c706bf95dd1090",
   "evidence": ["docs/evidence/M0.md"],
   "blockers": [
     { "scope": "M1", "detail": "Rust/Cargo not on PATH; Windows C++ build tools not found; registered Windows SDK headers not found in probed location. Recheck/install prerequisites before native work." }

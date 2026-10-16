@@ -32,4 +32,4 @@ Next approved task: M0.2 executable validation and CI. Then M0.3 independent sou
 
 No M0.1 blocker remains. Rust/Cargo and standard Windows C++ tools were not found; registered SDK headers were not found. Recheck/install prerequisites before M1. WebView2 directories exist but runtime behavior is untested. Existing remote history protects committed source; independent local restore remains unverified.
 
-Publication checkpoint will be recorded after successful commit/push. Recovery must inspect later metadata commits rather than reset to an older SHA.
+Last verified implementation checkpoint: 4b3bc0a1077148e8b6191267a7c706bf95dd1090. Successfully pushed and matched origin/master. This following metadata commit records publication; recovery must inspect later metadata commits rather than reset to an older SHA.
