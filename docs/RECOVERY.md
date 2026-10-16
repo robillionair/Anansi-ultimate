@@ -11,7 +11,7 @@ Recovery checkpoints should contain source, tests, and the corresponding status/
 
 ## Reconciled resume entrypoint
 
-Begin with [the completed M1 plan](../plans/PHASE-001-runnable-shell.md), the active/next task in project-state.json, and [the canonical roadmap](ROADMAP.md). M0 and M1.0–M1.5 are complete. Next is M2.0 detailed planning and approval only; do not implement Memory OS automatically. Check BUILD_STATUS.md for actual acceptance/publication. Read the detailed acceptance plan before coding. Milestone IDs follow master section 82; legacy numeric plan filenames do not define milestone numbers. Run `node --test tests/repository-hygiene.test.mjs` and `node scripts/validate-planning.mjs --self-test` for current foundation checks; these do not run product tests or replace M0 CI/restore checks.
+Begin with [the M2 detailed plan](../plans/02-memory-system.md), the active/next task in project-state.json, and [the canonical roadmap](ROADMAP.md). M0 and M1.0–M1.5 are complete. M2.0 has prepared a concrete plan for acceptance approval; M2.1 product implementation remains unstarted pending approval. Preserve the M1 completion tag at 97babb3. Check BUILD_STATUS.md for actual acceptance/publication. Read the detailed acceptance plan before coding. Milestone IDs follow master section 82; legacy numeric plan filenames do not define milestone numbers. Run `node --test tests/repository-hygiene.test.mjs` and `node scripts/validate-planning.mjs --self-test` for current foundation checks; these do not run product tests or replace source recovery checks.
 
 ## Workspace data recovery after M1.3
 
@@ -29,4 +29,4 @@ Development installer artifacts are rebuildable and are excluded from source bun
 
 ## M1 completion boundary
 
-M1 development desktop/browser foundation is verified complete; see [M1.5 evidence](evidence/M1-5.md). The completion tag is m1-desktop-foundation-verified, applied to the checked completion record after protected publication. Source and tag readback plus a final independent bundle are verified at that boundary. M2.0 remains a planning/approval gate only, not an implementation authorization.
+M1 development desktop/browser foundation is verified complete; see [M1.5 evidence](evidence/M1-5.md). The completion tag is m1-desktop-foundation-verified at 97babb3, applied after protected publication. Source/tag readback and independent restore passed. Subsequent user continuation authorized M2.0 planning only; the next step is approval of the concrete plan before M2.1. No product storage migration or private-data change occurred in the planning checkpoint.

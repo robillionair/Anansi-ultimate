@@ -46,7 +46,7 @@ Private/sealed memories, credentials, OAuth tokens, MCP tools, local filesystem 
 
 ## Open architectural decisions
 
-- The restored specification defines memory metadata/states, privacy classes and an optional audited vault. M1.3's schema/migration covers workspace metadata/settings only; memory and encryption-library designs remain M2 planning decisions.
+- M1.3/M1.4's schema covers workspace metadata/settings only. The [M2 plan](../plans/02-memory-system.md) now proposes immutable Markdown bodies with transactional SQLite revision pointers, scoped ownership and native privacy policy. This is a proposal pending acceptance, not implemented memory storage. Audited vault library/key/recovery design remains the explicit M2.6 gate and blocks M2 completion until M2.7 verification.
 - Exact vector index implementation awaits performance and data-shape requirements.
 - Section 14 lists candidate providers; official authentication/entitlement verification is required in M5. Section 70 specifies Windows Credential Manager and macOS Keychain; no credentials integration is implemented.
 - M1.2 verifies readiness command/API parity; M1.3 extends the same generated contracts and real cross-adapter tests to workspace/settings commands. Each subsequent command must preserve these boundaries.
@@ -65,3 +65,9 @@ The M1 detailed plan chooses authoritative Rust DTOs with generated shared schem
 M1.4 extends the shared settings contract with typed intent and onboarding completion. Recognized schema-1 catalogs migrate transactionally to schema 2 with preserved workspace fields. These UI preferences grant no cloud/native capability; the permission/transport boundary is unchanged. Shared onboarding, navigation, workspace and settings components follow ADR-0014; hardware/providers, memory and installer remain their approved tasks.
 
 M1.5 adds per-user NSIS development packaging, checksum/payload manifests and isolated install/uninstall verification. The installed application uses the same core, contracts and UI. No automatic API service, elevation, updater, signing, filesystem grant or model setup is introduced. See ADR-0015 for WebView2 prerequisites, CI's explicit installed-UI limitation and the M15 boundary.
+
+## M2.0 proposed domain and recovery boundaries
+
+The proposed Memory OS extends the existing core/catalog and generated adapter contracts. Markdown stores immutable body bytes; SQLite owns metadata, revisions, workspace ownership, relationships and jobs. Search indexes are derived; canonical metadata is not discarded on index rebuild. File write/sync precedes transactional publication, with hash verification and recoverable orphan/missing-file handling rather than an unsupported cross-filesystem atomicity claim.
+
+All four privacy classes are native policy. Initial plaintext slices reject Sealed and disclose encryption limits; optional vault remains mandatory milestone scope behind a separate security approval gate. Selected-workspace snapshots must exclude other catalog workspaces; live full-catalog backup is a distinct explicit scope. Restore creates a fresh target, never overwrites originals. See the [task plan](../plans/02-memory-system.md) and ADR-0016. No product or security capability changes occur in this planning checkpoint.

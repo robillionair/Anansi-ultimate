@@ -2,9 +2,9 @@
 
 ## Current state — 2026-10-16
 
-M0 and M1.0–M1.5 are verified complete. M1 delivers the actual per-user x64 NSIS development installer and shared browser/workspace foundation. Source checkpoint 7eebcd0 passed all three jobs in CI run 38922142058, including release packaging/install/uninstall/artifact upload, and was published to protected master. The downloaded CI installer also passed the full local installed-release native/browser workflow and data-preserving uninstall. Stop before M2.
+M0 and M1.0–M1.5 are verified complete. M1 completion checkpoint 97babb3ae9f3dc20b5602a7b46a947e833943eb2 passed all three CI jobs in run 38955878511, was published to protected master and tagged m1-desktop-foundation-verified. Final source bundle restored identical HEAD/tree/tag and passed documentation checks. The downloaded CI installer passed the full local installed-release native/browser workflow and data-preserving uninstall.
 
-Verified implementation checkpoint: 7eebcd0a7f6977a951757a65ff90a794b7c2867b. This completion record references the prior verified source SHA to avoid self-reference. Annotated completion tag name: m1-desktop-foundation-verified; create/push it only after this completion record's CI succeeds. See [M1.5 evidence](evidence/M1-5.md), [M1 history](evidence/M1.md) and [completed plan](../plans/PHASE-001-runnable-shell.md).
+Last verified checkpoint: 97babb3ae9f3dc20b5602a7b46a947e833943eb2; product implementation source 7eebcd0a7f6977a951757a65ff90a794b7c2867b. The subsequent user continuation authorizes M2.0 detailed planning only. The [Memory OS plan](../plans/02-memory-system.md) is prepared for acceptance approval before M2.1 coding. See [M2.0 evidence](evidence/M2-0.md), [M1.5 evidence](evidence/M1-5.md) and [completed M1 plan](../plans/PHASE-001-runnable-shell.md). No Memory OS behavior is implemented by this planning checkpoint.
 
 ## M1 certification and recovery
 
@@ -17,4 +17,4 @@ Verified implementation checkpoint: 7eebcd0a7f6977a951757a65ff90a794b7c2867b. Th
 
 M1 is development-foundation certification only. AN-003 shared foundation design and AN-023 local onboarding/workspace/navigation/settings have verified workflow evidence. AN-001/002/018/020 retain release/security/later-platform scope and remain in progress. Signed installers, updater and clean-machine certification remain M15; no fully offline runtime installation claim. Existing WebView2 supports tested offline operation; its embedded bootstrapper needs internet if the runtime is absent.
 
-M2.0 detailed planning and approval is the next gate and has not started. Do not implement Memory OS automatically. Memory, inference, hardware/model/provider setup, vault/encryption and automatic user-data backups remain their planned milestones. There is no M1 blocker.
+M2.0 plan preparation is complete; acceptance approval remains pending. Next task is M2.1 only after approval. M2.6 remains a separate audited-vault design/approval gate; its implementation is required before M2 certification. Memory, jobs, export, encrypted vault and user-data backups are planned, not implemented. No product requirement status advances on documentation evidence. There is no M1 blocker.

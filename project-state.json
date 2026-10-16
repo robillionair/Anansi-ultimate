@@ -1,21 +1,27 @@
 {
   "schemaVersion": 1,
-  "activeMilestone": "M1",
-  "activeTask": "M1.5",
-  "plan": "plans/PHASE-001-runnable-shell.md",
-  "implementationStatus": "M1 complete: installed development NSIS/native-browser workflows, CI release artifact and independent recovery verified; stop before M2",
-  "lastVerifiedCommit": "7eebcd0a7f6977a951757a65ff90a794b7c2867b",
+  "activeMilestone": "M2",
+  "activeTask": "M2.0",
+  "plan": "plans/02-memory-system.md",
+  "implementationStatus": "M2.0 plan prepared for acceptance approval; M2 product implementation unstarted",
+  "lastVerifiedCommit": "97babb3ae9f3dc20b5602a7b46a947e833943eb2",
   "evidence": [
     "docs/evidence/M0.md",
     "docs/evidence/M1.md",
     "docs/evidence/M1-2.md",
     "docs/evidence/M1-3.md",
     "docs/evidence/M1-4.md",
-    "docs/evidence/M1-5.md"
+    "docs/evidence/M1-5.md",
+    "docs/evidence/M2-0.md"
   ],
-  "blockers": [],
-  "nextTask": "M2.0",
-  "nextTaskScope": "Detailed planning and approval only; M2 has not started",
+  "blockers": [
+    {
+      "scope": "M2.1 acceptance approval",
+      "detail": "Detailed M2 plan prepared; acceptance approval required before product coding."
+    }
+  ],
+  "nextTask": "M2.1",
+  "nextTaskScope": "Implement only after approval of the concrete M2 plan; later vault design approval remains mandatory",
   "productImplementation": "M1 development NSIS and shared browser/workspace foundation; memory, AI and signed production release remain later milestones",
-  "milestoneComplete": true
+  "milestoneComplete": false
 }
