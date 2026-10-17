@@ -34,8 +34,9 @@ function Test-Inside([string]$Candidate, [string]$Directory) {
 
 $temporary = $null
 try {
-    $isFullyQualified = if ([Type]::GetType('System.IO.Path').GetMethod('IsPathFullyQualified')) {
-        [IO.Path]::IsPathFullyQualified($Destination)
+    $method = [IO.Path].GetMethod('IsPathFullyQualified', [Type[]]@([string]))
+    $isFullyQualified = if ($null -ne $method) {
+        $method.Invoke($null, @($Destination))
     } else {
         [IO.Path]::IsPathRooted($Destination) -and [IO.Path]::GetPathRoot($Destination).Length -ge 2
     }
