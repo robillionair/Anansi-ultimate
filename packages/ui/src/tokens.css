@@ -4,6 +4,7 @@
 /* Shared first-run and navigation controls. No remote font assets. */
 textarea{display:block;width:100%;max-width:100%;font:inherit;color:inherit;border:1px solid #c6c1cf;border-radius:7px;padding:12px;resize:vertical}textarea:focus-visible{outline:3px solid #9370e8;outline-offset:3px}.memory{overflow-wrap:anywhere}.memory fieldset>button{margin-top:20px}.memory li button{max-width:100%;white-space:normal;overflow-wrap:anywhere}.memory fieldset:disabled{opacity:.85}
 .memory pre{white-space:pre-wrap;overflow-wrap:anywhere;border:1px solid #dedbe4;padding:12px;border-radius:7px;max-height:24rem;overflow:auto}.memory select{max-width:100%;padding:10px;border:1px solid #c6c1cf;border-radius:7px;background:#fff;color:inherit}.memory select:focus-visible{outline:3px solid #9370e8;outline-offset:3px}
+.entity-controls{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-top:16px}.entity-controls>*{flex:0 0 auto;max-width:100%}.entity-controls label{margin:0}
 :root{font-family:"Segoe UI",system-ui,sans-serif}
 button,input,select,summary{font:inherit}
 main{min-width:0}main h1:focus{outline:none}

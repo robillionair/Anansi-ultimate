@@ -165,7 +165,7 @@ export function People({ client, workspaceId }: { client: Client; workspaceId: s
                     })
                   }
                 >
-                  Delete
+                  Archive relationship
                 </button>
               </li>
             ))}

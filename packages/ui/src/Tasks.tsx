@@ -130,7 +130,7 @@ export function Tasks({ client, workspaceId }: { client: Client; workspaceId: st
         </button>
       </div>
 
-      <div style={{ marginTop: '16px', display: 'flex', gap: '8px', alignItems: 'center' }}>
+      <div className="entity-controls">
         <span>Filter: </span>
         <button
           className={filter === 'all' ? '' : 'secondary'}
@@ -159,7 +159,7 @@ export function Tasks({ client, workspaceId }: { client: Client; workspaceId: st
         {displayedTasks.map(t => {
           const proj = projects.find(p => p.id === t.projectId);
           return (
-            <li key={t.id} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <li key={t.id} style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px' }}>
               <input
                 type="checkbox"
                 checked={!!t.completed}
@@ -274,7 +274,7 @@ export function Tasks({ client, workspaceId }: { client: Client; workspaceId: st
                     })
                   }
                 >
-                  Delete
+                  Archive relationship
                 </button>
               </li>
             ))}

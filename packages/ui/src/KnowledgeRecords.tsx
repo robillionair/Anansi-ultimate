@@ -98,7 +98,7 @@ export function KnowledgeRecords({ client, workspaceId }: { client: Client; work
       {error && <p role="alert" className="error">{error}</p>}
       {notice && <p role="status" className="notice">{notice}</p>}
 
-      <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginTop: '16px' }}>
+      <div className="entity-controls">
         <label htmlFor="kind-filter" style={{ margin: 0 }}>Filter by kind:</label>
         <select
           id="kind-filter"
@@ -234,7 +234,7 @@ export function KnowledgeRecords({ client, workspaceId }: { client: Client; work
                     })
                   }
                 >
-                  Delete
+                  Archive relationship
                 </button>
               </li>
             ))}

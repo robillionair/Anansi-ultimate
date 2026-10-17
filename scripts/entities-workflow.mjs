@@ -151,4 +151,18 @@ export async function checkEntities(page, label) {
     await expect(page.getByLabel('Content & description',{exact:true})).toHaveValue('Literal <script>text</script> '+kind);
     await expect(page.getByRole('list',{name:'Relationships for this record'}).getByRole('listitem')).toHaveCount(1);
   }
+  await checkEntityLayout(page);
+}
+
+
+export async function checkEntityLayout(page) {
+  const viewport=page.viewportSize();
+  await page.setViewportSize({width:390,height:844});
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  const label=await page.locator('label[for="kind-filter"]').boundingBox();
+  const create=await button(page,'New record').boundingBox();
+  expect(label.height).toBeLessThanOrEqual(44);
+  expect(create.height).toBeLessThanOrEqual(64);
+  expect(create.width).toBeGreaterThanOrEqual(80);
+  await page.setViewportSize(viewport||{width:1280,height:1000});
 }
