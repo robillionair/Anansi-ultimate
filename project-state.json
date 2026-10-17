@@ -3,8 +3,8 @@
   "activeMilestone": "M2",
   "activeTask": "M2.3",
   "plan": "plans/02-memory-system.md",
-  "implementationStatus": "M2.3 verified complete: all 9 knowledge kinds, type-specific attributes, typed relationships, Schema 5 migration, UI views and cross-adapter verifiers pass",
-  "lastVerifiedCommit": "aac601dcee12067a1bbee44b62d72db0a3a6122b",
+  "implementationStatus": "M2.3 verified complete: all 9 knowledge kinds, type-specific attributes, typed relationships, Schema 5 migration, UI views, cross-adapter verifiers and all three CI jobs passed; stop before M2.4",
+  "lastVerifiedCommit": "82789d3d3d61fa9839685ceafe55e897ad2f2e93",
   "evidence": [
     "docs/evidence/M0.md",
     "docs/evidence/M1.md",
