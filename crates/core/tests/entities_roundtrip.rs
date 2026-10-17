@@ -371,6 +371,11 @@ fn relationships_reject_self_loops_cross_workspace_and_missing_endpoints() {
         .unwrap_err();
     assert_eq!(missing_err.code, ErrorCode::NotFound);
 
+    for metadata in [json!([]), json!({"text":"x".repeat(8193)})] {
+        let err=core.relationship_command("create",json!({"contractVersion":1,"workspaceId":w1,"draft":{"sourceId":m1_id,"targetId":m2_id,"predicate":"references","metadata":metadata}})).unwrap_err();
+        assert_eq!(err.code, ErrorCode::InvalidRequest);
+    }
+
     // 4. Invalid predicate
     let bad_pred_err = core
         .relationship_command(
