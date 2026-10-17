@@ -19,7 +19,7 @@ function Assert([bool]$Condition, [string]$Message) {
     if (-not $Condition) { throw $Message }
 }
 $isWin = if (Get-Variable -Name IsWindows -ErrorAction SilentlyContinue) { $IsWindows } else { $env:OS -eq 'Windows_NT' }
-$shellExe = if (Test-Path (Join-Path $PSHOME 'pwsh.exe')) { Join-Path $PSHOME 'pwsh' } else { Join-Path $PSHOME 'powershell' }
+$shellExe = if (Test-Path (Join-Path $PSHOME 'pwsh.exe')) { Join-Path $PSHOME 'pwsh' } elseif (Test-Path (Join-Path $PSHOME 'pwsh')) { Join-Path $PSHOME 'pwsh' } else { Join-Path $PSHOME 'powershell' }
 function Expect-Failure([string]$Name, [string]$Target, [string]$Source = $repo) {
     $prev = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
