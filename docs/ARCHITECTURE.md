@@ -46,7 +46,7 @@ Private/sealed memories, credentials, OAuth tokens, MCP tools, local filesystem 
 
 ## Open architectural decisions
 
-- M2.1's schema-3 memory storage implements the accepted [M2 plan](../plans/02-memory-system.md) subset: immutable Markdown bodies, transactional SQLite revision pointers, scoped ownership and native plaintext privacy policy. Audited vault library/key/recovery design remains the explicit M2.6 gate and blocks M2 completion until M2.7 verification.
+- M2.1 memory revisions and M2.2 schema-4 lifecycle storage implement the accepted [M2 plan](../plans/02-memory-system.md) subset: immutable Markdown bodies, transactional SQLite revision pointers, scoped ownership and native plaintext privacy policy. Audited vault library/key/recovery design remains the explicit M2.6 gate and blocks M2 completion until M2.7 verification.
 - Exact vector index implementation awaits performance and data-shape requirements.
 - Section 14 lists candidate providers; official authentication/entitlement verification is required in M5. Section 70 specifies Windows Credential Manager and macOS Keychain; no credentials integration is implemented.
 - M1.2 verifies readiness command/API parity; M1.3 extends the same generated contracts and real cross-adapter tests to workspace/settings commands. Each subsequent command must preserve these boundaries.

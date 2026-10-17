@@ -3,8 +3,8 @@
   "activeMilestone": "M2",
   "activeTask": "M2.2",
   "plan": "plans/02-memory-system.md",
-  "implementationStatus": "M2.2 local acceptance passed: notes/lifecycle/history, both adapters and restarts; exact-SHA CI/publication/source recovery pending; stop before M2.3",
-  "lastVerifiedCommit": "39b0e5ae440223a87ac394c60706160a8f237ca6",
+  "implementationStatus": "M2.2 verified complete: native/browser notes/lifecycle/history, all implementation CI jobs, protected source publication and independent recovery; stop before M2.3",
+  "lastVerifiedCommit": "aac601dcee12067a1bbee44b62d72db0a3a6122b",
   "evidence": [
     "docs/evidence/M0.md",
     "docs/evidence/M1.md",
@@ -19,6 +19,6 @@
   "blockers": [],
   "nextTask": "M2.3",
   "nextTaskScope": "Projects, entities and relationships; unstarted",
-  "productImplementation": "M1 plus M2.1 and locally verified M2.2 notes/lifecycle; entities/jobs/export/backups/vault remain later M2 tasks",
+  "productImplementation": "M1 foundation plus verified M2.1/M2.2 memory revisions, notes and lifecycle; entities/jobs/export/backups/vault remain later M2 tasks",
   "milestoneComplete": false
 }
