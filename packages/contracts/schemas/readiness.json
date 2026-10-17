@@ -66,6 +66,17 @@
       "MemoryMetadata": {
         "additionalProperties": false,
         "properties": {
+          "archivedState": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/MemoryState"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
           "confidence": {
             "format": "double",
             "type": [
@@ -112,6 +123,13 @@
             },
             "type": "array"
           },
+          "restoredFrom": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "revisionId": {
             "type": "string"
           },
@@ -122,7 +140,14 @@
             "type": "array"
           },
           "status": {
-            "type": "string"
+            "$ref": "#/$defs/MemoryState"
+          },
+          "supersededBy": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "supersedes": {
             "type": [
@@ -177,6 +202,17 @@
           "relationships"
         ],
         "type": "object"
+      },
+      "MemoryState": {
+        "enum": [
+          "proposed",
+          "confirmed",
+          "temporary",
+          "durable",
+          "superseded",
+          "archived"
+        ],
+        "type": "string"
       },
       "Privacy": {
         "enum": [
@@ -282,6 +318,17 @@
       "MemoryMetadata": {
         "additionalProperties": false,
         "properties": {
+          "archivedState": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/MemoryState"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
           "confidence": {
             "format": "double",
             "type": [
@@ -328,6 +375,13 @@
             },
             "type": "array"
           },
+          "restoredFrom": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "revisionId": {
             "type": "string"
           },
@@ -338,7 +392,14 @@
             "type": "array"
           },
           "status": {
-            "type": "string"
+            "$ref": "#/$defs/MemoryState"
+          },
+          "supersededBy": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "supersedes": {
             "type": [
@@ -393,6 +454,17 @@
           "relationships"
         ],
         "type": "object"
+      },
+      "MemoryState": {
+        "enum": [
+          "proposed",
+          "confirmed",
+          "temporary",
+          "durable",
+          "superseded",
+          "archived"
+        ],
+        "type": "string"
       },
       "Privacy": {
         "enum": [
@@ -451,6 +523,20 @@
           "null"
         ]
       },
+      "includeArchived": {
+        "default": false,
+        "type": "boolean"
+      },
+      "includeExpired": {
+        "default": false,
+        "type": "boolean"
+      },
+      "kind": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
       "limit": {
         "format": "uint32",
         "minimum": 0,
@@ -478,6 +564,17 @@
   },
   "MemoryMetadata": {
     "$defs": {
+      "MemoryState": {
+        "enum": [
+          "proposed",
+          "confirmed",
+          "temporary",
+          "durable",
+          "superseded",
+          "archived"
+        ],
+        "type": "string"
+      },
       "Privacy": {
         "enum": [
           "sealed",
@@ -491,6 +588,17 @@
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
     "properties": {
+      "archivedState": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/MemoryState"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
       "confidence": {
         "format": "double",
         "type": [
@@ -537,6 +645,13 @@
         },
         "type": "array"
       },
+      "restoredFrom": {
+        "default": null,
+        "type": [
+          "string",
+          "null"
+        ]
+      },
       "revisionId": {
         "type": "string"
       },
@@ -547,7 +662,14 @@
         "type": "array"
       },
       "status": {
-        "type": "string"
+        "$ref": "#/$defs/MemoryState"
+      },
+      "supersededBy": {
+        "default": null,
+        "type": [
+          "string",
+          "null"
+        ]
       },
       "supersedes": {
         "type": [
@@ -637,6 +759,29 @@
   },
   "MemoryWriteRequest": {
     "$defs": {
+      "LifecycleChange": {
+        "additionalProperties": false,
+        "properties": {
+          "confirmed": {
+            "description": "Mandatory explicit user consent, including confirmation and retention.",
+            "type": "boolean"
+          },
+          "state": {
+            "$ref": "#/$defs/MemoryState"
+          },
+          "successorId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "state",
+          "confirmed"
+        ],
+        "type": "object"
+      },
       "MemoryDraft": {
         "additionalProperties": false,
         "properties": {
@@ -689,6 +834,17 @@
         ],
         "type": "object"
       },
+      "MemoryState": {
+        "enum": [
+          "proposed",
+          "confirmed",
+          "temporary",
+          "durable",
+          "superseded",
+          "archived"
+        ],
+        "type": "string"
+      },
       "Privacy": {
         "enum": [
           "sealed",
@@ -722,6 +878,32 @@
         ]
       },
       "id": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "kind": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "lifecycle": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/LifecycleChange"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "restoreArchive": {
+        "default": false,
+        "type": "boolean"
+      },
+      "restoreRevision": {
         "type": [
           "string",
           "null"

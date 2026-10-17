@@ -1,6 +1,7 @@
 pub mod readiness;
 pub use readiness::*;
 pub mod content;
+pub mod lifecycle;
 pub mod memory;
 pub mod privacy;
 pub mod settings;

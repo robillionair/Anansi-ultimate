@@ -1,4 +1,5 @@
 // Actual cross-adapter workflow using synthetic external storage only.
+import { prepareLifecycle, checkLifecycle } from './memory-lifecycle-workflow.mjs';
 import { chromium, expect } from '@playwright/test';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
@@ -67,6 +68,7 @@ try{
   await expect(webPage.getByLabel('Memory text',{exact:true})).toHaveValue(original,{timeout:20000});
   await webPage.getByLabel('Memory text',{exact:true}).fill('Browser revision — preserved after restart');await webPage.getByRole('button',{name:'Save memory',exact:true}).click();await expect(webPage.getByRole('status').filter({hasText:'Memory saved. Revision 2.'})).toBeVisible({timeout:30000});
   await nativePage.getByLabel('Memory text',{exact:true}).fill('Native draft survives conflict');await nativePage.getByRole('button',{name:'Save memory',exact:true}).click();await expect(nativePage.getByRole('alert')).toContainText('draft was kept',{timeout:20000});await expect(nativePage.getByLabel('Memory text',{exact:true})).toHaveValue('Native draft survives conflict');
+  await prepareLifecycle(nativePage,"Native");await prepareLifecycle(webPage,"Browser");
   await stopDesktop();await stopApi();await startApi();await startDesktop();observe(nativePage,true);await pairBrowser();
   for(const page of [nativePage,webPage]){
     await open(page,workspaceId);await page.getByRole('button',{name:'Memory',exact:true}).click();await page.getByRole('button',{name:'Native research 世界',exact:true}).click();await expect(page.getByLabel('Memory text',{exact:true})).toHaveValue('Browser revision — preserved after restart',{timeout:20000});
@@ -74,8 +76,9 @@ try{
     await page.getByRole('button',{name:'Reopen latest revision'}).click();await expect(page.getByLabel('Memory text',{exact:true})).toHaveValue('Browser revision — preserved after restart',{timeout:20000});
     await expect(page.getByRole('button',{name:'Save memory',exact:true})).toBeEnabled({timeout:20000});if(await page.evaluate(()=>localStorage.length+sessionStorage.length))throw Error('Unexpected browser persistence');if(await page.evaluate(()=>Reflect.get(globalThis,'executed')))throw Error('Memory text was executed');
   }
+  await checkLifecycle(nativePage,"Native");await checkLifecycle(webPage,"Browser");
   if(external)throw Error('Unexpected request destination: '+[...destinations].join(', '));await nativePage.setViewportSize({width:390,height:844});if(!await nativePage.evaluate(()=>document.documentElement.scrollWidth<=innerWidth))throw Error('Native narrow overflow');
   fs.mkdirSync('test-results',{recursive:true});await nativePage.screenshot({path:'test-results/native-memory-narrow.png',fullPage:true});await nativePage.setViewportSize({width:1280,height:1000});await nativePage.screenshot({path:'test-results/native-memory.png',fullPage:true});await webPage.screenshot({path:'test-results/cross-browser-memory.png',fullPage:true});
-  fs.writeFileSync(path.join(root,'verification.json'),JSON.stringify({nativeBrowser:true,revisions:true,conflictDraftPreserved:true,bothProcessRestarts:true,historicalBytes:true,literalText:true,externalRequests:external},null,2));
-  console.log('PASS: actual native/browser memory create/revise/history, conflict draft preservation, both process restarts, literal text, no external requests and narrow layout.');
+  fs.writeFileSync(path.join(root,'verification.json'),JSON.stringify({nativeBrowser:true,notes:true,lifecycle:true,supersession:true,archiveRestore:true,expiryFilters:true,historicalComparisonAfterRestart:true,historicalContentRestore:true,revisions:true,conflictDraftPreserved:true,bothProcessRestarts:true,historicalBytes:true,literalText:true,externalRequests:external},null,2));
+  console.log('PASS: actual native/browser notes, explicit lifecycle, supersession, archive restoration, expiry filters, historical comparison/restore, memory revisions, conflict preservation, both process restarts, literal text, no external requests and narrow layout.');
 }finally{if(webBrowser)await webBrowser.close();await stopDesktop();await stopApi();await kill(preview);}

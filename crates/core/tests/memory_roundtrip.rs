@@ -291,7 +291,7 @@ fn schema_two_migration_and_memory_migration_failure_preserve_settings() {
     let file = temp.path().join("store").join(DATABASE_NAME);
     {
         let c = rusqlite::Connection::open(&file).unwrap();
-        c.execute_batch("PRAGMA foreign_keys=OFF; DROP TABLE memory_revisions; DROP TABLE memories; PRAGMA user_version=2;").unwrap();
+        c.execute_batch("PRAGMA foreign_keys=OFF; DROP TABLE memory_revisions; DROP TABLE memories; DROP TABLE lifecycle_format; PRAGMA user_version=2;").unwrap();
     }
     private_permissions(&file, false, false).unwrap();
     assert!(core.memory_command("create", request(&w)).is_ok());

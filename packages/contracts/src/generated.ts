@@ -25,6 +25,7 @@ export interface CreateWorkspaceRequest {
   contractVersion: number;
   name: string;
 }
+export type MemoryState = "proposed" | "confirmed" | "temporary" | "durable" | "superseded" | "archived";
 export type Privacy = "sealed" | "private" | "standard" | "public";
 
 export interface MemoryDetails {
@@ -33,6 +34,7 @@ export interface MemoryDetails {
   memory: MemoryMetadata;
 }
 export interface MemoryMetadata {
+  archivedState?: MemoryState | null;
   confidence?: number | null;
   createdAt: string;
   eventDate?: string | null;
@@ -43,9 +45,11 @@ export interface MemoryMetadata {
   projectId?: string | null;
   provenance: string;
   relationships: string[];
+  restoredFrom?: string | null;
   revisionId: string;
   sourceReferences: string[];
-  status: string;
+  status: MemoryState;
+  supersededBy?: string | null;
   supersedes?: string | null;
   title: string;
   updatedAt: string;
@@ -72,6 +76,7 @@ export interface MemoryList {
   nextOffset?: number | null;
 }
 export interface MemoryMetadata {
+  archivedState?: MemoryState | null;
   confidence?: number | null;
   createdAt: string;
   eventDate?: string | null;
@@ -82,9 +87,11 @@ export interface MemoryMetadata {
   projectId?: string | null;
   provenance: string;
   relationships: string[];
+  restoredFrom?: string | null;
   revisionId: string;
   sourceReferences: string[];
-  status: string;
+  status: MemoryState;
+  supersededBy?: string | null;
   supersedes?: string | null;
   title: string;
   updatedAt: string;
@@ -97,12 +104,16 @@ export interface MemoryMetadata {
 export interface MemoryListRequest {
   contractVersion: number;
   id?: string | null;
+  includeArchived?: boolean;
+  includeExpired?: boolean;
+  kind?: string | null;
   limit?: number | null;
   offset?: number;
   workspaceId: string;
 }
 
 export interface MemoryMetadata {
+  archivedState?: MemoryState | null;
   confidence?: number | null;
   createdAt: string;
   eventDate?: string | null;
@@ -113,9 +124,11 @@ export interface MemoryMetadata {
   projectId?: string | null;
   provenance: string;
   relationships: string[];
+  restoredFrom?: string | null;
   revisionId: string;
   sourceReferences: string[];
-  status: string;
+  status: MemoryState;
+  supersededBy?: string | null;
   supersedes?: string | null;
   title: string;
   updatedAt: string;
@@ -131,12 +144,17 @@ export interface MemoryReadRequest {
   revisionId?: string | null;
   workspaceId: string;
 }
+
 export interface MemoryWriteRequest {
   confirmPrivacyChange?: boolean;
   contractVersion: number;
   draft: MemoryDraft;
   expectedRevision?: string | null;
   id?: string | null;
+  kind?: string | null;
+  lifecycle?: LifecycleChange | null;
+  restoreArchive?: boolean;
+  restoreRevision?: string | null;
   workspaceId: string;
 }
 export interface MemoryDraft {
@@ -148,6 +166,14 @@ export interface MemoryDraft {
   title: string;
   validFrom?: string | null;
   validUntil?: string | null;
+}
+export interface LifecycleChange {
+  /**
+   * Mandatory explicit user consent, including confirmation and retention.
+   */
+  confirmed: boolean;
+  state: MemoryState;
+  successorId?: string | null;
 }
 export interface OpenWorkspaceRequest {
   contractVersion: number;

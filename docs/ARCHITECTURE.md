@@ -38,7 +38,7 @@ plans/               phase plans
 tests/               cross-layer and acceptance tests
 ```
 
-M1.2 establishes this workspace shape for readiness. M1.3 adds the shared SQLite workspace metadata/settings catalog; M2.1 adds local memory revisions and native privacy classification. Search, full lifecycle, encrypted vault and provider subsystems remain later tasks. Both adapters use the same bounded core operations and trusted storage configuration; see ADR-0013, ADR-0017 and evidence/M2-1.md.
+M1.2 establishes this workspace shape for readiness. M1.3 adds the shared SQLite workspace metadata/settings catalog; M2.1 adds local memory revisions and native privacy classification. M2.2 adds notes and explicit lifecycle revisions. Search, entities/relationships, encrypted vault and provider subsystems remain later tasks. Both adapters use the same bounded core operations and trusted storage configuration; see ADR-0013, ADR-0017 and evidence/M2-1.md.
 
 ## Security boundaries
 
@@ -77,3 +77,7 @@ All four privacy classes are native policy. Initial plaintext slices reject Seal
 The user accepted the M2 plan. M2.1 implements schema-3 local Proposed memories, immutable Markdown revisions, paginated metadata/history and optimistic edit conflicts through the common Rust service. Scoped native IPC and authenticated memory HTTP routes share generated DTOs and literal-text UI. File/ACL work precedes a short SQLite transaction that rechecks expectedRevision. Integrity failures preserve originals and report recovery errors. See ADR-0017 and [evidence](evidence/M2-1.md).
 
 Dates/confidence/sources are validated; timestamps/authorship/state are core-owned. Notes, lifecycle actions, project relations, jobs, automated backups and encrypted vault remain later tasks. Private storage is plaintext with local permissions, Standard/Public grant no sharing consent, and Sealed requests fail closed. Browser operations accept managed IDs only. Older binaries reject schema 3; preserve the whole closed root including content before manual rollback.
+
+## M2.2 lifecycle revision boundary
+
+Schema 4 retains original bodies/revisions and introduces a semantic compatibility barrier against schema-3 writers. Notes use the same storage and editor; lifecycle changes, archive restoration and historical content restore use the existing scoped revise command with expectedRevision. Rust owns the explicit six-state transition table and checks successor cycles under the publication lock. Default latest lists exclude archived/expired records; history ignores visibility filters. Historical restore creates a revision and preserves current privacy, state, creation and origin metadata. See ADR-0018 and [M2.2 evidence](evidence/M2-2.md) for the transition table and verification status. Project/entity relationships, jobs, export, backups and vault remain later M2 tasks.

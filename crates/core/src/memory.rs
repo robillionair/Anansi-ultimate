@@ -1,5 +1,6 @@
 use crate::{
     CommandError, Core, ErrorCode, content,
+    lifecycle::{LifecycleChange, MemoryState},
     privacy::Privacy,
     storage::{Storage, unavailable},
 };
@@ -110,7 +111,13 @@ pub struct MemoryMetadata {
     pub valid_from: Option<String>,
     pub valid_until: Option<String>,
     pub confidence: Option<f64>,
-    pub status: String,
+    pub status: MemoryState,
+    #[serde(default)]
+    pub archived_state: Option<MemoryState>,
+    #[serde(default)]
+    pub superseded_by: Option<String>,
+    #[serde(default)]
+    pub restored_from: Option<String>,
     pub privacy: Privacy,
     pub provenance: String,
     pub source_references: Vec<String>,
@@ -142,6 +149,11 @@ pub struct MemoryListRequest {
     #[serde(default)]
     pub offset: u32,
     pub limit: Option<u32>,
+    pub kind: Option<String>,
+    #[serde(default)]
+    pub include_archived: bool,
+    #[serde(default)]
+    pub include_expired: bool,
 }
 #[derive(Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -159,6 +171,11 @@ pub struct MemoryWriteRequest {
     pub id: Option<String>,
     pub expected_revision: Option<String>,
     pub draft: MemoryDraft,
+    pub kind: Option<String>,
+    pub lifecycle: Option<LifecycleChange>,
+    #[serde(default)]
+    pub restore_archive: bool,
+    pub restore_revision: Option<String>,
     #[serde(default)]
     pub confirm_privacy_change: bool,
 }
@@ -259,6 +276,12 @@ impl Core {
                 if let Some(record) = &r.id {
                     id(record)?;
                 }
+                if r.kind
+                    .as_deref()
+                    .is_some_and(|k| !["memory", "note"].contains(&k))
+                {
+                    return Err(invalid());
+                }
                 if r.offset > 1_000_000 || !(1..=100).contains(&r.limit.unwrap_or(50)) {
                     return Err(invalid());
                 }
@@ -292,11 +315,17 @@ fn metadata(
 impl Storage {
     pub(crate) fn memory_write(
         &self,
-        r: MemoryWriteRequest,
+        mut r: MemoryWriteRequest,
     ) -> Result<MemoryDetails, CommandError> {
         // The public core validates inputs before any storage access. Check again for direct callers.
         id(&r.workspace_id)?;
         validate(&r.draft)?;
+        if r.kind
+            .as_deref()
+            .is_some_and(|k| !["memory", "note"].contains(&k))
+        {
+            return Err(invalid());
+        }
         let mut connection = self.connection(false)?.ok_or_else(missing)?;
         if !connection
             .query_row(
@@ -318,7 +347,10 @@ impl Storage {
                 ));
             }
             content::read(&self.root, &r.workspace_id, record, &old.revision_id, &hash)?;
-            if r.draft.privacy.downgrade_from(old.privacy) && !r.confirm_privacy_change {
+            if r.restore_revision.is_none()
+                && r.draft.privacy.downgrade_from(old.privacy)
+                && !r.confirm_privacy_change
+            {
                 return Err(CommandError::new(
                     ErrorCode::InvalidMemory,
                     "Confirm the privacy classification change before saving.",
@@ -331,6 +363,34 @@ impl Storage {
             }
             None
         };
+        if old.is_none()
+            && (r.lifecycle.is_some() || r.restore_archive || r.restore_revision.is_some())
+        {
+            return Err(invalid());
+        }
+        if let Some(previous) = &old {
+            if r.kind.as_ref().is_some_and(|k| *k != previous.kind) {
+                return Err(invalid());
+            }
+            if let Some(rev) = &r.restore_revision {
+                id(rev)?;
+                if r.lifecycle.is_some() || r.restore_archive {
+                    return Err(invalid());
+                }
+                let (historic, hash) =
+                    metadata(&connection, &r.workspace_id, &previous.id, Some(rev))?;
+                r.draft = MemoryDraft {
+                    title: historic.title,
+                    body: content::read(&self.root, &r.workspace_id, &previous.id, rev, &hash)?,
+                    privacy: previous.privacy,
+                    event_date: historic.event_date,
+                    valid_from: historic.valid_from,
+                    valid_until: historic.valid_until,
+                    confidence: historic.confidence,
+                    source_references: historic.source_references,
+                };
+            }
+        }
         let record = old
             .as_ref()
             .map(|m| m.id.clone())
@@ -341,11 +401,14 @@ impl Storage {
             .as_ref()
             .map_or(Some(1), |m| m.version.checked_add(1))
             .ok_or_else(invalid)?;
-        let memory = MemoryMetadata {
+        let mut memory = MemoryMetadata {
             id: record.clone(),
             workspace_id: r.workspace_id.clone(),
-            project_id: None,
-            kind: "memory".into(),
+            project_id: old.as_ref().and_then(|m| m.project_id.clone()),
+            kind: old
+                .as_ref()
+                .map(|m| m.kind.clone())
+                .unwrap_or_else(|| r.kind.clone().unwrap_or_else(|| "memory".into())),
             revision_id: revision.clone(),
             version,
             title: r.draft.title,
@@ -358,15 +421,67 @@ impl Storage {
             valid_from: r.draft.valid_from,
             valid_until: r.draft.valid_until,
             confidence: r.draft.confidence,
-            status: "proposed".into(),
+            status: old.as_ref().map_or(MemoryState::Proposed, |m| m.status),
+            archived_state: old.as_ref().and_then(|m| m.archived_state),
+            superseded_by: old.as_ref().and_then(|m| m.superseded_by.clone()),
+            restored_from: r.restore_revision.clone(),
             privacy: r.draft.privacy,
-            provenance: "user_authored".into(),
+            provenance: old
+                .as_ref()
+                .map(|m| m.provenance.clone())
+                .unwrap_or_else(|| "user_authored".into()),
             source_references: r.draft.source_references,
-            generator_model: None,
-            validation_status: "unreviewed".into(),
-            relationships: vec![],
-            supersedes: None,
+            generator_model: old.as_ref().and_then(|m| m.generator_model.clone()),
+            validation_status: old
+                .as_ref()
+                .map(|m| m.validation_status.clone())
+                .unwrap_or_else(|| "unreviewed".into()),
+            relationships: old
+                .as_ref()
+                .map(|m| m.relationships.clone())
+                .unwrap_or_default(),
+            supersedes: old.as_ref().and_then(|m| m.supersedes.clone()),
         };
+        if let Some(previous) = &old {
+            if r.restore_archive {
+                if r.lifecycle.is_some() || previous.status != MemoryState::Archived {
+                    return Err(crate::lifecycle::invalid());
+                }
+                memory.status = previous
+                    .archived_state
+                    .ok_or_else(crate::lifecycle::invalid)?;
+                memory.archived_state = None;
+            }
+            if let Some(change) = &r.lifecycle {
+                if !change.confirmed || !previous.status.allows(change.state) {
+                    return Err(crate::lifecycle::invalid());
+                }
+                memory.status = change.state;
+                if change.state == MemoryState::Archived {
+                    memory.archived_state = Some(previous.status);
+                }
+                if change.state == MemoryState::Superseded {
+                    let successor = change
+                        .successor_id
+                        .as_deref()
+                        .ok_or_else(crate::lifecycle::invalid)?;
+                    id(successor)?;
+                    memory.superseded_by = Some(successor.into());
+                } else if change.successor_id.is_some() {
+                    return Err(invalid());
+                }
+            }
+        }
+        if memory.status == MemoryState::Temporary && memory.valid_until.is_none() {
+            return Err(crate::lifecycle::invalid());
+        }
+        if r.lifecycle
+            .as_ref()
+            .is_some_and(|c| c.state == MemoryState::Temporary)
+            && stamp(&memory.valid_until)?.is_none_or(|date| date.with_timezone(&Utc) <= Utc::now())
+        {
+            return Err(crate::lifecycle::invalid());
+        }
         #[cfg(test)]
         fault("before_file");
         let hash = content::write(
@@ -390,6 +505,19 @@ impl Storage {
                     ErrorCode::RevisionConflict,
                     "This memory changed. Your draft was kept; reopen the current revision before saving again.",
                 ));
+            }
+        }
+        // Check the complete successor graph under the publication lock.
+        // Archive retains edges, preventing concurrent A->B/B->A cycles.
+        if let Some(successor) = &memory.superseded_by {
+            let mut cursor = Some(successor.clone());
+            let mut visited = std::collections::HashSet::new();
+            while let Some(next) = cursor {
+                if next == record || !visited.insert(next.clone()) {
+                    return Err(crate::lifecycle::invalid());
+                }
+                let (target, _) = metadata(&tx, &r.workspace_id, &next, None)?;
+                cursor = target.superseded_by;
             }
         }
         if old.is_none() {
@@ -456,11 +584,21 @@ impl Storage {
     pub(crate) fn memory_list(&self, r: MemoryListRequest) -> Result<MemoryList, CommandError> {
         let connection = self.connection(false)?.ok_or_else(missing)?;
         let limit = r.limit.unwrap_or(50);
-        let mut statement=connection.prepare("SELECT r.metadata FROM memory_revisions r JOIN memories m ON m.workspace_id=r.workspace_id AND m.id=r.memory_id WHERE r.workspace_id=?1 AND ((?2 IS NULL AND r.id=m.current_revision) OR r.memory_id=?2) ORDER BY r.memory_id,r.version DESC LIMIT ?3 OFFSET ?4").map_err(|_|unavailable())?;
+        let mut statement=connection.prepare("SELECT r.metadata FROM memory_revisions r JOIN memories m ON m.workspace_id=r.workspace_id AND m.id=r.memory_id WHERE r.workspace_id=?1 AND ((?2 IS NULL AND r.id=m.current_revision) OR r.memory_id=?2) AND (?2 IS NOT NULL OR ((?5 IS NULL OR json_extract(r.metadata,'$.kind')=?5) AND (?6 OR json_extract(r.metadata,'$.status')!='archived') AND (?7 OR json_extract(r.metadata,'$.validUntil') IS NULL OR julianday(json_extract(r.metadata,'$.validUntil'))>julianday(?8)))) ORDER BY r.memory_id,r.version DESC LIMIT ?3 OFFSET ?4").map_err(|_|unavailable())?;
         let rows = statement
-            .query_map(params![r.workspace_id, r.id, limit + 1, r.offset], |row| {
-                row.get::<_, String>(0)
-            })
+            .query_map(
+                params![
+                    r.workspace_id,
+                    r.id,
+                    limit + 1,
+                    r.offset,
+                    r.kind,
+                    r.include_archived,
+                    r.include_expired,
+                    Utc::now().to_rfc3339()
+                ],
+                |row| row.get::<_, String>(0),
+            )
             .map_err(|_| unavailable())?;
         let mut memories = vec![];
         for row in rows {

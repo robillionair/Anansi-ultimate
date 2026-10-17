@@ -1,12 +1,12 @@
 import { validReadiness, validError, validWorkspaceDetails, validWorkspaceList, validMemoryDetails, validMemoryList } from './validators.mjs';
 import { invoke } from '@tauri-apps/api/core';
-import type { Readiness, WorkspaceDetails, WorkspaceList, Intent, MemoryDraft, MemoryDetails, MemoryList, MemoryMetadata, Privacy } from './generated';
-export type { Readiness, WorkspaceDetails, WorkspaceList, Intent, MemoryDraft, MemoryDetails, MemoryList, MemoryMetadata, Privacy } from './generated';
+import type { Readiness, WorkspaceDetails, WorkspaceList, Intent, MemoryDraft, MemoryDetails, MemoryList, MemoryMetadata, Privacy, LifecycleChange } from './generated';
+export type { Readiness, WorkspaceDetails, WorkspaceList, Intent, MemoryDraft, MemoryDetails, MemoryList, MemoryMetadata, Privacy, LifecycleChange } from './generated';
 export interface Client {
-  listMemories(workspaceId:string, options?:{id?:string;offset?:number;limit?:number}): Promise<MemoryList>;
+  listMemories(workspaceId:string, options?:{id?:string;offset?:number;limit?:number;kind?:string;includeArchived?:boolean;includeExpired?:boolean}): Promise<MemoryList>;
   readMemory(workspaceId:string,id:string,revisionId?:string): Promise<MemoryDetails>;
-  createMemory(workspaceId:string,draft:MemoryDraft): Promise<MemoryDetails>;
-  reviseMemory(workspaceId:string,id:string,expectedRevision:string,draft:MemoryDraft,confirmPrivacyChange?:boolean): Promise<MemoryDetails>;
+  createMemory(workspaceId:string,draft:MemoryDraft,kind?:string): Promise<MemoryDetails>;
+  reviseMemory(workspaceId:string,id:string,expectedRevision:string,draft:MemoryDraft,confirmPrivacyChange?:boolean,options?:{lifecycle?:LifecycleChange;restoreArchive?:boolean;restoreRevision?:string}): Promise<MemoryDetails>;
   readiness(): Promise<Readiness>;
   listWorkspaces(): Promise<WorkspaceList>;
   createWorkspace(name: string): Promise<WorkspaceDetails>;
@@ -21,7 +21,7 @@ export function decodeReadiness(value:unknown):Readiness {return decode(value,va
 function failure(value:unknown):Error {
   if(validError(value)){
     switch(value.code){
-      case 'INVALID_MEMORY': return new Error('Check the memory fields and privacy confirmation. Use a title up to 200 characters, text up to 256 KiB, UTC dates and confidence from 0 to 1.');
+      case 'INVALID_MEMORY': return new Error('Check the fields, lifecycle action, expiry, successor and privacy confirmation. Use a title up to 200 characters, text up to 256 KiB, UTC dates and confidence from 0 to 1.');
       case 'MEMORY_NOT_FOUND': return new Error('Memory not found in this workspace. Refresh the list.');
       case 'REVISION_CONFLICT': return new Error('This memory changed. Your draft was kept. Reopen the latest revision before saving again.');
       case 'CONTENT_INTEGRITY': return new Error('Memory content failed integrity verification. Preserve the storage root and restore a verified copy.');
@@ -44,8 +44,8 @@ function client(call:Call):Client {
   return {
     listMemories:async(workspaceId,options={})=>decode(await call('memories/list',{workspaceId,...options}),validMemoryList),
     readMemory:async(workspaceId,id,revisionId)=>decode(await call('memories/read',{workspaceId,id,revisionId}),validMemoryDetails),
-    createMemory:async(workspaceId,draft)=>decode(await call('memories/create',{workspaceId,draft}),validMemoryDetails),
-    reviseMemory:async(workspaceId,id,expectedRevision,draft,confirmPrivacyChange=false)=>decode(await call('memories/revise',{workspaceId,id,expectedRevision,draft,confirmPrivacyChange}),validMemoryDetails),
+    createMemory:async(workspaceId,draft,kind)=>decode(await call('memories/create',{workspaceId,draft,kind}),validMemoryDetails),
+    reviseMemory:async(workspaceId,id,expectedRevision,draft,confirmPrivacyChange=false,options={})=>decode(await call('memories/revise',{workspaceId,id,expectedRevision,draft,confirmPrivacyChange,...options}),validMemoryDetails),
     readiness:async()=>decodeReadiness(await call('readiness',{})),
     listWorkspaces:async()=>decode(await call('list',{}),validWorkspaceList),
     createWorkspace:async name=>decode(await call('create',{name}),validWorkspaceDetails),

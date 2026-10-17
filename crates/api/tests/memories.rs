@@ -112,3 +112,42 @@ async fn memory_http_parity_auth_scope_limits_and_revisions() {
         assert_eq!(response.headers()["cache-control"], "no-store");
     }
 }
+
+#[tokio::test]
+async fn lifecycle_notes_and_filters_share_core_policy() {
+    let temp = tempfile::tempdir().unwrap();
+    let state = Arc::new(ApiState {
+        core: Core::with_storage_root(temp.path().join("store")),
+        token: "synthetic".into(),
+        host: "127.0.0.1:1451".into(),
+        origin: "http://127.0.0.1:1420".into(),
+    });
+    let w = state
+        .core
+        .workspace_command(
+            "create",
+            json!({"contractVersion":1,"name":"Lifecycle HTTP"}),
+        )
+        .unwrap()["workspace"]["id"]
+        .clone();
+    let (_,note)=call(state.clone(),request("/v1/memories/create",json!({"contractVersion":1,"workspaceId":w,"kind":"note","draft":{"title":"HTTP note","body":"literal"}}))).await;
+    assert_eq!(note["memory"]["kind"], "note");
+    let input = json!({"contractVersion":1,"workspaceId":w,"id":note["memory"]["id"],"expectedRevision":note["memory"]["revisionId"],"draft":{"title":"HTTP note","body":"literal"},"lifecycle":{"state":"confirmed","confirmed":true}});
+    let (status, confirmed) =
+        call(state.clone(), request("/v1/memories/revise", input.clone())).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(confirmed["memory"]["status"], "confirmed");
+    assert_eq!(
+        call(state.clone(), request("/v1/memories/revise", input))
+            .await
+            .0,
+        StatusCode::CONFLICT
+    );
+    let list = json!({"contractVersion":1,"workspaceId":w,"kind":"note","includeArchived":true,"includeExpired":true});
+    assert_eq!(
+        call(state.clone(), request("/v1/memories/list", list.clone()))
+            .await
+            .1,
+        state.core.memory_command("list", list).unwrap()
+    );
+}

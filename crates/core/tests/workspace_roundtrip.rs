@@ -348,10 +348,10 @@ fn v1_migration_preserves_original_workspace_and_onboarding_survives_restart() {
     assert!(
         reopened
             .iter()
-            .all(|workspace| workspace.schema_version == 3 && workspace.settings.reduced_motion)
+            .all(|workspace| workspace.schema_version == 4 && workspace.settings.reduced_motion)
     );
     let original = reopened.pop().unwrap();
-    assert_eq!(original.schema_version, 3);
+    assert_eq!(original.schema_version, 4);
     assert_eq!(original.workspace.name, "Original");
     assert!(original.settings.reduced_motion);
     assert_eq!(

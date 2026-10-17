@@ -13,7 +13,7 @@ test('all five intents have labeled native radio controls and one checked choice
 test('navigation has a small active set, complete grouped unavailable tools and no ghost recording action',()=>{
   const html=renderToStaticMarkup(<Navigation view="workspace" hasWorkspace={false} onNavigate={()=>{}}/>);
   assert.ok(html.includes('aria-label="Main navigation"'));assert.ok(html.includes('aria-current="page"'));assert.ok(html.includes('disabled=""'));
-  assert.equal((html.match(/<button/g)||[]).length,4);for(const group of plannedGroups)for(const item of group.items)assert.ok(html.includes(item));
+  assert.equal((html.match(/<button/g)||[]).length,5);for(const group of plannedGroups)for(const item of group.items)assert.ok(html.includes(item));
   assert.ok(html.includes('not available yet'));assert.ok(html.includes('separate consent'));
 });
 test('onboarding explains actual privacy limits and cannot bypass review using its disabled action',()=>{

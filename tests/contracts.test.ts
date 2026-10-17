@@ -2,6 +2,18 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { decodeReadiness, httpClient, nativeClient } from '../packages/contracts/src/client.ts';
 const actual={applicationName:'ANANSI Ultimate',applicationVersion:'0.1.0',apiVersion:null,contractVersion:1,coreVersion:'0.1.0',operatingSystem:'windows',uptimeMs:5};
+test('lifecycle and note options remain bounded command data with sanitized conflicts',async()=>{
+  const original=globalThis.fetch;let body:Record<string,unknown>={};
+  try{
+    globalThis.fetch=async(_url,options)=>{body=JSON.parse(options!.body as string);return new Response(JSON.stringify({code:'REVISION_CONFLICT',message:'private details'}),{status:409});};
+    const client=httpClient('http://127.0.0.1:1451','a'.repeat(64));
+    await assert.rejects(client.createMemory('a'.repeat(32),{title:'Note',body:'literal'},'note'),/draft was kept/);assert.equal(body.kind,'note');
+    const lifecycle={state:'confirmed' as const,confirmed:true,successorId:null};
+    await assert.rejects(client.reviseMemory('a'.repeat(32),'b'.repeat(32),'c'.repeat(32),{title:'Note',body:'literal'},false,{lifecycle}),/draft was kept/);assert.deepEqual(body.lifecycle,lifecycle);assert.equal(body.expectedRevision,'c'.repeat(32));
+    await assert.rejects(client.reviseMemory('a'.repeat(32),'b'.repeat(32),'c'.repeat(32),{title:'Note',body:'literal'},false,{restoreRevision:'d'.repeat(32)}),/draft was kept/);assert.equal(body.restoreRevision,'d'.repeat(32));
+    await assert.rejects(client.listMemories('a'.repeat(32),{kind:'note',includeArchived:true,includeExpired:true}),/draft was kept/);assert.equal(body.includeArchived,true);assert.equal(body.includeExpired,true);assert.ok(!('path' in body));
+  }finally{globalThis.fetch=original;}
+});
 test('memory HTTP/native operations use scoped commands, validated DTOs and sanitized errors',async()=>{
   const original=globalThis.fetch;let address='';let body:Record<string,unknown>={};
   try{

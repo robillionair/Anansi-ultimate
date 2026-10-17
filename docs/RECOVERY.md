@@ -32,3 +32,9 @@ Development installer artifacts are rebuildable and are excluded from source bun
 ## M1 completion boundary
 
 M1 development desktop/browser foundation is verified complete; see [M1.5 evidence](evidence/M1-5.md). The completion tag is m1-desktop-foundation-verified at 97babb3, applied after protected publication. Source/tag readback and independent restore passed. Subsequent user continuation accepted M2.0 and authorized M2.1. Its schema-3 memory implementation is separate from M1; see evidence/M2-1.md. Preserve the M1 tag and distinguish source bundles from private-data backups.
+
+## M2.2 schema and history recovery
+
+M2.2 moves recognized schema-1/2/3 roots forward to schema 4 without rewriting original revision JSON or Markdown. Preserve the entire closed root before migration; schema-3 binaries must refuse it. Never lower user_version to run an older binary. Failed migration retains its previous schema and records. Source bundles do not contain private application data.
+
+Archive and expiry retain bytes and history. Include archived/expired records explicitly to reopen them. Restore archive returns to the saved prior state; an expired record remains filtered until explicitly requested. Compare history and restore selected content as a new revision to retain a recoverable audit trail. This preserves current privacy and lifecycle; it does not restore a database snapshot, erase originals, or implement M2.5 backup recovery. Stale writes must reopen the latest revision rather than overwriting it. See [M2.2 evidence](evidence/M2-2.md).
