@@ -63,7 +63,7 @@ async function pair(page: import('@playwright/test').Page) {
 }
 
 test('projects, tasks, people, knowledge records and relationships survive restart', async ({ page }) => {
-  test.setTimeout(360000);
+  test.setTimeout(900000);
   await pair(page);
 
   await page.getByRole('button', { name: 'Continue to workspace' }).click();

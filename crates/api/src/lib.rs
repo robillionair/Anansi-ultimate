@@ -47,6 +47,7 @@ pub fn command_path(path: &str) -> bool {
             | "/v1/memories/list"
             | "/v1/relationships/create"
             | "/v1/relationships/delete"
+            | "/v1/relationships/restore"
             | "/v1/relationships/list"
             | "/v1/readiness"
             | "/v1/workspaces/list"
@@ -211,6 +212,10 @@ async fn relationship(
         Ok(Err(e)) => {
             let status = match e.code {
                 ErrorCode::NotFound => StatusCode::NOT_FOUND,
+                ErrorCode::RevisionConflict
+                | ErrorCode::ContentIntegrity
+                | ErrorCode::UnsupportedSchema => StatusCode::CONFLICT,
+                ErrorCode::VaultUnavailable => StatusCode::FORBIDDEN,
                 ErrorCode::StorageUnavailable => StatusCode::SERVICE_UNAVAILABLE,
                 _ => StatusCode::BAD_REQUEST,
             };

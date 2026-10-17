@@ -94,12 +94,18 @@ pub struct MemoryDraft {
     pub confidence: Option<f64>,
     #[serde(default)]
     pub source_references: Vec<String>,
-    #[serde(default)]
-    pub project_id: Option<String>,
+    #[serde(default, deserialize_with = "project_assignment")]
+    pub project_id: Option<Option<String>>,
     #[serde(default)]
     pub due_date: Option<String>,
     #[serde(default)]
     pub completed: Option<bool>,
+}
+// Distinguish an omitted assignment (retain) from explicit null (clear).
+fn project_assignment<'de, D: serde::Deserializer<'de>>(
+    d: D,
+) -> Result<Option<Option<String>>, D::Error> {
+    Option::<String>::deserialize(d).map(Some)
 }
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -245,7 +251,7 @@ fn validate(draft: &MemoryDraft) -> Result<(), CommandError> {
     }
     stamp(&draft.event_date)?;
     stamp(&draft.due_date)?;
-    if let Some(pid) = &draft.project_id {
+    if let Some(Some(pid)) = &draft.project_id {
         id(pid)?;
     }
     let from = stamp(&draft.valid_from)?;
@@ -324,8 +330,9 @@ fn metadata(
         return Err(content::integrity());
     }
     meta.privacy.allow_plaintext()?;
-    meta.relationships =
-        Storage::record_relationship_ids(connection, workspace, record).unwrap_or_default();
+    if revision.is_none() {
+        meta.relationships = Storage::record_relationship_ids(connection, workspace, record)?;
+    }
     Ok((meta, hash))
 }
 impl Storage {
@@ -404,25 +411,39 @@ impl Storage {
                     valid_until: historic.valid_until,
                     confidence: historic.confidence,
                     source_references: historic.source_references,
-                    project_id: historic.project_id,
+                    project_id: Some(historic.project_id),
                     due_date: historic.due_date,
                     completed: historic.completed,
                 };
             }
         }
+        let kind = old
+            .as_ref()
+            .map(|m| m.kind.as_str())
+            .or(r.kind.as_deref())
+            .unwrap_or("memory");
+        crate::entities::validate_entity_fields(
+            kind,
+            r.draft.project_id.as_ref().and_then(|p| p.as_deref()),
+            r.draft.due_date.as_deref(),
+            r.draft.event_date.as_deref(),
+        )?;
+        if kind != "task" && (r.draft.due_date.is_some() || r.draft.completed == Some(true)) {
+            return Err(invalid());
+        }
         let record = old
             .as_ref()
             .map(|m| m.id.clone())
             .unwrap_or(content::random_id()?);
-        if let Some(pid) = &r.draft.project_id {
+        if let Some(Some(pid)) = &r.draft.project_id {
             let project_exists: bool = connection
                 .query_row(
-                    "SELECT EXISTS(SELECT 1 FROM memories WHERE workspace_id=?1 AND id=?2)",
+                    "SELECT EXISTS(SELECT 1 FROM memories m JOIN memory_revisions r ON r.workspace_id=m.workspace_id AND r.id=m.current_revision WHERE m.workspace_id=?1 AND m.id=?2 AND json_extract(r.metadata,'$.kind')='project')",
                     params![&r.workspace_id, pid],
                     |row| row.get(0),
                 )
                 .map_err(|_| unavailable())?;
-            if !project_exists && pid != &record {
+            if !project_exists {
                 return Err(invalid());
             }
         }
@@ -430,7 +451,7 @@ impl Storage {
             .draft
             .project_id
             .clone()
-            .or_else(|| old.as_ref().and_then(|m| m.project_id.clone()));
+            .unwrap_or_else(|| old.as_ref().and_then(|m| m.project_id.clone()));
         let revision = content::random_id()?;
         let now = Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
         let version = old
@@ -472,8 +493,7 @@ impl Storage {
                 .as_ref()
                 .map(|m| m.validation_status.clone())
                 .unwrap_or_else(|| "unreviewed".into()),
-            relationships: Storage::record_relationship_ids(&connection, &r.workspace_id, &record)
-                .unwrap_or_default(),
+            relationships: Storage::record_relationship_ids(&connection, &r.workspace_id, &record)?,
             supersedes: old.as_ref().and_then(|m| m.supersedes.clone()),
             due_date: r.draft.due_date,
             completed: r.draft.completed,
@@ -556,6 +576,7 @@ impl Storage {
                 cursor = target.superseded_by;
             }
         }
+        memory.relationships = Storage::record_relationship_ids(&tx, &r.workspace_id, &record)?;
         if old.is_none() {
             tx.execute(
                 "INSERT INTO memories VALUES(?1,?2,?3)",

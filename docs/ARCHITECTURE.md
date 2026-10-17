@@ -81,3 +81,8 @@ Dates/confidence/sources are validated; timestamps/authorship/state are core-own
 ## M2.2 lifecycle revision boundary
 
 Schema 4 retains original bodies/revisions and introduces a semantic compatibility barrier against schema-3 writers. Notes use the same storage and editor; lifecycle changes, archive restoration and historical content restore use the existing scoped revise command with expectedRevision. Rust owns the explicit six-state transition table and checks successor cycles under the publication lock. Default latest lists exclude archived/expired records; history ignores visibility filters. Historical restore creates a revision and preserves current privacy, state, creation and origin metadata. See ADR-0018 and [M2.2 evidence](evidence/M2-2.md) for the transition table and verification status. Project/entity relationships, jobs, export, backups and vault remain later M2 tasks.
+
+
+## M2.3 entities and relationship history
+
+M2.3 extends the same memory catalog/contracts/adapters to all nine knowledge kinds. The acceptance repair uses schema 6: stable typed edge IDs, immutable relationship revisions, reversible archive/restore and optimistic expectedVersion actions. Historical record reads retain their saved link snapshot; separate edge history records later actions. Project IDs resolve only to same-workspace projects and null clears membership. See ADR-0019 and [repair evidence](evidence/M2-3.md). Jobs/export, backups and vault remain later M2 tasks; the master specification is unchanged.

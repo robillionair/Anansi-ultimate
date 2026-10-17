@@ -8,8 +8,9 @@ export interface Client {
   createMemory(workspaceId:string,draft:MemoryDraft,kind?:string): Promise<MemoryDetails>;
   reviseMemory(workspaceId:string,id:string,expectedRevision:string,draft:MemoryDraft,confirmPrivacyChange?:boolean,options?:{lifecycle?:LifecycleChange;restoreArchive?:boolean;restoreRevision?:string}): Promise<MemoryDetails>;
   createRelationship(workspaceId:string,draft:RelationshipDraft): Promise<RelationshipDetails>;
-  deleteRelationship(workspaceId:string,id:string): Promise<RelationshipDetails>;
-  listRelationships(workspaceId:string,options?:{recordId?:string;predicate?:string}): Promise<RelationshipList>;
+  deleteRelationship(workspaceId:string,id:string,expectedVersion:number): Promise<RelationshipDetails>;
+  restoreRelationship(workspaceId:string,id:string,expectedVersion:number): Promise<RelationshipDetails>;
+  listRelationships(workspaceId:string,options?:{recordId?:string;predicate?:string;includeHistory?:boolean}): Promise<RelationshipList>;
   readiness(): Promise<Readiness>;
   listWorkspaces(): Promise<WorkspaceList>;
   createWorkspace(name: string): Promise<WorkspaceDetails>;
@@ -50,7 +51,8 @@ function client(call:Call):Client {
     createMemory:async(workspaceId,draft,kind)=>decode(await call('memories/create',{workspaceId,draft,kind}),validMemoryDetails),
     reviseMemory:async(workspaceId,id,expectedRevision,draft,confirmPrivacyChange=false,options={})=>decode(await call('memories/revise',{workspaceId,id,expectedRevision,draft,confirmPrivacyChange,...options}),validMemoryDetails),
     createRelationship:async(workspaceId,draft)=>decode(await call('relationships/create',{workspaceId,draft}),validRelationshipDetails),
-    deleteRelationship:async(workspaceId,id)=>decode(await call('relationships/delete',{workspaceId,id}),validRelationshipDetails),
+    deleteRelationship:async(workspaceId,id,expectedVersion)=>decode(await call('relationships/delete',{workspaceId,id,expectedVersion}),validRelationshipDetails),
+    restoreRelationship:async(workspaceId,id,expectedVersion)=>decode(await call('relationships/restore',{workspaceId,id,expectedVersion}),validRelationshipDetails),
     listRelationships:async(workspaceId,options={})=>decode(await call('relationships/list',{workspaceId,...options}),validRelationshipList),
     readiness:async()=>decodeReadiness(await call('readiness',{})),
     listWorkspaces:async()=>decode(await call('list',{}),validWorkspaceList),

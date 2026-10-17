@@ -1,3 +1,4 @@
+import { EntityHistory } from './EntityHistory';
 import { useEffect, useState } from 'react';
 import type { Client, MemoryDetails, MemoryDraft, MemoryMetadata, RelationshipRecord } from '@anansi/contracts';
 
@@ -210,6 +211,7 @@ export function KnowledgeRecords({ client, workspaceId }: { client: Client; work
         </fieldset>
       </form>
 
+      {current && <EntityHistory key={current.memory.id} client={client} workspaceId={workspaceId} current={current} refresh={() => open(current.memory.id)} />}
       {current && (
         <section aria-labelledby="record-relationships-heading">
           <h3 id="record-relationships-heading">Connected relationships</h3>
@@ -226,7 +228,7 @@ export function KnowledgeRecords({ client, workspaceId }: { client: Client; work
                   style={{ marginLeft: '12px' }}
                   onClick={() =>
                     void run(async () => {
-                      await client.deleteRelationship(workspaceId, r.id);
+                      await client.deleteRelationship(workspaceId, r.id, r.version);
                       await open(current.memory.id);
                       setNotice('Relationship removed.');
                     })

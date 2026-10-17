@@ -74,3 +74,8 @@ AN-004 gains note CRUD through reversible archive, all six lifecycle states, exp
 ## M2.3 implementation traceability
 
 AN-004 and AN-024 gain all 9 user knowledge kinds from Master Spec §9–10 (`memory`, `note`, `project`, `task`, `person`, `organization`, `decision`, `event`, `document`), type-specific attributes (`dueDate`, `completed`, `eventDate`, `projectId`), typed directed relationships (`predicate`, `sourceId`, `targetId`, `metadata`) with same-workspace enforcement, self-loop rejection, composite foreign keys preventing cross-workspace links, Schema 5 forward migration preserving Schemas 1–4, contracts and DTOs across Rust and TypeScript, shared UI views for Projects, Tasks, People, and Knowledge Records, and cross-adapter verification with process restarts. Verification status is in [M2.3 evidence](evidence/M2-3.md). All 90 sections and 33 requirement IDs remain represented.
+
+
+### M2.3 acceptance repair status
+
+AN-004/AN-024 remain in progress. Audit found incomplete M2.3 relationship history and membership acceptance despite the earlier verification record. The authorized repair adds schema-6 immutable edge revisions, reversible archive/restore, scoped optimistic actions, stable historical link snapshots and valid/clearable project membership, with expanded all-eight-kind desktop/browser restart coverage. AN-002/018/020 shared adapter/isolation and AN-033 provenance obligations continue unchanged. Verification/publication is pending; see [repair evidence](evidence/M2-3.md). No master requirement is removed; jobs/export M2.4, backups, vault and integrated certification remain required.

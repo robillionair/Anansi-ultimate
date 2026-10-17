@@ -22,3 +22,8 @@ M2.3 is verified complete. Implementation checkpoint 82789d3d3d61fa9839685ceafe5
 M1 is development-foundation certification only. AN-003 shared foundation design and AN-023 local onboarding/workspace/navigation/settings have verified workflow evidence. AN-001/002/018/020 retain release/security/later-platform scope and remain in progress. Signed installers, updater and clean-machine certification remain M15; no fully offline runtime installation claim. Existing WebView2 supports tested offline operation; its embedded bootstrapper needs internet if the runtime is absent.
 
 M2.1, M2.2, and M2.3 local acceptance gates passed: 54 Rust tests, 18 client/component tests, Playwright e2e, cross-adapter verification, and process restarts passed. Tooling/recovery checks passed. Proposed/user-authored memory revisions, notes, lifecycle, all 9 knowledge kinds, and typed relationships are implemented; vault, jobs, export and automated backups remain later tasks. M2.6 vault approval remains separate. M2 remains incomplete; next task is M2.4 persistent jobs and open-format export, unstarted.
+
+
+## M2.3 acceptance repair — 2026-10-18
+
+The user approved repairing the audit findings before M2.4. The earlier M2.3 completion claim did not cover immutable edge history/provenance, historical link snapshots, valid/clearable project membership or all eight linked kinds in the native restart workflow. Repair implementation uses schema 6 and ADR-0019; validation/publication is in progress. Do not start M2.4 until the repair acceptance passes. See [repair evidence](evidence/M2-3.md). Master specification and M0/M1 verified tags remain unchanged.

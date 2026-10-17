@@ -85,6 +85,7 @@ jobs:
       - run: pnpm exec playwright install --with-deps chromium
       - run: node scripts/verify-workspace.mjs --configured-cdp
       - run: node scripts/verify-memory.mjs --configured-cdp
+      - run: node scripts/verify-entities.mjs --configured-cdp
       - name: Build unsigned development NSIS release installer
         run: pnpm build:installer
       - name: Verify release package installation and uninstall (UI covered separately)

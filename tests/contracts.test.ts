@@ -81,7 +81,7 @@ test('workspace HTTP contracts validate settings and never send paths',async()=>
 });
 test('relationship HTTP/native operations use scoped routes, validated DTOs and reject paths',async()=>{
   const original=globalThis.fetch;let address='';let body:Record<string,unknown>={};
-  const relDetails={contractVersion:1,relationship:{id:'r'.repeat(32),workspaceId:'w'.repeat(32),sourceId:'s'.repeat(32),targetId:'t'.repeat(32),predicate:'relates_to',createdAt:'2026-10-17T21:00:00.000Z',metadata:{}}};
+  const relDetails={contractVersion:1,relationship:{id:'r'.repeat(32),workspaceId:'w'.repeat(32),sourceId:'s'.repeat(32),targetId:'t'.repeat(32),predicate:'relates_to',createdAt:'2026-10-17T21:00:00.000Z',updatedAt:'2026-10-17T21:00:00.000Z',version:1,archived:false,provenance:'user_authored',metadata:{}}};
   try{
     globalThis.fetch=async(url,options)=>{address=String(url);body=JSON.parse(options!.body as string);return new Response(JSON.stringify(url.toString().endsWith('/list')?{contractVersion:1,relationships:[relDetails.relationship]}:relDetails));};
     const client=httpClient('http://127.0.0.1:1451','a'.repeat(64));
@@ -91,8 +91,14 @@ test('relationship HTTP/native operations use scoped routes, validated DTOs and 
     assert.deepEqual(body.draft,{sourceId:'s'.repeat(32),targetId:'t'.repeat(32),predicate:'relates_to'});
     await client.listRelationships('w'.repeat(32),{recordId:'s'.repeat(32)});
     assert.equal(new URL(address).pathname,'/v1/relationships/list');
-    await client.deleteRelationship('w'.repeat(32),'r'.repeat(32));
+    await client.deleteRelationship('w'.repeat(32),'r'.repeat(32),1);
     assert.equal(new URL(address).pathname,'/v1/relationships/delete');
+    assert.equal(body.expectedVersion,1);
+    await client.restoreRelationship('w'.repeat(32),'r'.repeat(32),2);
+    assert.equal(new URL(address).pathname,'/v1/relationships/restore');
+    assert.equal(body.expectedVersion,2);
+    await client.listRelationships('w'.repeat(32),{includeHistory:true});
+    assert.equal(body.includeHistory,true);
   }finally{globalThis.fetch=original;}
   const window=Object.getOwnPropertyDescriptor(globalThis,'window');let command='',args:unknown;
   Object.defineProperty(globalThis,'window',{configurable:true,value:{__TAURI_INTERNALS__:{invoke:async(c:string,a:unknown)=>{command=c;args=a;return relDetails;}}}});

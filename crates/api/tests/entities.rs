@@ -374,13 +374,43 @@ async fn relationships_http_endpoints_and_security_guards() {
             json!({
                 "contractVersion": 1,
                 "workspaceId": w1,
-                "id": rel_id
+                "id": rel_id, "expectedVersion": 1
             }),
         ),
     )
     .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(del["relationship"]["id"], rel_id);
+
+    let (status, _) = call(
+        state.clone(),
+        request(
+            "/v1/relationships/restore",
+            json!({"contractVersion":1,"workspaceId":w1,"id":rel_id,"expectedVersion":1}),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    let (status, restored) = call(
+        state.clone(),
+        request(
+            "/v1/relationships/restore",
+            json!({"contractVersion":1,"workspaceId":w1,"id":rel_id,"expectedVersion":2}),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(restored["relationship"]["version"], 3);
+    let (status, history) = call(
+        state.clone(),
+        request(
+            "/v1/relationships/list",
+            json!({"contractVersion":1,"workspaceId":w1,"recordId":alice_id,"includeHistory":true}),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(history["relationships"].as_array().unwrap().len(), 3);
 
     // 6. Security guards: auth, host, origin
     for (header, value, expected_status) in [
@@ -397,7 +427,7 @@ async fn relationships_http_endpoints_and_security_guards() {
     }
 
     // 7. OPTIONS preflight
-    for op in ["create", "delete", "list"] {
+    for op in ["create", "delete", "restore", "list"] {
         let mut r = request(&format!("/v1/relationships/{op}"), json!({}));
         *r.method_mut() = axum::http::Method::OPTIONS;
         r.headers_mut()

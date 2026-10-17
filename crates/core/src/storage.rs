@@ -12,7 +12,7 @@ use std::{
 };
 
 const APPLICATION_ID: i64 = 0x414e414e;
-const SCHEMA_VERSION: i64 = 5;
+const SCHEMA_VERSION: i64 = 6;
 const ROOT_MARKER: &[u8] = b"ANANSI workspace root v1\n";
 pub const DATABASE_NAME: &str = "workspaces.sqlite3";
 
@@ -231,7 +231,8 @@ impl Storage {
                     "\n",
                     include_str!("../migrations/0003_memory.sql"),
                     include_str!("../migrations/0004_lifecycle.sql"),
-                    include_str!("../migrations/0005_entities.sql")
+                    include_str!("../migrations/0005_entities.sql"),
+                    include_str!("../migrations/0006_relationship_history.sql")
                 ),
             )
             .map_err(|_| corrupt())?;
@@ -275,6 +276,10 @@ impl Storage {
                 }
                 if locked_version < 5 {
                     tx.execute_batch(include_str!("../migrations/0005_entities.sql"))
+                        .map_err(|_| corrupt())?;
+                }
+                if locked_version < 6 {
+                    tx.execute_batch(include_str!("../migrations/0006_relationship_history.sql"))
                         .map_err(|_| corrupt())?;
                 }
                 tx.pragma_update(None, "user_version", SCHEMA_VERSION)

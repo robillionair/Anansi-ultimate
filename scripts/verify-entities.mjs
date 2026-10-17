@@ -206,7 +206,10 @@ try {
         people: true,
         knowledgeRecords: true,
         relationships: true,
-        schemaFive: true,
+        schemaSix: true,
+        allEightLinkedKinds: true,
+        relationshipHistoryAndRestore: true,
+        projectUnassignment: true,
         bothProcessRestarts: true,
         externalRequests: external,
       },
@@ -215,7 +218,7 @@ try {
     )
   );
   console.log(
-    'PASS: actual native/browser projects, tasks with due dates/completion, people, knowledge records, relationships, schema 5 migration, both process restarts, no external requests and responsive narrow layout.'
+    'PASS: actual native/browser projects, tasks with due dates/completion, people, knowledge records, relationships, schema 6 relationship history, both process restarts, no external requests and responsive narrow layout.'
   );
 } finally {
   if (webBrowser) await webBrowser.close();

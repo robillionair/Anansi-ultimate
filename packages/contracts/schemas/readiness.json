@@ -121,6 +121,11 @@
         "minimum": 0,
         "type": "integer"
       },
+      "expectedVersion": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
       "id": {
         "type": "string"
       },
@@ -131,7 +136,8 @@
     "required": [
       "contractVersion",
       "workspaceId",
-      "id"
+      "id",
+      "expectedVersion"
     ],
     "title": "DeleteRelationshipRequest",
     "type": "object"
@@ -145,6 +151,10 @@
         "maximum": 255,
         "minimum": 0,
         "type": "integer"
+      },
+      "includeHistory": {
+        "default": false,
+        "type": "boolean"
       },
       "predicate": {
         "type": [
@@ -1201,6 +1211,9 @@
       "RelationshipRecord": {
         "additionalProperties": false,
         "properties": {
+          "archived": {
+            "type": "boolean"
+          },
           "createdAt": {
             "type": "string"
           },
@@ -1213,11 +1226,22 @@
           "predicate": {
             "type": "string"
           },
+          "provenance": {
+            "type": "string"
+          },
           "sourceId": {
             "type": "string"
           },
           "targetId": {
             "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          },
+          "version": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
           },
           "workspaceId": {
             "type": "string"
@@ -1229,7 +1253,11 @@
           "sourceId",
           "targetId",
           "predicate",
-          "createdAt"
+          "createdAt",
+          "updatedAt",
+          "version",
+          "archived",
+          "provenance"
         ],
         "type": "object"
       }
@@ -1284,6 +1312,9 @@
       "RelationshipRecord": {
         "additionalProperties": false,
         "properties": {
+          "archived": {
+            "type": "boolean"
+          },
           "createdAt": {
             "type": "string"
           },
@@ -1296,11 +1327,22 @@
           "predicate": {
             "type": "string"
           },
+          "provenance": {
+            "type": "string"
+          },
           "sourceId": {
             "type": "string"
           },
           "targetId": {
             "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          },
+          "version": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
           },
           "workspaceId": {
             "type": "string"
@@ -1312,7 +1354,11 @@
           "sourceId",
           "targetId",
           "predicate",
-          "createdAt"
+          "createdAt",
+          "updatedAt",
+          "version",
+          "archived",
+          "provenance"
         ],
         "type": "object"
       }
@@ -1344,6 +1390,9 @@
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
     "properties": {
+      "archived": {
+        "type": "boolean"
+      },
       "createdAt": {
         "type": "string"
       },
@@ -1356,11 +1405,22 @@
       "predicate": {
         "type": "string"
       },
+      "provenance": {
+        "type": "string"
+      },
       "sourceId": {
         "type": "string"
       },
       "targetId": {
         "type": "string"
+      },
+      "updatedAt": {
+        "type": "string"
+      },
+      "version": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
       },
       "workspaceId": {
         "type": "string"
@@ -1372,7 +1432,11 @@
       "sourceId",
       "targetId",
       "predicate",
-      "createdAt"
+      "createdAt",
+      "updatedAt",
+      "version",
+      "archived",
+      "provenance"
     ],
     "title": "RelationshipRecord",
     "type": "object"

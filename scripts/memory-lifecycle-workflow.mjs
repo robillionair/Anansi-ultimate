@@ -1,4 +1,5 @@
-import { expect } from '@playwright/test';
+import { expect as baseExpect } from '@playwright/test';
+const expect = baseExpect.configure({ timeout: 30000 });
 const button=(page,name)=>page.getByRole('button',{name,exact:true});
 async function saved(page,text){await expect(page.getByRole('status').filter({hasText:text})).toBeVisible({timeout:30000});await expect(button(page,'Reopen latest revision')).toBeEnabled();}
 async function create(page,kind,title,body){

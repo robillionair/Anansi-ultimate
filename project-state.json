@@ -3,7 +3,7 @@
   "activeMilestone": "M2",
   "activeTask": "M2.3",
   "plan": "plans/02-memory-system.md",
-  "implementationStatus": "M2.3 verified complete: all 9 knowledge kinds, type-specific attributes, typed relationships, Schema 5 migration, UI views, cross-adapter verifiers and all three CI jobs passed; stop before M2.4",
+  "implementationStatus": "M2.3 acceptance repair implemented; full local/native/CI verification and publication pending; stop before M2.4",
   "lastVerifiedCommit": "82789d3d3d61fa9839685ceafe55e897ad2f2e93",
   "evidence": [
     "docs/evidence/M0.md",
@@ -17,9 +17,14 @@
     "docs/evidence/M2-2.md",
     "docs/evidence/M2-3.md"
   ],
-  "blockers": [],
-  "nextTask": "M2.4",
-  "nextTaskScope": "Persistent jobs and open-format export; unstarted",
+  "blockers": [
+    {
+      "scope": "M2.3",
+      "detail": "Repair acceptance and exact-SHA CI/publication pending."
+    }
+  ],
+  "nextTask": "M2.3",
+  "nextTaskScope": "Finish acceptance repair verification and recoverable checkpoint; M2.4 remains unstarted",
   "productImplementation": "M1 foundation plus verified M2.1/M2.2/M2.3 memory revisions, notes, lifecycle, entities and typed relationships; M2.4 unstarted",
   "milestoneComplete": false
 }

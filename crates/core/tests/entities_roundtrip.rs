@@ -261,7 +261,7 @@ fn relationships_create_list_delete_and_restart() {
             json!({
                 "contractVersion": 1,
                 "workspaceId": w,
-                "id": rel_id
+                "id": rel_id, "expectedVersion": 1
             }),
         )
         .unwrap();
@@ -407,8 +407,10 @@ fn schema_four_migrates_forward_to_schema_five_preserving_records() {
 
     let path = temp.path().join("store").join(DATABASE_NAME);
     let conn = rusqlite::Connection::open(&path).unwrap();
-    conn.execute_batch("DROP TABLE relationships; PRAGMA user_version = 4;")
-        .unwrap();
+    conn.execute_batch(
+        "DROP TABLE relationship_revisions; DROP TABLE relationships; PRAGMA user_version = 4;",
+    )
+    .unwrap();
     let v: i64 = conn
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
@@ -433,5 +435,178 @@ fn schema_four_migrates_forward_to_schema_five_preserving_records() {
     let user_version: i64 = verify_conn
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(user_version, 5);
+    assert_eq!(user_version, 6);
+}
+
+#[test]
+fn project_membership_and_relationship_history_are_recoverable() {
+    let (temp, core, w) = setup();
+    let create = |kind: &str, draft: serde_json::Value| {
+        core.memory_command(
+            "create",
+            json!({"contractVersion":1,"workspaceId":w,"kind":kind,"draft":draft}),
+        )
+        .unwrap()
+    };
+    let project = create(
+        "project",
+        json!({"title":"Project","body":"original project"}),
+    );
+    let person = create("person", json!({"title":"Person","body":"person"}));
+    let project_id = &project["memory"]["id"];
+    let person_id = &person["memory"]["id"];
+    let original_revision = &project["memory"]["revisionId"];
+    assert!(core.memory_command("create",json!({"contractVersion":1,"workspaceId":w,"kind":"task","draft":{"title":"Wrong project","body":"","projectId":person_id}})).is_err());
+    assert!(core.memory_command("create",json!({"contractVersion":1,"workspaceId":w,"kind":"person","draft":{"title":"Wrong fields","body":"","dueDate":"2026-10-25T00:00:00Z","completed":true}})).is_err());
+    let task = create(
+        "task",
+        json!({"title":"Task","body":"body","projectId":project_id}),
+    );
+    let retained=core.memory_command("revise",json!({"contractVersion":1,"workspaceId":w,"id":task["memory"]["id"],"expectedRevision":task["memory"]["revisionId"],"draft":{"title":"Task","body":"body"}})).unwrap();
+    assert_eq!(retained["memory"]["projectId"], *project_id);
+    let detached=core.memory_command("revise",json!({"contractVersion":1,"workspaceId":w,"id":task["memory"]["id"],"expectedRevision":retained["memory"]["revisionId"],"draft":{"title":"Task","body":"body","projectId":null}})).unwrap();
+    assert!(detached["memory"]["projectId"].is_null());
+    let mut edge_ids = Vec::new();
+    for kind in [
+        "memory",
+        "note",
+        "task",
+        "person",
+        "organization",
+        "decision",
+        "event",
+        "document",
+    ] {
+        let record = create(
+            kind,
+            json!({"title":kind,"body":"literal <script>text</script>"}),
+        );
+        let edge=core.relationship_command("create",json!({"contractVersion":1,"workspaceId":w,"draft":{"sourceId":project_id,"targetId":record["memory"]["id"],"predicate":"references"}})).unwrap();
+        edge_ids.push(edge["relationship"]["id"].clone());
+    }
+    let saved=core.memory_command("revise",json!({"contractVersion":1,"workspaceId":w,"id":project_id,"expectedRevision":original_revision,"draft":{"title":"Project","body":"updated"}})).unwrap();
+    assert_eq!(
+        saved["memory"]["relationships"].as_array().unwrap().len(),
+        8
+    );
+    let edge_id = &edge_ids[0];
+    let action = json!({"contractVersion":1,"workspaceId":w,"id":edge_id,"expectedVersion":1});
+    let archived = core.relationship_command("delete", action.clone()).unwrap();
+    assert_eq!(archived["relationship"]["archived"], true);
+    assert_eq!(
+        core.relationship_command("delete", action)
+            .unwrap_err()
+            .code,
+        ErrorCode::RevisionConflict
+    );
+    let old=core.memory_command("read",json!({"contractVersion":1,"workspaceId":w,"id":project_id,"revisionId":original_revision})).unwrap();
+    assert!(
+        old["memory"]["relationships"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    let historic=core.memory_command("read",json!({"contractVersion":1,"workspaceId":w,"id":project_id,"revisionId":saved["memory"]["revisionId"]})).unwrap();
+    assert_eq!(
+        historic["memory"]["relationships"]
+            .as_array()
+            .unwrap()
+            .len(),
+        8
+    );
+    let restarted = Core::with_storage_root(temp.path().join("store"));
+    let history=restarted.relationship_command("list",json!({"contractVersion":1,"workspaceId":w,"recordId":project_id,"includeHistory":true})).unwrap();
+    assert_eq!(history["relationships"].as_array().unwrap().len(), 9);
+    assert!(
+        history["relationships"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|r| r["provenance"] == "user_authored")
+    );
+    restarted
+        .relationship_command(
+            "restore",
+            json!({"contractVersion":1,"workspaceId":w,"id":edge_id,"expectedVersion":2}),
+        )
+        .unwrap();
+    let active = restarted
+        .relationship_command(
+            "list",
+            json!({"contractVersion":1,"workspaceId":w,"recordId":project_id}),
+        )
+        .unwrap();
+    assert_eq!(active["relationships"].as_array().unwrap().len(), 8);
+    // Archive endpoint without losing edges/history; cross-workspace history reveals nothing.
+    restarted.memory_command("revise",json!({"contractVersion":1,"workspaceId":w,"id":project_id,"expectedRevision":saved["memory"]["revisionId"],"draft":{"title":"Project","body":"updated"},"lifecycle":{"state":"archived","confirmed":true}})).unwrap();
+    let active = restarted
+        .relationship_command(
+            "list",
+            json!({"contractVersion":1,"workspaceId":w,"recordId":project_id}),
+        )
+        .unwrap();
+    assert_eq!(active["relationships"].as_array().unwrap().len(), 8);
+    let other = restarted
+        .workspace_command("create", json!({"contractVersion":1,"name":"Other"}))
+        .unwrap();
+    let foreign=restarted.relationship_command("list",json!({"contractVersion":1,"workspaceId":other["workspace"]["id"],"recordId":project_id,"includeHistory":true})).unwrap();
+    assert!(foreign["relationships"].as_array().unwrap().is_empty());
+}
+
+#[test]
+fn schema_five_edges_migrate_with_honest_origin_and_failed_migration_rolls_back() {
+    let (temp, core, w) = setup();
+    let a = core
+        .memory_command(
+            "create",
+            json!({"contractVersion":1,"workspaceId":w,"draft":{"title":"A","body":"A"}}),
+        )
+        .unwrap();
+    let b = core
+        .memory_command(
+            "create",
+            json!({"contractVersion":1,"workspaceId":w,"draft":{"title":"B","body":"B"}}),
+        )
+        .unwrap();
+    let db = temp.path().join("store").join(DATABASE_NAME);
+    let conn = rusqlite::Connection::open(&db).unwrap();
+    conn.execute_batch("DROP TABLE relationship_revisions; ALTER TABLE relationships DROP COLUMN archived; ALTER TABLE relationships DROP COLUMN version; PRAGMA user_version=5;").unwrap();
+    conn.execute(
+        "INSERT INTO relationships VALUES(?1,?2,?3,?4,'references','{}','2026-10-17T00:00:00Z')",
+        rusqlite::params![
+            w,
+            "e".repeat(32),
+            a["memory"]["id"].as_str().unwrap(),
+            b["memory"]["id"].as_str().unwrap()
+        ],
+    )
+    .unwrap();
+    drop(conn);
+    let result = core
+        .relationship_command(
+            "list",
+            json!({"contractVersion":1,"workspaceId":w,"includeHistory":true}),
+        )
+        .unwrap();
+    assert_eq!(result["relationships"][0]["provenance"], "legacy_schema5");
+    let conn = rusqlite::Connection::open(&db).unwrap();
+    conn.execute_batch("DROP TABLE relationship_revisions; ALTER TABLE relationships DROP COLUMN archived; ALTER TABLE relationships DROP COLUMN version; CREATE TABLE relationship_revisions(wrong TEXT); PRAGMA user_version=5;").unwrap();
+    drop(conn);
+    assert!(
+        core.workspace_command("open", json!({"contractVersion":1,"id":w}))
+            .is_err()
+    );
+    let conn = rusqlite::Connection::open(&db).unwrap();
+    assert_eq!(
+        conn.pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))
+            .unwrap(),
+        5
+    );
+    assert_eq!(
+        conn.query_row("SELECT count(*) FROM relationships", [], |r| r
+            .get::<_, i64>(0))
+            .unwrap(),
+        1
+    );
+    assert!(conn.prepare("SELECT archived FROM relationships").is_err());
 }

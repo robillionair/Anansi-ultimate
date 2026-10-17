@@ -1,4 +1,5 @@
-import { expect } from '@playwright/test';
+import { expect as baseExpect } from '@playwright/test';
+const expect = baseExpect.configure({ timeout: 30000 });
 
 const button = (page, name) => page.getByRole('button', { name, exact: true });
 
@@ -66,6 +67,44 @@ export async function prepareEntities(page, label) {
   await button(page, 'Add relationship').click();
   await saved(page, 'Relationship created.');
   await expect(page.getByRole('list', { name: 'Relationships for this project' }).getByText('documents')).toBeVisible();
+  // All eight project-linked kinds, created and linked through the actual shared UI.
+  for (const kind of ['memory','note','task','person','organization','decision','event','document']) {
+    await button(page,'Records').click();
+    await button(page,'New record').click();
+    await page.getByLabel('Record kind',{exact:true}).selectOption(kind);
+    await page.getByLabel('Title',{exact:true}).fill(label+' Linked '+kind);
+    await page.getByLabel('Content & description',{exact:true}).fill('Literal <script>text</script> '+kind);
+    await button(page,'Save record').click();
+    await saved(page,'Record saved ('+kind+').');
+    const id=(await page.locator('.help code').innerText()).trim();
+    await button(page,'Projects').click();
+    await button(page,label+' Alpha Project').click();
+    await page.getByLabel('Target record ID').fill(id);
+    await page.getByLabel('Predicate').selectOption('references');
+    await button(page,'Add relationship').click();
+    await saved(page,'Relationship created.');
+  }
+  await expect(page.getByRole('list',{name:'Relationships for this project'}).getByRole('listitem')).toHaveCount(9);
+  await page.getByLabel('Description & objectives',{exact:true}).fill('Updated project '+label);
+  await button(page,'Save project').click();
+  await saved(page,'Project saved.');
+  await page.getByRole('list',{name:'Relationships for this project'}).getByRole('button',{name:'Archive relationship'}).first().click();
+  await saved(page,'Relationship removed.');
+  await button(page,'Load history').click();
+  await expect(page.getByRole('list',{name:'Relationship revisions'}).getByRole('listitem')).toHaveCount(10);
+  await button(page,'Restore relationship').click();
+  await expect(page.getByRole('list',{name:'Relationships for this project'}).getByRole('listitem')).toHaveCount(9);
+  // Explicitly clear and reassign project membership through the task form.
+  await button(page,'Tasks').click();
+  await button(page,label+' Primary Task').click();
+  await page.getByLabel('Associated project (optional)').selectOption('');
+  await button(page,'Save task').click();
+  await saved(page,'Task saved.');
+  await expect(page.getByLabel('Associated project (optional)')).toHaveValue('');
+  await page.getByLabel('Associated project (optional)').selectOption({label:label+' Alpha Project'});
+  await button(page,'Save task').click();
+  await saved(page,'Task saved.');
+
 }
 
 export async function checkEntities(page, label) {
@@ -73,9 +112,17 @@ export async function checkEntities(page, label) {
   await button(page, 'Projects').click();
   await button(page, label + ' Alpha Project').click();
   await expect(page.getByLabel('Project title', { exact: true })).toHaveValue(label + ' Alpha Project');
-  await expect(page.getByLabel('Description & objectives', { exact: true })).toHaveValue('Core initiative description for ' + label);
+  await expect(page.getByLabel('Description & objectives', { exact: true })).toHaveValue('Updated project ' + label);
   await expect(page.getByText(label + ' Primary Task (Completed)')).toBeVisible();
   await expect(page.getByRole('list', { name: 'Relationships for this project' }).getByText('documents')).toBeVisible();
+
+  await expect(page.getByRole('list',{name:'Relationships for this project'}).getByRole('listitem')).toHaveCount(9);
+  await button(page,'Load history').click();
+  await expect(page.getByRole('list',{name:'Relationship revisions'}).getByRole('listitem')).toHaveCount(11);
+  await button(page,'View revision 1').click();
+  await expect(page.getByRole('region',{name:'Historical record'})).toContainText('Saved relationship IDs: None',{timeout:30000});
+  await button(page,'View revision 2').click();
+  await expect(page.getByRole('region',{name:'Historical record'})).toContainText('Updated project '+label,{timeout:30000});
 
   // 2. Check Task
   await button(page, 'Tasks').click();
@@ -98,4 +145,10 @@ export async function checkEntities(page, label) {
   await button(page, label + ' Architecture Decision').click();
   await expect(page.getByLabel('Event date (UTC ISO timestamp)', { exact: true })).toHaveValue('2026-10-17T12:00:00Z');
   await expect(page.getByLabel('Content & description', { exact: true })).toHaveValue('Adopted typed directed relationships schema 5');
+  for (const kind of ['memory','note','task','person','organization','decision','event','document']) {
+    await page.getByLabel('Filter by kind:',{exact:true}).selectOption(kind);
+    await button(page,label+' Linked '+kind).click();
+    await expect(page.getByLabel('Content & description',{exact:true})).toHaveValue('Literal <script>text</script> '+kind);
+    await expect(page.getByRole('list',{name:'Relationships for this record'}).getByRole('listitem')).toHaveCount(1);
+  }
 }

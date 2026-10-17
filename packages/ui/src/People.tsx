@@ -1,3 +1,4 @@
+import { EntityHistory } from './EntityHistory';
 import { useEffect, useState } from 'react';
 import type { Client, MemoryDetails, MemoryDraft, MemoryMetadata, RelationshipRecord } from '@anansi/contracts';
 
@@ -55,6 +56,9 @@ export function People({ client, workspaceId }: { client: Client; workspaceId: s
       validUntil: p.memory.validUntil,
       confidence: p.memory.confidence,
       sourceReferences: p.memory.sourceReferences,
+      projectId: p.memory.projectId,
+      dueDate: p.memory.dueDate,
+      completed: p.memory.completed,
     });
 
     const relList = await client.listRelationships(workspaceId, { recordId: id });
@@ -138,6 +142,7 @@ export function People({ client, workspaceId }: { client: Client; workspaceId: s
         </fieldset>
       </form>
 
+      {current && <EntityHistory key={current.memory.id} client={client} workspaceId={workspaceId} current={current} refresh={() => open(current.memory.id)} />}
       {current && (
         <section aria-labelledby="person-relationships-heading">
           <h3 id="person-relationships-heading">Connected relationships</h3>
@@ -154,7 +159,7 @@ export function People({ client, workspaceId }: { client: Client; workspaceId: s
                   style={{ marginLeft: '12px' }}
                   onClick={() =>
                     void run(async () => {
-                      await client.deleteRelationship(workspaceId, r.id);
+                      await client.deleteRelationship(workspaceId, r.id, r.version);
                       await open(current.memory.id);
                       setNotice('Relationship removed.');
                     })

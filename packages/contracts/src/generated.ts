@@ -40,11 +40,13 @@ export interface CreateWorkspaceRequest {
 }
 export interface DeleteRelationshipRequest {
   contractVersion: number;
+  expectedVersion: number;
   id: string;
   workspaceId: string;
 }
 export interface ListRelationshipsRequest {
   contractVersion: number;
+  includeHistory?: boolean;
   predicate?: string | null;
   recordId?: string | null;
   workspaceId: string;
@@ -232,14 +234,18 @@ export interface RelationshipDetails {
   relationship: RelationshipRecord;
 }
 export interface RelationshipRecord {
+  archived: boolean;
   createdAt: string;
   id: string;
   metadata?: {
     [k: string]: unknown;
   };
   predicate: string;
+  provenance: string;
   sourceId: string;
   targetId: string;
+  updatedAt: string;
+  version: number;
   workspaceId: string;
 }
 export interface RelationshipDraft {
@@ -255,25 +261,33 @@ export interface RelationshipList {
   relationships: RelationshipRecord[];
 }
 export interface RelationshipRecord {
+  archived: boolean;
   createdAt: string;
   id: string;
   metadata?: {
     [k: string]: unknown;
   };
   predicate: string;
+  provenance: string;
   sourceId: string;
   targetId: string;
+  updatedAt: string;
+  version: number;
   workspaceId: string;
 }
 export interface RelationshipRecord {
+  archived: boolean;
   createdAt: string;
   id: string;
   metadata?: {
     [k: string]: unknown;
   };
   predicate: string;
+  provenance: string;
   sourceId: string;
   targetId: string;
+  updatedAt: string;
+  version: number;
   workspaceId: string;
 }
 export type Intent = "second_memory" | "invent_product" | "build_application" | "connect_ai" | "explore";
