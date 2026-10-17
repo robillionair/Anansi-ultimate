@@ -38,13 +38,26 @@ async fn memory_command(
         .map_err(|_| anansi_core::storage::unavailable())?
 }
 #[cfg(windows)]
+#[tauri::command]
+async fn relationship_command(
+    core: tauri::State<'_, Core>,
+    command: String,
+    request: serde_json::Value,
+) -> Result<serde_json::Value, CommandError> {
+    let core = core.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || core.relationship_command(&command, request))
+        .await
+        .map_err(|_| anansi_core::storage::unavailable())?
+}
+#[cfg(windows)]
 pub fn run() {
     tauri::Builder::default()
         .manage(Core::for_host())
         .invoke_handler(tauri::generate_handler![
             get_readiness,
             workspace_command,
-            memory_command
+            memory_command,
+            relationship_command
         ])
         .run(tauri::generate_context!())
         .expect("ANANSI desktop failed to start");

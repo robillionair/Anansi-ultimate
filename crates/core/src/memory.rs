@@ -94,6 +94,12 @@ pub struct MemoryDraft {
     pub confidence: Option<f64>,
     #[serde(default)]
     pub source_references: Vec<String>,
+    #[serde(default)]
+    pub project_id: Option<String>,
+    #[serde(default)]
+    pub due_date: Option<String>,
+    #[serde(default)]
+    pub completed: Option<bool>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -125,6 +131,10 @@ pub struct MemoryMetadata {
     pub validation_status: String,
     pub relationships: Vec<String>,
     pub supersedes: Option<String>,
+    #[serde(default)]
+    pub due_date: Option<String>,
+    #[serde(default)]
+    pub completed: Option<bool>,
 }
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -234,6 +244,10 @@ fn validate(draft: &MemoryDraft) -> Result<(), CommandError> {
         return Err(invalid());
     }
     stamp(&draft.event_date)?;
+    stamp(&draft.due_date)?;
+    if let Some(pid) = &draft.project_id {
+        id(pid)?;
+    }
     let from = stamp(&draft.valid_from)?;
     let until = stamp(&draft.valid_until)?;
     if from.zip(until).is_some_and(|(a, b)| b < a) {
@@ -278,7 +292,7 @@ impl Core {
                 }
                 if r.kind
                     .as_deref()
-                    .is_some_and(|k| !["memory", "note"].contains(&k))
+                    .is_some_and(|k| !crate::entities::is_valid_kind(k))
                 {
                     return Err(invalid());
                 }
@@ -302,7 +316,7 @@ fn metadata(
 ) -> Result<(MemoryMetadata, String), CommandError> {
     let result:Option<(String,String)>=connection.query_row("SELECT r.metadata,r.body_hash FROM memory_revisions r JOIN memories m ON m.workspace_id=r.workspace_id AND m.id=r.memory_id WHERE r.workspace_id=?1 AND r.memory_id=?2 AND r.id=COALESCE(?3,m.current_revision)",params![workspace,record,revision],|r|Ok((r.get(0)?,r.get(1)?))).optional().map_err(|_|content::integrity())?;
     let (json, hash) = result.ok_or_else(missing)?;
-    let meta: MemoryMetadata = serde_json::from_str(&json).map_err(|_| content::integrity())?;
+    let mut meta: MemoryMetadata = serde_json::from_str(&json).map_err(|_| content::integrity())?;
     if meta.workspace_id != workspace
         || meta.id != record
         || revision.is_some_and(|r| r != meta.revision_id)
@@ -310,6 +324,8 @@ fn metadata(
         return Err(content::integrity());
     }
     meta.privacy.allow_plaintext()?;
+    meta.relationships =
+        Storage::record_relationship_ids(connection, workspace, record).unwrap_or_default();
     Ok((meta, hash))
 }
 impl Storage {
@@ -322,7 +338,7 @@ impl Storage {
         validate(&r.draft)?;
         if r.kind
             .as_deref()
-            .is_some_and(|k| !["memory", "note"].contains(&k))
+            .is_some_and(|k| !crate::entities::is_valid_kind(k))
         {
             return Err(invalid());
         }
@@ -388,6 +404,9 @@ impl Storage {
                     valid_until: historic.valid_until,
                     confidence: historic.confidence,
                     source_references: historic.source_references,
+                    project_id: historic.project_id,
+                    due_date: historic.due_date,
+                    completed: historic.completed,
                 };
             }
         }
@@ -395,6 +414,23 @@ impl Storage {
             .as_ref()
             .map(|m| m.id.clone())
             .unwrap_or(content::random_id()?);
+        if let Some(pid) = &r.draft.project_id {
+            let project_exists: bool = connection
+                .query_row(
+                    "SELECT EXISTS(SELECT 1 FROM memories WHERE workspace_id=?1 AND id=?2)",
+                    params![&r.workspace_id, pid],
+                    |row| row.get(0),
+                )
+                .map_err(|_| unavailable())?;
+            if !project_exists && pid != &record {
+                return Err(invalid());
+            }
+        }
+        let project_id = r
+            .draft
+            .project_id
+            .clone()
+            .or_else(|| old.as_ref().and_then(|m| m.project_id.clone()));
         let revision = content::random_id()?;
         let now = Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
         let version = old
@@ -404,7 +440,7 @@ impl Storage {
         let mut memory = MemoryMetadata {
             id: record.clone(),
             workspace_id: r.workspace_id.clone(),
-            project_id: old.as_ref().and_then(|m| m.project_id.clone()),
+            project_id,
             kind: old
                 .as_ref()
                 .map(|m| m.kind.clone())
@@ -436,11 +472,11 @@ impl Storage {
                 .as_ref()
                 .map(|m| m.validation_status.clone())
                 .unwrap_or_else(|| "unreviewed".into()),
-            relationships: old
-                .as_ref()
-                .map(|m| m.relationships.clone())
+            relationships: Storage::record_relationship_ids(&connection, &r.workspace_id, &record)
                 .unwrap_or_default(),
             supersedes: old.as_ref().and_then(|m| m.supersedes.clone()),
+            due_date: r.draft.due_date,
+            completed: r.draft.completed,
         };
         if let Some(previous) = &old {
             if r.restore_archive {

@@ -1,12 +1,15 @@
-import { validReadiness, validError, validWorkspaceDetails, validWorkspaceList, validMemoryDetails, validMemoryList } from './validators.mjs';
+import { validReadiness, validError, validWorkspaceDetails, validWorkspaceList, validMemoryDetails, validMemoryList, validRelationshipDetails, validRelationshipList } from './validators.mjs';
 import { invoke } from '@tauri-apps/api/core';
-import type { Readiness, WorkspaceDetails, WorkspaceList, Intent, MemoryDraft, MemoryDetails, MemoryList, MemoryMetadata, Privacy, LifecycleChange } from './generated';
-export type { Readiness, WorkspaceDetails, WorkspaceList, Intent, MemoryDraft, MemoryDetails, MemoryList, MemoryMetadata, Privacy, LifecycleChange } from './generated';
+import type { Readiness, WorkspaceDetails, WorkspaceList, Intent, MemoryDraft, MemoryDetails, MemoryList, MemoryMetadata, Privacy, LifecycleChange, RelationshipDraft, RelationshipRecord, RelationshipDetails, RelationshipList } from './generated';
+export type { Readiness, WorkspaceDetails, WorkspaceList, Intent, MemoryDraft, MemoryDetails, MemoryList, MemoryMetadata, Privacy, LifecycleChange, RelationshipDraft, RelationshipRecord, RelationshipDetails, RelationshipList } from './generated';
 export interface Client {
   listMemories(workspaceId:string, options?:{id?:string;offset?:number;limit?:number;kind?:string;includeArchived?:boolean;includeExpired?:boolean}): Promise<MemoryList>;
   readMemory(workspaceId:string,id:string,revisionId?:string): Promise<MemoryDetails>;
   createMemory(workspaceId:string,draft:MemoryDraft,kind?:string): Promise<MemoryDetails>;
   reviseMemory(workspaceId:string,id:string,expectedRevision:string,draft:MemoryDraft,confirmPrivacyChange?:boolean,options?:{lifecycle?:LifecycleChange;restoreArchive?:boolean;restoreRevision?:string}): Promise<MemoryDetails>;
+  createRelationship(workspaceId:string,draft:RelationshipDraft): Promise<RelationshipDetails>;
+  deleteRelationship(workspaceId:string,id:string): Promise<RelationshipDetails>;
+  listRelationships(workspaceId:string,options?:{recordId?:string;predicate?:string}): Promise<RelationshipList>;
   readiness(): Promise<Readiness>;
   listWorkspaces(): Promise<WorkspaceList>;
   createWorkspace(name: string): Promise<WorkspaceDetails>;
@@ -46,6 +49,9 @@ function client(call:Call):Client {
     readMemory:async(workspaceId,id,revisionId)=>decode(await call('memories/read',{workspaceId,id,revisionId}),validMemoryDetails),
     createMemory:async(workspaceId,draft,kind)=>decode(await call('memories/create',{workspaceId,draft,kind}),validMemoryDetails),
     reviseMemory:async(workspaceId,id,expectedRevision,draft,confirmPrivacyChange=false,options={})=>decode(await call('memories/revise',{workspaceId,id,expectedRevision,draft,confirmPrivacyChange,...options}),validMemoryDetails),
+    createRelationship:async(workspaceId,draft)=>decode(await call('relationships/create',{workspaceId,draft}),validRelationshipDetails),
+    deleteRelationship:async(workspaceId,id)=>decode(await call('relationships/delete',{workspaceId,id}),validRelationshipDetails),
+    listRelationships:async(workspaceId,options={})=>decode(await call('relationships/list',{workspaceId,...options}),validRelationshipList),
     readiness:async()=>decodeReadiness(await call('readiness',{})),
     listWorkspaces:async()=>decode(await call('list',{}),validWorkspaceList),
     createWorkspace:async name=>decode(await call('create',{name}),validWorkspaceDetails),
@@ -60,7 +66,12 @@ export function httpClient(endpoint:string,token:string):Client {
   if(!/^[a-f0-9]{64}$/.test(token))throw new Error('Enter the 64-character token from the current private pairing file.');
   return client(async(operation,request)=>{
     let response:Response;
-    try{response=await fetch(`${url.origin}/v1/${operation.startsWith('memories/')?operation:operation==='readiness'?'readiness':'workspaces/'+operation}`,{method:'POST',credentials:'omit',cache:'no-store',redirect:'error',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({contractVersion:1,...request}),signal:AbortSignal.timeout(15000)});}
+    const path = operation.startsWith('memories/') || operation.startsWith('relationships/')
+      ? operation
+      : operation === 'readiness'
+      ? 'readiness'
+      : 'workspaces/' + operation;
+    try{response=await fetch(`${url.origin}/v1/${path}`,{method:'POST',credentials:'omit',cache:'no-store',redirect:'error',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({contractVersion:1,...request}),signal:AbortSignal.timeout(15000)});}
     catch{throw new Error('Local core unavailable. Start the API, then retry or pair with its new session.');}
     let value:unknown;try{value=await response.json();}catch{throw new Error('The core returned an unreadable response. Try again.');}
     if(!response.ok)throw failure(value);return value;
@@ -68,7 +79,12 @@ export function httpClient(endpoint:string,token:string):Client {
 }
 export function nativeClient():Client {
   return client(async(operation,request)=>{
-    try{return operation.startsWith('memories/')?await invoke('memory_command',{command:operation.slice(9),request:{contractVersion:1,...request}}):operation==='readiness'?await invoke('get_readiness',{request:{contractVersion:1}}):await invoke('workspace_command',{command:operation,request:{contractVersion:1,...request}});}
+    try{
+      if(operation.startsWith('memories/'))return await invoke('memory_command',{command:operation.slice(9),request:{contractVersion:1,...request}});
+      if(operation.startsWith('relationships/'))return await invoke('relationship_command',{command:operation.slice(14),request:{contractVersion:1,...request}});
+      if(operation==='readiness')return await invoke('get_readiness',{request:{contractVersion:1}});
+      return await invoke('workspace_command',{command:operation,request:{contractVersion:1,...request}});
+    }
     catch(error){throw failure(error);}
   });
 }

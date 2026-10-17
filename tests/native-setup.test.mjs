@@ -10,8 +10,9 @@ test('Rust discovery respects CARGO_HOME without modifying PATH',()=>{
   assert.deepEqual(rustCandidates('rustc','linux',undefined,'user'),['rustc',path.join('user','.cargo','bin','rustc')]);
 });
 test('MSVC installer default mode is read-only and explicitly scoped',()=>{
-  const r=spawnSync('pwsh',['-NoProfile','-File','scripts/install-msvc.ps1'],{cwd:root,encoding:'utf8'});
-  assert.equal(r.status,0,r.stderr);
+  const shell = spawnSync('pwsh', ['--version']).error ? 'powershell' : 'pwsh';
+  const r=spawnSync(shell,['-NoProfile','-ExecutionPolicy','Bypass','-File','scripts/install-msvc.ps1'],{cwd:root,encoding:'utf8'});
+  assert.equal(r.status,0,r.stderr || r.error?.message);
   const p=JSON.parse(r.stdout);
   assert.equal(p.mode,'plan');
   assert.equal(p.url,'https://aka.ms/vs/17/release/vs_BuildTools.exe');

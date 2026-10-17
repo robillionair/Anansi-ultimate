@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "activeMilestone": "M2",
-  "activeTask": "M2.2",
+  "activeTask": "M2.3",
   "plan": "plans/02-memory-system.md",
-  "implementationStatus": "M2.2 verified complete: native/browser notes/lifecycle/history, all implementation CI jobs, protected source publication and independent recovery; stop before M2.3",
+  "implementationStatus": "M2.3 verified complete: all 9 knowledge kinds, type-specific attributes, typed relationships, Schema 5 migration, UI views and cross-adapter verifiers pass",
   "lastVerifiedCommit": "aac601dcee12067a1bbee44b62d72db0a3a6122b",
   "evidence": [
     "docs/evidence/M0.md",
@@ -14,11 +14,12 @@
     "docs/evidence/M1-5.md",
     "docs/evidence/M2-0.md",
     "docs/evidence/M2-1.md",
-    "docs/evidence/M2-2.md"
+    "docs/evidence/M2-2.md",
+    "docs/evidence/M2-3.md"
   ],
   "blockers": [],
-  "nextTask": "M2.3",
-  "nextTaskScope": "Projects, entities and relationships; unstarted",
-  "productImplementation": "M1 foundation plus verified M2.1/M2.2 memory revisions, notes and lifecycle; entities/jobs/export/backups/vault remain later M2 tasks",
+  "nextTask": "M2.4",
+  "nextTaskScope": "Persistent jobs and open-format export; unstarted",
+  "productImplementation": "M1 foundation plus verified M2.1/M2.2/M2.3 memory revisions, notes, lifecycle, entities and typed relationships; M2.4 unstarted",
   "milestoneComplete": false
 }

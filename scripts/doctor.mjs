@@ -76,7 +76,8 @@ foreach ($base in @([Environment]::GetFolderPath('ProgramFilesX86'), [Environmen
 }
 @{cpp=$cpp; registeredSdkRoot=$sdkRoot; sdkRoots=@($sdkRoots | Where-Object {$_} | Select-Object -Unique); webview=($versions.Count -gt 0); webviewVersions=@($versions | Sort-Object -Unique)} | ConvertTo-Json -Compress
 `;
-    const result=run('pwsh',['-NoProfile','-NonInteractive','-Command',script]);
+    let result=run('pwsh',['-NoProfile','-NonInteractive','-Command',script]);
+    if (!result.ok) result=run('powershell.exe',['-NoProfile','-NonInteractive','-Command',script]);
     try {
       native=JSON.parse(result.output);
       native.sdkEvidence=findWindowsSdk(native.sdkRoots ?? []);

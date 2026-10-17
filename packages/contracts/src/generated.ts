@@ -21,9 +21,33 @@ export interface CommandError {
   code: ErrorCode;
   message: string;
 }
+export interface CreateRelationshipRequest {
+  contractVersion: number;
+  draft: RelationshipDraft;
+  workspaceId: string;
+}
+export interface RelationshipDraft {
+  metadata?: {
+    [k: string]: unknown;
+  };
+  predicate: string;
+  sourceId: string;
+  targetId: string;
+}
 export interface CreateWorkspaceRequest {
   contractVersion: number;
   name: string;
+}
+export interface DeleteRelationshipRequest {
+  contractVersion: number;
+  id: string;
+  workspaceId: string;
+}
+export interface ListRelationshipsRequest {
+  contractVersion: number;
+  predicate?: string | null;
+  recordId?: string | null;
+  workspaceId: string;
 }
 export type MemoryState = "proposed" | "confirmed" | "temporary" | "durable" | "superseded" | "archived";
 export type Privacy = "sealed" | "private" | "standard" | "public";
@@ -35,8 +59,10 @@ export interface MemoryDetails {
 }
 export interface MemoryMetadata {
   archivedState?: MemoryState | null;
+  completed?: boolean | null;
   confidence?: number | null;
   createdAt: string;
+  dueDate?: string | null;
   eventDate?: string | null;
   generatorModel?: string | null;
   id: string;
@@ -61,9 +87,12 @@ export interface MemoryMetadata {
 }
 export interface MemoryDraft {
   body: string;
+  completed?: boolean | null;
   confidence?: number | null;
+  dueDate?: string | null;
   eventDate?: string | null;
   privacy?: "sealed" | "private" | "standard" | "public";
+  projectId?: string | null;
   sourceReferences?: string[];
   title: string;
   validFrom?: string | null;
@@ -77,8 +106,10 @@ export interface MemoryList {
 }
 export interface MemoryMetadata {
   archivedState?: MemoryState | null;
+  completed?: boolean | null;
   confidence?: number | null;
   createdAt: string;
+  dueDate?: string | null;
   eventDate?: string | null;
   generatorModel?: string | null;
   id: string;
@@ -114,8 +145,10 @@ export interface MemoryListRequest {
 
 export interface MemoryMetadata {
   archivedState?: MemoryState | null;
+  completed?: boolean | null;
   confidence?: number | null;
   createdAt: string;
+  dueDate?: string | null;
   eventDate?: string | null;
   generatorModel?: string | null;
   id: string;
@@ -159,9 +192,12 @@ export interface MemoryWriteRequest {
 }
 export interface MemoryDraft {
   body: string;
+  completed?: boolean | null;
   confidence?: number | null;
+  dueDate?: string | null;
   eventDate?: string | null;
   privacy?: "sealed" | "private" | "standard" | "public";
+  projectId?: string | null;
   sourceReferences?: string[];
   title: string;
   validFrom?: string | null;
@@ -190,6 +226,55 @@ export interface Readiness {
 }
 export interface ReadinessRequest {
   contractVersion: number;
+}
+export interface RelationshipDetails {
+  contractVersion: number;
+  relationship: RelationshipRecord;
+}
+export interface RelationshipRecord {
+  createdAt: string;
+  id: string;
+  metadata?: {
+    [k: string]: unknown;
+  };
+  predicate: string;
+  sourceId: string;
+  targetId: string;
+  workspaceId: string;
+}
+export interface RelationshipDraft {
+  metadata?: {
+    [k: string]: unknown;
+  };
+  predicate: string;
+  sourceId: string;
+  targetId: string;
+}
+export interface RelationshipList {
+  contractVersion: number;
+  relationships: RelationshipRecord[];
+}
+export interface RelationshipRecord {
+  createdAt: string;
+  id: string;
+  metadata?: {
+    [k: string]: unknown;
+  };
+  predicate: string;
+  sourceId: string;
+  targetId: string;
+  workspaceId: string;
+}
+export interface RelationshipRecord {
+  createdAt: string;
+  id: string;
+  metadata?: {
+    [k: string]: unknown;
+  };
+  predicate: string;
+  sourceId: string;
+  targetId: string;
+  workspaceId: string;
 }
 export type Intent = "second_memory" | "invent_product" | "build_application" | "connect_ai" | "explore";
 

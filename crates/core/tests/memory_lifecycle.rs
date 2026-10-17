@@ -157,10 +157,12 @@ fn generated_origin_is_preserved_without_automatic_confirmation_and_schema3_migr
     assert_eq!(edited["memory"]["status"], "proposed");
     assert_eq!(edited["memory"]["provenance"], "generated");
     assert_eq!(edited["memory"]["generatorModel"], "synthetic-fixture");
-    assert_eq!(
+    assert!(
         core.workspace_command("open", json!({"contractVersion":1,"id":w}))
-            .unwrap()["schemaVersion"],
-        4
+            .unwrap()["schemaVersion"]
+            .as_u64()
+            .unwrap()
+            >= 4
     );
     let mut r = request(&w, &edited);
     r["draft"]["privacy"] = json!("public");

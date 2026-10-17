@@ -8,15 +8,23 @@ $repo = Join-Path $fixture 'source with spaces'
 $null = New-Item -ItemType Directory -Path $repo
 $passed = 0
 function Invoke-FixtureGit([string[]]$Arguments) {
-    $output = & git -C $repo @Arguments 2>&1
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    $output = & git -C $repo -c core.autocrlf=false @Arguments 2>&1
+    $ErrorActionPreference = $prev
     if ($LASTEXITCODE -ne 0) { throw "Fixture git failed: $($output -join ' ')" }
     return ($output -join "`n")
 }
 function Assert([bool]$Condition, [string]$Message) {
     if (-not $Condition) { throw $Message }
 }
+$isWin = if (Get-Variable -Name IsWindows -ErrorAction SilentlyContinue) { $IsWindows } else { $env:OS -eq 'Windows_NT' }
+$shellExe = if (Test-Path (Join-Path $PSHOME 'pwsh.exe')) { Join-Path $PSHOME 'pwsh' } else { Join-Path $PSHOME 'powershell' }
 function Expect-Failure([string]$Name, [string]$Target, [string]$Source = $repo) {
-    $output = & (Join-Path $PSHOME 'pwsh') -NoProfile -File $scriptPath -Repository $Source -Destination $Target 2>&1
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    $output = & $shellExe -NoProfile -ExecutionPolicy Bypass -File $scriptPath -Repository $Source -Destination $Target 2>$null
+    $ErrorActionPreference = $prev
     Assert ($LASTEXITCODE -ne 0) "$Name unexpectedly succeeded"
     $script:passed++
     Write-Output "PASS: $Name refused"
@@ -51,7 +59,7 @@ try {
     Expect-Failure 'modified tracked source' (Join-Path $fixture 'dirty-tracked.bundle')
     $null = Invoke-FixtureGit -Arguments @('restore','source.txt') # Only the known synthetic fixture is restored.
     $bundle = Join-Path $fixture 'source backup.bundle'
-    $output = & (Join-Path $PSHOME 'pwsh') -NoProfile -File $scriptPath -Repository $repo -Destination $bundle 2>&1
+    $output = & $shellExe -NoProfile -ExecutionPolicy Bypass -File $scriptPath -Repository $repo -Destination $bundle 2>&1
     Assert ($LASTEXITCODE -eq 0) "Valid backup failed: $output"
     $record = ($output -join "`n") | ConvertFrom-Json
     Assert ($record.head -eq (Invoke-FixtureGit -Arguments @('rev-parse','HEAD'))) 'Backup checkpoint differs'
@@ -72,14 +80,17 @@ try {
     Expect-Failure 'overwrite' $bundle
     Assert ($before -eq (Get-FileHash -LiteralPath $bundle).Hash) 'Existing backup changed'
     $link = Join-Path $fixture 'linked destination'
-    $null = New-Item -ItemType $(if ($IsWindows) {'Junction'} else {'SymbolicLink'}) -Path $link -Target $repo
+    $null = New-Item -ItemType $(if ($isWin) {'Junction'} else {'SymbolicLink'}) -Path $link -Target $repo
     Expect-Failure 'junction/symlink escape' (Join-Path $link 'escape.bundle')
     $corrupt = Join-Path $fixture 'corrupt.bundle'
     Set-Content -LiteralPath $corrupt -Value 'not a bundle'
-    & git -C $repo bundle verify $corrupt 2>&1 | Out-Null
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    & git -C $repo bundle verify $corrupt 2>$null | Out-Null
     Assert ($LASTEXITCODE -ne 0) 'Corrupt bundle was accepted'
-    & git -C $repo bundle verify (Join-Path $fixture 'absent.bundle') 2>&1 | Out-Null
+    & git -C $repo bundle verify (Join-Path $fixture 'absent.bundle') 2>$null | Out-Null
     Assert ($LASTEXITCODE -ne 0) 'Missing bundle was accepted'
+    $ErrorActionPreference = $prev
     $passed++; Write-Output 'PASS: Git rejects corrupt and missing bundles'
     Write-Output "PASS: $passed backup/recovery checks. Synthetic fixture retained at $fixture"
 } catch {

@@ -12,7 +12,7 @@ use std::{
 };
 
 const APPLICATION_ID: i64 = 0x414e414e;
-const SCHEMA_VERSION: i64 = 4;
+const SCHEMA_VERSION: i64 = 5;
 const ROOT_MARKER: &[u8] = b"ANANSI workspace root v1\n";
 pub const DATABASE_NAME: &str = "workspaces.sqlite3";
 
@@ -230,7 +230,8 @@ impl Storage {
                     include_str!("../migrations/0002_onboarding.sql"),
                     "\n",
                     include_str!("../migrations/0003_memory.sql"),
-                    include_str!("../migrations/0004_lifecycle.sql")
+                    include_str!("../migrations/0004_lifecycle.sql"),
+                    include_str!("../migrations/0005_entities.sql")
                 ),
             )
             .map_err(|_| corrupt())?;
@@ -268,8 +269,14 @@ impl Storage {
                     tx.execute_batch(include_str!("../migrations/0003_memory.sql"))
                         .map_err(|_| corrupt())?;
                 }
-                tx.execute_batch(include_str!("../migrations/0004_lifecycle.sql"))
-                    .map_err(|_| corrupt())?;
+                if locked_version < 4 {
+                    tx.execute_batch(include_str!("../migrations/0004_lifecycle.sql"))
+                        .map_err(|_| corrupt())?;
+                }
+                if locked_version < 5 {
+                    tx.execute_batch(include_str!("../migrations/0005_entities.sql"))
+                        .map_err(|_| corrupt())?;
+                }
                 tx.pragma_update(None, "user_version", SCHEMA_VERSION)
                     .map_err(|_| corrupt())?;
             } else if locked_version != SCHEMA_VERSION {

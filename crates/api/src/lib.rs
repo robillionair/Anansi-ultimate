@@ -23,6 +23,7 @@ pub fn router(state: Arc<ApiState>) -> Router {
         .route("/v1/readiness", post(readiness))
         .route("/v1/workspaces/{operation}", post(workspace))
         .route("/v1/memories/{operation}", post(memory))
+        .route("/v1/relationships/{operation}", post(relationship))
         .fallback(|| async {
             error(
                 StatusCode::NOT_FOUND,
@@ -44,6 +45,9 @@ pub fn command_path(path: &str) -> bool {
             | "/v1/memories/read"
             | "/v1/memories/revise"
             | "/v1/memories/list"
+            | "/v1/relationships/create"
+            | "/v1/relationships/delete"
+            | "/v1/relationships/list"
             | "/v1/readiness"
             | "/v1/workspaces/list"
             | "/v1/workspaces/create"
@@ -173,5 +177,49 @@ async fn readiness(State(state): State<Arc<ApiState>>, request: Request<Body>) -
             Json(value).into_response()
         }
         Err(e) => (StatusCode::BAD_REQUEST, Json(e)).into_response(),
+    }
+}
+async fn relationship(
+    Path(operation): Path<String>,
+    State(state): State<Arc<ApiState>>,
+    request: Request<Body>,
+) -> Response {
+    let bytes = match axum::body::to_bytes(request.into_body(), 64 * 1024).await {
+        Ok(v) => v,
+        Err(_) => {
+            return error(
+                StatusCode::BAD_REQUEST,
+                ErrorCode::InvalidRequest,
+                "Relationship request exceeds its limit.",
+            );
+        }
+    };
+    let input = match serde_json::from_slice(&bytes) {
+        Ok(v) => v,
+        Err(_) => {
+            return error(
+                StatusCode::BAD_REQUEST,
+                ErrorCode::InvalidRequest,
+                "Use the supported relationship request.",
+            );
+        }
+    };
+    match tokio::task::spawn_blocking(move || state.core.relationship_command(&operation, input))
+        .await
+    {
+        Ok(Ok(value)) => Json(value).into_response(),
+        Ok(Err(e)) => {
+            let status = match e.code {
+                ErrorCode::NotFound => StatusCode::NOT_FOUND,
+                ErrorCode::StorageUnavailable => StatusCode::SERVICE_UNAVAILABLE,
+                _ => StatusCode::BAD_REQUEST,
+            };
+            (status, Json(e)).into_response()
+        }
+        Err(_) => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(anansi_core::storage::unavailable()),
+        )
+            .into_response(),
     }
 }

@@ -79,3 +79,26 @@ test('workspace HTTP contracts validate settings and never send paths',async()=>
     globalThis.fetch=async()=>new Response(JSON.stringify({code:'CORRUPT_STORAGE',message:'private path must not be echoed'}),{status:409});await assert.rejects(api.listWorkspaces(),/Keep the original files/);
   }finally{globalThis.fetch=original;}
 });
+test('relationship HTTP/native operations use scoped routes, validated DTOs and reject paths',async()=>{
+  const original=globalThis.fetch;let address='';let body:Record<string,unknown>={};
+  const relDetails={contractVersion:1,relationship:{id:'r'.repeat(32),workspaceId:'w'.repeat(32),sourceId:'s'.repeat(32),targetId:'t'.repeat(32),predicate:'relates_to',createdAt:'2026-10-17T21:00:00.000Z',metadata:{}}};
+  try{
+    globalThis.fetch=async(url,options)=>{address=String(url);body=JSON.parse(options!.body as string);return new Response(JSON.stringify(url.toString().endsWith('/list')?{contractVersion:1,relationships:[relDetails.relationship]}:relDetails));};
+    const client=httpClient('http://127.0.0.1:1451','a'.repeat(64));
+    await client.createRelationship('w'.repeat(32),{sourceId:'s'.repeat(32),targetId:'t'.repeat(32),predicate:'relates_to'});
+    assert.equal(new URL(address).pathname,'/v1/relationships/create');
+    assert.equal(body.workspaceId,'w'.repeat(32));
+    assert.deepEqual(body.draft,{sourceId:'s'.repeat(32),targetId:'t'.repeat(32),predicate:'relates_to'});
+    await client.listRelationships('w'.repeat(32),{recordId:'s'.repeat(32)});
+    assert.equal(new URL(address).pathname,'/v1/relationships/list');
+    await client.deleteRelationship('w'.repeat(32),'r'.repeat(32));
+    assert.equal(new URL(address).pathname,'/v1/relationships/delete');
+  }finally{globalThis.fetch=original;}
+  const window=Object.getOwnPropertyDescriptor(globalThis,'window');let command='',args:unknown;
+  Object.defineProperty(globalThis,'window',{configurable:true,value:{__TAURI_INTERNALS__:{invoke:async(c:string,a:unknown)=>{command=c;args=a;return relDetails;}}}});
+  try{
+    await nativeClient().createRelationship('w'.repeat(32),{sourceId:'s'.repeat(32),targetId:'t'.repeat(32),predicate:'relates_to'});
+    assert.equal(command,'relationship_command');
+    assert.deepEqual(args,{command:'create',request:{contractVersion:1,workspaceId:'w'.repeat(32),draft:{sourceId:'s'.repeat(32),targetId:'t'.repeat(32),predicate:'relates_to'}}});
+  }finally{if(window)Object.defineProperty(globalThis,'window',window);else Reflect.deleteProperty(globalThis,'window');}
+});

@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-relationships"
+description = "Create, delete and list managed local relationships between records in the same workspace"
+commands.allow = ["relationship_command"]

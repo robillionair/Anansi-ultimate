@@ -4,8 +4,9 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $url = 'https://aka.ms/vs/17/release/vs_BuildTools.exe'
 $arguments = @('--quiet','--wait','--norestart','--nocache','--add','Microsoft.VisualStudio.Workload.VCTools','--includeRecommended')
+$isWin = if (Get-Variable -Name IsWindows -ErrorAction SilentlyContinue) { $IsWindows } else { $env:OS -eq 'Windows_NT' }
 $administrator = $false
-if ($IsWindows) {
+if ($isWin) {
     $principal = [Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())
     $administrator = $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
@@ -13,7 +14,7 @@ if (-not $Install) {
     [ordered]@{ mode='plan'; administrator=$administrator; url=$url; arguments=$arguments; next='Run this script with -Install in an already elevated PowerShell. No self-elevation or restart is performed.' } | ConvertTo-Json -Depth 3
     exit 0
 }
-if (-not $IsWindows -or -not $administrator) { Write-Error 'Installation requires an already elevated Windows PowerShell; nothing downloaded or installed'; exit 1 }
+if (-not $isWin -or -not $administrator) { Write-Error 'Installation requires an already elevated Windows PowerShell; nothing downloaded or installed'; exit 1 }
 $directory = Join-Path ([IO.Path]::GetTempPath()) ('anansi-msvc-setup-' + [guid]::NewGuid().ToString('N'))
 $null = New-Item -ItemType Directory -Path $directory
 $installer = Join-Path $directory 'vs_BuildTools.exe'

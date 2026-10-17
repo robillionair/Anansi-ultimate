@@ -40,6 +40,56 @@
     "title": "CommandError",
     "type": "object"
   },
+  "CreateRelationshipRequest": {
+    "$defs": {
+      "RelationshipDraft": {
+        "additionalProperties": false,
+        "properties": {
+          "metadata": {
+            "default": null
+          },
+          "predicate": {
+            "type": "string"
+          },
+          "sourceId": {
+            "type": "string"
+          },
+          "targetId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "sourceId",
+          "targetId",
+          "predicate"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "draft": {
+        "$ref": "#/$defs/RelationshipDraft"
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "workspaceId",
+      "draft"
+    ],
+    "title": "CreateRelationshipRequest",
+    "type": "object"
+  },
   "CreateWorkspaceRequest": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
@@ -61,6 +111,64 @@
     "title": "CreateWorkspaceRequest",
     "type": "object"
   },
+  "DeleteRelationshipRequest": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "id": {
+        "type": "string"
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "workspaceId",
+      "id"
+    ],
+    "title": "DeleteRelationshipRequest",
+    "type": "object"
+  },
+  "ListRelationshipsRequest": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "predicate": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "recordId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "workspaceId"
+    ],
+    "title": "ListRelationshipsRequest",
+    "type": "object"
+  },
   "MemoryDetails": {
     "$defs": {
       "MemoryMetadata": {
@@ -77,6 +185,13 @@
             ],
             "default": null
           },
+          "completed": {
+            "default": null,
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
           "confidence": {
             "format": "double",
             "type": [
@@ -86,6 +201,13 @@
           },
           "createdAt": {
             "type": "string"
+          },
+          "dueDate": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "eventDate": {
             "type": [
@@ -266,10 +388,24 @@
       "body": {
         "type": "string"
       },
+      "completed": {
+        "default": null,
+        "type": [
+          "boolean",
+          "null"
+        ]
+      },
       "confidence": {
         "format": "double",
         "type": [
           "number",
+          "null"
+        ]
+      },
+      "dueDate": {
+        "default": null,
+        "type": [
+          "string",
           "null"
         ]
       },
@@ -282,6 +418,13 @@
       "privacy": {
         "$ref": "#/$defs/Privacy",
         "default": "private"
+      },
+      "projectId": {
+        "default": null,
+        "type": [
+          "string",
+          "null"
+        ]
       },
       "sourceReferences": {
         "default": [],
@@ -329,6 +472,13 @@
             ],
             "default": null
           },
+          "completed": {
+            "default": null,
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
           "confidence": {
             "format": "double",
             "type": [
@@ -338,6 +488,13 @@
           },
           "createdAt": {
             "type": "string"
+          },
+          "dueDate": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "eventDate": {
             "type": [
@@ -599,6 +756,13 @@
         ],
         "default": null
       },
+      "completed": {
+        "default": null,
+        "type": [
+          "boolean",
+          "null"
+        ]
+      },
       "confidence": {
         "format": "double",
         "type": [
@@ -608,6 +772,13 @@
       },
       "createdAt": {
         "type": "string"
+      },
+      "dueDate": {
+        "default": null,
+        "type": [
+          "string",
+          "null"
+        ]
       },
       "eventDate": {
         "type": [
@@ -788,10 +959,24 @@
           "body": {
             "type": "string"
           },
+          "completed": {
+            "default": null,
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
           "confidence": {
             "format": "double",
             "type": [
               "number",
+              "null"
+            ]
+          },
+          "dueDate": {
+            "default": null,
+            "type": [
+              "string",
               "null"
             ]
           },
@@ -804,6 +989,13 @@
           "privacy": {
             "$ref": "#/$defs/Privacy",
             "default": "private"
+          },
+          "projectId": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "sourceReferences": {
             "default": [],
@@ -1002,6 +1194,187 @@
       "contractVersion"
     ],
     "title": "ReadinessRequest",
+    "type": "object"
+  },
+  "RelationshipDetails": {
+    "$defs": {
+      "RelationshipRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "createdAt": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "metadata": {
+            "default": null
+          },
+          "predicate": {
+            "type": "string"
+          },
+          "sourceId": {
+            "type": "string"
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "workspaceId",
+          "sourceId",
+          "targetId",
+          "predicate",
+          "createdAt"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "relationship": {
+        "$ref": "#/$defs/RelationshipRecord"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "relationship"
+    ],
+    "title": "RelationshipDetails",
+    "type": "object"
+  },
+  "RelationshipDraft": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "metadata": {
+        "default": null
+      },
+      "predicate": {
+        "type": "string"
+      },
+      "sourceId": {
+        "type": "string"
+      },
+      "targetId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "sourceId",
+      "targetId",
+      "predicate"
+    ],
+    "title": "RelationshipDraft",
+    "type": "object"
+  },
+  "RelationshipList": {
+    "$defs": {
+      "RelationshipRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "createdAt": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "metadata": {
+            "default": null
+          },
+          "predicate": {
+            "type": "string"
+          },
+          "sourceId": {
+            "type": "string"
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "workspaceId",
+          "sourceId",
+          "targetId",
+          "predicate",
+          "createdAt"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "relationships": {
+        "items": {
+          "$ref": "#/$defs/RelationshipRecord"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "relationships"
+    ],
+    "title": "RelationshipList",
+    "type": "object"
+  },
+  "RelationshipRecord": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "createdAt": {
+        "type": "string"
+      },
+      "id": {
+        "type": "string"
+      },
+      "metadata": {
+        "default": null
+      },
+      "predicate": {
+        "type": "string"
+      },
+      "sourceId": {
+        "type": "string"
+      },
+      "targetId": {
+        "type": "string"
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "id",
+      "workspaceId",
+      "sourceId",
+      "targetId",
+      "predicate",
+      "createdAt"
+    ],
+    "title": "RelationshipRecord",
     "type": "object"
   },
   "UpdateSettingsRequest": {

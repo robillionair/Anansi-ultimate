@@ -2,6 +2,10 @@ use anansi_core::memory::{
     MemoryDetails, MemoryDraft, MemoryList, MemoryListRequest, MemoryMetadata, MemoryReadRequest,
     MemoryWriteRequest,
 };
+use anansi_core::relationships::{
+    CreateRelationshipRequest, DeleteRelationshipRequest, ListRelationshipsRequest,
+    RelationshipDetails, RelationshipDraft, RelationshipList, RelationshipRecord,
+};
 use anansi_core::workspace::{
     CreateWorkspaceRequest, OpenWorkspaceRequest, UpdateSettingsRequest, WorkspaceDetails,
     WorkspaceList,
@@ -16,6 +20,13 @@ fn main() {
         "MemoryListRequest":schemars::schema_for!(MemoryListRequest),
         "MemoryReadRequest":schemars::schema_for!(MemoryReadRequest),
         "MemoryWriteRequest":schemars::schema_for!(MemoryWriteRequest),
+        "RelationshipDraft":schemars::schema_for!(RelationshipDraft),
+        "RelationshipRecord":schemars::schema_for!(RelationshipRecord),
+        "RelationshipDetails":schemars::schema_for!(RelationshipDetails),
+        "RelationshipList":schemars::schema_for!(RelationshipList),
+        "CreateRelationshipRequest":schemars::schema_for!(CreateRelationshipRequest),
+        "DeleteRelationshipRequest":schemars::schema_for!(DeleteRelationshipRequest),
+        "ListRelationshipsRequest":schemars::schema_for!(ListRelationshipsRequest),
         "Readiness":schemars::schema_for!(Readiness),
         "ReadinessRequest":schemars::schema_for!(ReadinessRequest),
         "CommandError":schemars::schema_for!(CommandError),

@@ -1,7 +1,10 @@
 // Generated from Rust schemas.
-import type {CommandError,CreateWorkspaceRequest,MemoryDetails,MemoryDraft,MemoryList,MemoryListRequest,MemoryMetadata,MemoryReadRequest,MemoryWriteRequest,OpenWorkspaceRequest,Readiness,ReadinessRequest,UpdateSettingsRequest,WorkspaceDetails,WorkspaceList} from './generated';
+import type {CommandError,CreateRelationshipRequest,CreateWorkspaceRequest,DeleteRelationshipRequest,ListRelationshipsRequest,MemoryDetails,MemoryDraft,MemoryList,MemoryListRequest,MemoryMetadata,MemoryReadRequest,MemoryWriteRequest,OpenWorkspaceRequest,Readiness,ReadinessRequest,RelationshipDetails,RelationshipDraft,RelationshipList,RelationshipRecord,UpdateSettingsRequest,WorkspaceDetails,WorkspaceList} from './generated';
 export function validError(value:unknown):value is CommandError;
+export function validCreateRelationshipRequest(value:unknown):value is CreateRelationshipRequest;
 export function validCreateWorkspaceRequest(value:unknown):value is CreateWorkspaceRequest;
+export function validDeleteRelationshipRequest(value:unknown):value is DeleteRelationshipRequest;
+export function validListRelationshipsRequest(value:unknown):value is ListRelationshipsRequest;
 export function validMemoryDetails(value:unknown):value is MemoryDetails;
 export function validMemoryDraft(value:unknown):value is MemoryDraft;
 export function validMemoryList(value:unknown):value is MemoryList;
@@ -12,6 +15,10 @@ export function validMemoryWriteRequest(value:unknown):value is MemoryWriteReque
 export function validOpenWorkspaceRequest(value:unknown):value is OpenWorkspaceRequest;
 export function validReadiness(value:unknown):value is Readiness;
 export function validReadinessRequest(value:unknown):value is ReadinessRequest;
+export function validRelationshipDetails(value:unknown):value is RelationshipDetails;
+export function validRelationshipDraft(value:unknown):value is RelationshipDraft;
+export function validRelationshipList(value:unknown):value is RelationshipList;
+export function validRelationshipRecord(value:unknown):value is RelationshipRecord;
 export function validUpdateSettingsRequest(value:unknown):value is UpdateSettingsRequest;
 export function validWorkspaceDetails(value:unknown):value is WorkspaceDetails;
 export function validWorkspaceList(value:unknown):value is WorkspaceList;

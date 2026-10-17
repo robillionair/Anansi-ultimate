@@ -8,7 +8,10 @@ $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
 
 function Invoke-SourceGit([string[]]$Arguments) {
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
     $output = & git -C $Repository @Arguments 2>&1
+    $ErrorActionPreference = $prev
     if ($LASTEXITCODE -ne 0) { throw "Git $($Arguments[0]) failed: $($output -join ' ')" }
     return ($output -join "`n")
 }
@@ -23,14 +26,20 @@ function Assert-NoLinks([string]$ExistingPath) {
     }
 }
 function Test-Inside([string]$Candidate, [string]$Directory) {
-    $comparison = if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
+    $isWin = if (Get-Variable -Name IsWindows -ErrorAction SilentlyContinue) { $IsWindows } else { $env:OS -eq 'Windows_NT' }
+    $comparison = if ($isWin) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
     $base = $Directory.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
     return $Candidate.Equals($base, $comparison) -or $Candidate.StartsWith($base + [IO.Path]::DirectorySeparatorChar, $comparison)
 }
 
 $temporary = $null
 try {
-    if (-not [IO.Path]::IsPathFullyQualified($Destination)) { throw 'Destination must be an explicit absolute path' }
+    $isFullyQualified = if ([Type]::GetType('System.IO.Path').GetMethod('IsPathFullyQualified')) {
+        [IO.Path]::IsPathFullyQualified($Destination)
+    } else {
+        [IO.Path]::IsPathRooted($Destination) -and [IO.Path]::GetPathRoot($Destination).Length -ge 2
+    }
+    if (-not $isFullyQualified) { throw 'Destination must be an explicit absolute path' }
     $target = [IO.Path]::GetFullPath($Destination)
     if ([IO.Path]::GetExtension($target) -ne '.bundle') { throw 'Destination must end in .bundle' }
     if (Get-Item -LiteralPath $target -Force -ErrorAction SilentlyContinue) { throw 'Destination already exists; overwrite refused' }
