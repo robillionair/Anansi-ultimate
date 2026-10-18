@@ -1,5 +1,6 @@
 pub mod readiness;
 pub use readiness::*;
+pub mod backup;
 pub mod content;
 pub mod entities;
 pub mod export;
@@ -8,6 +9,7 @@ pub mod lifecycle;
 pub mod memory;
 pub mod privacy;
 pub mod relationships;
+pub mod restore;
 pub mod settings;
 pub mod storage;
 pub mod workspace;

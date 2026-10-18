@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
   "activeMilestone": "M2",
-  "activeTask": "M2.4",
+  "activeTask": "M2.5",
   "plan": "plans/02-memory-system.md",
-  "implementationStatus": "M2.4 local acceptance verified at 8f7ff87; exact-SHA CI, protected publication and final independent source restore were pending at metadata authoring; inspect docs/evidence/M2-4.md and source-verification.json",
-  "lastVerifiedCommit": "8f7ff87a8ef55a6ccf6c1384f0c9700b12db2b53",
+  "implementationStatus": "M2.5 started: shared versioned backup manifest, member integrity verification and fresh-target restore boundary; adapters and full acceptance remain open",
+  "lastVerifiedCommit": "eb3455ddc744acd890e57f38810b2d7ce2d5d4fc",
   "evidence": [
     "docs/evidence/M0.md",
     "docs/evidence/M1.md",
@@ -17,10 +17,11 @@
     "docs/evidence/M2-2.md",
     "docs/evidence/M2-3.md",
     "docs/evidence/M2-4.md"
+    ,"docs/evidence/M2-5.md"
   ],
   "blockers": [],
   "nextTask": "M2.5",
-  "nextTaskScope": "Full snapshots, backups and restore preview; unstarted. Verify M2.4 publication/source ledger before continuing.",
+  "nextTaskScope": "Complete selected-workspace snapshots, scheduling, adapters and native/browser restore preview; in progress.",
   "productImplementation": "M1 and M2.1-M2.4 verified subsets: local memory/lifecycle/entities, reversible relationship history/project membership, persistent six-state export jobs and owned portable knowledge archives. Full backups, audited vault and M2 certification remain required.",
   "milestoneComplete": false
 }
