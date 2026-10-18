@@ -12,6 +12,12 @@ pub fn preview(root: &Path) -> Result<BackupPreview, CommandError> {
 }
 
 pub fn restore_to_new_target(source: &Path, target: &Path) -> Result<BackupPreview, CommandError> {
+    if source == target {
+        return Err(crate::CommandError::new(
+            crate::ErrorCode::InvalidRequest,
+            "Restore source and target must be different.",
+        ));
+    }
     let preview = read_and_verify(source)?;
     reject_links(target).map_err(|_| {
         crate::CommandError::new(

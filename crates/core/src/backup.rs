@@ -63,6 +63,9 @@ fn safe_member(path: &str) -> Result<PathBuf, CommandError> {
     {
         return Err(invalid("Backup member path is unsafe."));
     }
+    if path == "manifest.json" {
+        return Err(invalid("Backup manifest is reserved."));
+    }
     Ok(candidate.to_path_buf())
 }
 

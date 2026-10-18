@@ -58,3 +58,12 @@ fn refuses_tampered_members_and_duplicate_paths() {
     backup::write_manifest(&source, &manifest).unwrap();
     assert!(restore::preview(&source).is_err());
 }
+
+#[test]
+fn refuses_manifest_member_and_source_target_collision() {
+    let root = tempdir().unwrap();
+    let source = root.path().join("source");
+    fs::create_dir_all(&source).unwrap();
+    assert!(backup::copy_member(&source.join("missing"), &source, "manifest.json").is_err());
+    assert!(restore::restore_to_new_target(&source, &source).is_err());
+}
