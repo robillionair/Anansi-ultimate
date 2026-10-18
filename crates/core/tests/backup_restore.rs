@@ -1,5 +1,5 @@
 use anansi_core::{
-    backup::{self, BACKUP_FORMAT, BACKUP_VERSION, BackupManifest},
+    backup::{self, BACKUP_FORMAT, BACKUP_VERSION, BackupCatalog, BackupManifest},
     restore,
 };
 use chrono::Utc;
@@ -66,4 +66,21 @@ fn refuses_manifest_member_and_source_target_collision() {
     fs::create_dir_all(&source).unwrap();
     assert!(backup::copy_member(&source.join("missing"), &source, "manifest.json").is_err());
     assert!(restore::restore_to_new_target(&source, &source).is_err());
+}
+
+#[test]
+fn writes_and_reads_workspace_scoped_catalog() {
+    let root = tempdir().unwrap();
+    let catalog = BackupCatalog {
+        format: BACKUP_FORMAT.to_owned(),
+        format_version: BACKUP_VERSION,
+        workspace_id: "0123456789abcdef0123456789abcdef".to_owned(),
+        workspace_name: "Workspace A".to_owned(),
+        settings: serde_json::json!({"reducedMotion": true}),
+        records: vec![serde_json::json!({"id":"record-a"})],
+        relationships: vec![],
+    };
+    let member = backup::write_catalog(root.path(), &catalog).unwrap();
+    assert_eq!(member.path, "catalog.json");
+    assert_eq!(backup::read_catalog(root.path()).unwrap(), catalog);
 }

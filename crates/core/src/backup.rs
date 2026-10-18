@@ -36,6 +36,18 @@ pub struct BackupManifest {
     pub members: Vec<BackupMember>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct BackupCatalog {
+    pub format: String,
+    pub format_version: u32,
+    pub workspace_id: String,
+    pub workspace_name: String,
+    pub settings: serde_json::Value,
+    pub records: Vec<serde_json::Value>,
+    pub relationships: Vec<serde_json::Value>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct BackupPreview {
@@ -90,6 +102,44 @@ pub fn write_manifest(root: &Path, manifest: &BackupManifest) -> Result<(), Comm
     }
     fs::write(root.join("manifest.json"), data)
         .map_err(|_| invalid("Backup manifest cannot be written."))
+}
+
+pub fn write_catalog(root: &Path, catalog: &BackupCatalog) -> Result<BackupMember, CommandError> {
+    validate_id(&catalog.workspace_id)?;
+    if catalog.format != BACKUP_FORMAT || catalog.format_version != BACKUP_VERSION {
+        return Err(invalid("Unsupported backup format."));
+    }
+    let path = root.join("catalog.json");
+    if path.exists() {
+        return Err(invalid("Backup catalog overwrite is refused."));
+    }
+    let bytes = serde_json::to_vec_pretty(catalog)
+        .map_err(|_| invalid("Backup catalog cannot be encoded."))?;
+    if bytes.len() as u64 > MAX_MANIFEST_BYTES {
+        return Err(invalid("Backup catalog is too large."));
+    }
+    fs::write(&path, bytes).map_err(|_| invalid("Backup catalog cannot be written."))?;
+    let (bytes, sha256) = digest(&path)?;
+    Ok(BackupMember {
+        path: "catalog.json".to_owned(),
+        bytes,
+        sha256,
+    })
+}
+
+pub fn read_catalog(root: &Path) -> Result<BackupCatalog, CommandError> {
+    let bytes =
+        fs::read(root.join("catalog.json")).map_err(|_| invalid("Backup catalog is missing."))?;
+    if bytes.len() as u64 > MAX_MANIFEST_BYTES {
+        return Err(invalid("Backup catalog is too large."));
+    }
+    let catalog: BackupCatalog =
+        serde_json::from_slice(&bytes).map_err(|_| invalid("Backup catalog is invalid."))?;
+    if catalog.format != BACKUP_FORMAT || catalog.format_version != BACKUP_VERSION {
+        return Err(invalid("Unsupported backup format."));
+    }
+    validate_id(&catalog.workspace_id)?;
+    Ok(catalog)
 }
 
 pub fn read_and_verify(root: &Path) -> Result<BackupPreview, CommandError> {
