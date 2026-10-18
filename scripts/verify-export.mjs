@@ -22,7 +22,7 @@ const binary = process.argv.slice(2).find(argument => !argument.startsWith('--')
 let api, desktop, preview, nativeBrowser, webBrowser, nativePage, webPage, pairing, pairingFile, dialog;
 
 async function kill(child) {
-  if (child && child.exitCode === null) {
+  if (child && child.exitCode === null && child.signalCode === null) {
     const stopped = new Promise(resolve => child.once('exit', resolve));
     child.kill();
     await stopped;
@@ -72,7 +72,7 @@ async function stopApi() {
 }
 
 async function ownedSaveDialogPid() {
-  const query=spawn('powershell.exe',['-NoProfile','-NonInteractive','-Command',"$ErrorActionPreference='Stop'; Get-CimInstance Win32_Process -Filter ('ParentProcessId='+[int]$env:ANANSI_EXPORT_DESKTOP_PID) | Where-Object { $_.Name -eq 'powershell.exe' -and $_.CommandLine -like '*SaveFileDialog*' -and $_.CommandLine -like '*Save complete knowledge export*' } | ForEach-Object { $dialogProcess=[Diagnostics.Process]::GetProcessById($_.ProcessId); if($dialogProcess.MainWindowTitle -like 'Save complete knowledge export*'){Write-Output $_.ProcessId} }"],{windowsHide:true,env:{...process.env,ANANSI_EXPORT_DESKTOP_PID:String(desktop.pid)},stdio:['ignore','pipe','ignore']});
+  const query=spawn('powershell.exe',['-NoProfile','-NonInteractive','-Command',"$ErrorActionPreference='Stop'; Add-Type -AssemblyName UIAutomationClient; Add-Type -AssemblyName UIAutomationTypes; Get-CimInstance Win32_Process -Filter ('ParentProcessId='+[int]$env:ANANSI_EXPORT_DESKTOP_PID) | Where-Object { $_.Name -eq 'powershell.exe' -and $_.CommandLine -like '*SaveFileDialog*' -and $_.CommandLine -like '*Save complete knowledge export*' } | ForEach-Object { $ownedId=[int]$_.ProcessId; $condition=[System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ProcessIdProperty,$ownedId); $windows=[System.Windows.Automation.AutomationElement]::RootElement.FindAll([System.Windows.Automation.TreeScope]::Children,$condition); foreach($window in $windows){if($window.Current.Name -like 'Save complete knowledge export*' -and -not $window.Current.IsOffscreen){Write-Output $ownedId}} }"],{windowsHide:true,env:{...process.env,ANANSI_EXPORT_DESKTOP_PID:String(desktop.pid)},stdio:['ignore','pipe','ignore']});
   let output='';query.stdout.on('data',data=>output+=data);
   await new Promise((resolve,reject)=>{query.once('error',reject);query.once('exit',code=>code===0?resolve():reject(Error('Owned Save dialog query failed')));});
   const pid=Number(output.trim());return Number.isSafeInteger(pid)&&pid>0?pid:undefined;
@@ -198,14 +198,19 @@ try {
   const browserDestination = path.join(root, 'browser.tar');
   await downloadExport(webPage, browserJob, browserDestination);
   const browserInspection = inspectExport(browserDestination, 'Browser');
+  console.log('PASS: native saved archive and browser download retain the correct selected project and revisions.');
 
   // Interrupt an actual second Save dialog without choosing a file. Its real
   // parent monitor must terminate it; test cleanup must not hide this assertion.
   await nativePage.locator(`[data-job-id="${nativeJob}"]`).getByRole('button',{name:'Save complete export',exact:true}).click();
   let pendingDialog;
   await expect.poll(async()=>{pendingDialog=await ownedSaveDialogPid();return Boolean(pendingDialog);},{timeout:30000}).toBe(true);
+  console.log('Observed the owned pending native Save dialog.');
+  await nativeBrowser.close();
+  nativeBrowser=null;
   await kill(desktop);
   await expect.poll(()=>{try{process.kill(pendingDialog,0);return true;}catch{return false;}},{timeout:10000}).toBe(false);
+  console.log('PASS: the pending native Save dialog exits with its desktop parent.');
   await stopDesktop();
   await stopApi();
   await startApi();
