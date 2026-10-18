@@ -18,8 +18,12 @@
     "docs/evidence/M2-3.md",
     "docs/evidence/M2-4.md"
     ,"docs/evidence/M2-5.md"
+    ,"docs/evidence/M2-6.md"
   ],
-  "blockers": [],
+  "blockers": [
+    {"scope": "M2.5", "detail": "Selected-workspace snapshot assembly, scheduling, adapters and end-to-end acceptance remain incomplete."},
+    {"scope": "M2.6", "detail": "Vault security design awaits explicit approval before any cryptographic implementation."}
+  ],
   "nextTask": "M2.5",
   "nextTaskScope": "Complete selected-workspace snapshots, scheduling, adapters and native/browser restore preview; in progress.",
   "productImplementation": "M1 and M2.1-M2.4 verified subsets: local memory/lifecycle/entities, reversible relationship history/project membership, persistent six-state export jobs and owned portable knowledge archives. Full backups, audited vault and M2 certification remain required.",
