@@ -87,8 +87,10 @@ Schema 4 retains original bodies/revisions and introduces a semantic compatibili
 
 M2.3 extends the same memory catalog/contracts/adapters to all nine knowledge kinds. The acceptance repair uses schema 6: stable typed edge IDs, immutable relationship revisions, reversible archive/restore and optimistic expectedVersion actions. Historical record reads retain their saved link snapshot; separate edge history records later actions. Project IDs resolve only to same-workspace projects; omission preserves an assignment and explicit null clears it. See ADR-0019 and [repair evidence](evidence/M2-3.md). Jobs/export, backups and vault remain later M2 tasks; the master specification is unchanged.
 
-## M2.4 jobs and portable export — verification pending
+## M2.4 jobs and portable export — locally verified
 
 Schema 7 adds durable workspace-owned export jobs. Shared Rust services own claims, leases, state transitions, resource limits, immutable attempt files and fenced completion. Both adapters use the same generated job DTOs; the React jobs view remains responsive while a background worker performs catalog/file work. Expired Running jobs pause instead of silently resuming. Checkpoints version the idempotent snapshot stage, not individual imported/output effects.
 
 Exports are owned complete USTAR artifacts with Markdown revisions, hashes and a versioned JSON manifest. Selected project membership is current; selected record history remains complete within the byte bound. Cross-selection references are opaque and do not broaden disclosure. Native files stay in managed private storage until the trusted system Save dialog; HTTP supports only bounded owned-artifact chunks. See ADR-0020 and [M2.4 evidence](evidence/M2-4.md). Backups, product restore and vault remain separate tasks.
+
+M2.4 local workflows and recovery behavior passed at 8f7ff87; exact CI/publication/source restoration are tracked in its evidence/independent ledger. The native dialog exits with its actual desktop parent; final verification observed that exit before cleanup. No generic browser filesystem/process grant was added.

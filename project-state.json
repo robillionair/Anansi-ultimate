@@ -3,8 +3,8 @@
   "activeMilestone": "M2",
   "activeTask": "M2.4",
   "plan": "plans/02-memory-system.md",
-  "implementationStatus": "M2.4 implementation in progress; core recovery/export tests passed, full acceptance and actual application verification pending",
-  "lastVerifiedCommit": "5b83338d08884349558a7145de9a5f30c75dd469",
+  "implementationStatus": "M2.4 local acceptance verified at 8f7ff87; exact-SHA CI, protected publication and final independent source restore were pending at metadata authoring; inspect docs/evidence/M2-4.md and source-verification.json",
+  "lastVerifiedCommit": "8f7ff87a8ef55a6ccf6c1384f0c9700b12db2b53",
   "evidence": [
     "docs/evidence/M0.md",
     "docs/evidence/M1.md",
@@ -19,8 +19,8 @@
     "docs/evidence/M2-4.md"
   ],
   "blockers": [],
-  "nextTask": "M2.4",
-  "nextTaskScope": "Complete and verify persistent jobs and open-format export before starting M2.5",
-  "productImplementation": "M1 foundation plus verified M2.1/M2.2/M2.3 memory revisions, notes, lifecycle, entities, versioned reversible relationships and valid project membership; M2.4 unstarted",
+  "nextTask": "M2.5",
+  "nextTaskScope": "Full snapshots, backups and restore preview; unstarted. Verify M2.4 publication/source ledger before continuing.",
+  "productImplementation": "M1 and M2.1-M2.4 verified subsets: local memory/lifecycle/entities, reversible relationship history/project membership, persistent six-state export jobs and owned portable knowledge archives. Full backups, audited vault and M2 certification remain required.",
   "milestoneComplete": false
 }
