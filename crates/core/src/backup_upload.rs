@@ -56,8 +56,11 @@ impl Core {
             {
                 return Err(invalid());
             }
-            let db = storage.connection(false)?.ok_or_else(unavailable)?;
-            let count: u32 = db
+            let mut db = storage.connection(false)?.ok_or_else(unavailable)?;
+            let tx = db
+                .transaction_with_behavior(TransactionBehavior::Immediate)
+                .map_err(|_| unavailable())?;
+            let count: u32 = tx
                 .query_row(
                     "SELECT count(*) FROM backup_uploads WHERE workspace_id=?1",
                     [&r.workspace_id],
@@ -71,7 +74,8 @@ impl Core {
             let path =
                 crate::export::directory(storage, &r.workspace_id)?.join(format!("{id}.upload"));
             crate::snapshots::new_file(&path)?;
-            db.execute("INSERT INTO backup_uploads(workspace_id,id,expected_bytes,expected_hash) VALUES(?1,?2,?3,?4)",params![r.workspace_id,id,r.bytes,r.sha256]).map_err(|_|unavailable())?;
+            tx.execute("INSERT INTO backup_uploads(workspace_id,id,expected_bytes,expected_hash) VALUES(?1,?2,?3,?4)",params![r.workspace_id,id,r.bytes,r.sha256]).map_err(|_|unavailable())?;
+            tx.commit().map_err(|_| unavailable())?;
             UploadStatus {
                 contract_version: 1,
                 id,
@@ -82,6 +86,7 @@ impl Core {
             let r: UploadPart = serde_json::from_value(input).map_err(|_| invalid())?;
             crate::workspace::validate_id(&r.workspace_id)?;
             crate::workspace::validate_id(&r.id)?;
+            storage.open(&r.workspace_id)?;
             if r.bytes.len() > 65536 {
                 return Err(invalid());
             }

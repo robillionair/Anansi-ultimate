@@ -13,6 +13,8 @@ export async function roundTripSavedBackup(page,jobId,root){
   for(const member of manifest.members){const bytes=fs.readFileSync(path.join(extracted,member.path));expect(bytes.length).toBe(member.bytes);expect(createHash('sha256').update(bytes).digest('hex')).toBe(member.sha256);}
   expect(manifest.members.some(m=>m.path==='catalog.sqlite3')).toBe(true);
   await button(page,'Backups').click();await page.getByLabel('I consent to a plaintext copy',{exact:false}).check();
+  await page.getByLabel('Saved backup file',{exact:true}).setInputFiles({name:'invalid.tar',mimeType:'application/x-tar',buffer:Buffer.alloc(1024)});
+  await button(page,'Import saved backup').click();await expect(page.getByRole('alert')).toBeVisible({timeout:120000});
   await page.getByLabel('Saved backup file',{exact:true}).setInputFiles(destination);await button(page,'Import saved backup').click();
   await expect(page.getByRole('status').filter({hasText:'Saved backup verified.'})).toBeVisible({timeout:120000});
   const imported=await page.getByRole('region',{name:'Back up and recover'}).getAttribute('data-created-backup-id');expect(imported).toMatch(/^[a-f0-9]{32}$/);expect(imported).not.toBe(jobId);

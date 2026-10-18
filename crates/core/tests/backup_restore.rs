@@ -29,7 +29,7 @@ fn real_catalog_snapshot_restores_settings_history_edges_and_preserves_originals
     core.workspace_command("settings",json!({"contractVersion":1,"id":w,"reducedMotion":true,"intent":"build_application","onboardingComplete":true})).unwrap();
     core.memory_command("create",json!({"contractVersion":1,"workspaceId":other,"draft":{"title":"Other secret","body":"excluded bytes"}})).unwrap();
     let first=core.memory_command("create",json!({"contractVersion":1,"workspaceId":w,"kind":"note","draft":{"title":"Snapshot note","body":"first revision"}})).unwrap();
-    let next=core.memory_command("revise",json!({"contractVersion":1,"workspaceId":w,"id":first["memory"]["id"],"expectedRevision":first["memory"]["revisionId"],"draft":{"title":"Snapshot note","body":"second revision"}})).unwrap();
+    let next=core.memory_command("revise",json!({"contractVersion":1,"workspaceId":w,"id":first["memory"]["id"],"expectedRevision":first["memory"]["revisionId"],"draft":{"title":"Snapshot note","body":"second revision"},"lifecycle":{"state":"confirmed","confirmed":true}})).unwrap();
     let person=core.memory_command("create",json!({"contractVersion":1,"workspaceId":w,"kind":"person","draft":{"title":"Snapshot person","body":"contact"}})).unwrap();
     core.relationship_command("create",json!({"contractVersion":1,"workspaceId":w,"draft":{"sourceId":first["memory"]["id"],"targetId":person["memory"]["id"],"predicate":"references"}})).unwrap();
     let store = Storage::new(root.clone()).unwrap();
@@ -90,6 +90,7 @@ fn real_catalog_snapshot_restores_settings_history_edges_and_preserves_originals
         )
         .unwrap();
     assert_eq!(detail["body"], "second revision");
+    assert_eq!(detail["memory"]["status"], "confirmed");
     assert_ne!(detail["memory"]["revisionId"], next["memory"]["revisionId"]);
     let history = reopen
         .memory_command(

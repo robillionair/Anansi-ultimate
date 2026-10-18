@@ -164,6 +164,11 @@ try {
   const imported=await roundTripSavedBackup(webPage,browserJob,root);
   const browserRestored=await restoreBackup(webPage,imported,'Browser recovered');
   await checkBackup(webPage,'Native');
+  await nativePage.getByRole('button',{name:'Backups',exact:true}).click();
+  await nativePage.getByLabel('I consent to a plaintext copy',{exact:false}).check();
+  await nativePage.getByLabel('Saved backup file',{exact:true}).setInputFiles(path.join(root,'backup-roundtrip.tar'));
+  await nativePage.getByRole('button',{name:'Import saved backup',exact:true}).click();
+  await expect(nativePage.getByRole('status').filter({hasText:'Saved backup verified.'})).toBeVisible({timeout:120000});
   if(nativeRestored===original||browserRestored===original||nativeRestored===browserRestored)throw Error('Restore reused workspace IDs');
   await stopDesktop();await stopApi();await startApi();await startDesktop();observe(nativePage,true);await pairBrowser();
   await open(nativePage,nativeRestored);await open(webPage,browserRestored);

@@ -4,6 +4,9 @@ const expect=baseExpect.configure({timeout:30000});
 const button=(p,name)=>p.getByRole('button',{name,exact:true});
 
 export async function prepareBackup(page,label,createData=true){
+  await button(page,'Settings').click();
+  const startingPoint=page.getByRole('radio',{name:/Build an application/});
+  if(!await startingPoint.isChecked()){await startingPoint.check();await button(page,'Save starting point').click();await expect(page.getByRole('status').filter({hasText:'Workspace preferences saved.'})).toBeVisible();await expect(button(page,'Save starting point')).toBeDisabled();}
   if(createData)await prepareEntities(page,label);
   await button(page,'Backups').click();
   await expect(button(page,'Create backup')).toBeDisabled();
@@ -45,4 +48,9 @@ export async function restoreBackup(page,jobId,name){
   const fresh=await page.locator('.workspace-id code').innerText();
   return fresh;
 }
-export async function checkBackup(page,label){await checkEntities(page,label);}
+export async function checkBackup(page,label){
+  await checkEntities(page,label);
+  await button(page,'Settings').click();
+  await expect(page.getByRole('radio',{name:/Build an application/})).toBeChecked();
+  await expect(button(page,'Turn reduced motion on')).toBeVisible();
+}
