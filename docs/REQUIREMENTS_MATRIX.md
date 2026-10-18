@@ -43,7 +43,7 @@ Milestones now follow the approved canonical roadmap and master section 82. Plan
 | AN-028 | Unified lifecycle and Launch Studio | M12 | planned | Section 85 workflow; real approval before publishing |
 | AN-029 | Persistent jobs and recovery | M2, M3, M6, M13 | in progress | M2.4 export-handler six states, leases, headless wake-up, cancel/retry/restart, ownership and resource limits verified: [evidence](evidence/M2-4.md); remaining job categories stay in their owning milestones |
 | AN-030 | Native macOS/Apple Silicon, updates/credential vaults | M14, M15 | planned | Native signed installation/update and offline verification |
-| AN-031 | Encryption, privacy classes, optional audited vault | M2, M15 | in progress | M2.1 native privacy, Sealed refusal and plaintext disclosure: [evidence](evidence/M2-1.md); audited vault remains M2.6/M2.7 |
+| AN-031 | Encryption, privacy classes, optional audited vault | M2, M15 | in progress | M2.1 native privacy, Sealed refusal and plaintext disclosure: [evidence](evidence/M2-1.md); [M2.6 reconciliation](evidence/M2-6.md) preserves approval and records adopted corrections G2–G4 and open audit gate G1. M2.7 encryption remains unimplemented; no verified encryption claim |
 | AN-032 | Performance, accessibility, engine evaluation | M3–M15 | planned | 1k/10k/100k datasets, engine suites, keyboard/2D fallback evidence |
 | AN-033 | Export/ownership and synthetic provenance | M2–M15 | in progress | M2.1 readable Markdown/user provenance/Proposed state: [evidence](evidence/M2-1.md); exports/engine scope remain later tasks |
 

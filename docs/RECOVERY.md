@@ -1,5 +1,9 @@
 # ANANSI Ultimate — Recovery Guide
 
+## Current resume gate — M2.6
+
+Published M2.5 checkpoint `6c193ef8c9891e966c547451b4e01b7db74215b4` passed all three implementation/checkpoint CI jobs and independent source recovery. Read [the M2.6 reconciliation](../plans/M2-vault-security.md) and [evidence](evidence/M2-6.md). The user's conditional approval is preserved; [the corrections](approvals/M2-6-corrections.md) are adopted and G1 audit evidence remains open, not an absent approval. Do not add crypto dependencies, run sealed migrations, purge staging, reset a vault or start M3 while that condition remains unresolved. No vault exists in schema 8. Source bundles cannot recover private application data or future recovery keys.
+
 ## M2.5 backup recovery
 
 Schema 8 requires a compatible binary; never downgrade a live root. Preserve the original closed root and use a fresh compatible copy when recovering. Source bundles exclude private catalogs and are distinct from application backups.

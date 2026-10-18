@@ -2,7 +2,9 @@
 
 ## Current state — 2026-10-18
 
-M2.5 local acceptance passed at `cfc28af296ed5adcf8f5d557cd61c23008286843`: coherent workspace/application catalog snapshots, opt-in scheduling, owned saved-file import, strict preview and fresh restore through shared native/browser adapters. All 12 browser tests and actual native/browser restart workflows passed within their recorded scopes; see [M2.5 evidence](evidence/M2-5.md). Exact-source CI, protected publication and final independent source recovery are pending at metadata authoring; their final results are recorded in the permanent source-verification.json ledger referenced there. M2 remains incomplete. This task stops after M2.5; no vault/crypto or M3 work was started.
+M2.5 is verified and published at `6c193ef8c9891e966c547451b4e01b7db74215b4` (implementation `cfc28af`). All three implementation and checkpoint CI jobs passed, including native backup workflows and unsigned installer verification; protected master and independent source recovery are verified. See [M2.5 evidence](evidence/M2-5.md) and its permanent ledger. M2 remains incomplete.
+
+Current task: M2.6 security-design reconciliation. The user's conditional M2.7 approval is preserved in [the original contract](approvals/M2-6-user-contract.md), correcting the obsolete awaiting-approval claim. [The detailed plan](../plans/M2-vault-security.md) and [review evidence](evidence/M2-6.md) record official source/version checks and the adopted [contract corrections](approvals/M2-6-corrections.md). G2–G4 are resolved at design level; G1 audit coverage remains open. No crypto dependency, vault code, schema change or secret-store write was added. M2.7 is blocked on that audit evidence; no repeated blanket user approval is needed. Stop at M2.6.
 
 M0 and M1.0–M1.5 are verified complete. M1 completion checkpoint 97babb3ae9f3dc20b5602a7b46a947e833943eb2 passed all three CI jobs in run 38955878511, was published to protected master and tagged m1-desktop-foundation-verified. Final source bundle restored identical HEAD/tree/tag and passed documentation checks. The downloaded CI installer passed the full local installed-release native/browser workflow and data-preserving uninstall.
 
@@ -23,7 +25,7 @@ M2.3 acceptance repair is verified at implementation checkpoint 5b83338d08884349
 
 M1 is development-foundation certification only. AN-003 shared foundation design and AN-023 local onboarding/workspace/navigation/settings have verified workflow evidence. AN-001/002/018/020 retain release/security/later-platform scope and remain in progress. Signed installers, updater and clean-machine certification remain M15; no fully offline runtime installation claim. Existing WebView2 supports tested offline operation; its embedded bootstrapper needs internet if the runtime is absent.
 
-M2.1–M2.5 local acceptance gates passed within their recorded scopes. M2.6 security-design reconciliation, M2.7 vault implementation and M2.8 integrated certification remain. The user supplied conditional M2.6 approval; the next task must reconcile that approved contract with actual audit/platform evidence without requesting the same approval again. Next task: M2.6, unstarted by this increment. Verify the M2.5 publication/source ledger before proceeding.
+M2.1–M2.5 acceptance gates passed within their recorded scopes. M2.6 reconciliation now records the supplied approval and concrete unresolved prerequisites. Next work: close G1 audit coverage in the M2.6 plan, then M2.7 implementation under the existing conditional authorization; M2.8 integrated certification remains required before M2 completion or M3. Documentation checks do not verify encrypted product behavior.
 
 
 ## Historical M2.3 acceptance repair — 2026-10-18

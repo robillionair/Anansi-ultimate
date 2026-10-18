@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
   "activeMilestone": "M2",
-  "activeTask": "M2.5",
-  "plan": "plans/02-memory-system.md",
-  "implementationStatus": "M2.5 local acceptance verified at cfc28af; exact-source CI/protected publication/source recovery pending at metadata authoring; final outcomes in the permanent ledger linked from docs/evidence/M2-5.md",
-  "lastVerifiedCommit": "cfc28af296ed5adcf8f5d557cd61c23008286843",
+  "activeTask": "M2.6",
+  "plan": "plans/M2-vault-security.md",
+  "implementationStatus": "M2.5 verified and published; M2.6 approval preserved and technical reconciliation documented. M2.7 blocked on G1 audit evidence; G2-G4 corrections adopted; no cryptographic implementation added.",
+  "lastVerifiedCommit": "6c193ef8c9891e966c547451b4e01b7db74215b4",
   "evidence": [
     "docs/evidence/M0.md",
     "docs/evidence/M1.md",
@@ -22,12 +22,12 @@
   ],
   "blockers": [
     {
-      "scope": "M2.5 publication",
-      "detail": "Resolve exact-source CI, protected publication and independent source recovery in the permanent ledger before proceeding."
+      "scope": "M2.6 technical readiness",
+      "detail": "Close G1 audit/version evidence in plans/M2-vault-security.md. User approval and adopted corrections G2-G4 are recorded; no missing-approval claim."
     }
   ],
   "nextTask": "M2.6",
-  "nextTaskScope": "Unstarted here: reconcile user-supplied conditional security-design approval with actual audit/platform evidence. No vault/crypto implementation or M3 work in M2.5.",
+  "nextTaskScope": "Close the recorded M2.6 audit gate G1. M2.7 is conditionally authorized by the preserved user contract but must not start while audit evidence remains unresolved. Stop before M2.7/M3.",
   "productImplementation": "M1 and M2.1-M2.5 verified subsets: memory/lifecycle/entities, immutable relationship history, durable exports, coherent workspace/application catalog backups, opt-in schedules, owned saved-file import and verified fresh restore. Audited vault and integrated M2 certification remain required.",
   "milestoneComplete": false
 }

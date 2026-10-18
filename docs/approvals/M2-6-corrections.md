@@ -1,0 +1,41 @@
+# M2.6 — Adopted contract corrections
+
+Authority: direct user reply in this development session, 2026-10-18: **“Adopt these corrections; retain audit gate.”** The question explicitly named authenticated migration journals with preserved staging, realistic memory-erasure limits, identity binding and encrypted-only ordinary Sealed exports. This addendum supersedes the corresponding conflicting wording in [the original contract](M2-6-user-contract.md); it does not replace its other requirements or waive master section 75's audited-library prerequisite.
+
+## Adopted normative corrections
+
+1. A migration journal is an authenticated encrypted manifest of SHA-256 member hashes, using the selected AEAD and context binding. It is not a digital signature or an unauthenticated “signed hash.” Preserve/quarantine incomplete staging on restart. Authenticate after unlock before any recovery action; no automatic purge or reset from a journal. Canonical source data is untouched before the verified generation switch.
+2. Lock/restart revokes authorization logically. Guard and zeroize Rust-owned secret buffers on normal cleanup paths. Do not claim physical erasure after abrupt termination, absence from every OS dump/swap/register copy, protection from a privileged debugger, or retraction of plaintext already displayed. No application secret logging or deliberate plaintext crash-report capture.
+3. Bind vault/workspace/record/revision/generation and operation purpose inside authenticated payloads, and verify them against authorization context. Preserve the approved 64-byte header as exact AAD. A valid tag alone never authorizes a swapped record, keyslot, generation or workspace.
+4. Ordinary Sealed exports are encrypted-only, in both locked and unlocked states. No plaintext-export exception or purge/reset command is authorized by this design increment. Public/Standard/Private export retains existing behavior.
+5. The audit gate remains mandatory. Version availability, matching test vectors and upstream historical audit statements do not by themselves establish audit coverage of every proposed primitive/version. No cryptographic dependency or M2.7 implementation starts until that prerequisite is resolved and documented.
+
+## Concrete format and resource refinements
+
+These definitions make the adopted corrections reviewable without adding a new cryptographic primitive or changing ANSV's header, algorithm identifiers or exact header AAD. They are design requirements to test in M2.7, not implemented claims.
+
+| Use | flags / kdf_id | Authenticated plaintext definition |
+|---|---|---|
+| Passphrase-wrapped DEK | 0 / 1 | Fixed 130-byte context keyslot described below |
+| Recovery-wrapped DEK | 4 / 0 | Same context keyslot, distinct recovery purpose |
+| Sealed revision | 1 / 0 | Versioned typed record payload bound to vault, owner, generation, record and revision |
+| Entire encrypted backup | 2 / 1 | Versioned portable archive carrying source context and required wrapped keyslots; never a raw key |
+| Migration manifest | 0 / 0 | Versioned typed journal payload with explicit migration purpose and old/new generation context |
+
+Reject all other flag/KDF combinations and reserved bits. In direct-key mode, do not invoke Argon2; require canonical default m=65536, t=3, p=4 and a fresh nonzero salt. In passphrase mode preserve approved bounds and Argon2id v0x13. Every write has a new 24-byte OS-random nonce. Entropy failure is a failure, never a deterministic fallback.
+
+The keyslot plaintext is byte 0 payload version 1; byte 1 purpose (1 passphrase slot, 2 recovery slot); bytes 2..34 vault ID; 34..66 owner workspace ID; 66..98 key generation ID; 98..130 raw 32-byte DEK. IDs are exactly 32 lowercase hexadecimal ASCII characters, matching existing managed IDs. The DEK stays in guarded native buffers. Check all context fields and caller-selected purpose before accepting the key. The 64-byte ANSV header's ct_len is 130, not 32; the original format did not require a fixed ciphertext length. New IDs use secure randomness; preserve existing identities during sealing rather than inventing UUID provenance for legacy records.
+
+Record and migration payloads use UTF-8 typed JSON version 1, reject duplicate/unknown fields and bound decoded sizes. AEAD authenticates the exact serialized bytes, so no JSON reserialization is used to reconstruct authentication input. Each record payload has purpose=sealed_revision, workspaceId, vaultId, generationId, recordId, revisionId, version, full validated domain metadata, body, bodyHash and relationship snapshot. Other record/revision/source/project/supersession references live inside this encrypted payload, not a plaintext relationship shadow. A plain endpoint touching a Sealed node must not retain sensitive reference snapshots. Verify the full existing domain model and owner/identity matches after authentication.
+
+Each migration manifest has purpose=vault_migration, version=1, workspaceId, vaultId, sourceGenerationId, targetGenerationId, journalId and bounded entries. An entry contains opaque record/revision IDs, expected envelope SHA-256, byte length and source-content hash; it contains no user-supplied filesystem path. Build all paths from validated managed IDs under the selected root. The manifest is encrypted using the target DEK and fresh nonce. When locked, startup only reports and preserves an incomplete generation; it cannot claim authenticated rollback. After unlock verify the manifest and staged members, then resume verification or abandon staging without deleting the original. A retained old generation needs its corresponding wrapped slots; rotation cannot discard recovery material while the old generation is authoritative.
+
+Resource ceilings: 10,000 selected records, at most 100,000 encrypted revision/relationship envelope members and 256 MiB total staged plaintext across a migration or portable archive, including metadata/history. A record/revision payload is at most 1 MiB before decryption allocation and must also satisfy existing smaller body/metadata limits. A journal plaintext is at most 8 MiB and included in the aggregate budget. A whole encrypted archive is at most 256 MiB plaintext plus the 80-byte ANSV overhead; no unbounded JSON/base64 allocation. Budget failure is explicit and preserves originals; never truncate history. Chunk transfer remains at most 64 KiB. Admit one KDF per process with a bounded queue; the cross-process managed-root operation lock admits at most one KDF for that root. Malicious input can request no larger allocation than the approved 1 GiB KDF ceiling, and high-cost work needs explicit admission/consent before execution.
+
+## Schema and recovery ownership
+
+The future schema-9 compatibility barrier adds vault descriptors (workspace owner, opaque vault ID, active generation, revocation epoch), generation descriptors (opaque ID, state, keyslot references, journal reference) and encrypted member references (workspace owner, opaque record ID, coarse update bucket, generation and envelope reference/hash/size). Keep revision/edge metadata and history counts inside envelopes and private generation manifests. Only opaque storage/ownership/count/length/coarse-time information is admitted in the plaintext index; do not call it zero information leakage. Older binaries refuse schema 9. Never modify applied migrations 1–8.
+
+The active generation switch, revocation epoch and current member references publish in one fenced SQLite transaction after files are private, synced and verified. Desktop/API operations serialize with that switch and lock epoch. A crash before commit retains the old authoritative generation; after commit retains the new authoritative generation. Ambiguous/missing/tampered members produce a recoverable error and preserve both generations. No fallback to plaintext Sealed data, automatic journal execution, live-root overwrite, reset or secure-deletion promise.
+
+All details remain subject to parser/vector/policy/concurrency/crash and actual native/browser certification in [the implementation plan](../../plans/M2-vault-security.md). This addendum resolves design gates G2–G4; **G1 audit evidence remains open**. M2.7 and M2.8 are not implemented.
