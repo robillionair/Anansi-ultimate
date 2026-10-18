@@ -19,7 +19,7 @@ Failed attempts retain private `backup-staging` data, incomplete uploads and unr
 
 Recovery checkpoints should contain source, tests, and the corresponding status/documentation updates. Never treat a build artifact alone as a recoverable project state.
 
-## Reconciled resume entrypoint
+## Historical reconciled resume entrypoint (M2.3 checkpoint)
 
 Begin with [the M2 detailed plan](../plans/02-memory-system.md), the active/next task in project-state.json, and [the canonical roadmap](ROADMAP.md). M0 and M1.0–M1.5 are complete. The user accepted the M2 plan. M2.1, M2.2 and the M2.3 acceptance repair are verified locally; the last verified implementation is 5b83338. M2.4 persistent jobs/open-format export is next and remains unstarted. Verify the latest checkpoint/publication before proceeding. Preserve the M1 completion tag at 97babb3. Check BUILD_STATUS.md for actual acceptance/publication. Read the detailed acceptance plan before coding. Milestone IDs follow master section 82; legacy numeric plan filenames do not define milestone numbers. Run `node --test tests/repository-hygiene.test.mjs` and `node scripts/validate-planning.mjs --self-test` for current foundation checks; these do not run product tests or replace source recovery checks.
 
