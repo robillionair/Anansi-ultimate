@@ -3,8 +3,8 @@
   "activeMilestone": "M2",
   "activeTask": "M2.5",
   "plan": "plans/02-memory-system.md",
-  "implementationStatus": "M2.5 implementation candidate: real SQLite snapshots, schedule consent, bounded saved-file recovery, shared adapters/UI and fresh restore; final native/browser regression and CI pending",
-  "lastVerifiedCommit": "eb3455ddc744acd890e57f38810b2d7ce2d5d4fc",
+  "implementationStatus": "M2.5 local acceptance verified at cfc28af; exact-source CI/protected publication/source recovery pending at metadata authoring; final outcomes in the permanent ledger linked from docs/evidence/M2-5.md",
+  "lastVerifiedCommit": "cfc28af296ed5adcf8f5d557cd61c23008286843",
   "evidence": [
     "docs/evidence/M0.md",
     "docs/evidence/M1.md",
@@ -16,15 +16,18 @@
     "docs/evidence/M2-1.md",
     "docs/evidence/M2-2.md",
     "docs/evidence/M2-3.md",
-    "docs/evidence/M2-4.md"
-    ,"docs/evidence/M2-5.md"
-    ,"docs/evidence/M2-6.md"
+    "docs/evidence/M2-4.md",
+    "docs/evidence/M2-5.md",
+    "docs/evidence/M2-6.md"
   ],
   "blockers": [
-    {"scope": "M2.5", "detail": "Final native/browser acceptance, full regression, CI publication and independent source restore remain pending."}
+    {
+      "scope": "M2.5 publication",
+      "detail": "Resolve exact-source CI, protected publication and independent source recovery in the permanent ledger before proceeding."
+    }
   ],
-  "nextTask": "M2.5",
-  "nextTaskScope": "Complete selected-workspace snapshots, scheduling, adapters and native/browser restore preview; in progress.",
-  "productImplementation": "M1 and M2.1-M2.4 verified subsets: local memory/lifecycle/entities, reversible relationship history/project membership, persistent six-state export jobs and owned portable knowledge archives. Full backups, audited vault and M2 certification remain required.",
+  "nextTask": "M2.6",
+  "nextTaskScope": "Unstarted here: reconcile user-supplied conditional security-design approval with actual audit/platform evidence. No vault/crypto implementation or M3 work in M2.5.",
+  "productImplementation": "M1 and M2.1-M2.5 verified subsets: memory/lifecycle/entities, immutable relationship history, durable exports, coherent workspace/application catalog backups, opt-in schedules, owned saved-file import and verified fresh restore. Audited vault and integrated M2 certification remain required.",
   "milestoneComplete": false
 }

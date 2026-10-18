@@ -1,6 +1,6 @@
 # ANANSI Ultimate — Recovery Guide
 
-## M2.5 candidate backup recovery
+## M2.5 backup recovery
 
 Schema 8 requires a compatible binary; never downgrade a live root. Preserve the original closed root and use a fresh compatible copy when recovering. Source bundles exclude private catalogs and are distinct from application backups.
 

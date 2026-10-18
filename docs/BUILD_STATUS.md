@@ -2,7 +2,7 @@
 
 ## Current state — 2026-10-18
 
-M2.4 is verified and published at `eb3455ddc744acd890e57f38810b2d7ce2d5d4fc`. M2.5 now has an implementation candidate for real catalog snapshots, opt-in scheduling, saved-file import, shared adapters/UI and fresh restore. Core and HTTP recovery checks passed; final regression and native/browser acceptance remain in progress. See [M2.5 evidence](evidence/M2-5.md). The user supplied conditional M2.6 approval, but no vault or crypto implementation belongs to this M2.5 task. M2 remains incomplete.
+M2.5 local acceptance passed at `cfc28af296ed5adcf8f5d557cd61c23008286843`: coherent workspace/application catalog snapshots, opt-in scheduling, owned saved-file import, strict preview and fresh restore through shared native/browser adapters. All 12 browser tests and actual native/browser restart workflows passed within their recorded scopes; see [M2.5 evidence](evidence/M2-5.md). Exact-source CI, protected publication and final independent source recovery are pending at metadata authoring; their final results are recorded in the permanent source-verification.json ledger referenced there. M2 remains incomplete. This task stops after M2.5; no vault/crypto or M3 work was started.
 
 M0 and M1.0–M1.5 are verified complete. M1 completion checkpoint 97babb3ae9f3dc20b5602a7b46a947e833943eb2 passed all three CI jobs in run 38955878511, was published to protected master and tagged m1-desktop-foundation-verified. Final source bundle restored identical HEAD/tree/tag and passed documentation checks. The downloaded CI installer passed the full local installed-release native/browser workflow and data-preserving uninstall.
 
@@ -23,10 +23,10 @@ M2.3 acceptance repair is verified at implementation checkpoint 5b83338d08884349
 
 M1 is development-foundation certification only. AN-003 shared foundation design and AN-023 local onboarding/workspace/navigation/settings have verified workflow evidence. AN-001/002/018/020 retain release/security/later-platform scope and remain in progress. Signed installers, updater and clean-machine certification remain M15; no fully offline runtime installation claim. Existing WebView2 supports tested offline operation; its embedded bootstrapper needs internet if the runtime is absent.
 
-M2.1–M2.4 local acceptance gates passed. Proposed/user-authored memory revisions, notes, lifecycle, all nine knowledge kinds, relationships, persistent export jobs and portable archives are implemented and verified within their recorded scopes. Full backups/restore remain M2.5, audited vault approval M2.6 and vault implementation M2.7; integrated M2 certification remains M2.8. M2 is incomplete. Next task: M2.5, unstarted; verify publication/source ledger before beginning.
+M2.1–M2.5 local acceptance gates passed within their recorded scopes. M2.6 security-design reconciliation, M2.7 vault implementation and M2.8 integrated certification remain. The user supplied conditional M2.6 approval; the next task must reconcile that approved contract with actual audit/platform evidence without requesting the same approval again. Next task: M2.6, unstarted by this increment. Verify the M2.5 publication/source ledger before proceeding.
 
 
-## M2.3 acceptance repair — 2026-10-18
+## Historical M2.3 acceptance repair — 2026-10-18
 
 The authorized audit repair is complete; ADR-0019 records the schema/history/membership decisions and [repair evidence](evidence/M2-3.md) records actual results and intermediate failures. The source checkpoint ledger is written after protected publication at `C:/Users/robin/Documents/ChatGPT/Anansi-source-recovery/M2-3-verified-b4a8e110d61042fbb11a3faf434bf9b4/source-verification.json` and contains the actual source HEAD/tree, bundle digest and independent restore results. Screenshots and machine verification records are retained alongside it. Source recovery excludes private application catalogs. The master specification and M0/M1 tags are unchanged. M2.4 is the next approved task and remains unstarted; M2 as a whole is incomplete.
 

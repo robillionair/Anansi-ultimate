@@ -22,7 +22,7 @@ Status vocabulary: `provisional`, `planned`, `in progress`, `verified`, `blocked
 | AN-016 | GHOST-PROMPT | AI/workflow | P1 | Context policy, providers | M11 | planned | Prompt transformation tests and audit trail |
 | AN-017 | MCP | Integrations/security | P1 | Permission model, contracts | M13 | planned | Allow/deny, timeout, and audit tests |
 | AN-018 | Privacy and security | Cross-cutting | P0 | All privileged features | M0–M15 | in progress | Threat model, redaction, permission and penetration checks; M1.2 readiness evidence: [record](evidence/M1-2.md), full scope still open |
-| AN-019 | Backups and restoration | Core/recovery | P0 | Storage schema, encryption | M0, M2, M15 | in progress | M2.5 shared manifest/member integrity and fresh-target restore boundary: [evidence](evidence/M2-5.md); full catalog snapshot, scheduling and cross-adapter workflow remain |
+| AN-019 | Backups and restoration | Core/recovery | P0 | Storage schema, encryption | M0, M2, M15 | in progress | M2.5 workspace/application SQLite snapshots, explicit schedule consent, owned saved-file import, strict preview and fresh-ID restoration have native/browser/core [evidence](evidence/M2-5.md). Encrypted/sealed backup and integrated/release certification remain M2.7/M2.8/M15; the full requirement stays in progress |
 | AN-020 | ANANSI Core readiness | Core/platform | P0 | Shared contracts, policy | M1 (contracts), M14 (appliance) | in progress | Core API contract suite and readiness checklist; M1.2 readiness evidence: [record](evidence/M1-2.md), full scope still open |
 | AN-021 | Enterprise architecture | Platform/deployment | P2 | Security review, tenancy model | M14 (design gate), M15 (review) | deferred | Architecture review, isolation and migration tests |
 

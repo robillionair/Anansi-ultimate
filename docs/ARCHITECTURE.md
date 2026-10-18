@@ -95,7 +95,7 @@ Exports are owned complete USTAR artifacts with Markdown revisions, hashes and a
 
 M2.4 local workflows and recovery behavior passed at 8f7ff87; exact CI/publication/source restoration are tracked in its evidence/independent ledger. The native dialog exits with its actual desktop parent; final verification observed that exit before cleanup. No generic browser filesystem/process grant was added.
 
-## M2.5 backup and recovery boundary — verification in progress
+## M2.5 backup and recovery boundary — local acceptance verified
 
 Schema 8 adds opt-in schedule consent, bounded owned upload state and restore-origin mappings. Workspace snapshots construct a fresh standalone SQLite catalog containing only the selected workspace; application snapshots use SQLite's online backup API and include referenced immutable bodies and completed artifacts. Both produce versioned, hashed USTAR packages through the existing durable job worker. A read transaction fixes metadata/revision references, and owner/lease checks fence publication after package verification and a final privacy check. All Sealed records fail closed.
 
