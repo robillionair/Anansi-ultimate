@@ -45,7 +45,7 @@ pub struct ExportManifest {
     pub boundary_references: Vec<String>,
 }
 
-fn directory(storage: &Storage, workspace: &str) -> Result<PathBuf, CommandError> {
+pub(crate) fn directory(storage: &Storage, workspace: &str) -> Result<PathBuf, CommandError> {
     validate_id(workspace)?;
     let mut root = storage.root.clone();
     for part in ["exports", workspace] {
@@ -63,13 +63,13 @@ fn directory(storage: &Storage, workspace: &str) -> Result<PathBuf, CommandError
     Ok(root)
 }
 
-struct Archive {
-    file: File,
-    bytes: u64,
-    hash: Sha256,
+pub(crate) struct Archive {
+    pub(crate) file: File,
+    pub(crate) bytes: u64,
+    pub(crate) hash: Sha256,
 }
 impl Archive {
-    fn write(&mut self, bytes: &[u8]) -> Result<(), CommandError> {
+    pub(crate) fn write(&mut self, bytes: &[u8]) -> Result<(), CommandError> {
         if self.bytes.saturating_add(bytes.len() as u64) > MAX_BYTES {
             return Err(invalid());
         }
@@ -78,7 +78,7 @@ impl Archive {
         self.bytes += bytes.len() as u64;
         Ok(())
     }
-    fn member(&mut self, name: &str, bytes: &[u8]) -> Result<(), CommandError> {
+    pub(crate) fn member(&mut self, name: &str, bytes: &[u8]) -> Result<(), CommandError> {
         if name.len() > 100 || name.starts_with('/') || name.split('/').any(|p| p == "..") {
             return Err(invalid());
         }
@@ -109,6 +109,7 @@ fn selected(
 ) -> Result<BTreeSet<String>, CommandError> {
     let mut ids = BTreeSet::new();
     match selection {
+        ExportSelection::Backup { .. } => return Err(invalid()),
         ExportSelection::Records { ids: requested } => {
             for id in requested {
                 let exists: bool = connection

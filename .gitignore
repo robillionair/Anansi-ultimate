@@ -30,6 +30,8 @@ pairing.json
 /backups/
 /artifacts/
 /exports/
+/backup-staging/
+*.upload
 *.tar
 *.partial
 *.db

@@ -16,7 +16,7 @@ export function PrivacyReview() {
     <li>Workspace names and preferences stay on this computer. This edition makes no AI or cloud requests.</li>
     <li>The browser uses your paired local service. Pairing is kept in this tab’s memory and is forgotten on reload.</li>
     <li>Local file permissions protect access; this is not an encrypted vault. Application lock and disk encryption are different.</li>
-    <li>Private, Standard and Public memory labels do not grant sharing consent or encrypt files. Sealed storage, an encrypted vault and automatic data backups are not available yet.</li>
+    <li>Private, Standard and Public memory labels do not grant sharing consent or encrypt files. Sealed storage and the encrypted vault are not available yet. Plaintext workspace backups require separate consent.</li>
     <li>Continuing does not authorize future cloud sharing, model downloads or recording of drafts. Those require separate choices.</li>
   </ul></div>;
 }

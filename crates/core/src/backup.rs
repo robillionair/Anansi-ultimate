@@ -75,14 +75,20 @@ fn safe_member(path: &str) -> Result<PathBuf, CommandError> {
     {
         return Err(invalid("Backup member path is unsafe."));
     }
-    if path == "manifest.json" {
+    if path.eq_ignore_ascii_case("manifest.json")
+        || path.contains('\\')
+        || path.contains(':')
+        || path
+            .split('/')
+            .any(|p| p.is_empty() || p == "." || p.ends_with('.') || p.ends_with(' '))
+    {
         return Err(invalid("Backup manifest is reserved."));
     }
     Ok(candidate.to_path_buf())
 }
 
 fn digest(path: &Path) -> Result<(u64, String), CommandError> {
-    let bytes = fs::read(path).map_err(|_| invalid("Backup member cannot be read."))?;
+    let bytes = crate::snapshots::limited(path, crate::jobs::MAX_BYTES)?;
     let mut hash = Sha256::new();
     hash.update(&bytes);
     Ok((bytes.len() as u64, format!("{:x}", hash.finalize())))
@@ -145,7 +151,7 @@ pub fn read_catalog(root: &Path) -> Result<BackupCatalog, CommandError> {
 pub fn read_and_verify(root: &Path) -> Result<BackupPreview, CommandError> {
     reject_links(root).map_err(|_| invalid("Backup path contains a link."))?;
     let manifest_path = root.join("manifest.json");
-    let data = fs::read(&manifest_path).map_err(|_| invalid("Backup manifest is missing."))?;
+    let data = crate::snapshots::limited(&manifest_path, MAX_MANIFEST_BYTES)?;
     if data.len() as u64 > MAX_MANIFEST_BYTES {
         return Err(invalid("Backup manifest is too large."));
     }
@@ -158,10 +164,15 @@ pub fn read_and_verify(root: &Path) -> Result<BackupPreview, CommandError> {
     let mut total = 0u64;
     let mut seen = std::collections::HashSet::new();
     for member in &manifest.members {
-        if !seen.insert(member.path.clone()) {
+        if !seen.insert(member.path.to_ascii_lowercase()) {
             return Err(invalid("Backup contains duplicate members."));
         }
         let relative = safe_member(&member.path)?;
+        if member.bytes > crate::jobs::MAX_BYTES
+            || total.saturating_add(member.bytes) > crate::jobs::MAX_BYTES
+        {
+            return Err(invalid("Backup is too large."));
+        }
         let path = root.join(relative);
         reject_links(&path).map_err(|_| invalid("Backup member path contains a link."))?;
         let (bytes, hash) = digest(&path)?;
@@ -186,6 +197,8 @@ pub fn copy_member(
 ) -> Result<BackupMember, CommandError> {
     let relative_path = safe_member(relative)?;
     let destination = root.join(&relative_path);
+    reject_links(source).map_err(|_| invalid("Backup source contains a link."))?;
+    reject_links(&destination).map_err(|_| invalid("Backup destination contains a link."))?;
     if destination.exists() {
         return Err(invalid("Backup member overwrite is refused."));
     }

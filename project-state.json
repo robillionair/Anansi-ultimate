@@ -3,7 +3,7 @@
   "activeMilestone": "M2",
   "activeTask": "M2.5",
   "plan": "plans/02-memory-system.md",
-  "implementationStatus": "M2.5 started: shared versioned backup manifest, member integrity verification and fresh-target restore boundary; adapters and full acceptance remain open",
+  "implementationStatus": "M2.5 implementation candidate: real SQLite snapshots, schedule consent, bounded saved-file recovery, shared adapters/UI and fresh restore; final native/browser regression and CI pending",
   "lastVerifiedCommit": "eb3455ddc744acd890e57f38810b2d7ce2d5d4fc",
   "evidence": [
     "docs/evidence/M0.md",
@@ -21,8 +21,7 @@
     ,"docs/evidence/M2-6.md"
   ],
   "blockers": [
-    {"scope": "M2.5", "detail": "Selected-workspace snapshot assembly, scheduling, adapters and end-to-end acceptance remain incomplete."},
-    {"scope": "M2.6", "detail": "Vault security design awaits explicit approval before any cryptographic implementation."}
+    {"scope": "M2.5", "detail": "Final native/browser acceptance, full regression, CI publication and independent source restore remain pending."}
   ],
   "nextTask": "M2.5",
   "nextTaskScope": "Complete selected-workspace snapshots, scheduling, adapters and native/browser restore preview; in progress.",

@@ -231,7 +231,7 @@ fn stamp(value: &Option<String>) -> Result<Option<DateTime<chrono::FixedOffset>>
         })
         .transpose()
 }
-fn validate(draft: &MemoryDraft) -> Result<(), CommandError> {
+pub(crate) fn validate(draft: &MemoryDraft) -> Result<(), CommandError> {
     draft.privacy.allow_plaintext()?;
     if draft.title.trim().is_empty()
         || draft.title.chars().count() > 200

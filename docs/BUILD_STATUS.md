@@ -2,7 +2,7 @@
 
 ## Current state — 2026-10-18
 
-M2.4 is verified and published at `eb3455ddc744acd890e57f38810b2d7ce2d5d4fc`. M2.5 has started with the shared backup manifest/integrity and fresh-target restore boundary; see [M2.5 evidence](evidence/M2-5.md). Full snapshot assembly, scheduling, adapters and end-to-end acceptance remain open. The M2.6 vault design gate is recorded at [plans/M2-vault-security.md](../plans/M2-vault-security.md) and awaits explicit approval; no crypto implementation has started. M2 remains incomplete.
+M2.4 is verified and published at `eb3455ddc744acd890e57f38810b2d7ce2d5d4fc`. M2.5 now has an implementation candidate for real catalog snapshots, opt-in scheduling, saved-file import, shared adapters/UI and fresh restore. Core and HTTP recovery checks passed; final regression and native/browser acceptance remain in progress. See [M2.5 evidence](evidence/M2-5.md). The user supplied conditional M2.6 approval, but no vault or crypto implementation belongs to this M2.5 task. M2 remains incomplete.
 
 M0 and M1.0–M1.5 are verified complete. M1 completion checkpoint 97babb3ae9f3dc20b5602a7b46a947e833943eb2 passed all three CI jobs in run 38955878511, was published to protected master and tagged m1-desktop-foundation-verified. Final source bundle restored identical HEAD/tree/tag and passed documentation checks. The downloaded CI installer passed the full local installed-release native/browser workflow and data-preserving uninstall.
 

@@ -1,5 +1,15 @@
 # ANANSI Ultimate — Recovery Guide
 
+## M2.5 candidate backup recovery
+
+Schema 8 requires a compatible binary; never downgrade a live root. Preserve the original closed root and use a fresh compatible copy when recovering. Source bundles exclude private catalogs and are distinct from application backups.
+
+In Backups, explicitly consent to plaintext snapshots in private managed storage. Create a workspace snapshot (only that workspace) or the separately labeled application data snapshot (all workspaces and referenced artifacts). Save a Completed artifact from Jobs and export to another disk if protection from disk loss is needed. Scheduling defaults off; enabling requires destination/retention/privacy consent. It runs only while the native app or API is open, reports missed intervals and keeps all versions without pruning.
+
+To recover a saved archive, create/open a local landing workspace in a compatible installation, select the TAR file in Backups and choose Import saved backup. Only verified owned artifacts can be previewed. Review schema/scope/counts/privacy/size/hash and choose an unused restored workspace name. Confirm fresh IDs; restore creates new workspace(s), preserving originals and retaining ID provenance. Application recovery also copies completed job artifacts and disables imported schedules. Reopen the restored workspace and verify its data before relying on it. Unknown schema, missing/hash-invalid members, links/traversal or Sealed content fail closed; no reset or plaintext fallback is performed.
+
+Failed attempts retain private `backup-staging` data, incomplete uploads and unreferenced output for diagnosis. Do not manually merge it into the catalog, delete originals, restore a live SQLite main file alone or claim secure deletion. Ordinary packages are plaintext and must not contain credential secrets; audited vault/confidential backup work remains separate. Final execution evidence is in [M2.5](evidence/M2-5.md).
+
 1. Read `AGENTS.md`, `docs/MASTER_SPEC.md`, `docs/BUILD_STATUS.md`, the active plan, and `docs/DECISIONS.md`.
 2. Check `git status` and inspect the last verified commit recorded in build status.
 3. Do not discard uncommitted work. Identify the active phase and its acceptance criteria.

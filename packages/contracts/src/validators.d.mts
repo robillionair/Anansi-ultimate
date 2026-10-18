@@ -1,6 +1,8 @@
 // Generated from Rust schemas.
-import type {ArtifactChunk,CommandError,ControlJobRequest,CreateRelationshipRequest,CreateWorkspaceRequest,DeleteRelationshipRequest,EnqueueExportRequest,Job,JobDetails,JobList,ListJobsRequest,ListRelationshipsRequest,MemoryDetails,MemoryDraft,MemoryList,MemoryListRequest,MemoryMetadata,MemoryReadRequest,MemoryWriteRequest,OpenWorkspaceRequest,ReadArtifactRequest,Readiness,ReadinessRequest,RelationshipDetails,RelationshipDraft,RelationshipList,RelationshipRecord,UpdateSettingsRequest,WorkspaceDetails,WorkspaceList} from './generated';
+import type {ArtifactChunk,BackupRequest,BackupSchedule,CommandError,ControlJobRequest,CreateRelationshipRequest,CreateWorkspaceRequest,DeleteRelationshipRequest,EnqueueExportRequest,Job,JobDetails,JobList,ListJobsRequest,ListRelationshipsRequest,MemoryDetails,MemoryDraft,MemoryList,MemoryListRequest,MemoryMetadata,MemoryReadRequest,MemoryWriteRequest,OpenWorkspaceRequest,ReadArtifactRequest,Readiness,ReadinessRequest,RelationshipDetails,RelationshipDraft,RelationshipList,RelationshipRecord,RestoreRequest,RestoreResult,ScheduleReadRequest,ScheduleRequest,SnapshotPreview,SnapshotRequest,UpdateSettingsRequest,UploadBegin,UploadPart,UploadStatus,WorkspaceDetails,WorkspaceList} from './generated';
 export function validArtifactChunk(value:unknown):value is ArtifactChunk;
+export function validBackupRequest(value:unknown):value is BackupRequest;
+export function validBackupSchedule(value:unknown):value is BackupSchedule;
 export function validError(value:unknown):value is CommandError;
 export function validControlJobRequest(value:unknown):value is ControlJobRequest;
 export function validCreateRelationshipRequest(value:unknown):value is CreateRelationshipRequest;
@@ -27,6 +29,15 @@ export function validRelationshipDetails(value:unknown):value is RelationshipDet
 export function validRelationshipDraft(value:unknown):value is RelationshipDraft;
 export function validRelationshipList(value:unknown):value is RelationshipList;
 export function validRelationshipRecord(value:unknown):value is RelationshipRecord;
+export function validRestoreRequest(value:unknown):value is RestoreRequest;
+export function validRestoreResult(value:unknown):value is RestoreResult;
+export function validScheduleReadRequest(value:unknown):value is ScheduleReadRequest;
+export function validScheduleRequest(value:unknown):value is ScheduleRequest;
+export function validSnapshotPreview(value:unknown):value is SnapshotPreview;
+export function validSnapshotRequest(value:unknown):value is SnapshotRequest;
 export function validUpdateSettingsRequest(value:unknown):value is UpdateSettingsRequest;
+export function validUploadBegin(value:unknown):value is UploadBegin;
+export function validUploadPart(value:unknown):value is UploadPart;
+export function validUploadStatus(value:unknown):value is UploadStatus;
 export function validWorkspaceDetails(value:unknown):value is WorkspaceDetails;
 export function validWorkspaceList(value:unknown):value is WorkspaceList;

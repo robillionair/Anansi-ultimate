@@ -3,6 +3,21 @@ export interface ArtifactChunk {
   bytes: number[];
   contractVersion: number;
 }
+export interface BackupRequest {
+  application: boolean;
+  contractVersion: number;
+  plaintextConsent: boolean;
+  workspaceId: string;
+}
+export interface BackupSchedule {
+  contractVersion: number;
+  destination: string;
+  enabled: boolean;
+  intervalSeconds: number;
+  missedRuns: number;
+  nextDue?: number | null;
+  retention: string;
+}
 export type ErrorCode =
   | "INVALID_REQUEST"
   | "UNSUPPORTED_CONTRACT"
@@ -60,6 +75,10 @@ export interface DeleteRelationshipRequest {
 export type ExportSelection =
   | {
       kind: "workspace";
+    }
+  | {
+      application: boolean;
+      kind: "backup";
     }
   | {
       id: string;
@@ -400,6 +419,58 @@ export interface RelationshipRecord {
   version: number;
   workspaceId: string;
 }
+export interface RestoreRequest {
+  artifactId: string;
+  confirm: boolean;
+  contractVersion: number;
+  expectedHash: string;
+  jobId: string;
+  name: string;
+  workspaceId: string;
+}
+export interface RestoreResult {
+  backupHash: string;
+  contractVersion: number;
+  workspaces: Workspace[];
+}
+export interface Workspace {
+  id: string;
+  name: string;
+}
+export interface ScheduleReadRequest {
+  contractVersion: number;
+  workspaceId: string;
+}
+export interface ScheduleRequest {
+  contractVersion: number;
+  enabled: boolean;
+  intervalSeconds: number;
+  keepAllVersions: boolean;
+  managedDestination: boolean;
+  plaintextConsent: boolean;
+  workspaceId: string;
+}
+export interface SnapshotPreview {
+  application: boolean;
+  conflicts: string[];
+  contractVersion: number;
+  privacy: string;
+  records: number;
+  relationships: number;
+  revisions: number;
+  schemaVersion: number;
+  sha256: string;
+  totalBytes: number;
+  workspaceCount: number;
+  workspaceId: string;
+  workspaceName: string;
+}
+export interface SnapshotRequest {
+  artifactId: string;
+  contractVersion: number;
+  jobId: string;
+  workspaceId: string;
+}
 export type Intent = "second_memory" | "invent_product" | "build_application" | "connect_ai" | "explore";
 
 export interface UpdateSettingsRequest {
@@ -408,6 +479,46 @@ export interface UpdateSettingsRequest {
   intent?: Intent | null;
   onboardingComplete?: boolean | null;
   reducedMotion: boolean;
+}
+export interface UploadBegin {
+  bytes: number;
+  contractVersion: number;
+  plaintextConsent: boolean;
+  sha256: string;
+  workspaceId: string;
+}
+export interface UploadPart {
+  bytes: number[];
+  contractVersion: number;
+  finish: boolean;
+  id: string;
+  offset: number;
+  workspaceId: string;
+}
+
+export interface UploadStatus {
+  contractVersion: number;
+  id: string;
+  job?: Job | null;
+  received: number;
+}
+export interface Job {
+  artifactBytes?: number | null;
+  artifactHash?: string | null;
+  artifactId?: string | null;
+  checkpoint: string;
+  checkpointVersion: number;
+  createdAt: string;
+  id: string;
+  log: string;
+  maxBytes: number;
+  maxRecords: number;
+  progress: number;
+  selection: ExportSelection;
+  state: JobState;
+  updatedAt: string;
+  version: number;
+  workspaceId: string;
 }
 
 export interface WorkspaceDetails {

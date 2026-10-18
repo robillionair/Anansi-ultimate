@@ -150,13 +150,13 @@ fn schema_six_upgrade_is_forward_only_and_failure_atomic() {
     let (temp, store, w) = setup();
     let file = temp.path().join("store").join(DATABASE_NAME);
     let db = rusqlite::Connection::open(&file).unwrap();
-    db.execute_batch("DROP TABLE jobs; PRAGMA user_version=6;")
+    db.execute_batch("DROP TABLE jobs; DROP TABLE backup_schedules; DROP TABLE restore_origins; DROP TABLE IF EXISTS backup_uploads; PRAGMA user_version=6;")
         .unwrap();
     assert_eq!(store.open(&w).unwrap().workspace.id, w);
     assert_eq!(
         db.pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))
             .unwrap(),
-        7
+        8
     );
     db.execute_batch("DROP TABLE jobs; CREATE TABLE jobs(wrong TEXT); PRAGMA user_version=6;")
         .unwrap();

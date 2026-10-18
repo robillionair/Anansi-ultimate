@@ -1,8 +1,17 @@
 import { validReadiness, validError, validWorkspaceDetails, validWorkspaceList, validMemoryDetails, validMemoryList, validRelationshipDetails, validRelationshipList, validJobDetails, validJobList, validArtifactChunk } from './validators.mjs';
 import { invoke } from '@tauri-apps/api/core';
+import {validSnapshotPreview,validRestoreResult,validBackupSchedule,validUploadStatus} from './validators.mjs';
+import type {SnapshotPreview,RestoreResult,BackupSchedule} from './generated';
+export type {SnapshotPreview,RestoreResult,BackupSchedule} from './generated';
 import type { Readiness, WorkspaceDetails, WorkspaceList, Intent, MemoryDraft, MemoryDetails, MemoryList, MemoryMetadata, Privacy, LifecycleChange, RelationshipDraft, RelationshipRecord, RelationshipDetails, RelationshipList, Job, JobDetails, JobList, ArtifactChunk, ExportSelection, JobAction } from './generated';
 export type { Readiness, WorkspaceDetails, WorkspaceList, Intent, MemoryDraft, MemoryDetails, MemoryList, MemoryMetadata, Privacy, LifecycleChange, RelationshipDraft, RelationshipRecord, RelationshipDetails, RelationshipList, Job, JobDetails, JobList, ArtifactChunk, ExportSelection, JobAction } from './generated';
 export interface Client {
+  importBackup(workspaceId:string,bytes:Uint8Array,plaintextConsent:boolean):Promise<Job>;
+  enqueueBackup(workspaceId:string,application:boolean,plaintextConsent:boolean):Promise<JobDetails>;
+  previewBackup(workspaceId:string,jobId:string,artifactId:string):Promise<SnapshotPreview>;
+  restoreBackup(workspaceId:string,jobId:string,artifactId:string,name:string,expectedHash:string,confirm:boolean):Promise<RestoreResult>;
+  readBackupSchedule(workspaceId:string):Promise<BackupSchedule>;
+  setBackupSchedule(workspaceId:string,enabled:boolean,intervalSeconds:number,plaintextConsent:boolean,keepAllVersions:boolean,managedDestination:boolean):Promise<BackupSchedule>;
   enqueueExport(workspaceId:string,selection:ExportSelection):Promise<JobDetails>;
   listJobs(workspaceId:string,offset?:number):Promise<JobList>;
   controlJob(workspaceId:string,id:string,expectedVersion:number,action:JobAction):Promise<JobDetails>;
@@ -53,6 +62,19 @@ function failure(value:unknown,operation=''):Error {
 type Call=(operation:string,request:Record<string,unknown>)=>Promise<unknown>;
 function client(call:Call):Client {
   return {
+    importBackup:async(workspaceId,bytes,plaintextConsent)=>{
+      if(bytes.length>256*1024*1024||bytes.length<1024)throw Error('Choose a backup up to 256 MiB.');
+      const sha256=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',Uint8Array.from(bytes)))).map(b=>b.toString(16).padStart(2,'0')).join('');
+      const opened=decode(await call('jobs/upload-begin',{workspaceId,bytes:bytes.length,sha256,plaintextConsent}),validUploadStatus);
+      let result=opened;
+      for(let offset=0;offset<bytes.length;offset+=65536){const end=Math.min(offset+65536,bytes.length);result=decode(await call('jobs/upload-part',{workspaceId,id:opened.id,offset,bytes:Array.from(bytes.subarray(offset,end)),finish:end===bytes.length}),validUploadStatus);}
+      if(!result.job)throw Error('Backup import did not publish a verified job.');return result.job;
+    },
+    enqueueBackup:async(workspaceId,application,plaintextConsent)=>decode(await call('jobs/backup',{workspaceId,application,plaintextConsent}),validJobDetails),
+    previewBackup:async(workspaceId,jobId,artifactId)=>decode(await call('jobs/preview',{workspaceId,jobId,artifactId}),validSnapshotPreview),
+    restoreBackup:async(workspaceId,jobId,artifactId,name,expectedHash,confirm)=>decode(await call('jobs/restore',{workspaceId,jobId,artifactId,name,expectedHash,confirm}),validRestoreResult),
+    readBackupSchedule:async(workspaceId)=>decode(await call('jobs/schedule-read',{workspaceId}),validBackupSchedule),
+    setBackupSchedule:async(workspaceId,enabled,intervalSeconds,plaintextConsent,keepAllVersions,managedDestination)=>decode(await call('jobs/schedule',{workspaceId,enabled,intervalSeconds,plaintextConsent,keepAllVersions,managedDestination}),validBackupSchedule),
     enqueueExport:async(workspaceId,selection)=>decode(await call('jobs/export',{workspaceId,selection}),validJobDetails),
     listJobs:async(workspaceId,offset=0)=>decode(await call('jobs/list',{workspaceId,offset}),validJobList),
     controlJob:async(workspaceId,id,expectedVersion,action)=>decode(await call('jobs/control',{workspaceId,id,expectedVersion,action}),validJobDetails),
@@ -84,7 +106,7 @@ export function httpClient(endpoint:string,token:string):Client {
       : operation === 'readiness'
       ? 'readiness'
       : 'workspaces/' + operation;
-    try{response=await fetch(`${url.origin}/v1/${path}`,{method:'POST',credentials:'omit',cache:'no-store',redirect:'error',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({contractVersion:1,...request}),signal:AbortSignal.timeout(15000)});}
+    try{response=await fetch(`${url.origin}/v1/${path}`,{method:'POST',credentials:'omit',cache:'no-store',redirect:'error',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({contractVersion:1,...request}),signal:AbortSignal.timeout(operation.startsWith('jobs/')?120000:15000)});}
     catch{throw new Error('Local core unavailable. Start the API, then retry or pair with its new session.');}
     let value:unknown;try{value=await response.json();}catch{throw new Error('The core returned an unreadable response. Try again.');}
     if(!response.ok)throw failure(value,operation);return value;

@@ -12,7 +12,19 @@ use std::{
 };
 
 const APPLICATION_ID: i64 = 0x414e414e;
-const SCHEMA_VERSION: i64 = 7;
+pub(crate) const SCHEMA_VERSION: i64 = 8;
+pub(crate) const CURRENT_SCHEMA: &str = concat!(
+    include_str!("../migrations/0001_workspace.sql"),
+    "\n",
+    include_str!("../migrations/0002_onboarding.sql"),
+    "\n",
+    include_str!("../migrations/0003_memory.sql"),
+    include_str!("../migrations/0004_lifecycle.sql"),
+    include_str!("../migrations/0005_entities.sql"),
+    include_str!("../migrations/0006_relationship_history.sql"),
+    include_str!("../migrations/0007_jobs.sql"),
+    include_str!("../migrations/0008_backups.sql")
+);
 const ROOT_MARKER: &[u8] = b"ANANSI workspace root v1\n";
 pub const DATABASE_NAME: &str = "workspaces.sqlite3";
 
@@ -222,21 +234,7 @@ impl Storage {
             .pragma_update(None, "foreign_keys", true)
             .map_err(|_| unavailable())?;
         if fresh {
-            migrate(
-                &mut connection,
-                concat!(
-                    include_str!("../migrations/0001_workspace.sql"),
-                    "\n",
-                    include_str!("../migrations/0002_onboarding.sql"),
-                    "\n",
-                    include_str!("../migrations/0003_memory.sql"),
-                    include_str!("../migrations/0004_lifecycle.sql"),
-                    include_str!("../migrations/0005_entities.sql"),
-                    include_str!("../migrations/0006_relationship_history.sql"),
-                    include_str!("../migrations/0007_jobs.sql")
-                ),
-            )
-            .map_err(|_| corrupt())?;
+            migrate(&mut connection, CURRENT_SCHEMA).map_err(|_| corrupt())?;
         }
         check_identity(&connection)?;
         let integrity: String = connection
@@ -285,6 +283,10 @@ impl Storage {
                 }
                 if locked_version < 7 {
                     tx.execute_batch(include_str!("../migrations/0007_jobs.sql"))
+                        .map_err(|_| corrupt())?;
+                }
+                if locked_version < 8 {
+                    tx.execute_batch(include_str!("../migrations/0008_backups.sql"))
                         .map_err(|_| corrupt())?;
                 }
                 tx.pragma_update(None, "user_version", SCHEMA_VERSION)

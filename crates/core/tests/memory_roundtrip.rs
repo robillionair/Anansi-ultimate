@@ -291,13 +291,13 @@ fn schema_two_migration_and_memory_migration_failure_preserve_settings() {
     let file = temp.path().join("store").join(DATABASE_NAME);
     {
         let c = rusqlite::Connection::open(&file).unwrap();
-        c.execute_batch("PRAGMA foreign_keys=OFF; DROP TABLE memory_revisions; DROP TABLE memories; DROP TABLE lifecycle_format; DROP TABLE IF EXISTS relationship_revisions; DROP TABLE IF EXISTS relationships; DROP TABLE IF EXISTS jobs; PRAGMA user_version=2;").unwrap();
+        c.execute_batch("PRAGMA foreign_keys=OFF; DROP TABLE memory_revisions; DROP TABLE memories; DROP TABLE lifecycle_format; DROP TABLE IF EXISTS relationship_revisions; DROP TABLE IF EXISTS relationships; DROP TABLE IF EXISTS jobs; DROP TABLE IF EXISTS backup_schedules; DROP TABLE IF EXISTS restore_origins; DROP TABLE IF EXISTS backup_uploads; PRAGMA user_version=2;").unwrap();
     }
     private_permissions(&file, false, false).unwrap();
     assert!(core.memory_command("create", request(&w)).is_ok());
     {
         let c = rusqlite::Connection::open(&file).unwrap();
-        c.execute_batch("DROP TABLE IF EXISTS relationship_revisions; DROP TABLE IF EXISTS relationships; DROP TABLE IF EXISTS jobs; PRAGMA user_version=2;").unwrap();
+        c.execute_batch("DROP TABLE IF EXISTS relationship_revisions; DROP TABLE IF EXISTS relationships; DROP TABLE IF EXISTS jobs; DROP TABLE IF EXISTS backup_schedules; DROP TABLE IF EXISTS restore_origins; DROP TABLE IF EXISTS backup_uploads; PRAGMA user_version=2;").unwrap();
     }
     assert!(
         core.workspace_command("open", json!({"contractVersion":1,"id":w}))

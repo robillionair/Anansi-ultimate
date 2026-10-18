@@ -9,6 +9,12 @@ import { Tasks } from '../src/Tasks';
 import { People } from '../src/People';
 import { KnowledgeRecords } from '../src/KnowledgeRecords';
 import { Jobs } from '../src/Jobs';
+import {Backups} from '../src/Backups';
+
+test('backup creation and restore expose real plaintext/destination/retention consent',()=>{
+  const html=renderToStaticMarkup(<Backups client={{} as any} workspaceId={'a'.repeat(32)}/>);
+  assert.match(html,/Create backup/);assert.match(html,/disabled=""/);assert.match(html,/plaintext/);assert.match(html,/Keep all versions/);assert.match(html,/Runs only while/);assert.doesNotMatch(html,/Restore verified backup/);
+});
 
 test('export explains plaintext privacy, selection boundaries and real resource limits',()=>{
   const html=renderToStaticMarkup(<Jobs client={{} as any} workspaceId={'a'.repeat(32)} native={false}/>);
@@ -62,7 +68,7 @@ test('navigation has a small active set, complete grouped unavailable tools and 
   assert.ok(html.includes('aria-label="Main navigation"'));
   assert.ok(html.includes('aria-current="page"'));
   assert.ok(html.includes('disabled=""'));
-  assert.equal((html.match(/<button/g) || []).length, 10);
+  assert.equal((html.match(/<button/g) || []).length, 11);
   for (const group of plannedGroups) for (const item of group.items) assert.ok(html.includes(item));
   assert.ok(html.includes('not available yet'));
   assert.ok(html.includes('separate consent'));

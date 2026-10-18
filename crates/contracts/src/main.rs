@@ -17,6 +17,17 @@ use anansi_core::workspace::{
 use anansi_core::{CommandError, Readiness, ReadinessRequest};
 fn main() {
     let schemas = serde_json::json!({
+        "UploadBegin":schemars::schema_for!(anansi_core::backup_upload::UploadBegin),
+        "UploadPart":schemars::schema_for!(anansi_core::backup_upload::UploadPart),
+        "UploadStatus":schemars::schema_for!(anansi_core::backup_upload::UploadStatus),
+        "SnapshotPreview":schemars::schema_for!(anansi_core::snapshots::SnapshotPreview),
+        "RestoreResult":schemars::schema_for!(anansi_core::restore::RestoreResult),
+        "BackupSchedule":schemars::schema_for!(anansi_core::backup_commands::BackupSchedule),
+        "BackupRequest":schemars::schema_for!(anansi_core::backup_commands::BackupRequest),
+        "SnapshotRequest":schemars::schema_for!(anansi_core::backup_commands::SnapshotRequest),
+        "RestoreRequest":schemars::schema_for!(anansi_core::backup_commands::RestoreRequest),
+        "ScheduleRequest":schemars::schema_for!(anansi_core::backup_commands::ScheduleRequest),
+        "ScheduleReadRequest":schemars::schema_for!(anansi_core::backup_commands::ScheduleReadRequest),
         "Job":schemars::schema_for!(Job),
         "JobDetails":schemars::schema_for!(JobDetails),
         "JobList":schemars::schema_for!(JobList),

@@ -27,13 +27,14 @@ pub enum JobState {
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum ExportSelection {
     Workspace,
+    Backup { application: bool },
     Project { id: String },
     Records { ids: Vec<String> },
 }
 impl ExportSelection {
     fn validate(&self) -> Result<(), CommandError> {
         match self {
-            Self::Workspace => Ok(()),
+            Self::Workspace | Self::Backup { .. } => Ok(()),
             Self::Project { id } => validate_id(id),
             Self::Records { ids } => {
                 if ids.is_empty() || ids.len() > MAX_RECORDS as usize {
@@ -406,7 +407,12 @@ impl crate::Core {
                     }
                 };
                 while let Ok(Some(lease)) = storage.claim_export() {
-                    if storage.execute_export(&lease).is_err() {
+                    let result = if matches!(lease.job.selection, ExportSelection::Backup { .. }) {
+                        storage.execute_backup(&lease)
+                    } else {
+                        storage.execute_export(&lease)
+                    };
+                    if result.is_err() {
                         let _ = storage.fail_export(&lease);
                     }
                 }
@@ -429,10 +435,22 @@ impl crate::Core {
             ));
         }
         let storage = self.storage()?;
+        if matches!(command, "upload-begin" | "upload-part") {
+            return self.upload_operation(command, input);
+        }
+        if matches!(
+            command,
+            "backup" | "preview" | "restore" | "schedule" | "schedule-read"
+        ) {
+            return self.backup_operation(command, input);
+        }
         let response = match command {
             "export" => {
                 let request: EnqueueExportRequest =
                     serde_json::from_value(input).map_err(|_| invalid())?;
+                if matches!(request.selection, ExportSelection::Backup { .. }) {
+                    return Err(invalid());
+                }
                 serde_json::to_value(JobDetails {
                     contract_version: 1,
                     job: storage.enqueue_export(&request.workspace_id, request.selection)?,

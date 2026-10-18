@@ -14,6 +14,7 @@ test('Git ignores representative secrets, private data and generated output', ()
     'private.pem', 'signing.pfx', 'secrets.json', 'pairing.json', 'local-data/memory.md',
     'workspaces/personal/note.md', 'backups/source.bundle', 'source.bundle',
     'exports/private/manifest.json', 'knowledge.tar', '.anansi-export-fixture.partial',
+    'backup-staging/private/manifest.json', 'private-snapshot.upload',
     'data/memory.sqlite3-wal', 'data/memory.db-shm', 'data/memory.sqlite',
     'node_modules/example/index.js', 'apps/web/node_modules/example/index.js',
     'apps/web/dist/index.html', 'crates/core/target/debug/core.exe',

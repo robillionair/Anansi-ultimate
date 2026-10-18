@@ -26,6 +26,83 @@
     "title": "ArtifactChunk",
     "type": "object"
   },
+  "BackupRequest": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "application": {
+        "type": "boolean"
+      },
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "plaintextConsent": {
+        "type": "boolean"
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "workspaceId",
+      "application",
+      "plaintextConsent"
+    ],
+    "title": "BackupRequest",
+    "type": "object"
+  },
+  "BackupSchedule": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "destination": {
+        "type": "string"
+      },
+      "enabled": {
+        "type": "boolean"
+      },
+      "intervalSeconds": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "missedRuns": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "nextDue": {
+        "format": "int64",
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "retention": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "enabled",
+      "intervalSeconds",
+      "missedRuns",
+      "destination",
+      "retention"
+    ],
+    "title": "BackupSchedule",
+    "type": "object"
+  },
   "CommandError": {
     "$defs": {
       "ErrorCode": {
@@ -235,6 +312,23 @@
           {
             "additionalProperties": false,
             "properties": {
+              "application": {
+                "type": "boolean"
+              },
+              "kind": {
+                "const": "backup",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "application"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
               "id": {
                 "type": "string"
               },
@@ -310,6 +404,23 @@
             },
             "required": [
               "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "application": {
+                "type": "boolean"
+              },
+              "kind": {
+                "const": "backup",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "application"
             ],
             "type": "object"
           },
@@ -469,6 +580,23 @@
             },
             "required": [
               "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "application": {
+                "type": "boolean"
+              },
+              "kind": {
+                "const": "backup",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "application"
             ],
             "type": "object"
           },
@@ -647,6 +775,23 @@
             },
             "required": [
               "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "application": {
+                "type": "boolean"
+              },
+              "kind": {
+                "const": "backup",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "application"
             ],
             "type": "object"
           },
@@ -2183,6 +2328,265 @@
     "title": "RelationshipRecord",
     "type": "object"
   },
+  "RestoreRequest": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "artifactId": {
+        "type": "string"
+      },
+      "confirm": {
+        "type": "boolean"
+      },
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "expectedHash": {
+        "type": "string"
+      },
+      "jobId": {
+        "type": "string"
+      },
+      "name": {
+        "type": "string"
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "workspaceId",
+      "jobId",
+      "artifactId",
+      "name",
+      "expectedHash",
+      "confirm"
+    ],
+    "title": "RestoreRequest",
+    "type": "object"
+  },
+  "RestoreResult": {
+    "$defs": {
+      "Workspace": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "backupHash": {
+        "type": "string"
+      },
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "workspaces": {
+        "items": {
+          "$ref": "#/$defs/Workspace"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "workspaces",
+      "backupHash"
+    ],
+    "title": "RestoreResult",
+    "type": "object"
+  },
+  "ScheduleReadRequest": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "workspaceId"
+    ],
+    "title": "ScheduleReadRequest",
+    "type": "object"
+  },
+  "ScheduleRequest": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "enabled": {
+        "type": "boolean"
+      },
+      "intervalSeconds": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "keepAllVersions": {
+        "type": "boolean"
+      },
+      "managedDestination": {
+        "type": "boolean"
+      },
+      "plaintextConsent": {
+        "type": "boolean"
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "workspaceId",
+      "enabled",
+      "intervalSeconds",
+      "plaintextConsent",
+      "keepAllVersions",
+      "managedDestination"
+    ],
+    "title": "ScheduleRequest",
+    "type": "object"
+  },
+  "SnapshotPreview": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "application": {
+        "type": "boolean"
+      },
+      "conflicts": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "privacy": {
+        "type": "string"
+      },
+      "records": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "relationships": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "revisions": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "schemaVersion": {
+        "format": "int64",
+        "type": "integer"
+      },
+      "sha256": {
+        "type": "string"
+      },
+      "totalBytes": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "workspaceCount": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "workspaceId": {
+        "type": "string"
+      },
+      "workspaceName": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "workspaceId",
+      "workspaceName",
+      "schemaVersion",
+      "application",
+      "workspaceCount",
+      "records",
+      "revisions",
+      "relationships",
+      "totalBytes",
+      "sha256",
+      "privacy",
+      "conflicts"
+    ],
+    "title": "SnapshotPreview",
+    "type": "object"
+  },
+  "SnapshotRequest": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "artifactId": {
+        "type": "string"
+      },
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "jobId": {
+        "type": "string"
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "workspaceId",
+      "jobId",
+      "artifactId"
+    ],
+    "title": "SnapshotRequest",
+    "type": "object"
+  },
   "UpdateSettingsRequest": {
     "$defs": {
       "Intent": {
@@ -2234,6 +2638,297 @@
       "reducedMotion"
     ],
     "title": "UpdateSettingsRequest",
+    "type": "object"
+  },
+  "UploadBegin": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "bytes": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "plaintextConsent": {
+        "type": "boolean"
+      },
+      "sha256": {
+        "type": "string"
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "workspaceId",
+      "bytes",
+      "sha256",
+      "plaintextConsent"
+    ],
+    "title": "UploadBegin",
+    "type": "object"
+  },
+  "UploadPart": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "bytes": {
+        "items": {
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": "array"
+      },
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "finish": {
+        "type": "boolean"
+      },
+      "id": {
+        "type": "string"
+      },
+      "offset": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "workspaceId",
+      "id",
+      "offset",
+      "bytes",
+      "finish"
+    ],
+    "title": "UploadPart",
+    "type": "object"
+  },
+  "UploadStatus": {
+    "$defs": {
+      "ExportSelection": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "workspace",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "application": {
+                "type": "boolean"
+              },
+              "kind": {
+                "const": "backup",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "application"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "kind": {
+                "const": "project",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "id"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "ids": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "kind": {
+                "const": "records",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "ids"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "Job": {
+        "additionalProperties": false,
+        "properties": {
+          "artifactBytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "artifactHash": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "artifactId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "checkpoint": {
+            "type": "string"
+          },
+          "checkpointVersion": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "log": {
+            "type": "string"
+          },
+          "maxBytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxRecords": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "progress": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "selection": {
+            "$ref": "#/$defs/ExportSelection"
+          },
+          "state": {
+            "$ref": "#/$defs/JobState"
+          },
+          "updatedAt": {
+            "type": "string"
+          },
+          "version": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "workspaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "workspaceId",
+          "state",
+          "version",
+          "checkpointVersion",
+          "checkpoint",
+          "selection",
+          "progress",
+          "maxRecords",
+          "maxBytes",
+          "createdAt",
+          "updatedAt",
+          "log"
+        ],
+        "type": "object"
+      },
+      "JobState": {
+        "enum": [
+          "Queued",
+          "Running",
+          "Paused",
+          "Completed",
+          "Failed",
+          "Cancelled"
+        ],
+        "type": "string"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "id": {
+        "type": "string"
+      },
+      "job": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/Job"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "received": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "id",
+      "received"
+    ],
+    "title": "UploadStatus",
     "type": "object"
   },
   "WorkspaceDetails": {

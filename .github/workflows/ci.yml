@@ -8,7 +8,7 @@ jobs:
   foundation:
     name: Foundation (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 35
+    timeout-minutes: 50
     strategy:
       fail-fast: false
       matrix:
@@ -51,7 +51,7 @@ jobs:
   native-toolchain:
     name: Windows native toolchain smoke
     runs-on: windows-latest
-    timeout-minutes: 45
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -87,6 +87,7 @@ jobs:
       - run: node scripts/verify-memory.mjs --configured-cdp
       - run: node scripts/verify-entities.mjs --configured-cdp
       - run: node scripts/verify-export.mjs --configured-cdp
+      - run: node scripts/verify-backup.mjs --configured-cdp
       - name: Build unsigned development NSIS release installer
         run: pnpm build:installer
       - name: Verify release package installation and uninstall (UI covered separately)
