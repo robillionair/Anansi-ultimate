@@ -103,4 +103,6 @@ The shared jobs command surface adds manual backup, preview, fresh restore, sche
 
 ## M2.6 security design reconciliation — no implementation
 
+The user selected retaining pure Rust on 2026-10-19. Native libsodium remains unselected comparison research; no native FFI or KDF profile change is adopted. ADR-0023 and [the audit follow-up](evidence/M2-6-audit-review.md) preserve the p=4 contract and open G1 evidence gate.
+
 The [user-approved contract](approvals/M2-6-user-contract.md) is preserved verbatim and [the reconciliation plan](../plans/M2-vault-security.md) records exact dependency proposals and their audit/platform limitations. Desktop and API remain separate Rust processes, with no existing shared vault broker or secret-input capability. Proposed per-process guarded keys, native-only secret entry, scoped ephemeral handles and cross-process revocation require implementation tests. Current schema remains 8 and all Sealed operations continue to fail closed. [The adopted addendum](approvals/M2-6-corrections.md) resolves G2–G4 at design level; G1 audit evidence remains open. Authorization is not an executed test or verified audit; see ADR-0022. No accepted runtime architecture is silently changed.

@@ -1,6 +1,8 @@
 # ANANSI Ultimate — Build Status
 
-## Current state — 2026-10-18
+## Current state — 2026-10-19
+
+M2.6 G1 follow-up: the user selected **“Retain pure Rust; obtain matching audit evidence.”** [The evidence review](evidence/M2-6-audit-review.md) records verified direct-package source identities and report scope exclusions. [The library comparison](../plans/M2-vault-library-options.md) retains native libsodium as unselected research. G1 remains open for matching independent Argon2 evidence and current AEAD/dependency mapping. [A precise maintainer inquiry](reviews/M2-6-audit-inquiry.md) is prepared but unsent; external contact and paid review have not occurred. No vault product work or dependency change. Prior design checkpoint is `57abb23c8fa2065ae888dc4cbb1cf7325cfe6c10`; publication/recovery for this follow-up is recorded after validation in the external audit-review ledger.
 
 M2.5 is verified and published at `6c193ef8c9891e966c547451b4e01b7db74215b4` (implementation `cfc28af`). All three implementation and checkpoint CI jobs passed, including native backup workflows and unsigned installer verification; protected master and independent source recovery are verified. See [M2.5 evidence](evidence/M2-5.md) and its permanent ledger. M2 remains incomplete.
 

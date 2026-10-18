@@ -1,5 +1,7 @@
 # ANANSI Ultimate — Requirements Matrix
 
+M2.6 audit follow-up (2026-10-19): AN-018/019/031 remain in progress. [Direct source identities and report scope exclusions](evidence/M2-6-audit-review.md) add evidence without certifying encryption. The user retained pure Rust, p=4 defaults and the independent-audit gate; no native substitute or requirement weakening is adopted. All existing requirement rows and milestone owners remain intact.
+
 Status vocabulary: `provisional`, `planned`, `in progress`, `verified`, `blocked`, `deferred`. No row may be marked verified without workflow evidence.
 
 | ID | Requirement area | Subsystem | Priority | Dependencies | Milestone | Status | Test / evidence required |

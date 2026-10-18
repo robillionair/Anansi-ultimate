@@ -3,7 +3,7 @@
   "activeMilestone": "M2",
   "activeTask": "M2.6",
   "plan": "plans/M2-vault-security.md",
-  "implementationStatus": "M2.5 verified and published; M2.6 approval preserved and technical reconciliation documented. M2.7 blocked on G1 audit evidence; G2-G4 corrections adopted; no cryptographic implementation added.",
+  "implementationStatus": "M2.5 verified; M2.6 retains pure Rust by explicit user choice. Direct package sources verified and historical report exclusions recorded. G1 matching audit/version coverage remains open; G2-G4 adopted. No crypto implementation or dependency changes.",
   "lastVerifiedCommit": "6c193ef8c9891e966c547451b4e01b7db74215b4",
   "evidence": [
     "docs/evidence/M0.md",
@@ -18,12 +18,13 @@
     "docs/evidence/M2-3.md",
     "docs/evidence/M2-4.md",
     "docs/evidence/M2-5.md",
-    "docs/evidence/M2-6.md"
+    "docs/evidence/M2-6.md",
+    "docs/evidence/M2-6-audit-review.md"
   ],
   "blockers": [
     {
       "scope": "M2.6 technical readiness",
-      "detail": "Close G1 audit/version evidence in plans/M2-vault-security.md. User approval and adopted corrections G2-G4 are recorded; no missing-approval claim."
+      "detail": "Retain pure Rust and p=4; obtain matching independent Argon2 audit evidence and current AEAD/dependency mapping. Source identities verified, reports inspected, inquiry prepared but unsent. G1 remains open; user approval and G2-G4 are preserved."
     }
   ],
   "nextTask": "M2.6",

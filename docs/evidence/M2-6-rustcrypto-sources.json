@@ -1,0 +1,236 @@
+{
+  "reviewDate": "2026-10-19",
+  "method": "Passive published-source review; registry archive SHA256 verified; no Cargo resolution/build, crypto execution or dependency installation",
+  "scope": "Direct proposed releases only. Manifest dependency ranges are not a resolved transitive graph or audit.",
+  "packages": [
+    {
+      "name": "argon2",
+      "version": "0.6.0",
+      "url": "https://static.crates.io/crates/argon2/argon2-0.6.0.crate",
+      "sha256": "134c52ddac6d63c576bef8168db10c83c49c26444ecbc68060fef078925a901c",
+      "bytes": 34538,
+      "files": [
+        {
+          "path": "Cargo.toml.orig",
+          "bytes": 2578,
+          "sha256": "88092c789b2c0f24fa4cd6764cc63d4721f8954d7624cbef8031e6707fe5d2d7"
+        },
+        {
+          "path": "README.md",
+          "bytes": 2186,
+          "sha256": "b658dc4d3e9018393094ffa4ee27d22b663e9fc1f923cd9e04d8c9e2ac7b22a4"
+        },
+        {
+          "path": "src/algorithm.rs",
+          "bytes": 3800,
+          "sha256": "d0f89772b17ce3a47ca8e4c644a0c5141e2c08a91527567d0e4110c3c17cd30d"
+        },
+        {
+          "path": "src/blake2b_long.rs",
+          "bytes": 2448,
+          "sha256": "9a71c8fe70486d7ee586e9a28bf738ee88929adb7d6d18287e7c347ccd8bc9c3"
+        },
+        {
+          "path": "src/block.rs",
+          "bytes": 5629,
+          "sha256": "4694ec1e93b9af6841b7608d51b1a0efdf7a73214ac69450dfc5c6c8f0b0e6a0"
+        },
+        {
+          "path": "src/error.rs",
+          "bytes": 4068,
+          "sha256": "8f08987fccfe58802a0520005eb423f9159e4c1d272a76c9d419c47ab3f62b89"
+        },
+        {
+          "path": "src/lib.rs",
+          "bytes": 26793,
+          "sha256": "9ac55c0154746bc2b3216d79d99b4ffa60e8b39efc74ed7475c5d9d1c4f957b5"
+        },
+        {
+          "path": "src/memory.rs",
+          "bytes": 6001,
+          "sha256": "1d9ea341a46b241cbffb20ae2fd26aa5bc49e604f2f710f9bb99de40ca74804d"
+        },
+        {
+          "path": "src/params.rs",
+          "bytes": 19354,
+          "sha256": "9dc498ff47fc7c47003eff0ab86f45301e78a24808e84c45fbb362be94efca9d"
+        },
+        {
+          "path": "src/version.rs",
+          "bytes": 954,
+          "sha256": "f6d0cadcfc094d4050b2075384795da1415d2d1490f90d9dd52c4c395245f6e9"
+        }
+      ],
+      "vcs": {
+        "git": {
+          "sha1": "b1e0ad6fe229b1ba74e4696c7359ab45d7e931f0"
+        },
+        "path_in_vcs": "argon2"
+      },
+      "manifest": "[package]\nname = \"argon2\"\nversion = \"0.6.0\"\ndescription = \"\"\"\nPure Rust implementation of the Argon2 password hashing function with support\nfor the Argon2d, Argon2i, and Argon2id algorithmic variants\n\"\"\"\nauthors = [\"RustCrypto Developers\"]\nlicense = \"MIT OR Apache-2.0\"\ndocumentation = \"https://docs.rs/argon2\"\nhomepage = \"https://github.com/RustCrypto/password-hashes/tree/master/argon2\"\nrepository = \"https://github.com/RustCrypto/password-hashes\"\nkeywords = [\"crypto\", \"hashing\", \"password\", \"phf\"]\ncategories = [\"authentication\", \"cryptography\", \"no-std\"]\nreadme = \"README.md\"\nedition = \"2024\"\nrust-version = \"1.85\"\n\n[dependencies]\nbase64ct = \"1.7\"\nblake2 = { version = \"0.11\", default-features = false }\n\n# optional dependencies\nkdf = { version = \"0.1\", optional = true }\nrayon = { version = \"1.7\", optional = true }\npassword-hash = { version = \"0.6\", optional = true, features = [\"phc\"] }\nzeroize = { version = \"1\", default-features = false, optional = true }\n\n[target.'cfg(any(target_arch = \"x86\", target_arch = \"x86_64\"))'.dependencies]\ncpufeatures = \"0.3\"\n\n[dev-dependencies]\nhex-literal = \"1\"\n\n[features]\ndefault = [\"alloc\", \"getrandom\", \"password-hash\"]\nalloc = [\"password-hash?/alloc\"]\n\nkdf = [\"alloc\", \"dep:kdf\"]\ngetrandom = [\"password-hash/getrandom\"]\nparallel = [\"dep:rayon\"]\npassword-hash = [\"dep:password-hash\"]\nrand_core = [\"password-hash/rand_core\"]\nzeroize = [\"dep:zeroize\"]\n\n[lints.clippy]\nborrow_as_ptr = \"warn\"\ncast_lossless = \"warn\"\ncast_possible_truncation = \"warn\"\ncast_possible_wrap = \"warn\"\ncast_precision_loss = \"warn\"\ncast_sign_loss = \"warn\"\nchecked_conversions = \"warn\"\ndoc_markdown = \"warn\"\nfrom_iter_instead_of_collect = \"warn\"\nimplicit_saturating_sub = \"warn\"\nmanual_assert = \"warn\"\nmap_unwrap_or = \"warn\"\nmissing_errors_doc = \"warn\"\nmissing_panics_doc = \"warn\"\nmod_module_files = \"warn\"\nmust_use_candidate = \"warn\"\nneedless_range_loop = \"allow\"\nptr_as_ptr = \"warn\"\nredundant_closure_for_method_calls = \"warn\"\nref_as_ptr = \"warn\"\nreturn_self_not_must_use = \"warn\"\nsemicolon_if_nothing_returned = \"warn\"\ntrivially_copy_pass_by_ref = \"warn\"\nstd_instead_of_alloc = \"warn\"\nstd_instead_of_core = \"warn\"\nundocumented_unsafe_blocks = \"warn\"\nunnecessary_safety_comment = \"warn\"\nunwrap_used = \"warn\"\n\n[lints.rust]\nmissing_copy_implementations = \"warn\"\nmissing_debug_implementations = \"warn\"\nmissing_docs = \"warn\"\ntrivial_casts = \"warn\"\ntrivial_numeric_casts = \"warn\"\nunused_lifetimes = \"warn\"\nunused_qualifications = \"warn\"\n\n[lints.rust.unexpected_cfgs]\nlevel = \"warn\"\ncheck-cfg = ['cfg(test_large_ram)']\n\n[package.metadata.docs.rs]\nall-features = true\n"
+    },
+    {
+      "name": "chacha20poly1305",
+      "version": "0.11.0",
+      "url": "https://static.crates.io/crates/chacha20poly1305/chacha20poly1305-0.11.0.crate",
+      "sha256": "9b89e1c441e926b9c82a8d023f6e1b7ae0adcfaa7d621814e4d60789bac751cb",
+      "bytes": 71012,
+      "files": [
+        {
+          "path": "Cargo.toml.orig",
+          "bytes": 1523,
+          "sha256": "3b17182be9bcc2b818b6214a4a6fe18d0fa22492d23cdcaab4fc41251c3f9bed"
+        },
+        {
+          "path": "README.md",
+          "bytes": 3691,
+          "sha256": "3ef6cfd941096d8ce8dda11058eb59cb0252fa08ebc4dfbc7adb44e33c5f60ea"
+        },
+        {
+          "path": "src/cipher.rs",
+          "bytes": 3563,
+          "sha256": "96c6c14e10f0c81b78b743a2f8f74db2c9325e78119f7ff81a467af2f65958ad"
+        },
+        {
+          "path": "src/lib.rs",
+          "bytes": 10747,
+          "sha256": "c5735fcb58bdd9c03975a376eb40b4e8698790f3ad72282823cfbdc2aa90335f"
+        }
+      ],
+      "vcs": {
+        "git": {
+          "sha1": "e37a978ccf0992d9053fbc039470d6527108e393"
+        },
+        "path_in_vcs": "chacha20poly1305"
+      },
+      "manifest": "[package]\nname = \"chacha20poly1305\"\nversion = \"0.11.0\"\ndescription = \"\"\"\nPure Rust implementation of the ChaCha20Poly1305 Authenticated Encryption\nwith Additional Data Cipher (RFC 8439) with optional architecture-specific\nhardware acceleration. Also contains implementations of the XChaCha20Poly1305\nextended nonce variant of ChaCha20Poly1305, and the reduced-round\nChaCha8Poly1305 and ChaCha12Poly1305 lightweight variants.\n\"\"\"\nauthors = [\"RustCrypto Developers\"]\nedition = \"2024\"\nlicense = \"Apache-2.0 OR MIT\"\nreadme = \"README.md\"\ndocumentation = \"https://docs.rs/chacha20poly1305\"\nhomepage = \"https://github.com/RustCrypto/AEADs/tree/master/chacha20poly1305\"\nrepository = \"https://github.com/RustCrypto/AEADs\"\nkeywords = [\"aead\", \"chacha20\", \"poly1305\", \"xchacha20\", \"xchacha20poly1305\"]\ncategories = [\"cryptography\", \"no-std\"]\nrust-version = \"1.85\"\n\n[dependencies]\naead = { version = \"0.6\", default-features = false }\nchacha20 = { version = \"0.10\", default-features = false, features = [\"xchacha\"] }\ncipher = \"0.5\"\npoly1305 = \"0.9\"\nzeroize = { version = \"1.8\", optional = true, default-features = false }\n\n[dev-dependencies]\naead = { version = \"0.6\", features = [\"dev\"], default-features = false }\n\n[features]\ndefault = [\"alloc\", \"getrandom\"]\nalloc = [\"aead/alloc\"]\narrayvec = [\"aead/arrayvec\"]\nbytes = [\"aead/bytes\"]\ngetrandom = [\"aead/getrandom\"]\nrand_core = [\"aead/rand_core\"]\nreduced-round = []\nzeroize = [\"dep:zeroize\", \"chacha20/zeroize\"]\n\n[lints]\nworkspace = true\n\n[package.metadata.docs.rs]\nall-features = true\n"
+    },
+    {
+      "name": "zeroize",
+      "version": "1.9.1",
+      "url": "https://static.crates.io/crates/zeroize/zeroize-1.9.1.crate",
+      "sha256": "e13084392c5e4bc371903e2935a5eaeed24905a7511356b883835e18a78f6879",
+      "bytes": 25043,
+      "files": [
+        {
+          "path": "Cargo.toml.orig",
+          "bytes": 1130,
+          "sha256": "5a02315966d889fc90c682768796c8d8c92bb41b7a3568876ba9808d3976350b"
+        },
+        {
+          "path": "README.md",
+          "bytes": 3618,
+          "sha256": "cda76c899179e07b295d7daac7227db266795adbc548dcaf99d71360f81fbbf5"
+        },
+        {
+          "path": "src/aarch64.rs",
+          "bytes": 644,
+          "sha256": "86180b7aa417a1918165fbc6665227f7667e989384f008dfbe77137ae64f873c"
+        },
+        {
+          "path": "src/barrier.rs",
+          "bytes": 3321,
+          "sha256": "99d5495396318717a050570dc6e6cfbdba77f218689c9fac513e1060499453be"
+        },
+        {
+          "path": "src/lib.rs",
+          "bytes": 27748,
+          "sha256": "0ec1dcf0d7c33b0bab02f85d79d37f29bbb8f034f648513797859a7b37bca637"
+        },
+        {
+          "path": "src/stack.rs",
+          "bytes": 2173,
+          "sha256": "9ef73091eab4aeb562f87147008f66411d3c70ea4f9807437828a8ba50f4c9d5"
+        },
+        {
+          "path": "src/x86.rs",
+          "bytes": 631,
+          "sha256": "cd87d6bf0f95df0702d94442643ca8d401c85515b6dc13d65ebd13723f07bc02"
+        }
+      ],
+      "vcs": {
+        "git": {
+          "sha1": "34a6ebcb9b920ec7ae5809e470fce94fe7c0cb55"
+        },
+        "path_in_vcs": "zeroize"
+      },
+      "manifest": "[package]\nname = \"zeroize\"\nversion = \"1.9.1\"\nauthors = [\"The RustCrypto Project Developers\"]\nedition = \"2024\"\nrust-version = \"1.85\"\ndocumentation = \"https://docs.rs/zeroize\"\nreadme = \"README.md\"\nrepository = \"https://github.com/RustCrypto/utils\"\nlicense = \"Apache-2.0 OR MIT\"\nkeywords = [\"memory\", \"memset\", \"secure\", \"volatile\", \"zero\"]\ncategories = [\"cryptography\", \"memory-management\", \"no-std\", \"os\"]\ndescription = \"\"\"\nSecurely clear secrets from memory with a simple trait built on\nstable Rust primitives which guarantee memory is zeroed using an\noperation will not be 'optimized away' by the compiler.\nUses a portable pure Rust implementation that works everywhere,\neven WASM!\n\"\"\"\n\n[dependencies]\nserde = { version = \"1\", default-features = false, optional = true }\nzeroize_derive = { version = \"1.5\", optional = true }\n\n[features]\ndefault = [\"alloc\"]\nalloc = []\nstd = [\"alloc\"]\n\naarch64 = [] # NOTE: vestigial no-op feature; AArch64 support is always enabled now\nderive = [\"zeroize_derive\"]\nsimd = [] # NOTE: vestigial no-op feature; always enabled\n\n[lints]\nworkspace = true\n\n[package.metadata.docs.rs]\nall-features = true\n"
+    },
+    {
+      "name": "keyring",
+      "version": "3.6.3",
+      "url": "https://static.crates.io/crates/keyring/keyring-3.6.3.crate",
+      "sha256": "eebcc3aff044e5944a8fbaf69eb277d11986064cba30c468730e8b9909fb551c",
+      "bytes": 67500,
+      "files": [
+        {
+          "path": "Cargo.toml.orig",
+          "bytes": 3077,
+          "sha256": "435cc9ea9a2c68ff007da37f6072c3b1321fbefbef0ead36e4476d39eebb43b6"
+        },
+        {
+          "path": "README.md",
+          "bytes": 10429,
+          "sha256": "8f9b54161398c84d413630047fd47532d49fcc96fb65111b2d67ad29116badad"
+        },
+        {
+          "path": "src/credential.rs",
+          "bytes": 7766,
+          "sha256": "41185066e93511028e724fa1189ff95f221f371960f943761da84e4a0431030f"
+        },
+        {
+          "path": "src/error.rs",
+          "bytes": 4783,
+          "sha256": "6c5797d0a2cfeea3641397f23777c90e8ef38d9fa89d57644b3b5f3d2c967b54"
+        },
+        {
+          "path": "src/ios.rs",
+          "bytes": 7301,
+          "sha256": "c673178218ce2b42719e1a1f3e7a2c424b16a69de27db54091456de1521e510a"
+        },
+        {
+          "path": "src/keyutils.rs",
+          "bytes": 15711,
+          "sha256": "ae7f1915437ed091afd2e0addd5fb1890caf60c4ae9c55d665cf87b44ac5e778"
+        },
+        {
+          "path": "src/keyutils_persistent.rs",
+          "bytes": 8822,
+          "sha256": "e0e23b80f8547a278ff9786892b3b61d92c671ea4af8643f344e3d92a80636c4"
+        },
+        {
+          "path": "src/lib.rs",
+          "bytes": 29865,
+          "sha256": "dfa7fa25141b5cfa6d6000fa753bcdd956679dabc7c55293d0b9ebd5f9eaa8fc"
+        },
+        {
+          "path": "src/macos.rs",
+          "bytes": 13280,
+          "sha256": "7a78829f057fdb2b620684fecf0b7f617ebc3305fb426484d4c11b0847f2b03b"
+        },
+        {
+          "path": "src/mock.rs",
+          "bytes": 11148,
+          "sha256": "444b47c1cc9ecb38cb2fdc23a38a67181702f7c71ab5a98a00ea58471ad0a8dd"
+        },
+        {
+          "path": "src/secret_service.rs",
+          "bytes": 34878,
+          "sha256": "1f3e0dab29e3805e2e2c17a17e3504997128444f50cd15b29e921bb3562b0d19"
+        },
+        {
+          "path": "src/windows.rs",
+          "bytes": 30752,
+          "sha256": "bca6eec1115989c04607a0e303b8b44702b656e469c885deb93e8a0607e8e42f"
+        }
+      ],
+      "vcs": {
+        "git": {
+          "sha1": "315cbdf6c6a9153d8c9f88b56568f29862d3e39d"
+        },
+        "path_in_vcs": ""
+      },
+      "manifest": "[package]\nauthors = [\"Walther Chen <walther.chen@gmail.com>\", \"Daniel Brotsky <dev@brotsky.com>\"]\ndescription = \"Cross-platform library for managing passwords/credentials\"\nhomepage = \"https://github.com/hwchen/keyring-rs\"\nkeywords = [\"password\", \"credential\", \"keychain\", \"keyring\", \"cross-platform\"]\nlicense = \"MIT OR Apache-2.0\"\nname = \"keyring\"\nrepository = \"https://github.com/hwchen/keyring-rs.git\"\nversion = \"3.6.3\"\nrust-version = \"1.75\"\nedition = \"2021\"\nexclude = [\".github/\"]\nreadme = \"README.md\"\n\n[features]\nlinux-native = [\"dep:linux-keyutils\"]\napple-native = [\"dep:security-framework\"]\nwindows-native = [\"dep:windows-sys\", \"dep:byteorder\"]\n\nlinux-native-sync-persistent = [\"linux-native\", \"sync-secret-service\"]\nlinux-native-async-persistent = [\"linux-native\", \"async-secret-service\"]\nsync-secret-service = [\"dep:dbus-secret-service\"]\nasync-secret-service = [\"dep:secret-service\", \"dep:zbus\"]\ncrypto-rust = [\"dbus-secret-service?/crypto-rust\", \"secret-service?/crypto-rust\"]\ncrypto-openssl = [\"dbus-secret-service?/crypto-openssl\", \"secret-service?/crypto-openssl\"]\ntokio = [\"zbus?/tokio\"]\nasync-io = [\"zbus?/async-io\"]\nvendored = [\"dbus-secret-service?/vendored\", \"openssl?/vendored\"]\n\n[dependencies]\nlog = \"0.4.22\"\nopenssl = { version = \"0.10.66\", optional = true }\n\n[target.'cfg(target_os = \"macos\")'.dependencies]  # see issue #190\nsecurity-framework = { version = \"3\", optional = true }\n\n[target.'cfg(target_os = \"ios\")'.dependencies]  # see issue #190\nsecurity-framework = { version = \"2\", optional = true }\n\n[target.'cfg(target_os = \"linux\")'.dependencies]\nsecret-service = { version = \"4\", optional = true }\nzbus = { version = \"4\", optional = true }\nlinux-keyutils = { version = \"0.2\", features = [\"std\"], optional = true }\ndbus-secret-service = { version = \"4.0.0-rc.2\", optional = true }\n\n[target.'cfg(target_os = \"freebsd\")'.dependencies]\nsecret-service = { version = \"4\", optional = true }\nzbus = { version = \"4\", optional = true }\ndbus-secret-service = { version = \"4.0.1\", optional = true }\n\n[target.'cfg(target_os = \"openbsd\")'.dependencies]\nsecret-service = { version = \"4\", optional = true }\nzbus = { version = \"4\", optional = true }\ndbus-secret-service = { version = \"4.0.0-rc.1\", optional = true }\n\n[target.'cfg(target_os = \"windows\")'.dependencies]\nbyteorder = { version = \"1.2\", optional = true }\nwindows-sys = { version = \"0.60\", features = [\"Win32_Foundation\", \"Win32_Security_Credentials\"], optional = true }\nzeroize = \"1.8.1\"\n\n[[example]]\nname = \"iostest\"\npath = \"examples/ios.rs\"\ncrate-type = [\"staticlib\"]\n\n[[example]]\nname = \"keyring-cli\"\npath = \"examples/cli.rs\"\n\n[dev-dependencies]\nbase64 = \"0.22\"\nclap = { version = \"4\", features = [\"derive\", \"wrap_help\"] }\ndoc-comment = \"0.3\"\nenv_logger = \"0.11.5\"\nfastrand = \"2\"\nrpassword = \"7\"\nrprompt = \"2\"\nwhoami = \"1.5\"\n\n[package.metadata.docs.rs]\ndefault-target = \"x86_64-unknown-linux-gnu\"\ntargets = [\"x86_64-unknown-linux-gnu\", \"aarch64-apple-darwin\", \"aarch64-apple-ios\", \"x86_64-pc-windows-msvc\"]\nfeatures = [\"apple-native\", \"windows-native\", \"linux-native-sync-persistent\", \"crypto-rust\"]\n"
+    }
+  ]
+}

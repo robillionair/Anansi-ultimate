@@ -1,0 +1,416 @@
+{
+  "reviewDate": "2026-10-19",
+  "method": "Passive source/audit mapping only; no compilation, installation or cryptographic execution",
+  "scope": "Selected libsodium source subtrees only, not a complete transitive/build/hardware dependency closure; path moves appear as added/removed.",
+  "versions": {
+    "audited": {
+      "tag": "1.0.13",
+      "commit": "7d5d9204e515ce37cce6d5e5015a1f94d1d92492",
+      "selectedFiles": 59
+    },
+    "candidate": {
+      "tag": "1.0.22-RELEASE",
+      "commit": "77e1ce5d6dee871c49ef211222ba18ef0c486bda",
+      "selectedFiles": 64
+    }
+  },
+  "counts": {
+    "removed": 3,
+    "identical": 15,
+    "changed": 41,
+    "added": 8
+  },
+  "components": [
+    {
+      "path": "src/libsodium/crypto_aead/xchacha20poly1305/sodium/aead_xchacha20poly1305.c",
+      "status": "removed",
+      "auditedBlob": "38385c84e208ec2b7e0c27d751cf27c306113336"
+    },
+    {
+      "path": "src/libsodium/crypto_core/hchacha20/core_hchacha20.c",
+      "status": "identical",
+      "auditedBlob": "39ab26a6da894e75cc648a5868fd663237ffdcc2",
+      "candidateBlob": "39ab26a6da894e75cc648a5868fd663237ffdcc2"
+    },
+    {
+      "path": "src/libsodium/crypto_generichash/blake2b/generichash_blake2.c",
+      "status": "identical",
+      "auditedBlob": "781d4c584e2f9ccf40d04341096f3268dcf1bcec",
+      "candidateBlob": "781d4c584e2f9ccf40d04341096f3268dcf1bcec"
+    },
+    {
+      "path": "src/libsodium/crypto_generichash/blake2b/ref/blake2.h",
+      "status": "changed",
+      "auditedBlob": "64162eee0fe79c70877342721e1e9437a5efb4ac",
+      "candidateBlob": "edfc99a245c9b3c1d4c19c352c1c5211e087d712"
+    },
+    {
+      "path": "src/libsodium/crypto_generichash/blake2b/ref/blake2b-compress-avx2.c",
+      "status": "changed",
+      "auditedBlob": "7cb41fb6e7ef77ee3cdf28c8f03e301213491c3f",
+      "candidateBlob": "3152e286a1e5b0a8ec1af8b7918f6b8c55af674c"
+    },
+    {
+      "path": "src/libsodium/crypto_generichash/blake2b/ref/blake2b-compress-avx2.h",
+      "status": "changed",
+      "auditedBlob": "21acb2fa0cef53db6b7831b7c3fefce0e7284e29",
+      "candidateBlob": "7c11321b9232930b60aebfc943b846e0c17ff4ff"
+    },
+    {
+      "path": "src/libsodium/crypto_generichash/blake2b/ref/blake2b-compress-ref.c",
+      "status": "changed",
+      "auditedBlob": "63438e61330082fa305119ad547917a2a68bcb47",
+      "candidateBlob": "5fb356f39ba47ccabf74bda7912407056b106405"
+    },
+    {
+      "path": "src/libsodium/crypto_generichash/blake2b/ref/blake2b-compress-sse41.c",
+      "status": "changed",
+      "auditedBlob": "9e5c0c5081d4aed4ed5c978eddb47aade57512a6",
+      "candidateBlob": "ecab71644ba25f5aa5d12a98b57f3203a26744c8"
+    },
+    {
+      "path": "src/libsodium/crypto_generichash/blake2b/ref/blake2b-compress-sse41.h",
+      "status": "changed",
+      "auditedBlob": "ac78e5bb1e9fa992200b1892b1d8cc65060191e6",
+      "candidateBlob": "c4c93f779edb5beabf8de9ea039b6c66bbb7e620"
+    },
+    {
+      "path": "src/libsodium/crypto_generichash/blake2b/ref/blake2b-compress-ssse3.c",
+      "status": "changed",
+      "auditedBlob": "a207a64d40436349ed42816dae9e9bef1fe4503a",
+      "candidateBlob": "8d0e3e9daf5125f3ab4606819d050046d48fc1d1"
+    },
+    {
+      "path": "src/libsodium/crypto_generichash/blake2b/ref/blake2b-compress-ssse3.h",
+      "status": "changed",
+      "auditedBlob": "9a7164fe2541a1b3aa2fa43271f5be979a75a8d6",
+      "candidateBlob": "9b96b8f97e9ed38467fcd5b762fabd646ff9d5c7"
+    },
+    {
+      "path": "src/libsodium/crypto_generichash/blake2b/ref/blake2b-load-avx2.h",
+      "status": "changed",
+      "auditedBlob": "8c15f177c704a961b7347209be3df9bdddaceb11",
+      "candidateBlob": "12a5d1890c326884cc9ad68c49d5969f157dd264"
+    },
+    {
+      "path": "src/libsodium/crypto_generichash/blake2b/ref/blake2b-load-sse2.h",
+      "status": "identical",
+      "auditedBlob": "8e67421acafc507decfc28ba519c4a56bc4c6590",
+      "candidateBlob": "8e67421acafc507decfc28ba519c4a56bc4c6590"
+    },
+    {
+      "path": "src/libsodium/crypto_generichash/blake2b/ref/blake2b-load-sse41.h",
+      "status": "identical",
+      "auditedBlob": "31745fc139d21010a214729b1b7f904df4a5e469",
+      "candidateBlob": "31745fc139d21010a214729b1b7f904df4a5e469"
+    },
+    {
+      "path": "src/libsodium/crypto_generichash/blake2b/ref/blake2b-ref.c",
+      "status": "changed",
+      "auditedBlob": "8a00cb8854d0b1e7c5bde15465499674cc17d871",
+      "candidateBlob": "19008f54ac55eb00e87bf7afa06ce2cec7a534a4"
+    },
+    {
+      "path": "src/libsodium/crypto_generichash/blake2b/ref/generichash_blake2b.c",
+      "status": "changed",
+      "auditedBlob": "474d26ebbca83f3e5c593357e81263dd28887bce",
+      "candidateBlob": "7a8598c7937aaeb2e9ac0f75b5e5d7b7d49dfaef"
+    },
+    {
+      "path": "src/libsodium/crypto_onetimeauth/poly1305/donna/poly1305_donna.c",
+      "status": "identical",
+      "auditedBlob": "e798072f84c4804d51c5c1cc19d9ca8fbf77d905",
+      "candidateBlob": "e798072f84c4804d51c5c1cc19d9ca8fbf77d905"
+    },
+    {
+      "path": "src/libsodium/crypto_onetimeauth/poly1305/donna/poly1305_donna.h",
+      "status": "identical",
+      "auditedBlob": "d6474b3af4f502a893c331fb653df82c962f27c5",
+      "candidateBlob": "d6474b3af4f502a893c331fb653df82c962f27c5"
+    },
+    {
+      "path": "src/libsodium/crypto_onetimeauth/poly1305/donna/poly1305_donna32.h",
+      "status": "changed",
+      "auditedBlob": "e562ac4fb81716493771dd72c2899a948684a555",
+      "candidateBlob": "ed525008017618fae02127db1c4e266264001a68"
+    },
+    {
+      "path": "src/libsodium/crypto_onetimeauth/poly1305/donna/poly1305_donna64.h",
+      "status": "changed",
+      "auditedBlob": "695ad28f82a043c9028e207b289c7b79dda73527",
+      "candidateBlob": "046ab09a7a81061f109d48734cd864337cf8bcb2"
+    },
+    {
+      "path": "src/libsodium/crypto_onetimeauth/poly1305/onetimeauth_poly1305.c",
+      "status": "changed",
+      "auditedBlob": "a8a515db63566bb4bed7f25cdf2f7e60ec1c6717",
+      "candidateBlob": "d5e2efa29769a3ce925c0cb5592b6b3b975c9ce2"
+    },
+    {
+      "path": "src/libsodium/crypto_onetimeauth/poly1305/onetimeauth_poly1305.h",
+      "status": "identical",
+      "auditedBlob": "243eadd50b17444dceccf106de3558d6f545c799",
+      "candidateBlob": "243eadd50b17444dceccf106de3558d6f545c799"
+    },
+    {
+      "path": "src/libsodium/crypto_onetimeauth/poly1305/sse2/poly1305_sse2.c",
+      "status": "changed",
+      "auditedBlob": "aff802de578c1926ec78ebf7170a288871cd4036",
+      "candidateBlob": "03a80790002172bc21d6a3cf3ec9a56cacd65f93"
+    },
+    {
+      "path": "src/libsodium/crypto_onetimeauth/poly1305/sse2/poly1305_sse2.h",
+      "status": "identical",
+      "auditedBlob": "9177cad487ab72aa379968a591830024b27885ac",
+      "candidateBlob": "9177cad487ab72aa379968a591830024b27885ac"
+    },
+    {
+      "path": "src/libsodium/crypto_pwhash/argon2/argon2-core.c",
+      "status": "changed",
+      "auditedBlob": "091ce33fd19765e511b4e2006a18e6f559963d8d",
+      "candidateBlob": "d1274ba38277f3f999d457264e2e64f9fb491003"
+    },
+    {
+      "path": "src/libsodium/crypto_pwhash/argon2/argon2-core.h",
+      "status": "changed",
+      "auditedBlob": "69d5925bd64eac05a864a090492007ec1d204fa7",
+      "candidateBlob": "d544f3ebe6d36594bc2a2d5eac65cb8a6d1e924d"
+    },
+    {
+      "path": "src/libsodium/crypto_pwhash/argon2/argon2-encoding.c",
+      "status": "changed",
+      "auditedBlob": "5224cb61c11a8499c8ca432b979f413ff1affdb8",
+      "candidateBlob": "3c9b4927a1872ec4e72fb819a66d5e9e028028c7"
+    },
+    {
+      "path": "src/libsodium/crypto_pwhash/argon2/argon2-encoding.h",
+      "status": "changed",
+      "auditedBlob": "e929b31dc3fdddef0191f0aebb07fe251fe60dbc",
+      "candidateBlob": "c35fbf42d0ac526eb9dc52599a389cf1af65c6af"
+    },
+    {
+      "path": "src/libsodium/crypto_pwhash/argon2/argon2-fill-block-avx2.c",
+      "status": "changed",
+      "auditedBlob": "8597fc44fc88262fee89379a864013c5fe643f57",
+      "candidateBlob": "5c7956632b20250a7a3e344e5fed45184d6c8ba8"
+    },
+    {
+      "path": "src/libsodium/crypto_pwhash/argon2/argon2-fill-block-ref.c",
+      "status": "changed",
+      "auditedBlob": "98ad50c922e249552c551edaec128b86cc148bd5",
+      "candidateBlob": "d93daee19a94f9893bb17343e7dc04c6bb1f8610"
+    },
+    {
+      "path": "src/libsodium/crypto_pwhash/argon2/argon2-fill-block-ssse3.c",
+      "status": "changed",
+      "auditedBlob": "4056080d6a6b5f2e447dfcde64ce9f8bf21ca122",
+      "candidateBlob": "1930bc35f30b1aa35773a6ed1dc5a55e48e4d2c8"
+    },
+    {
+      "path": "src/libsodium/crypto_pwhash/argon2/argon2.c",
+      "status": "changed",
+      "auditedBlob": "f52381db3ef08355367dcc74143cf416def49156",
+      "candidateBlob": "ddc55c2c587060979d48edce4b1fbb2ef56a657e"
+    },
+    {
+      "path": "src/libsodium/crypto_pwhash/argon2/argon2.h",
+      "status": "changed",
+      "auditedBlob": "ab2b01ec6e3499cd026a09284fdebad3d57f0af6",
+      "candidateBlob": "a1014a470a596bc9936b2beba857226e248cd374"
+    },
+    {
+      "path": "src/libsodium/crypto_pwhash/argon2/blake2b-long.c",
+      "status": "identical",
+      "auditedBlob": "f0364aca87dd8aaf550fef429f9a82f7000444c2",
+      "candidateBlob": "f0364aca87dd8aaf550fef429f9a82f7000444c2"
+    },
+    {
+      "path": "src/libsodium/crypto_pwhash/argon2/blake2b-long.h",
+      "status": "identical",
+      "auditedBlob": "3d6d77552195ee22a80a9b0ab136a15572b90d8d",
+      "candidateBlob": "3d6d77552195ee22a80a9b0ab136a15572b90d8d"
+    },
+    {
+      "path": "src/libsodium/crypto_pwhash/argon2/blamka-round-avx2.h",
+      "status": "identical",
+      "auditedBlob": "f3dfa0f506add29b6ddb33bd8beb1b4f463ff989",
+      "candidateBlob": "f3dfa0f506add29b6ddb33bd8beb1b4f463ff989"
+    },
+    {
+      "path": "src/libsodium/crypto_pwhash/argon2/blamka-round-ref.h",
+      "status": "identical",
+      "auditedBlob": "7a2c6eb20e5e9f6694a597dd3d7342928d79f9ce",
+      "candidateBlob": "7a2c6eb20e5e9f6694a597dd3d7342928d79f9ce"
+    },
+    {
+      "path": "src/libsodium/crypto_pwhash/argon2/blamka-round-ssse3.h",
+      "status": "changed",
+      "auditedBlob": "98a47b93f8b096c8d25061bb5d2b17ef84ec28ef",
+      "candidateBlob": "5134b67c6f6c79089ac4059ec404fed6b27976b8"
+    },
+    {
+      "path": "src/libsodium/crypto_pwhash/argon2/pwhash_argon2i.c",
+      "status": "changed",
+      "auditedBlob": "78a671846daa59b918cd310a0a11eec71886eb2c",
+      "candidateBlob": "890f2d50829d067ee66af8d0d5f4d4067e1fb735"
+    },
+    {
+      "path": "src/libsodium/crypto_pwhash/argon2/pwhash_argon2id.c",
+      "status": "changed",
+      "auditedBlob": "aec0707c3b83ad3ff7c11676e216f474c90e7a05",
+      "candidateBlob": "2cac9856ceb5538bbee777d82566140572845e44"
+    },
+    {
+      "path": "src/libsodium/crypto_stream/chacha20/dolbeau/chacha20_dolbeau-avx2.c",
+      "status": "changed",
+      "auditedBlob": "c8cdff375b3550a4d0a4a53241de45178248ba6b",
+      "candidateBlob": "2bf2250b5906eddbd79e76aee8b86bf2560fe48d"
+    },
+    {
+      "path": "src/libsodium/crypto_stream/chacha20/dolbeau/chacha20_dolbeau-avx2.h",
+      "status": "identical",
+      "auditedBlob": "45eb98d7970379b60915d09f5b2f9179fb7e08c7",
+      "candidateBlob": "45eb98d7970379b60915d09f5b2f9179fb7e08c7"
+    },
+    {
+      "path": "src/libsodium/crypto_stream/chacha20/dolbeau/chacha20_dolbeau-ssse3.c",
+      "status": "changed",
+      "auditedBlob": "0689593280f47744eb7c7ece678696f4e58ccbb4",
+      "candidateBlob": "eb52bda62c4e06889011ea962e876bc6f6072221"
+    },
+    {
+      "path": "src/libsodium/crypto_stream/chacha20/dolbeau/chacha20_dolbeau-ssse3.h",
+      "status": "identical",
+      "auditedBlob": "d67630f6a92ece875de32a68ab787fd771230f8c",
+      "candidateBlob": "d67630f6a92ece875de32a68ab787fd771230f8c"
+    },
+    {
+      "path": "src/libsodium/crypto_stream/chacha20/dolbeau/u0.h",
+      "status": "changed",
+      "auditedBlob": "3312d29b94b88b17ee6b5c921cef596ec62afb10",
+      "candidateBlob": "c05dfd7282f937abe724ea5b3d20c525600f146b"
+    },
+    {
+      "path": "src/libsodium/crypto_stream/chacha20/dolbeau/u1.h",
+      "status": "changed",
+      "auditedBlob": "867b44bcf224c88b2304915856a91d97e233acaf",
+      "candidateBlob": "f93fffeadc76692c8cd2c74f7784719ba4351c37"
+    },
+    {
+      "path": "src/libsodium/crypto_stream/chacha20/dolbeau/u4.h",
+      "status": "changed",
+      "auditedBlob": "3ff834260903edeba57a0dd8d5b0a0aa9a250915",
+      "candidateBlob": "4ab295d7a3fb0e7e1fbbb915c5d2a181c3022bae"
+    },
+    {
+      "path": "src/libsodium/crypto_stream/chacha20/dolbeau/u8.h",
+      "status": "changed",
+      "auditedBlob": "22bf9fcfa1adf5df41e7402492a080948dd64ac8",
+      "candidateBlob": "f212f67515bce1c133d6c792815407502909567d"
+    },
+    {
+      "path": "src/libsodium/crypto_stream/chacha20/ref/chacha20_ref.c",
+      "status": "changed",
+      "auditedBlob": "7a19cebb01c22570085795727b7b689f6c9b8a9b",
+      "candidateBlob": "40cccbf8f8f90eb54dd73a493206c202f42aef39"
+    },
+    {
+      "path": "src/libsodium/crypto_stream/chacha20/ref/chacha20_ref.h",
+      "status": "identical",
+      "auditedBlob": "6ac48075546907560a552a907f15ceae1ec6af72",
+      "candidateBlob": "6ac48075546907560a552a907f15ceae1ec6af72"
+    },
+    {
+      "path": "src/libsodium/crypto_stream/chacha20/stream_chacha20.c",
+      "status": "changed",
+      "auditedBlob": "0f7520ecf7bc9d20f75c9a4e4aadde9ce9394a13",
+      "candidateBlob": "adcab5bf118476fb962c013edcb9630e73576328"
+    },
+    {
+      "path": "src/libsodium/crypto_stream/chacha20/stream_chacha20.h",
+      "status": "changed",
+      "auditedBlob": "d6b71c5e0d6441f1a7569f7e160c1b74f67eac51",
+      "candidateBlob": "40f782f418c5ade3f0d20c3320dc40e3b9f5f0b3"
+    },
+    {
+      "path": "src/libsodium/include/sodium/crypto_aead_xchacha20poly1305.h",
+      "status": "changed",
+      "auditedBlob": "f863ce88ca26fd2f8b737daf11522cd3f44b8832",
+      "candidateBlob": "6643b0cbf5091d0ed173a6ad546bda913acf9f26"
+    },
+    {
+      "path": "src/libsodium/include/sodium/crypto_pwhash_argon2id.h",
+      "status": "changed",
+      "auditedBlob": "550fd6fd5a346ec0f4896517f02ec862d57ab6d1",
+      "candidateBlob": "98bc83e075117be94f910aadbe0361fe76b6cb94"
+    },
+    {
+      "path": "src/libsodium/randombytes/nativeclient/randombytes_nativeclient.c",
+      "status": "removed",
+      "auditedBlob": "468cd653d91d75eb8be6139fc761472b7c0fe357"
+    },
+    {
+      "path": "src/libsodium/randombytes/randombytes.c",
+      "status": "changed",
+      "auditedBlob": "b1926ddac9c1edc1a0b2eff58ba208ad51d5974a",
+      "candidateBlob": "dfb6b355869140033775b82e1c9f8a574a762e6d"
+    },
+    {
+      "path": "src/libsodium/randombytes/salsa20/randombytes_salsa20_random.c",
+      "status": "removed",
+      "auditedBlob": "a226195285c9e52ba12171ce8ca500f3351ab41e"
+    },
+    {
+      "path": "src/libsodium/randombytes/sysrandom/randombytes_sysrandom.c",
+      "status": "changed",
+      "auditedBlob": "feede4653b13a11dfad3efacb7d8843f8a1d93df",
+      "candidateBlob": "ed1ebee05c1be1f38eabdc30810b2b34c1ade489"
+    },
+    {
+      "path": "src/libsodium/sodium/utils.c",
+      "status": "changed",
+      "auditedBlob": "0796e1fec892004609cca94be8f0c9c7f758f84e",
+      "candidateBlob": "a27ee7aee4964fb1372f694ce22308f7c884c207"
+    },
+    {
+      "path": "src/libsodium/crypto_aead/xchacha20poly1305/aead_xchacha20poly1305.c",
+      "status": "added",
+      "candidateBlob": "0d5cd3cf84c6afbbcb59b058c1b1c6c618c3ca70"
+    },
+    {
+      "path": "src/libsodium/crypto_pwhash/argon2/argon2-fill-block-avx512f.c",
+      "status": "added",
+      "candidateBlob": "8629fdf51b2a11f6f25aa5f77508e9ddd9712e8a"
+    },
+    {
+      "path": "src/libsodium/crypto_pwhash/argon2/argon2-fill-block-neon.c",
+      "status": "added",
+      "candidateBlob": "3e3fec7aacd063dd4c13101f78cfb07fae69d637"
+    },
+    {
+      "path": "src/libsodium/crypto_pwhash/argon2/argon2-fill-block-wasm32.c",
+      "status": "added",
+      "candidateBlob": "d8d65d8b43f819feba2c2b8f80ab6fb1aaef80bf"
+    },
+    {
+      "path": "src/libsodium/crypto_pwhash/argon2/blamka-round-avx512f.h",
+      "status": "added",
+      "candidateBlob": "9a822402d897ca74349302b6eecd809b8dfe285f"
+    },
+    {
+      "path": "src/libsodium/crypto_pwhash/argon2/blamka-round-neon.h",
+      "status": "added",
+      "candidateBlob": "3362fe7219d7cefd8536dcc499a455e8bb9cbebc"
+    },
+    {
+      "path": "src/libsodium/crypto_pwhash/argon2/blamka-round-wasm32.h",
+      "status": "added",
+      "candidateBlob": "ee3349776fae9a3db9e7eb8cd53c00faedf1f692"
+    },
+    {
+      "path": "src/libsodium/randombytes/internal/randombytes_internal_random.c",
+      "status": "added",
+      "candidateBlob": "33c04ad630c8ca4b45c084e44ac01fcd68804175"
+    }
+  ]
+}
