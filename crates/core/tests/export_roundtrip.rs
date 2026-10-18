@@ -249,4 +249,16 @@ fn record_quota_is_not_silent_truncation_and_boundary_edges_disclose_no_metadata
     assert!(store.execute_export(&lease).is_err());
     store.fail_export(&lease).unwrap();
     assert!(store.read_job(&w, &job.id).unwrap().artifact_id.is_none());
+    for application in [false, true] {
+        let job = store
+            .enqueue_export(&w, ExportSelection::Backup { application })
+            .unwrap();
+        let lease = store.claim_export().unwrap().unwrap();
+        assert_eq!(
+            store.execute_backup(&lease).unwrap_err().code,
+            anansi_core::ErrorCode::InvalidRequest
+        );
+        store.fail_export(&lease).unwrap();
+        assert!(store.read_job(&w, &job.id).unwrap().artifact_id.is_none());
+    }
 }

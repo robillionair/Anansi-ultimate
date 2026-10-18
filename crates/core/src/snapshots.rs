@@ -108,6 +108,7 @@ pub(crate) fn copy_rows(
     target: &Connection,
     table: &str,
     workspace: &str,
+    budget: &mut u64,
 ) -> Result<(), CommandError> {
     // table identifiers are fixed by callers, never renderer input.
     if !TABLES.contains(&table) {
@@ -135,6 +136,17 @@ pub(crate) fn copy_rows(
             .map(|i| row.get::<_, Value>(i))
             .collect::<rusqlite::Result<Vec<_>>>()
             .map_err(|_| unavailable())?;
+        for value in &values {
+            let size = match value {
+                Value::Text(text) => text.len() as u64,
+                Value::Blob(bytes) => bytes.len() as u64,
+                _ => 16,
+            };
+            *budget = budget.checked_add(size + 32).ok_or_else(invalid)?;
+            if *budget > MAX_BYTES {
+                return Err(invalid());
+            }
+        }
         insert
             .execute(rusqlite::params_from_iter(values))
             .map_err(|_| unavailable())?;
@@ -163,16 +175,52 @@ impl Storage {
             .map_err(|_| unavailable())?;
         let mut connection = self.connection(false)?.ok_or_else(unavailable)?;
         let snapshot = connection.transaction().map_err(|_| unavailable())?;
+        let count: u32 = if application {
+            snapshot.query_row("SELECT count(*) FROM memories", [], |r| r.get(0))
+        } else {
+            snapshot.query_row(
+                "SELECT count(*) FROM memories WHERE workspace_id=?1",
+                [&lease.job.workspace_id],
+                |r| r.get(0),
+            )
+        }
+        .map_err(|_| unavailable())?;
+        if count > MAX_RECORDS {
+            return Err(invalid());
+        }
+        let target_page_size: u64 = target
+            .pragma_query_value(None, "page_size", |r| r.get::<_, u32>(0))
+            .map(u64::from)
+            .map_err(|_| unavailable())?;
+        target
+            .pragma_update(
+                None,
+                "max_page_count",
+                i64::try_from(MAX_BYTES / target_page_size).map_err(|_| invalid())?,
+            )
+            .map_err(|_| unavailable())?;
         let mut ids = vec![lease.job.workspace_id.clone()];
         if application {
             let mut statement = snapshot
                 .prepare("SELECT id FROM workspaces ORDER BY id")
                 .map_err(|_| unavailable())?;
+            let source_page_size: u32 = snapshot
+                .pragma_query_value(None, "page_size", |r| r.get(0))
+                .map_err(|_| unavailable())?;
+            let source_page_count: u32 = snapshot
+                .pragma_query_value(None, "page_count", |r| r.get(0))
+                .map_err(|_| unavailable())?;
+            if u64::from(source_page_size) * u64::from(source_page_count) > MAX_BYTES {
+                return Err(invalid());
+            }
             ids = statement
                 .query_map([], |r| r.get(0))
                 .map_err(|_| unavailable())?
                 .collect::<rusqlite::Result<_>>()
                 .map_err(|_| unavailable())?;
+            if ids.len() > MAX_RECORDS as usize {
+                return Err(invalid());
+            }
             // SQLite's online backup API includes committed WAL pages from this read snapshot.
             {
                 let backup = rusqlite::backup::Backup::new(&snapshot, &mut target)
@@ -202,8 +250,9 @@ impl Storage {
             let tx = target.transaction().map_err(|_| unavailable())?;
             tx.execute_batch("PRAGMA defer_foreign_keys=ON;")
                 .map_err(|_| unavailable())?;
+            let mut budget = 0;
             for table in TABLES {
-                copy_rows(&snapshot, &tx, table, &lease.job.workspace_id)?;
+                copy_rows(&snapshot, &tx, table, &lease.job.workspace_id, &mut budget)?;
             }
             tx.commit().map_err(|_| unavailable())?;
         }
@@ -757,6 +806,24 @@ mod tests {
     use super::*;
     use serde_json::json;
     use sha2::Digest;
+    #[test]
+    fn standalone_catalog_budget_is_checked_before_row_insertion() {
+        let source = Connection::open_in_memory().unwrap();
+        let target = Connection::open_in_memory().unwrap();
+        source.execute_batch("CREATE TABLE workspaces(id TEXT,name TEXT,name_key TEXT); INSERT INTO workspaces VALUES('workspace','title','title')").unwrap();
+        target
+            .execute_batch("CREATE TABLE workspaces(id TEXT,name TEXT,name_key TEXT)")
+            .unwrap();
+        let mut budget = MAX_BYTES;
+        assert!(copy_rows(&source, &target, "workspaces", "workspace", &mut budget).is_err());
+        assert_eq!(
+            target
+                .query_row("SELECT count(*) FROM workspaces", [], |r| r
+                    .get::<_, u32>(0))
+                .unwrap(),
+            0
+        );
+    }
     fn archive_members(bytes: &[u8]) -> std::collections::BTreeMap<String, Vec<u8>> {
         let mut result = std::collections::BTreeMap::new();
         let mut offset = 0;
