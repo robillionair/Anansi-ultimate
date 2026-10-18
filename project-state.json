@@ -24,7 +24,7 @@
   "blockers": [
     {
       "scope": "M2.6 technical readiness",
-      "detail": "Retain pure Rust and p=4; obtain matching independent Argon2 audit evidence and current AEAD/dependency mapping. Source identities verified, reports inspected, inquiry prepared but unsent. G1 remains open; user approval and G2-G4 are preserved."
+      "detail": "Retain pure Rust and p=4; obtain matching independent Argon2 audit evidence and current AEAD/dependency mapping. Source identities verified, reports inspected, explicitly authorized inquiry published as RustCrypto/password-hashes issue 940. G1 remains open; user approval and G2-G4 are preserved."
     }
   ],
   "nextTask": "M2.6",

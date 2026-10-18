@@ -4,7 +4,7 @@
 
 On 2026-10-19 the user selected **“Retain pure Rust; obtain matching audit evidence”** in response to [the library comparison](../plans/M2-vault-library-options.md). Native libsodium and its p=1 public API are not selected; the pure-Rust requirement, Argon2id p=4 defaults and existing import bounds remain unchanged. No FFI/build/dependency amendment is adopted.
 
-[The follow-up review](evidence/M2-6-audit-review.md) records exact checksum-verified direct source identities, historical AEAD audit revisions and the opaque-ke report's explicit Argon2 exclusion. This narrows the evidence gap but does not close G1 or certify current dependency coverage. G2–G4 remain adopted; no repeated blanket approval is required. An evidence inquiry is prepared but unsent. No external contact or paid review is inferred from the development authorization, and no M2.7 implementation begins before G1 closes.
+[The follow-up review](evidence/M2-6-audit-review.md) records exact checksum-verified direct source identities, historical AEAD audit revisions and the opaque-ke report's explicit Argon2 exclusion. This narrows the evidence gap but does not close G1 or certify current dependency coverage. G2–G4 remain adopted; no repeated blanket approval is required. The user separately authorized publishing the prepared evidence inquiry, now [upstream issue 940](https://github.com/RustCrypto/password-hashes/issues/940). No paid review is inferred from that authorization, and no M2.7 implementation begins before G1 closes.
 
 ## ADR-0001: Shared domain with two delivery adapters
 

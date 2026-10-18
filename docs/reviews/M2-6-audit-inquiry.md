@@ -1,6 +1,6 @@
 # M2.6 — Prepared audit evidence inquiry
 
-Status: UNSENT. Prepared 2026-10-19. No maintainer contact, issue, email, paid review or audit commission has occurred. Proposed destination: one public documentation question in [RustCrypto/password-hashes issues](https://github.com/RustCrypto/password-hashes/issues). Read-only GitHub API checks confirmed issues enabled, discussions disabled, and no repository-local issue template or CONTRIBUTING.md at the checked paths. This is an audit-documentation question, not a vulnerability report; do not use private security reporting without a vulnerability. User authorization to publish the message is still required.
+Status: PUBLISHED with explicit user authorization (“Publish the prepared question”) as [RustCrypto/password-hashes issue 940](https://github.com/RustCrypto/password-hashes/issues/940). Prepared/published 2026-10-19 client date (GitHub creation timestamp 2026-10-18T22:45:14Z). No paid review or audit commission occurred. Destination: one public documentation question in RustCrypto/password-hashes issues. Read-only GitHub API checks confirmed issues enabled, discussions disabled, and no repository-local issue template or CONTRIBUTING.md at the checked paths. This is an audit-documentation question, not a vulnerability report; do not use private security reporting without a vulnerability. The approved message below was sent once; read the issue before any follow-up or duplicate contact.
 
 ## Proposed message
 

@@ -4,7 +4,7 @@ Review date: 2026-10-19. Status: evidence review completed; G1 remains open. The
 
 ## Acceptance and method
 
-Identify exact proposed published sources, inspect independent reports for actual scope, rule out misleading audit associations, preserve the user's choice, and prepare an actionable evidence request. No product code, Cargo manifest/lockfile change, cryptographic execution, paid review or external communication is part of this checkpoint.
+Identify exact proposed published sources, inspect independent reports for actual scope, rule out misleading audit associations, preserve the user's choice, and prepare an actionable evidence request. No product code, Cargo manifest/lockfile change, cryptographic execution or paid review is part of this checkpoint. After preparing the request, the user explicitly authorized publishing it.
 
 [The direct-package inventory](M2-6-rustcrypto-sources.json) records downloaded archive SHA-256 values checked against registry checksums, packaged VCS metadata, original manifests and selected source-file fingerprints for argon2 0.6.0, chacha20poly1305 0.11.0, zeroize 1.9.1 and keyring 3.6.3. Archives were read passively in memory; package build scripts were not run. These are direct packages, not a resolved transitive dependency graph. VCS metadata is a package claim, not independent proof that every packaged byte matches Git. Checksums establish source identity, not audit coverage.
 
@@ -35,7 +35,7 @@ Primary RustCrypto repository/README/security policy, GitHub audit-related issue
 
 The packaged manifests expose dependency ranges and optional features. They do not close the selected build's full dependency/feature/platform coverage. Future feature minimization, zeroization behavior, lane handling, current AEAD changes and primitive vectors still require review and execution after the gate permits implementation. Nothing here changes the approved p=4 profile or silently substitutes a sequential p=1 API.
 
-Next: obtain an auditor/maintainer-provided report or explicit scope evidence, authenticate its provenance, map source revisions/features/dependencies and addressed findings to the selected implementation, and record residual gaps. If no suitable report exists, independent review is required under the retained gate. [The concrete inquiry](../reviews/M2-6-audit-inquiry.md) is prepared but unsent. Sending it needs explicit authorization to contact the proposed destination; commissioning a paid review needs separate explicit authorization. Neither is a repeated vault approval request.
+Next: obtain an auditor/maintainer-provided report or explicit scope evidence, authenticate its provenance, map source revisions/features/dependencies and addressed findings to the selected implementation, and record residual gaps. If no suitable report exists, independent review is required under the retained gate. The user authorized [the concrete inquiry](../reviews/M2-6-audit-inquiry.md), which was published once as [upstream issue 940](https://github.com/RustCrypto/password-hashes/issues/940). A request is not audit evidence; G1 remains open pending a verified response/report. No ongoing monitor was configured. Commissioning a paid review needs separate explicit authorization. This is not a repeated vault approval request.
 
 ## Validation and recovery
 

@@ -12,7 +12,7 @@ The requested RustCrypto chacha20poly1305 0.11.0 / argon2 0.6.0 pins preserve th
 
 NCC's historical AEAD review is relevant to ChaCha20/Poly1305, but does not establish Argon2 implementation coverage. Further primary-source searches of RustCrypto and auditor sites still did not locate an independent report for the proposed Argon2 release. Unrelated projects' “audited RustCrypto” descriptions and C# ports are not primary audit evidence. This is an evidence gap, not a finding that the crate is insecure or that no report can exist.
 
-To close A: obtain a report identifying the RustCrypto Argon2 source revision, variant and dependencies, map it to the actual selected release and record relevant changes/fixes. An existing report could satisfy this if its scope matches; otherwise an independent review is needed. No paid audit, external contact or commercial commitment is authorized by this proposal.
+To close A: obtain a report identifying the RustCrypto Argon2 source revision, variant and dependencies, map it to the actual selected release and record relevant changes/fixes. An existing report could satisfy this if its scope matches; otherwise an independent review is needed. The user separately authorized publishing the prepared audit-evidence question as upstream issue 940; this proposal authorizes no paid audit or commercial commitment.
 
 ## Option B — Investigate native libsodium with an explicit contract amendment
 
@@ -61,4 +61,4 @@ If B is adopted, add exact planned owners to the main implementation plan: `scri
 
 ## Decision and remaining work
 
-A is selected as the continuing research direction, not as a declaration that G1 passed. Pure Rust, p=4 defaults, supported bounds and the audit gate remain unchanged. Obtain the relevant independent scope/version evidence and then record a final gate decision; do not reopen G2–G4 or repeat the user's blanket vault approval. [The unsent inquiry](../docs/reviews/M2-6-audit-inquiry.md) identifies the missing evidence precisely. No keys, binaries, cryptographic dependencies, native builds, vault code or sealed migration were introduced or executed.
+A is selected as the continuing research direction, not as a declaration that G1 passed. Pure Rust, p=4 defaults, supported bounds and the audit gate remain unchanged. Obtain the relevant independent scope/version evidence and then record a final gate decision; do not reopen G2–G4 or repeat the user's blanket vault approval. [The published inquiry](../docs/reviews/M2-6-audit-inquiry.md) identifies the missing evidence precisely. No keys, binaries, cryptographic dependencies, native builds, vault code or sealed migration were introduced or executed.

@@ -8,7 +8,7 @@ The user subsequently replied **“Adopt these corrections; retain audit gate.�
 
 ## M2.6 acceptance criteria
 
-2026-10-19 direction: the user selected **“Retain pure Rust; obtain matching audit evidence.”** [The library comparison](M2-vault-library-options.md) records this choice; native libsodium and p=1 are not selected. [Follow-up evidence](../docs/evidence/M2-6-audit-review.md) records checksum-verified direct sources, historical audit revisions and the opaque-ke scope exclusion. [An inquiry](../docs/reviews/M2-6-audit-inquiry.md) is prepared but unsent. G1 remains open; neither source fingerprints nor an audit of a dependent application closes it.
+2026-10-19 direction: the user selected **“Retain pure Rust; obtain matching audit evidence.”** [The library comparison](M2-vault-library-options.md) records this choice; native libsodium and p=1 are not selected. [Follow-up evidence](../docs/evidence/M2-6-audit-review.md) records checksum-verified direct sources, historical audit revisions and the opaque-ke scope exclusion. [The explicitly authorized inquiry](../docs/reviews/M2-6-audit-inquiry.md) is published as upstream issue 940. G1 remains open; neither source fingerprints nor an audit of a dependent application closes it.
 
 Preserve approval/provenance; verify dependency/platform/audit facts; define threats, format, keys, operation policy, migration/recovery, exact file ownership and reproducible tests; record conflicts and closure evidence; validate and publish a recoverable design checkpoint. Do not add crypto dependencies, sealed migrations or product code. Stop at this design gate, without claiming M2.7 or M2 complete.
 
