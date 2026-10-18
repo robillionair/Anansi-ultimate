@@ -4,6 +4,8 @@ Status: PUBLISHED with explicit user authorization (“Publish the prepared ques
 
 ## Proposed message
 
+Response and follow-up (2026-10-19 client date): [tarcieri's qualified no-known-audit response](https://github.com/RustCrypto/password-hashes/issues/940#issuecomment-6256202461) was read. At the user's explicit request to answer as needed, [an acknowledgement](https://github.com/RustCrypto/password-hashes/issues/940#issuecomment-6256248503) confirmed that the gate stays open, no insecurity claim is made, and no further action is requested from the maintainer. Further unsolicited messages and paid review remain unauthorized. The original message is retained below.
+
 Title: Independent implementation audit scope for RustCrypto argon2
 
 We are evaluating RustCrypto argon2 for a local-first desktop vault whose project requirements retain an independent implementation-audit gate. Our proposed pin is argon2 0.6.0, package SHA-256 `134c52ddac6d63c576bef8168db10c83c49c26444ecbc68060fef078925a901c`, packaged VCS revision `b1e0ad6fe229b1ba74e4696c7359ab45d7e931f0` (argon2 directory). The intended raw KDF profile is Argon2id v0x13, m=65536 KiB, t=3, p=4, with bounded import parameters. No vault implementation has begun.

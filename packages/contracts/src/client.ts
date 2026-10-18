@@ -16,7 +16,7 @@ export interface Client {
   listJobs(workspaceId:string,offset?:number):Promise<JobList>;
   controlJob(workspaceId:string,id:string,expectedVersion:number,action:JobAction):Promise<JobDetails>;
   readArtifact(workspaceId:string,jobId:string,artifactId:string,offset:number):Promise<ArtifactChunk>;
-  listMemories(workspaceId:string, options?:{id?:string;offset?:number;limit?:number;kind?:string;includeArchived?:boolean;includeExpired?:boolean}): Promise<MemoryList>;
+  listMemories(workspaceId:string, options?:{id?:string;offset?:number;limit?:number;kind?:string;query?:string;includeArchived?:boolean;includeExpired?:boolean}): Promise<MemoryList>;
   readMemory(workspaceId:string,id:string,revisionId?:string): Promise<MemoryDetails>;
   createMemory(workspaceId:string,draft:MemoryDraft,kind?:string): Promise<MemoryDetails>;
   reviseMemory(workspaceId:string,id:string,expectedRevision:string,draft:MemoryDraft,confirmPrivacyChange?:boolean,options?:{lifecycle?:LifecycleChange;restoreArchive?:boolean;restoreRevision?:string}): Promise<MemoryDetails>;
@@ -42,6 +42,7 @@ function failure(value:unknown,operation=''):Error {
       case 'NOT_FOUND': return new Error('The requested item was not found in this workspace. Try again after refreshing.');
       case 'INVALID_REQUEST': return new Error('Check the selection, resource limits and current job state, then refresh.');
       case 'INVALID_MEMORY': return new Error('Check the fields, lifecycle action, expiry, successor and privacy confirmation. Use a title up to 200 characters, text up to 256 KiB, UTC dates and confidence from 0 to 1.');
+      case 'INVALID_SEARCH': return new Error('Use one to eight title words, up to 256 UTF-8 bytes. If the workspace exceeds 10,000 eligible records or 32 MiB of metadata, narrow the record type. History search is unavailable; no partial results were returned.');
       case 'MEMORY_NOT_FOUND': return new Error('Memory not found in this workspace. Refresh the list.');
       case 'REVISION_CONFLICT': return new Error('This memory changed. Your draft was kept. Reopen the latest revision before saving again.');
       case 'CONTENT_INTEGRITY': return new Error('Memory content failed integrity verification. Preserve the storage root and restore a verified copy.');

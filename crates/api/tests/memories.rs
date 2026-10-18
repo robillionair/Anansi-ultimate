@@ -41,6 +41,24 @@ async fn memory_http_parity_auth_scope_limits_and_revisions() {
     let input = json!({"contractVersion":1,"workspaceId":w,"draft":{"title":"HTTP 世界","body":"x".repeat(4096)}});
     let (status, first) = call(state.clone(), request("/v1/memories/create", input.clone())).await;
     assert_eq!(status, StatusCode::OK);
+    let search = json!({"contractVersion":1,"workspaceId":w,"query":"世界"});
+    let (search_status, matches) =
+        call(state.clone(), request("/v1/memories/list", search.clone())).await;
+    assert_eq!(search_status, StatusCode::OK);
+    assert_eq!(matches, state.core.memory_command("list", search).unwrap());
+    assert_eq!(
+        matches["memories"][0]["revisionId"],
+        first["memory"]["revisionId"]
+    );
+    let (bad_search, _) = call(
+        state.clone(),
+        request(
+            "/v1/memories/list",
+            json!({"contractVersion":1,"workspaceId":w,"query":"***"}),
+        ),
+    )
+    .await;
+    assert_eq!(bad_search, StatusCode::BAD_REQUEST);
     let read = json!({"contractVersion":1,"workspaceId":w,"id":first["memory"]["id"]});
     let (_, actual) = call(state.clone(), request("/v1/memories/read", read.clone())).await;
     assert_eq!(actual, state.core.memory_command("read", read).unwrap());

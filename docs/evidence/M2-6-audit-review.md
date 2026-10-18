@@ -31,6 +31,10 @@ A separate [NCC opaque-ke assessment, December 10, 2021, v1.3](https://www.nccgr
 
 ## Search limits and closure work
 
+Update after the user requested checking and answering GitHub: [RustCrypto member tarcieri's response](https://github.com/RustCrypto/password-hashes/issues/940#issuecomment-6256202461) says he does not think argon2 has ever been audited, and notes the README warning omission. Preserve that qualified statement; it is not a categorical proof about every possible private report or a vulnerability finding. The user authorized a reply, and [our acknowledgement](https://github.com/RustCrypto/password-hashes/issues/940#issuecomment-6256248503) was posted once. G1 remains open: independent implementation review or newly supplied matching evidence is needed; README wording and unrelated audits do not satisfy it. No review was commissioned.
+
+The user subsequently requested an hourly follow-up, now active as `anansi-audit-response-and-checkpoint-follow-up`; the earlier no-monitor statement below describes the original checkpoint only. The follow-up has been updated to treat these two comments as handled and retain the audit gate. The latest user also authorized independent M3.1 work while M2 remains incomplete; see ADR-0024.
+
 Primary RustCrypto repository/README/security policy, GitHub audit-related issues and auditor-site searches did not yield a matching Argon2 implementation report. Cargo/RustSec audit CI, algorithm analysis, downstream “audited” descriptions and ports are not independent implementation reports. Search absence is not proof no report exists and is not evidence of insecurity.
 
 The packaged manifests expose dependency ranges and optional features. They do not close the selected build's full dependency/feature/platform coverage. Future feature minimization, zeroization behavior, lane handling, current AEAD changes and primitive vectors still require review and execution after the gate permits implementation. Nothing here changes the approved p=4 profile or silently substitutes a sequential p=1 API.

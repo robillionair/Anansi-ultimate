@@ -2,6 +2,17 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { decodeReadiness, httpClient, nativeClient } from '../packages/contracts/src/client.ts';
 const actual={applicationName:'ANANSI Ultimate',applicationVersion:'0.1.0',apiVersion:null,contractVersion:1,coreVersion:'0.1.0',operatingSystem:'windows',uptimeMs:5};
+
+test('title query remains scoped command data and search errors are sanitized',async()=>{
+  const original=globalThis.fetch;let body:Record<string,unknown>={},url='';
+  try{
+    globalThis.fetch=async(address,options)=>{url=String(address);body=JSON.parse(options!.body as string);return new Response(JSON.stringify({contractVersion:1,memories:[],nextOffset:null}));};
+    const client=httpClient('http://127.0.0.1:1451','a'.repeat(64));await client.listMemories('b'.repeat(32),{query:'café OR x',kind:'note'});
+    assert.equal(url,'http://127.0.0.1:1451/v1/memories/list');assert.equal(body.query,'café OR x');assert.equal(body.workspaceId,'b'.repeat(32));
+    globalThis.fetch=async()=>new Response(JSON.stringify({code:'INVALID_SEARCH',message:'private detail'}),{status:400});
+    await assert.rejects(client.listMemories('b'.repeat(32),{query:'***'}),e=>e instanceof Error&&e.message.includes('one to eight title words')&&!e.message.includes('private detail'));
+  }finally{globalThis.fetch=original;}
+});
 test('jobs use scoped HTTP commands and malformed artifacts are refused',async()=>{
   const original=globalThis.fetch;let path='',request:Record<string,unknown>={};
   try{

@@ -166,6 +166,7 @@ pub struct MemoryListRequest {
     pub offset: u32,
     pub limit: Option<u32>,
     pub kind: Option<String>,
+    pub query: Option<String>,
     #[serde(default)]
     pub include_archived: bool,
     #[serde(default)]
@@ -292,6 +293,12 @@ impl Core {
             }
             "list" => {
                 let r: MemoryListRequest = input(value)?;
+                if let Some(query) = &r.query {
+                    crate::search::query(query)?;
+                    if r.id.is_some() {
+                        return Err(crate::search::invalid());
+                    }
+                }
                 id(&r.workspace_id)?;
                 if let Some(record) = &r.id {
                     id(record)?;
@@ -639,6 +646,9 @@ impl Storage {
         })
     }
     pub(crate) fn memory_list(&self, r: MemoryListRequest) -> Result<MemoryList, CommandError> {
+        if r.query.is_some() {
+            return self.title_search(r);
+        }
         let connection = self.connection(false)?.ok_or_else(missing)?;
         let limit = r.limit.unwrap_or(50);
         let mut statement=connection.prepare("SELECT r.metadata FROM memory_revisions r JOIN memories m ON m.workspace_id=r.workspace_id AND m.id=r.memory_id WHERE r.workspace_id=?1 AND ((?2 IS NULL AND r.id=m.current_revision) OR r.memory_id=?2) AND (?2 IS NOT NULL OR ((?5 IS NULL OR json_extract(r.metadata,'$.kind')=?5) AND (?6 OR json_extract(r.metadata,'$.status')!='archived') AND (?7 OR json_extract(r.metadata,'$.validUntil') IS NULL OR julianday(json_extract(r.metadata,'$.validUntil'))>julianday(?8)))) ORDER BY r.memory_id,r.version DESC LIMIT ?3 OFFSET ?4").map_err(|_|unavailable())?;

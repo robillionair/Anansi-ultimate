@@ -31,6 +31,7 @@ export type ErrorCode =
   | "UNSUPPORTED_SCHEMA"
   | "CORRUPT_STORAGE"
   | "INVALID_MEMORY"
+  | "INVALID_SEARCH"
   | "MEMORY_NOT_FOUND"
   | "REVISION_CONFLICT"
   | "CONTENT_INTEGRITY"
@@ -264,6 +265,7 @@ export interface MemoryListRequest {
   kind?: string | null;
   limit?: number | null;
   offset?: number;
+  query?: string | null;
   workspaceId: string;
 }
 

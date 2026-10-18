@@ -101,6 +101,8 @@ Plain M2.5 packages cannot admit raw Sealed plaintext. Future versioned packages
 
 ## Exact M2.7 file ownership (planned, not created)
 
+M3.1 scheduling handoff: when G1 eventually permits vault implementation, include `crates/core/src/search.rs` and shared `Search.tsx` in policy/revocation tests. Title matching is currently request-local and excludes Sealed; it has no persistent index to migrate. Vault activation must still guard encrypted title metadata before matching/counts and recheck authorization at result/body publication, including lock or migration during an in-flight search. No new search path may bypass the approved context/session/privacy rules. This is a retained integration obligation, not crypto implementation or a waiver of G1. See ADR-0024.
+
 | Responsibility | Create or extend |
 |---|---|
 | Format/keys/session/policy/migration/store | New `crates/core/src/vault.rs` and `crates/core/src/vault/envelope.rs`, `keys.rs`, `session.rs`, `policy.rs`, `migration.rs`, `credential_store.rs`, `native_prompt.rs` under that vault directory |

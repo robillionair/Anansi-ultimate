@@ -119,6 +119,7 @@
           "UNSUPPORTED_SCHEMA",
           "CORRUPT_STORAGE",
           "INVALID_MEMORY",
+          "INVALID_SEARCH",
           "MEMORY_NOT_FOUND",
           "REVISION_CONFLICT",
           "CONTENT_INTEGRITY",
@@ -1569,6 +1570,12 @@
         "format": "uint32",
         "minimum": 0,
         "type": "integer"
+      },
+      "query": {
+        "type": [
+          "string",
+          "null"
+        ]
       },
       "workspaceId": {
         "type": "string"

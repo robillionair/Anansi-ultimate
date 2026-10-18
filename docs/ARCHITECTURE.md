@@ -8,6 +8,10 @@
 4. Explicit trust boundaries: local desktop, local browser, local API, inference providers, and future hosted multi-user deployment are separate boundaries.
 5. Evidence over appearance: a screen or stub is not a completed feature.
 
+## M3.1 bounded title retrieval
+
+The latest user authorized independent local title search before M2 vault certification; see ADR-0024 and [the detailed plan](../plans/03-search-and-ollama.md). Existing native and authenticated HTTP memory-list contracts gain optional `query`; Rust validates literal bounded terms, scopes current metadata before ranking and builds a request-local in-memory SQLite FTS5 index. No canonical schema change or persistent plaintext derivative. Sealed metadata is excluded. Private remains locally stored without encryption, with no transmission or forensic erasure claim. Ranked results preserve revision/source identity; the read-only shared Search view opens the exact returned revision through existing integrity/privacy checks. Full-body/job indexing, semantic retrieval and inference remain separate tasks with explicit resource/vault/context dependencies. [Evidence](evidence/M3-1.md) distinguishes implementation from actual acceptance results.
+
 ## Target system
 
 ```text

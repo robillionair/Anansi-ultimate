@@ -1,11 +1,39 @@
 # M3 — Search and local AI
 
-Status: tracked planning task; detailed implementation design and acceptance approval required before coding. This is not an implemented feature or a complete technical design.
+Status: user explicitly authorized vault-independent next-phase work on 2026-10-19 while waiting for upstream audit feedback. M3.1 below is the bounded approved increment. M2.6/G1, M2.7 and M2.8 remain outstanding; this is a scheduling exception, not M2 completion or permission to bypass crypto review.
 
 Authority: [master specification](../docs/MASTER_SPEC.md), sections 11, 13, 18–19, 66–67; [canonical roadmap](../docs/ROADMAP.md).
 
 Required scope: FTS5, authorized local runtimes/hardware detection, Ask ANANSI, streaming, cancellation, grounded citations; minimum context/privacy/cost enforcement. All applicable cross-cutting constraints and section 82 milestone items remain mandatory.
 
-Dependencies: complete the preceding milestone and verify relevant shared contracts. Before implementation, inventory every bullet in the cited sections, define task-sized vertical slices, exact files, security boundaries, migrations, tests, observable workflow evidence, rollback and acceptance criteria. Record unresolved design choices in decisions; do not invent integrations or claim mocks are live verification.
+Dependencies: verified M2.1–M2.5 records, revision ownership, native/HTTP contracts and recovery suffice for title-only local retrieval. The latest user instruction permits this independent slice before M2 certification. Persistent/full-body indexing and inference must separately verify their privacy, resource and recovery contracts. No encrypted data exists or is indexed here; Sealed remains refused.
 
-Planning completion requires requirement-level traceability, explicit deferred sub-slices with rationale, current official dependency/provider verification where relevant, executable verification commands and reviewable Definition of Done. Stop at each approved task boundary. M0 is the current implementation phase; do not start this milestone during reconciliation.
+## Task sequence and preserved scope
+
+| Task | Scope and dependencies | Coverage |
+|---|---|---|
+| M3.1 — Local title search | Existing current revision metadata; bounded request-local FTS5, filters, ranked results and exact-revision reader in both editions | AN-005 lexical subset; AN-002/018 shared privacy boundary; AN-033 provenance |
+| M3.2 — Body indexing and retrieval evaluation | Detailed job/index design first; rebuildable full-body index, current-pointer synchronization, metadata/entity filters, deduplication, recency and evidence locations. Resolve encrypted index/vault interaction before enabling it | Master 10–11, 66, 74–78; AN-005/010/029/031 |
+| M3.3 — Authorized runtime discovery | Detailed plan first; actual hardware/runtime detection, user-chosen Ollama configuration/model, no automatic install/download/inference. Other runtimes and Apple Silicon retained for M14 | Master 7, 18–19, 69–70; AN-009/020 |
+| M3.4 — Minimum context and local Ask | Detailed plan first; deterministic privacy/context/cost checks, evidence pack, grounded citations, insufficient-evidence response, real authorized local inference, streaming/cancellation, restart/resource/error behavior | Master 11, 13, 16–19, 66–67, 71, 74, 78, 84; AN-006/009/010/018/029 |
+| M3.5 — Integrated acceptance | Desktop/browser parity, offline/cancellation/restart/privacy/citation evaluation and recovery. M2 unfinished gates remain prerequisites to integrated certification | Master 77–78, 82–84 |
+
+Embeddings, vector/hybrid merging, reranking and the complete Context Compiler stay M4. No paraphrase/semantic quality claim is made for lexical titles. Provider verification, budgets/routing and OAuth remain M5; minimum cost/privacy enforcement must precede M3 inference. Every later task needs a detailed file/test/acceptance plan before coding.
+
+## M3.1 implementation contract — defined before coding
+
+Objective: a user searches saved record titles in the selected workspace, filters type/archive/expiry, pages ranked results and opens the exact returned revision with provenance. All nine knowledge kinds are covered. Bodies, relationship text, semantic retrieval and inference are excluded and visibly described as unavailable.
+
+Files: create `crates/core/src/search.rs`, `crates/core/tests/title_search.rs`, `packages/ui/src/Search.tsx`, `tests/e2e/search.spec.ts`, `docs/evidence/M3-1.md`; modify `crates/core/src/lib.rs`, `crates/core/src/memory.rs`, `packages/contracts/src/client.ts`, generated schema/types/validators, shared navigation/workspace, native workflow verifier and relevant contract/UI tests. Update roadmap/architecture/decisions/status/matrix/recovery/state. No migration, applied-schema edit, new library, external runtime or cryptographic code.
+
+Steps: (1) add optional `query` to existing list contract, validate before storage; reject history+query and unsupported syntax sizes; (2) build FTS5 in a separate in-memory SQLite connection from one current-metadata query, applying workspace/type/archive/expiry/Sealed policy before inserting; (3) tokenize bounded literal words, use bound MATCH parameters, Unicode61/BM25 and stable ID ties; (4) return the existing validated metadata DTO and pagination; (5) add read-only shared Search view with explicit scope, loading/error/empty/results/pagination and exact-revision literal reader; (6) test and run actual native/browser behavior before status claims.
+
+Additional exact owners identified during implementation: `crates/core/src/readiness.rs` owns the sanitized INVALID_SEARCH error code, `crates/api/tests/memories.rs` verifies search over the existing authenticated route, and `crates/core/tests/title_search_limits.rs` verifies real corpus/metadata bounds and mismatched metadata identity. Existing route/IPC implementation and capability files require no extension.
+
+Bounds: at most 256 UTF-8 query bytes, eight alphanumeric terms, 10,000 eligible records and 32 MiB metadata. No partial corpus on overflow: return an actionable bounded-search error and suggest narrowing record type. Page size 1..100, existing offset cap. Quoted SQL/FTS operators are never passed as operators; each term is quoted and joined by AND. Empty/punctuation-only queries are rejected. No disk index, query history, body scan, external request or AI call. SQLite temporary storage is memory-only; in-memory copies have ordinary process/OS memory limits, not guaranteed forensic erasure.
+
+Acceptance: native and browser search real saved titles, Unicode/diacritic matching, correct workspace/type/default visibility and exact revision/body/provenance opening; current titles replace old matches after edits/restart; stable pagination on unchanged data; literal HTML stays inert; malformed/oversized/unsupported requests fail clearly; Sealed metadata is never indexed; filters never broaden scope. No persistent index files or database schema change. Existing workflows remain passing. Pagination across intervening edits is a new current snapshot, not a promised stable cursor.
+
+Verification: `pnpm check`, `node scripts/validate-planning.mjs --self-test`, `pnpm test`, `pnpm contracts:check`, `pnpm typecheck`, `pnpm test:ui`, `node scripts/cargo.mjs fmt --all --check`, `node scripts/cargo.mjs test --workspace --locked`, `node scripts/cargo.mjs clippy --workspace --all-targets --locked -- -D warnings`, `pnpm build:web`, `node scripts/cargo.mjs build --locked -p anansi-api`, `pnpm test:e2e`, build native test configuration and run the updated actual native/browser verifier. Inspect actual screenshots; retain synthetic evidence. Add targeted core tests for stale revisions, isolation, type/archive/expiry, literal operators, Unicode, bounds and integrity.
+
+Recovery/DoD: preserve master and all original requirements; current schema 8 and backups stay compatible. Reverting this code changes no canonical data. Keep user changes and failed evidence. Commit/push a small checkpoint, verify exact-SHA required CI before protected-master publication, independently restore a source bundle and record actual HEAD/tree/digest/results. Report pending checks honestly. Stop after M3.1; no runtime/inference/crypto implementation. The hourly audit follow-up remains responsible for evidence review, not a waiver.

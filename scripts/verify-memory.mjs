@@ -77,6 +77,20 @@ try{
     await expect(page.getByRole('button',{name:'Save memory',exact:true})).toBeEnabled({timeout:20000});if(await page.evaluate(()=>localStorage.length+sessionStorage.length))throw Error('Unexpected browser persistence');if(await page.evaluate(()=>Reflect.get(globalThis,'executed')))throw Error('Memory text was executed');
   }
   await checkLifecycle(nativePage,"Native");await checkLifecycle(webPage,"Browser");
+  for(const page of [nativePage,webPage]){
+    await page.getByRole('button',{name:'Search',exact:true}).click();
+    await page.getByLabel('Title keywords').fill('Native research');await page.getByRole('button',{name:'Search titles',exact:true}).click();
+    await expect(page.getByRole('list',{name:'Title search results'}).getByRole('button',{name:'Native research 世界',exact:true})).toBeVisible({timeout:20000});
+    await page.getByRole('list',{name:'Title search results'}).getByRole('button',{name:'Native research 世界',exact:true}).click();
+    await expect(page.getByRole('region',{name:'Search result revision'})).toContainText('Browser revision — preserved after restart',{timeout:20000});
+    await expect(page.getByRole('region',{name:'Search result revision'})).toContainText('Revision 2');
+    await page.getByLabel('Title keywords').fill('notfoundword');await page.getByRole('button',{name:'Search titles',exact:true}).click();await expect(page.getByRole('status').filter({hasText:'No matching titles'})).toBeVisible();
+    await page.setViewportSize({width:390,height:844});if(!await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth))throw Error('Narrow title search overflow');
+    await page.getByLabel('Title keywords').fill('Native research');await page.getByRole('button',{name:'Search titles',exact:true}).click();
+    await expect(page.getByRole('list',{name:'Title search results'}).getByRole('button',{name:'Native research 世界',exact:true})).toBeVisible({timeout:20000});
+    await page.screenshot({path:page===nativePage?'test-results/native-title-search.png':'test-results/browser-title-search.png',fullPage:true});await page.setViewportSize({width:1280,height:1000});
+    await page.getByRole('button',{name:'Memory',exact:true}).click();
+  }
   if(external)throw Error('Unexpected request destination: '+[...destinations].join(', '));await nativePage.setViewportSize({width:390,height:844});if(!await nativePage.evaluate(()=>document.documentElement.scrollWidth<=innerWidth))throw Error('Native narrow overflow');
   fs.mkdirSync('test-results',{recursive:true});await nativePage.screenshot({path:'test-results/native-memory-narrow.png',fullPage:true});await nativePage.setViewportSize({width:1280,height:1000});await nativePage.screenshot({path:'test-results/native-memory.png',fullPage:true});await webPage.screenshot({path:'test-results/cross-browser-memory.png',fullPage:true});
   fs.writeFileSync(path.join(root,'verification.json'),JSON.stringify({nativeBrowser:true,notes:true,lifecycle:true,supersession:true,archiveRestore:true,expiryFilters:true,historicalComparisonAfterRestart:true,historicalContentRestore:true,revisions:true,conflictDraftPreserved:true,bothProcessRestarts:true,historicalBytes:true,literalText:true,externalRequests:external},null,2));

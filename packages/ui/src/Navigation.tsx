@@ -1,7 +1,7 @@
-export type View = 'workspace'|'settings'|'connection'|'memory'|'notes'|'projects'|'tasks'|'people'|'records'|'jobs'|'backups';
+export type View = 'workspace'|'settings'|'connection'|'memory'|'notes'|'projects'|'tasks'|'people'|'records'|'jobs'|'backups'|'search';
 export const plannedGroups = [
   {name:'HOME',items:['Dashboard','Ask ANANSI']},
-  {name:'KNOWLEDGE',items:['Search','Files','Big Brain']},
+  {name:'KNOWLEDGE',items:['Files','Big Brain']},
   {name:'CREATE',items:['Innovation Studio','My Ideas','Product Forge','My Products']},
   {name:'VALIDATE',items:['SwarmTank','SOMNIA','Experiments']},
   {name:'WORK',items:['Team Workspace','Automations']},
@@ -16,6 +16,7 @@ export function Navigation({view,hasWorkspace,onNavigate}:{view:View;hasWorkspac
     <button disabled={!hasWorkspace} aria-current={view==='tasks'?'page':undefined} onClick={()=>onNavigate('tasks')}>Tasks</button>
     <button disabled={!hasWorkspace} aria-current={view==='people'?'page':undefined} onClick={()=>onNavigate('people')}>People</button>
     <p className="nav-group">KNOWLEDGE</p>
+    <button disabled={!hasWorkspace} aria-current={view==='search'?'page':undefined} onClick={()=>onNavigate('search')}>Search</button>
     <button disabled={!hasWorkspace} aria-current={view==='memory'?'page':undefined} onClick={()=>onNavigate('memory')}>Memory</button>
     <button disabled={!hasWorkspace} aria-current={view==='notes'?'page':undefined} onClick={()=>onNavigate('notes')}>Notes</button>
     <button disabled={!hasWorkspace} aria-current={view==='records'?'page':undefined} onClick={()=>onNavigate('records')}>Records</button>

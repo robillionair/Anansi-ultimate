@@ -1,5 +1,11 @@
 # ANANSI Ultimate — Architecture Decisions
 
+## ADR-0024: Vault-independent title search scheduling exception
+
+On 2026-10-19 the user explicitly requested continuing the next phase with work possible without upstream audit feedback. This supersedes the earlier blanket stop-before-M3 scheduling instruction for [M3.1](../plans/03-search-and-ollama.md) only. M2.6/G1, M2.7/M2.8 and their requirement coverage remain incomplete. No audit requirement or encryption contract is weakened.
+
+Use the existing current-revision metadata and scoped list command for request-local, bounded FTS5 title search in a separate in-memory connection. No persistent plaintext derivative or schema migration is introduced while encrypted indexing remains undesigned. Do not scan bodies or call a model. Display titles-only scope and corpus limits; overflow fails without partial results. BM25 ranks literal token queries; metadata filters precede ranking. The reader uses the returned revision ID and existing native privacy/integrity checks. Future body indexes, jobs and inference require their own plans and vault/privacy integration review. Source: [SQLite FTS5 documentation](https://www.sqlite.org/fts5.html), inspected for Unicode61, parameterized MATCH and rank semantics; its algorithm documentation is not a crypto audit.
+
 ## ADR-0023: Retain pure Rust while obtaining matching independent audit evidence
 
 On 2026-10-19 the user selected **“Retain pure Rust; obtain matching audit evidence”** in response to [the library comparison](../plans/M2-vault-library-options.md). Native libsodium and its p=1 public API are not selected; the pure-Rust requirement, Argon2id p=4 defaults and existing import bounds remain unchanged. No FFI/build/dependency amendment is adopted.

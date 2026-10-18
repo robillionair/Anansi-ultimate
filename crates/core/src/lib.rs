@@ -12,6 +12,7 @@ pub mod memory;
 pub mod privacy;
 pub mod relationships;
 pub mod restore;
+pub mod search;
 pub mod settings;
 pub mod snapshots;
 pub mod storage;

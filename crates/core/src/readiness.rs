@@ -35,6 +35,7 @@ pub enum ErrorCode {
     UnsupportedSchema,
     CorruptStorage,
     InvalidMemory,
+    InvalidSearch,
     MemoryNotFound,
     RevisionConflict,
     ContentIntegrity,

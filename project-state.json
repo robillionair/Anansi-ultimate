@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
-  "activeMilestone": "M2",
-  "activeTask": "M2.6",
-  "plan": "plans/M2-vault-security.md",
-  "implementationStatus": "M2.5 verified; M2.6 retains pure Rust by explicit user choice. Direct package sources verified and historical report exclusions recorded. G1 matching audit/version coverage remains open; G2-G4 adopted. No crypto implementation or dependency changes.",
+  "activeMilestone": "M3",
+  "activeTask": "M3.1",
+  "plan": "plans/03-search-and-ollama.md",
+  "implementationStatus": "User explicitly authorized vault-independent M3.1 local title search while M2 stays incomplete. Implementation under verification. G1 remains open after qualified upstream no-known-audit response; pure Rust and p=4 retained. No crypto, model or persistent index added.",
   "lastVerifiedCommit": "6c193ef8c9891e966c547451b4e01b7db74215b4",
   "evidence": [
     "docs/evidence/M0.md",
@@ -19,16 +19,17 @@
     "docs/evidence/M2-4.md",
     "docs/evidence/M2-5.md",
     "docs/evidence/M2-6.md",
-    "docs/evidence/M2-6-audit-review.md"
+    "docs/evidence/M2-6-audit-review.md",
+    "docs/evidence/M3-1.md"
   ],
   "blockers": [
     {
       "scope": "M2.6 technical readiness",
-      "detail": "Retain pure Rust and p=4; obtain matching independent Argon2 audit evidence and current AEAD/dependency mapping. Source identities verified, reports inspected, explicitly authorized inquiry published as RustCrypto/password-hashes issue 940. G1 remains open; user approval and G2-G4 are preserved."
+      "detail": "G1 remains open after RustCrypto member tarcieri's qualified statement that he does not think argon2 has ever been audited. Independent implementation review or newly supplied matching report and current AEAD/dependency mapping are required. Pure Rust, p=4 and adopted G2-G4 remain. User-authorized acknowledgement was posted; no paid review commissioned. M3.1 alone has the explicit independent scheduling exception."
     }
   ],
-  "nextTask": "M2.6",
-  "nextTaskScope": "Close the recorded M2.6 audit gate G1. M2.7 is conditionally authorized by the preserved user contract but must not start while audit evidence remains unresolved. Stop before M2.7/M3.",
+  "nextTask": "M3.1",
+  "nextTaskScope": "Finish and verify bounded local title search only. Keep M2/G1 open and review new audit evidence on hourly follow-up. No M2.7 crypto, persistent body index or inference until their prerequisites pass.",
   "productImplementation": "M1 and M2.1-M2.5 verified subsets: memory/lifecycle/entities, immutable relationship history, durable exports, coherent workspace/application catalog backups, opt-in schedules, owned saved-file import and verified fresh restore. Audited vault and integrated M2 certification remain required.",
   "milestoneComplete": false
 }
