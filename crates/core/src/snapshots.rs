@@ -655,6 +655,22 @@ impl Storage {
         {
             return Err(invalid());
         }
+        let unsafe_policy:bool=db.query_row("SELECT EXISTS(SELECT 1 FROM backup_schedules WHERE enabled<>0) OR EXISTS(SELECT 1 FROM jobs WHERE state IN ('Queued','Running')) OR EXISTS(SELECT 1 FROM backup_uploads)",[],|r|r.get(0)).map_err(|_|invalid())?;
+        if unsafe_policy {
+            return Err(invalid());
+        }
+        if !info.application {
+            let unexpected: bool = db
+                .query_row(
+                    "SELECT EXISTS(SELECT 1 FROM jobs) OR EXISTS(SELECT 1 FROM backup_schedules)",
+                    [],
+                    |r| r.get(0),
+                )
+                .map_err(|_| invalid())?;
+            if unexpected {
+                return Err(invalid());
+            }
+        }
         let mut query = db
             .prepare("SELECT id FROM workspaces ORDER BY id")
             .map_err(|_| invalid())?;
@@ -753,6 +769,20 @@ impl Storage {
             referenced.insert(path);
         }
         if info.application {
+            let mut jobs = db
+                .prepare("SELECT selection,log FROM jobs")
+                .map_err(|_| invalid())?;
+            let mut entries = jobs.query([]).map_err(|_| invalid())?;
+            while let Some(row) = entries.next().map_err(|_| invalid())? {
+                let selection: String = row.get(0).map_err(|_| invalid())?;
+                let log: String = row.get(1).map_err(|_| invalid())?;
+                serde_json::from_str::<ExportSelection>(&selection)
+                    .map_err(|_| invalid())?
+                    .validate()?;
+                if log.len() > 512 {
+                    return Err(invalid());
+                }
+            }
             let mut q=db.prepare("SELECT artifact_id,artifact_hash,artifact_bytes FROM jobs WHERE state='Completed'").map_err(|_|invalid())?;
             let mut rows = q.query([]).map_err(|_| invalid())?;
             while let Some(r) = rows.next().map_err(|_| invalid())? {
@@ -890,6 +920,7 @@ mod tests {
             "schema",
             "trigger",
             "sealed",
+            "activeSchedule",
             "oversized",
         ] {
             let mut changed = members.clone();
@@ -903,11 +934,16 @@ mod tests {
                 "traversal" => manifest.members[0].path = "../escape".into(),
                 "duplicate" => manifest.members.push(manifest.members[0].clone()),
                 "hash" => manifest.members[0].sha256 = "0".repeat(64),
-                "schema" | "trigger" | "sealed" => {
+                "schema" | "trigger" | "sealed" | "activeSchedule" => {
                     let path = temp.path().join(content::random_id().unwrap());
                     fs::write(&path, &changed["catalog.sqlite3"]).unwrap();
                     let db = Connection::open(&path).unwrap();
-                    match mode {"schema"=>db.execute_batch("PRAGMA user_version=99").unwrap(),"trigger"=>db.execute_batch("CREATE TRIGGER unexpected AFTER INSERT ON memories BEGIN SELECT 1; END").unwrap(),_=>{db.execute("UPDATE memory_revisions SET metadata=json_set(metadata,'$.privacy','sealed')",[]).unwrap();}}
+                    match mode {
+                        "schema"=>db.execute_batch("PRAGMA user_version=99").unwrap(),
+                        "trigger"=>db.execute_batch("CREATE TRIGGER unexpected AFTER INSERT ON memories BEGIN SELECT 1; END").unwrap(),
+                        "activeSchedule"=>{db.execute("INSERT INTO backup_schedules(workspace_id,enabled,interval_seconds,next_due,consent_version) VALUES(?1,1,3600,0,1)",[&w]).unwrap();},
+                        _=>{db.execute("UPDATE memory_revisions SET metadata=json_set(metadata,'$.privacy','sealed')",[]).unwrap();}
+                    }
                     drop(db);
                     let data = fs::read(path).unwrap();
                     let member = manifest

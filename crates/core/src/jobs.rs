@@ -32,7 +32,7 @@ pub enum ExportSelection {
     Records { ids: Vec<String> },
 }
 impl ExportSelection {
-    fn validate(&self) -> Result<(), CommandError> {
+    pub(crate) fn validate(&self) -> Result<(), CommandError> {
         match self {
             Self::Workspace | Self::Backup { .. } => Ok(()),
             Self::Project { id } => validate_id(id),

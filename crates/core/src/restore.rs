@@ -146,11 +146,15 @@ impl crate::storage::Storage {
                                 serde_json::from_str(text).map_err(|_| crate::jobs::invalid())?;
                             match &mut selection {
                                 crate::jobs::ExportSelection::Project { id } => {
-                                    *id = ids.get(id).ok_or_else(crate::jobs::invalid)?.clone()
+                                    if let Some(mapped) = ids.get(id) {
+                                        *id = mapped.clone();
+                                    }
                                 }
                                 crate::jobs::ExportSelection::Records { ids: records } => {
                                     for id in records {
-                                        *id = ids.get(id).ok_or_else(crate::jobs::invalid)?.clone();
+                                        if let Some(mapped) = ids.get(id) {
+                                            *id = mapped.clone();
+                                        }
                                     }
                                 }
                                 _ => {}
@@ -245,8 +249,9 @@ impl crate::storage::Storage {
                 use std::io::Write;
                 let destination = crate::export::directory(self, &ids[&w])?
                     .join(format!("{}.tar", ids[&artifact]));
-                crate::snapshots::new_file(&destination)?
-                    .write_all(&data)
+                let mut file = crate::snapshots::new_file(&destination)?;
+                file.write_all(&data)
+                    .and_then(|_| file.sync_all())
                     .map_err(|_| crate::storage::unavailable())?;
             }
         }

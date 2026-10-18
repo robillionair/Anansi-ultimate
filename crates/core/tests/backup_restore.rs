@@ -218,6 +218,22 @@ fn application_backup_has_all_workspaces_and_completed_artifacts() {
         store.read_job(&w, &export.id).unwrap().state,
         anansi_core::jobs::JobState::Completed
     );
+    let invalid_job = store
+        .enqueue_export(
+            &w,
+            ExportSelection::Records {
+                ids: vec!["f".repeat(32)],
+            },
+        )
+        .unwrap();
+    let invalid_lease = store.claim_export().unwrap().unwrap();
+    assert!(store.execute_export(&invalid_lease).is_err());
+    store.fail_export(&invalid_lease).unwrap();
+    assert_eq!(
+        store.read_job(&w, &invalid_job.id).unwrap().state,
+        anansi_core::jobs::JobState::Failed
+    );
+    store.set_backup_schedule(serde_json::from_value(serde_json::json!({"contractVersion":1,"workspaceId":w,"enabled":true,"intervalSeconds":3600,"plaintextConsent":true,"keepAllVersions":true,"managedDestination":true})).unwrap()).unwrap();
     let job = store
         .enqueue_export(&w, ExportSelection::Backup { application: true })
         .unwrap();
@@ -238,9 +254,13 @@ fn application_backup_has_all_workspaces_and_completed_artifacts() {
         .unwrap();
     assert_eq!(restored.workspaces.len(), 2);
     let mut completed_artifacts = 0;
+    let mut failed_jobs = 0;
     for fresh in restored.workspaces {
         assert!(!store.read_backup_schedule(&fresh.id).unwrap().enabled);
         for j in store.list_jobs(&fresh.id, 0).unwrap() {
+            if j.state == anansi_core::jobs::JobState::Failed {
+                failed_jobs += 1;
+            }
             if j.state == anansi_core::jobs::JobState::Completed {
                 assert!(
                     !store
@@ -253,6 +273,7 @@ fn application_backup_has_all_workspaces_and_completed_artifacts() {
         }
     }
     assert_eq!(completed_artifacts, 1);
+    assert_eq!(failed_jobs, 1);
 }
 
 #[test]
