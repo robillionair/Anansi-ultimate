@@ -28,6 +28,10 @@ fn verifies_members_and_restores_only_into_a_new_target() {
     assert!(preview.verified);
     let restored = restore::restore_to_new_target(&source, &target).unwrap();
     assert_eq!(restored.total_bytes, preview.total_bytes);
+    assert_ne!(
+        restored.manifest.workspace_id,
+        preview.manifest.workspace_id
+    );
     assert_eq!(
         fs::read(target.join("records.txt")).unwrap(),
         b"portable memory"
