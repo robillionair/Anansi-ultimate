@@ -1,9 +1,16 @@
 // Generated from Rust schemas.
-import type {CommandError,CreateRelationshipRequest,CreateWorkspaceRequest,DeleteRelationshipRequest,ListRelationshipsRequest,MemoryDetails,MemoryDraft,MemoryList,MemoryListRequest,MemoryMetadata,MemoryReadRequest,MemoryWriteRequest,OpenWorkspaceRequest,Readiness,ReadinessRequest,RelationshipDetails,RelationshipDraft,RelationshipList,RelationshipRecord,UpdateSettingsRequest,WorkspaceDetails,WorkspaceList} from './generated';
+import type {ArtifactChunk,CommandError,ControlJobRequest,CreateRelationshipRequest,CreateWorkspaceRequest,DeleteRelationshipRequest,EnqueueExportRequest,Job,JobDetails,JobList,ListJobsRequest,ListRelationshipsRequest,MemoryDetails,MemoryDraft,MemoryList,MemoryListRequest,MemoryMetadata,MemoryReadRequest,MemoryWriteRequest,OpenWorkspaceRequest,ReadArtifactRequest,Readiness,ReadinessRequest,RelationshipDetails,RelationshipDraft,RelationshipList,RelationshipRecord,UpdateSettingsRequest,WorkspaceDetails,WorkspaceList} from './generated';
+export function validArtifactChunk(value:unknown):value is ArtifactChunk;
 export function validError(value:unknown):value is CommandError;
+export function validControlJobRequest(value:unknown):value is ControlJobRequest;
 export function validCreateRelationshipRequest(value:unknown):value is CreateRelationshipRequest;
 export function validCreateWorkspaceRequest(value:unknown):value is CreateWorkspaceRequest;
 export function validDeleteRelationshipRequest(value:unknown):value is DeleteRelationshipRequest;
+export function validEnqueueExportRequest(value:unknown):value is EnqueueExportRequest;
+export function validJob(value:unknown):value is Job;
+export function validJobDetails(value:unknown):value is JobDetails;
+export function validJobList(value:unknown):value is JobList;
+export function validListJobsRequest(value:unknown):value is ListJobsRequest;
 export function validListRelationshipsRequest(value:unknown):value is ListRelationshipsRequest;
 export function validMemoryDetails(value:unknown):value is MemoryDetails;
 export function validMemoryDraft(value:unknown):value is MemoryDraft;
@@ -13,6 +20,7 @@ export function validMemoryMetadata(value:unknown):value is MemoryMetadata;
 export function validMemoryReadRequest(value:unknown):value is MemoryReadRequest;
 export function validMemoryWriteRequest(value:unknown):value is MemoryWriteRequest;
 export function validOpenWorkspaceRequest(value:unknown):value is OpenWorkspaceRequest;
+export function validReadArtifactRequest(value:unknown):value is ReadArtifactRequest;
 export function validReadiness(value:unknown):value is Readiness;
 export function validReadinessRequest(value:unknown):value is ReadinessRequest;
 export function validRelationshipDetails(value:unknown):value is RelationshipDetails;

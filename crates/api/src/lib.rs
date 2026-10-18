@@ -24,6 +24,7 @@ pub fn router(state: Arc<ApiState>) -> Router {
         .route("/v1/workspaces/{operation}", post(workspace))
         .route("/v1/memories/{operation}", post(memory))
         .route("/v1/relationships/{operation}", post(relationship))
+        .route("/v1/jobs/{operation}", post(job))
         .fallback(|| async {
             error(
                 StatusCode::NOT_FOUND,
@@ -42,6 +43,10 @@ pub fn command_path(path: &str) -> bool {
     matches!(
         path,
         "/v1/memories/create"
+            | "/v1/jobs/export"
+            | "/v1/jobs/list"
+            | "/v1/jobs/control"
+            | "/v1/jobs/artifact"
             | "/v1/memories/read"
             | "/v1/memories/revise"
             | "/v1/memories/list"
@@ -55,6 +60,50 @@ pub fn command_path(path: &str) -> bool {
             | "/v1/workspaces/open"
             | "/v1/workspaces/settings"
     )
+}
+
+async fn job(
+    Path(operation): Path<String>,
+    State(state): State<Arc<ApiState>>,
+    request: Request<Body>,
+) -> Response {
+    let input = match axum::body::to_bytes(request.into_body(), 384 * 1024).await {
+        Ok(bytes) => match serde_json::from_slice(&bytes) {
+            Ok(value) => value,
+            Err(_) => {
+                return error(
+                    StatusCode::BAD_REQUEST,
+                    ErrorCode::InvalidRequest,
+                    "Use a supported job request.",
+                );
+            }
+        },
+        Err(_) => {
+            return error(
+                StatusCode::BAD_REQUEST,
+                ErrorCode::InvalidRequest,
+                "Job request exceeds its limit.",
+            );
+        }
+    };
+    match tokio::task::spawn_blocking(move || state.core.job_command(&operation, input)).await {
+        Ok(Ok(value)) => Json(value).into_response(),
+        Ok(Err(e)) => {
+            let status = match e.code {
+                ErrorCode::NotFound | ErrorCode::WorkspaceNotFound => StatusCode::NOT_FOUND,
+                ErrorCode::RevisionConflict | ErrorCode::ContentIntegrity => StatusCode::CONFLICT,
+                ErrorCode::StorageUnavailable => StatusCode::SERVICE_UNAVAILABLE,
+                ErrorCode::VaultUnavailable => StatusCode::FORBIDDEN,
+                _ => StatusCode::BAD_REQUEST,
+            };
+            (status, Json(e)).into_response()
+        }
+        Err(_) => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(anansi_core::storage::unavailable()),
+        )
+            .into_response(),
+    }
 }
 async fn workspace(
     Path(operation): Path<String>,

@@ -52,3 +52,7 @@ Schema 6 migrates recognized earlier catalogs forward without changing applied m
 
 
 The M2.3 completion source checkpoint is independently bundled/restored after protected publication. Its machine ledger is `C:/Users/robin/Documents/ChatGPT/Anansi-source-recovery/M2-3-verified-b4a8e110d61042fbb11a3faf434bf9b4/source-verification.json`; read its actual HEAD/tree/digest/results rather than infer a self-referential commit from this document. Actual memory/entity verification JSON and screenshots are retained in the same external directory. This source ledger is separate from private-data backup/recovery.
+
+## M2.4 work in progress
+
+The active branch is `codex/m2-4-jobs-export`; acceptance is pending in [M2.4 evidence](evidence/M2-4.md). Schema 7 migrates forward from recognized schemas 1–6 without changing existing migrations. Preserve the entire closed private root before rollback; schema-6 binaries must refuse schema 7 rather than modifying its version. SQLite remains canonical for job state, histories and ownership. Interrupted Running jobs become Paused after lease expiry (120 seconds); explicitly resume to rebuild the snapshot stage. Cancel/retry never publishes old partial attempts. Keep unreferenced private export files for diagnosis; no automatic deletion or import is authorized. A portable knowledge export is not a full application backup or a product restore package. No M2 milestone tag or M2.5 work is authorized by this partial implementation record.

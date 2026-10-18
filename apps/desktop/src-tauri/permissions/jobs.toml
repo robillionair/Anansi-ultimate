@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-job-command"
+description = "Allow the local application to manage workspace-owned export jobs and read complete artifacts."
+commands.allow = ["job_command", "save_export"]

@@ -1,4 +1,8 @@
 // Generated from Rust serde DTOs. Run pnpm contracts:generate.
+export interface ArtifactChunk {
+  bytes: number[];
+  contractVersion: number;
+}
 export type ErrorCode =
   | "INVALID_REQUEST"
   | "UNSUPPORTED_CONTRACT"
@@ -21,6 +25,15 @@ export interface CommandError {
   code: ErrorCode;
   message: string;
 }
+export type JobAction = "pause" | "resume" | "cancel" | "retry";
+
+export interface ControlJobRequest {
+  action: JobAction;
+  contractVersion: number;
+  expectedVersion: number;
+  id: string;
+  workspaceId: string;
+}
 export interface CreateRelationshipRequest {
   contractVersion: number;
   draft: RelationshipDraft;
@@ -42,6 +55,96 @@ export interface DeleteRelationshipRequest {
   contractVersion: number;
   expectedVersion: number;
   id: string;
+  workspaceId: string;
+}
+export type ExportSelection =
+  | {
+      kind: "workspace";
+    }
+  | {
+      id: string;
+      kind: "project";
+    }
+  | {
+      ids: string[];
+      kind: "records";
+    };
+
+export interface EnqueueExportRequest {
+  contractVersion: number;
+  selection: ExportSelection;
+  workspaceId: string;
+}
+export type JobState = "Queued" | "Running" | "Paused" | "Completed" | "Failed" | "Cancelled";
+
+export interface Job {
+  artifactBytes?: number | null;
+  artifactHash?: string | null;
+  artifactId?: string | null;
+  checkpoint: string;
+  checkpointVersion: number;
+  createdAt: string;
+  id: string;
+  log: string;
+  maxBytes: number;
+  maxRecords: number;
+  progress: number;
+  selection: ExportSelection;
+  state: JobState;
+  updatedAt: string;
+  version: number;
+  workspaceId: string;
+}
+
+export interface JobDetails {
+  contractVersion: number;
+  job: Job;
+}
+export interface Job {
+  artifactBytes?: number | null;
+  artifactHash?: string | null;
+  artifactId?: string | null;
+  checkpoint: string;
+  checkpointVersion: number;
+  createdAt: string;
+  id: string;
+  log: string;
+  maxBytes: number;
+  maxRecords: number;
+  progress: number;
+  selection: ExportSelection;
+  state: JobState;
+  updatedAt: string;
+  version: number;
+  workspaceId: string;
+}
+
+export interface JobList {
+  contractVersion: number;
+  jobs: Job[];
+  nextOffset?: number | null;
+}
+export interface Job {
+  artifactBytes?: number | null;
+  artifactHash?: string | null;
+  artifactId?: string | null;
+  checkpoint: string;
+  checkpointVersion: number;
+  createdAt: string;
+  id: string;
+  log: string;
+  maxBytes: number;
+  maxRecords: number;
+  progress: number;
+  selection: ExportSelection;
+  state: JobState;
+  updatedAt: string;
+  version: number;
+  workspaceId: string;
+}
+export interface ListJobsRequest {
+  contractVersion: number;
+  offset?: number;
   workspaceId: string;
 }
 export interface ListRelationshipsRequest {
@@ -216,6 +319,13 @@ export interface LifecycleChange {
 export interface OpenWorkspaceRequest {
   contractVersion: number;
   id: string;
+}
+export interface ReadArtifactRequest {
+  artifactId: string;
+  contractVersion: number;
+  jobId: string;
+  offset: number;
+  workspaceId: string;
 }
 export interface Readiness {
   apiVersion?: string | null;

@@ -88,7 +88,9 @@ impl Core {
                     .map(|p| std::path::PathBuf::from(p).join(".local/share/anansi/workspaces"))
             }
         });
-        root.map(Self::with_storage_root).unwrap_or_default()
+        let core = root.map(Self::with_storage_root).unwrap_or_default();
+        core.wake_export_worker();
+        core
     }
     pub(crate) fn storage(&self) -> Result<&crate::storage::Storage, CommandError> {
         self.workspace_storage

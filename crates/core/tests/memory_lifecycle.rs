@@ -150,7 +150,7 @@ fn generated_origin_is_preserved_without_automatic_confirmation_and_schema3_migr
     let db = rusqlite::Connection::open(temp.path().join("store").join(DATABASE_NAME)).unwrap();
     // A synthetic future-generator fixture, never a model call or public create capability.
     db.execute("UPDATE memory_revisions SET metadata=json_set(metadata,'$.provenance','generated','$.generatorModel','synthetic-fixture')",[]).unwrap();
-    db.execute_batch("DROP TABLE lifecycle_format; DROP TABLE IF EXISTS relationship_revisions; DROP TABLE IF EXISTS relationships; PRAGMA user_version=3;")
+    db.execute_batch("DROP TABLE lifecycle_format; DROP TABLE IF EXISTS relationship_revisions; DROP TABLE IF EXISTS relationships; DROP TABLE IF EXISTS jobs; PRAGMA user_version=3;")
         .unwrap();
     drop(db);
     let edited = core.memory_command("revise", request(&w, &first)).unwrap();
@@ -185,7 +185,7 @@ fn failed_schema_four_migration_preserves_schema_three_records_and_settings() {
     let first = create(&core, &w, "memory");
     let path = temp.path().join("store").join(DATABASE_NAME);
     let db = rusqlite::Connection::open(&path).unwrap();
-    db.execute_batch("DROP TABLE lifecycle_format; CREATE TABLE lifecycle_format(wrong TEXT); DROP TABLE IF EXISTS relationship_revisions; DROP TABLE IF EXISTS relationships; PRAGMA user_version=3;").unwrap();
+    db.execute_batch("DROP TABLE lifecycle_format; CREATE TABLE lifecycle_format(wrong TEXT); DROP TABLE IF EXISTS relationship_revisions; DROP TABLE IF EXISTS relationships; DROP TABLE IF EXISTS jobs; PRAGMA user_version=3;").unwrap();
     let before: String = db
         .query_row("SELECT metadata FROM memory_revisions", [], |r| r.get(0))
         .unwrap();

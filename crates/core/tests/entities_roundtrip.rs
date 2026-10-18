@@ -413,7 +413,7 @@ fn schema_four_migrates_forward_to_schema_five_preserving_records() {
     let path = temp.path().join("store").join(DATABASE_NAME);
     let conn = rusqlite::Connection::open(&path).unwrap();
     conn.execute_batch(
-        "DROP TABLE relationship_revisions; DROP TABLE relationships; PRAGMA user_version = 4;",
+        "DROP TABLE relationship_revisions; DROP TABLE relationships; DROP TABLE IF EXISTS jobs; PRAGMA user_version = 4;",
     )
     .unwrap();
     let v: i64 = conn
@@ -440,7 +440,7 @@ fn schema_four_migrates_forward_to_schema_five_preserving_records() {
     let user_version: i64 = verify_conn
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(user_version, 6);
+    assert_eq!(user_version, 7);
 }
 
 #[test]
@@ -575,7 +575,7 @@ fn schema_five_edges_migrate_with_honest_origin_and_failed_migration_rolls_back(
         .unwrap();
     let db = temp.path().join("store").join(DATABASE_NAME);
     let conn = rusqlite::Connection::open(&db).unwrap();
-    conn.execute_batch("DROP TABLE relationship_revisions; ALTER TABLE relationships DROP COLUMN archived; ALTER TABLE relationships DROP COLUMN version; PRAGMA user_version=5;").unwrap();
+    conn.execute_batch("DROP TABLE relationship_revisions; ALTER TABLE relationships DROP COLUMN archived; ALTER TABLE relationships DROP COLUMN version; DROP TABLE IF EXISTS jobs; PRAGMA user_version=5;").unwrap();
     conn.execute(
         "INSERT INTO relationships VALUES(?1,?2,?3,?4,'references','{}','2026-10-17T00:00:00Z')",
         rusqlite::params![
@@ -595,7 +595,7 @@ fn schema_five_edges_migrate_with_honest_origin_and_failed_migration_rolls_back(
         .unwrap();
     assert_eq!(result["relationships"][0]["provenance"], "legacy_schema5");
     let conn = rusqlite::Connection::open(&db).unwrap();
-    conn.execute_batch("DROP TABLE relationship_revisions; ALTER TABLE relationships DROP COLUMN archived; ALTER TABLE relationships DROP COLUMN version; CREATE TABLE relationship_revisions(wrong TEXT); PRAGMA user_version=5;").unwrap();
+    conn.execute_batch("DROP TABLE relationship_revisions; ALTER TABLE relationships DROP COLUMN archived; ALTER TABLE relationships DROP COLUMN version; CREATE TABLE relationship_revisions(wrong TEXT); DROP TABLE IF EXISTS jobs; PRAGMA user_version=5;").unwrap();
     drop(conn);
     assert!(
         core.workspace_command("open", json!({"contractVersion":1,"id":w}))

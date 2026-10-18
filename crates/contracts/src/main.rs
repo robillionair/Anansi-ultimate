@@ -1,3 +1,7 @@
+use anansi_core::jobs::{
+    ArtifactChunk, ControlJobRequest, EnqueueExportRequest, Job, JobDetails, JobList,
+    ListJobsRequest, ReadArtifactRequest,
+};
 use anansi_core::memory::{
     MemoryDetails, MemoryDraft, MemoryList, MemoryListRequest, MemoryMetadata, MemoryReadRequest,
     MemoryWriteRequest,
@@ -13,6 +17,14 @@ use anansi_core::workspace::{
 use anansi_core::{CommandError, Readiness, ReadinessRequest};
 fn main() {
     let schemas = serde_json::json!({
+        "Job":schemars::schema_for!(Job),
+        "JobDetails":schemars::schema_for!(JobDetails),
+        "JobList":schemars::schema_for!(JobList),
+        "ArtifactChunk":schemars::schema_for!(ArtifactChunk),
+        "EnqueueExportRequest":schemars::schema_for!(EnqueueExportRequest),
+        "ListJobsRequest":schemars::schema_for!(ListJobsRequest),
+        "ControlJobRequest":schemars::schema_for!(ControlJobRequest),
+        "ReadArtifactRequest":schemars::schema_for!(ReadArtifactRequest),
         "MemoryDraft":schemars::schema_for!(MemoryDraft),
         "MemoryMetadata":schemars::schema_for!(MemoryMetadata),
         "MemoryDetails":schemars::schema_for!(MemoryDetails),

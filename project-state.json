@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "activeMilestone": "M2",
-  "activeTask": "M2.3",
+  "activeTask": "M2.4",
   "plan": "plans/02-memory-system.md",
-  "implementationStatus": "M2.3 acceptance repair verified locally at 5b83338 with both required foundation CI jobs passed; linked native CI was running at record time; stop before M2.4",
+  "implementationStatus": "M2.4 implementation in progress; core recovery/export tests passed, full acceptance and actual application verification pending",
   "lastVerifiedCommit": "5b83338d08884349558a7145de9a5f30c75dd469",
   "evidence": [
     "docs/evidence/M0.md",
@@ -15,11 +15,12 @@
     "docs/evidence/M2-0.md",
     "docs/evidence/M2-1.md",
     "docs/evidence/M2-2.md",
-    "docs/evidence/M2-3.md"
+    "docs/evidence/M2-3.md",
+    "docs/evidence/M2-4.md"
   ],
   "blockers": [],
   "nextTask": "M2.4",
-  "nextTaskScope": "Persistent jobs and open-format export; unstarted",
+  "nextTaskScope": "Complete and verify persistent jobs and open-format export before starting M2.5",
   "productImplementation": "M1 foundation plus verified M2.1/M2.2/M2.3 memory revisions, notes, lifecycle, entities, versioned reversible relationships and valid project membership; M2.4 unstarted",
   "milestoneComplete": false
 }

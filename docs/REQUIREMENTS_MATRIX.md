@@ -41,7 +41,7 @@ Milestones now follow the approved canonical roadmap and master section 82. Plan
 | AN-026 | Zero-Cost Lock, routing, budgets/disclosure | M3, M4, M5; all inference milestones | planned | Deny unknown/paid fallback and unauthorized data; disclosure fixtures |
 | AN-027 | Innovation/Opportunity Studio and idea scoring | M6 | planned | 5–10 concepts, transparent hypotheses, consent and saved project workflow |
 | AN-028 | Unified lifecycle and Launch Studio | M12 | planned | Section 85 workflow; real approval before publishing |
-| AN-029 | Persistent jobs and recovery | M2, M3, M6, M13 | planned | Restart/retry/cancellation/resource-limit tests |
+| AN-029 | Persistent jobs and recovery | M2, M3, M6, M13 | in progress | Restart/retry/cancellation/resource-limit tests |
 | AN-030 | Native macOS/Apple Silicon, updates/credential vaults | M14, M15 | planned | Native signed installation/update and offline verification |
 | AN-031 | Encryption, privacy classes, optional audited vault | M2, M15 | in progress | M2.1 native privacy, Sealed refusal and plaintext disclosure: [evidence](evidence/M2-1.md); audited vault remains M2.6/M2.7 |
 | AN-032 | Performance, accessibility, engine evaluation | M3–M15 | planned | 1k/10k/100k datasets, engine suites, keyboard/2D fallback evidence |
@@ -74,8 +74,8 @@ AN-004 gains note CRUD through reversible archive, all six lifecycle states, exp
 ## M2.3 implementation traceability
 
 AN-004 and AN-024 gain all 9 user knowledge kinds from Master Spec §9–10 (`memory`, `note`, `project`, `task`, `person`, `organization`, `decision`, `event`, `document`), type-specific attributes (`dueDate`, `completed`, `eventDate`, `projectId`), typed directed relationships (`predicate`, `sourceId`, `targetId`, `metadata`) with same-workspace enforcement, self-loop rejection, composite foreign keys preventing cross-workspace links, Schema 5 forward migration preserving Schemas 1–4, contracts and DTOs across Rust and TypeScript, shared UI views for Projects, Tasks, People, and Knowledge Records, and cross-adapter verification with process restarts. Verification status is in [M2.3 evidence](evidence/M2-3.md). All 90 sections and 33 requirement IDs remain represented.
-
-
 ### M2.3 acceptance repair status
 
 AN-004/AN-024 remain in progress for their full cross-task scope. M2.3 acceptance repair at 5b83338 adds schema-6 immutable edge revisions, honest legacy provenance, reversible archive/restore, scoped optimistic actions, stable historical link snapshots, valid project targets, retained omitted assignments and explicit clearing. Actual native/browser verification covers all eight project-linked kinds, history, task completion, clear/reassign and both process restarts; narrow control readability was inspected and asserted. AN-002/018/020 shared-adapter/isolation and AN-033 provenance obligations are preserved. See [repair evidence](evidence/M2-3.md) for exact local/CI results and source recovery. All 90 sections and 33 requirement IDs remain represented. Jobs/export M2.4, backups M2.5, vault M2.6/M2.7 and integrated certification M2.8 remain required and unstarted.
+
+M2.4 work in progress: AN-029 persistent job recovery and AN-033 portable export now have implementation/core tests, but acceptance remains pending in [M2.4 evidence](evidence/M2-4.md). AN-024 history/export coverage is partial; AN-019 full backups/restore stays M2.5 and vault work stays M2.6/M2.7. No full Memory OS requirement is completed by this implementation draft.

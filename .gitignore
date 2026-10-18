@@ -29,6 +29,9 @@ pairing.json
 /local-data/
 /backups/
 /artifacts/
+/exports/
+*.tar
+*.partial
 *.db
 *.db-*
 *.sqlite

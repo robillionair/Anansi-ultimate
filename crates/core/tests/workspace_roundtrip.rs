@@ -415,7 +415,7 @@ fn failed_v1_forward_migration_rolls_back_and_keeps_original_rows_and_version() 
         let connection = rusqlite::Connection::open(&file).unwrap();
         connection
             .execute_batch(
-                "ALTER TABLE workspace_settings DROP COLUMN intent; PRAGMA user_version=1;",
+                "ALTER TABLE workspace_settings DROP COLUMN intent; DROP TABLE IF EXISTS jobs; PRAGMA user_version=1;",
             )
             .unwrap();
     }

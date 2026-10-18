@@ -1,4 +1,31 @@
 {
+  "ArtifactChunk": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "bytes": {
+        "items": {
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": "array"
+      },
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "bytes"
+    ],
+    "title": "ArtifactChunk",
+    "type": "object"
+  },
   "CommandError": {
     "$defs": {
       "ErrorCode": {
@@ -38,6 +65,52 @@
       "message"
     ],
     "title": "CommandError",
+    "type": "object"
+  },
+  "ControlJobRequest": {
+    "$defs": {
+      "JobAction": {
+        "enum": [
+          "pause",
+          "resume",
+          "cancel",
+          "retry"
+        ],
+        "type": "string"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "action": {
+        "$ref": "#/$defs/JobAction"
+      },
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "expectedVersion": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "id": {
+        "type": "string"
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "workspaceId",
+      "id",
+      "expectedVersion",
+      "action"
+    ],
+    "title": "ControlJobRequest",
     "type": "object"
   },
   "CreateRelationshipRequest": {
@@ -140,6 +213,640 @@
       "expectedVersion"
     ],
     "title": "DeleteRelationshipRequest",
+    "type": "object"
+  },
+  "EnqueueExportRequest": {
+    "$defs": {
+      "ExportSelection": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "workspace",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "kind": {
+                "const": "project",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "id"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "ids": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "kind": {
+                "const": "records",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "ids"
+            ],
+            "type": "object"
+          }
+        ]
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "selection": {
+        "$ref": "#/$defs/ExportSelection"
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "workspaceId",
+      "selection"
+    ],
+    "title": "EnqueueExportRequest",
+    "type": "object"
+  },
+  "Job": {
+    "$defs": {
+      "ExportSelection": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "workspace",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "kind": {
+                "const": "project",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "id"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "ids": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "kind": {
+                "const": "records",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "ids"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "JobState": {
+        "enum": [
+          "Queued",
+          "Running",
+          "Paused",
+          "Completed",
+          "Failed",
+          "Cancelled"
+        ],
+        "type": "string"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "artifactBytes": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "artifactHash": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "artifactId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "checkpoint": {
+        "type": "string"
+      },
+      "checkpointVersion": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "createdAt": {
+        "type": "string"
+      },
+      "id": {
+        "type": "string"
+      },
+      "log": {
+        "type": "string"
+      },
+      "maxBytes": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "maxRecords": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "progress": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "selection": {
+        "$ref": "#/$defs/ExportSelection"
+      },
+      "state": {
+        "$ref": "#/$defs/JobState"
+      },
+      "updatedAt": {
+        "type": "string"
+      },
+      "version": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "id",
+      "workspaceId",
+      "state",
+      "version",
+      "checkpointVersion",
+      "checkpoint",
+      "selection",
+      "progress",
+      "maxRecords",
+      "maxBytes",
+      "createdAt",
+      "updatedAt",
+      "log"
+    ],
+    "title": "Job",
+    "type": "object"
+  },
+  "JobDetails": {
+    "$defs": {
+      "ExportSelection": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "workspace",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "kind": {
+                "const": "project",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "id"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "ids": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "kind": {
+                "const": "records",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "ids"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "Job": {
+        "additionalProperties": false,
+        "properties": {
+          "artifactBytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "artifactHash": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "artifactId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "checkpoint": {
+            "type": "string"
+          },
+          "checkpointVersion": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "log": {
+            "type": "string"
+          },
+          "maxBytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxRecords": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "progress": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "selection": {
+            "$ref": "#/$defs/ExportSelection"
+          },
+          "state": {
+            "$ref": "#/$defs/JobState"
+          },
+          "updatedAt": {
+            "type": "string"
+          },
+          "version": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "workspaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "workspaceId",
+          "state",
+          "version",
+          "checkpointVersion",
+          "checkpoint",
+          "selection",
+          "progress",
+          "maxRecords",
+          "maxBytes",
+          "createdAt",
+          "updatedAt",
+          "log"
+        ],
+        "type": "object"
+      },
+      "JobState": {
+        "enum": [
+          "Queued",
+          "Running",
+          "Paused",
+          "Completed",
+          "Failed",
+          "Cancelled"
+        ],
+        "type": "string"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "job": {
+        "$ref": "#/$defs/Job"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "job"
+    ],
+    "title": "JobDetails",
+    "type": "object"
+  },
+  "JobList": {
+    "$defs": {
+      "ExportSelection": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "workspace",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "kind": {
+                "const": "project",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "id"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "ids": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "kind": {
+                "const": "records",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "ids"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "Job": {
+        "additionalProperties": false,
+        "properties": {
+          "artifactBytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "artifactHash": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "artifactId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "checkpoint": {
+            "type": "string"
+          },
+          "checkpointVersion": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "log": {
+            "type": "string"
+          },
+          "maxBytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxRecords": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "progress": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "selection": {
+            "$ref": "#/$defs/ExportSelection"
+          },
+          "state": {
+            "$ref": "#/$defs/JobState"
+          },
+          "updatedAt": {
+            "type": "string"
+          },
+          "version": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "workspaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "workspaceId",
+          "state",
+          "version",
+          "checkpointVersion",
+          "checkpoint",
+          "selection",
+          "progress",
+          "maxRecords",
+          "maxBytes",
+          "createdAt",
+          "updatedAt",
+          "log"
+        ],
+        "type": "object"
+      },
+      "JobState": {
+        "enum": [
+          "Queued",
+          "Running",
+          "Paused",
+          "Completed",
+          "Failed",
+          "Cancelled"
+        ],
+        "type": "string"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "jobs": {
+        "items": {
+          "$ref": "#/$defs/Job"
+        },
+        "type": "array"
+      },
+      "nextOffset": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "contractVersion",
+      "jobs"
+    ],
+    "title": "JobList",
+    "type": "object"
+  },
+  "ListJobsRequest": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "offset": {
+        "default": 0,
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "workspaceId"
+    ],
+    "title": "ListJobsRequest",
     "type": "object"
   },
   "ListRelationshipsRequest": {
@@ -1142,6 +1849,41 @@
       "id"
     ],
     "title": "OpenWorkspaceRequest",
+    "type": "object"
+  },
+  "ReadArtifactRequest": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "artifactId": {
+        "type": "string"
+      },
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "jobId": {
+        "type": "string"
+      },
+      "offset": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "workspaceId",
+      "jobId",
+      "artifactId",
+      "offset"
+    ],
+    "title": "ReadArtifactRequest",
     "type": "object"
   },
   "Readiness": {

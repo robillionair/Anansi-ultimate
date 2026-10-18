@@ -1,8 +1,12 @@
-import { validReadiness, validError, validWorkspaceDetails, validWorkspaceList, validMemoryDetails, validMemoryList, validRelationshipDetails, validRelationshipList } from './validators.mjs';
+import { validReadiness, validError, validWorkspaceDetails, validWorkspaceList, validMemoryDetails, validMemoryList, validRelationshipDetails, validRelationshipList, validJobDetails, validJobList, validArtifactChunk } from './validators.mjs';
 import { invoke } from '@tauri-apps/api/core';
-import type { Readiness, WorkspaceDetails, WorkspaceList, Intent, MemoryDraft, MemoryDetails, MemoryList, MemoryMetadata, Privacy, LifecycleChange, RelationshipDraft, RelationshipRecord, RelationshipDetails, RelationshipList } from './generated';
-export type { Readiness, WorkspaceDetails, WorkspaceList, Intent, MemoryDraft, MemoryDetails, MemoryList, MemoryMetadata, Privacy, LifecycleChange, RelationshipDraft, RelationshipRecord, RelationshipDetails, RelationshipList } from './generated';
+import type { Readiness, WorkspaceDetails, WorkspaceList, Intent, MemoryDraft, MemoryDetails, MemoryList, MemoryMetadata, Privacy, LifecycleChange, RelationshipDraft, RelationshipRecord, RelationshipDetails, RelationshipList, Job, JobDetails, JobList, ArtifactChunk, ExportSelection, JobAction } from './generated';
+export type { Readiness, WorkspaceDetails, WorkspaceList, Intent, MemoryDraft, MemoryDetails, MemoryList, MemoryMetadata, Privacy, LifecycleChange, RelationshipDraft, RelationshipRecord, RelationshipDetails, RelationshipList, Job, JobDetails, JobList, ArtifactChunk, ExportSelection, JobAction } from './generated';
 export interface Client {
+  enqueueExport(workspaceId:string,selection:ExportSelection):Promise<JobDetails>;
+  listJobs(workspaceId:string,offset?:number):Promise<JobList>;
+  controlJob(workspaceId:string,id:string,expectedVersion:number,action:JobAction):Promise<JobDetails>;
+  readArtifact(workspaceId:string,jobId:string,artifactId:string,offset:number):Promise<ArtifactChunk>;
   listMemories(workspaceId:string, options?:{id?:string;offset?:number;limit?:number;kind?:string;includeArchived?:boolean;includeExpired?:boolean}): Promise<MemoryList>;
   readMemory(workspaceId:string,id:string,revisionId?:string): Promise<MemoryDetails>;
   createMemory(workspaceId:string,draft:MemoryDraft,kind?:string): Promise<MemoryDetails>;
@@ -22,9 +26,12 @@ function decode<T extends {contractVersion:number}>(value:unknown, validate:(val
   return value;
 }
 export function decodeReadiness(value:unknown):Readiness {return decode(value,validReadiness);}
-function failure(value:unknown):Error {
+function failure(value:unknown,operation=''):Error {
   if(validError(value)){
+    if(operation.startsWith('jobs/')&&value.code==='REVISION_CONFLICT')return new Error('This job changed or its lease expired. Refresh jobs and try again.');
     switch(value.code){
+      case 'NOT_FOUND': return new Error('The requested item was not found in this workspace. Try again after refreshing.');
+      case 'INVALID_REQUEST': return new Error('Check the selection, resource limits and current job state, then refresh.');
       case 'INVALID_MEMORY': return new Error('Check the fields, lifecycle action, expiry, successor and privacy confirmation. Use a title up to 200 characters, text up to 256 KiB, UTC dates and confidence from 0 to 1.');
       case 'MEMORY_NOT_FOUND': return new Error('Memory not found in this workspace. Refresh the list.');
       case 'REVISION_CONFLICT': return new Error('This memory changed. Your draft was kept. Reopen the latest revision before saving again.');
@@ -46,6 +53,10 @@ function failure(value:unknown):Error {
 type Call=(operation:string,request:Record<string,unknown>)=>Promise<unknown>;
 function client(call:Call):Client {
   return {
+    enqueueExport:async(workspaceId,selection)=>decode(await call('jobs/export',{workspaceId,selection}),validJobDetails),
+    listJobs:async(workspaceId,offset=0)=>decode(await call('jobs/list',{workspaceId,offset}),validJobList),
+    controlJob:async(workspaceId,id,expectedVersion,action)=>decode(await call('jobs/control',{workspaceId,id,expectedVersion,action}),validJobDetails),
+    readArtifact:async(workspaceId,jobId,artifactId,offset)=>decode(await call('jobs/artifact',{workspaceId,jobId,artifactId,offset}),validArtifactChunk),
     listMemories:async(workspaceId,options={})=>decode(await call('memories/list',{workspaceId,...options}),validMemoryList),
     readMemory:async(workspaceId,id,revisionId)=>decode(await call('memories/read',{workspaceId,id,revisionId}),validMemoryDetails),
     createMemory:async(workspaceId,draft,kind)=>decode(await call('memories/create',{workspaceId,draft,kind}),validMemoryDetails),
@@ -68,7 +79,7 @@ export function httpClient(endpoint:string,token:string):Client {
   if(!/^[a-f0-9]{64}$/.test(token))throw new Error('Enter the 64-character token from the current private pairing file.');
   return client(async(operation,request)=>{
     let response:Response;
-    const path = operation.startsWith('memories/') || operation.startsWith('relationships/')
+    const path = operation.startsWith('jobs/') || operation.startsWith('memories/') || operation.startsWith('relationships/')
       ? operation
       : operation === 'readiness'
       ? 'readiness'
@@ -76,17 +87,22 @@ export function httpClient(endpoint:string,token:string):Client {
     try{response=await fetch(`${url.origin}/v1/${path}`,{method:'POST',credentials:'omit',cache:'no-store',redirect:'error',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({contractVersion:1,...request}),signal:AbortSignal.timeout(15000)});}
     catch{throw new Error('Local core unavailable. Start the API, then retry or pair with its new session.');}
     let value:unknown;try{value=await response.json();}catch{throw new Error('The core returned an unreadable response. Try again.');}
-    if(!response.ok)throw failure(value);return value;
+    if(!response.ok)throw failure(value,operation);return value;
   });
 }
 export function nativeClient():Client {
   return client(async(operation,request)=>{
     try{
+      if(operation.startsWith('jobs/'))return await invoke('job_command',{command:operation.slice(5),request:{contractVersion:1,...request}});
       if(operation.startsWith('memories/'))return await invoke('memory_command',{command:operation.slice(9),request:{contractVersion:1,...request}});
       if(operation.startsWith('relationships/'))return await invoke('relationship_command',{command:operation.slice(14),request:{contractVersion:1,...request}});
       if(operation==='readiness')return await invoke('get_readiness',{request:{contractVersion:1}});
       return await invoke('workspace_command',{command:operation,request:{contractVersion:1,...request}});
     }
-    catch(error){throw failure(error);}
+    catch(error){throw failure(error,operation);}
   });
+}
+
+export async function saveNativeExport(workspaceId:string,jobId:string,artifactId:string):Promise<boolean>{
+  try {const saved=await invoke('save_export',{request:{contractVersion:1,workspaceId,jobId,artifactId,offset:0}});if(typeof saved!=='boolean')throw Error();return saved;}catch(error){throw failure(error);}
 }

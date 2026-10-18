@@ -27,3 +27,7 @@ M2.1, M2.2, and M2.3 local acceptance gates passed: 56 Rust tests, 18 client/com
 ## M2.3 acceptance repair — 2026-10-18
 
 The authorized audit repair is complete; ADR-0019 records the schema/history/membership decisions and [repair evidence](evidence/M2-3.md) records actual results and intermediate failures. The source checkpoint ledger is written after protected publication at `C:/Users/robin/Documents/ChatGPT/Anansi-source-recovery/M2-3-verified-b4a8e110d61042fbb11a3faf434bf9b4/source-verification.json` and contains the actual source HEAD/tree, bundle digest and independent restore results. Screenshots and machine verification records are retained alongside it. Source recovery excludes private application catalogs. The master specification and M0/M1 tags are unchanged. M2.4 is the next approved task and remains unstarted; M2 as a whole is incomplete.
+
+## M2.4 implementation in progress
+
+User authorized continuation after M2.3. Work is on `codex/m2-4-jobs-export`; [M2.4 acceptance criteria and verification ledger](evidence/M2-4.md) were created before implementation. The previous verified checkpoint remains c141939 (production implementation 5b83338). M2.4 is not accepted yet; full tests and actual native/browser export verification remain required. M2.5 has not started.

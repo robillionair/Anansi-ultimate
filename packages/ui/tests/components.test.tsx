@@ -8,6 +8,12 @@ import { Projects } from '../src/Projects';
 import { Tasks } from '../src/Tasks';
 import { People } from '../src/People';
 import { KnowledgeRecords } from '../src/KnowledgeRecords';
+import { Jobs } from '../src/Jobs';
+
+test('export explains plaintext privacy, selection boundaries and real resource limits',()=>{
+  const html=renderToStaticMarkup(<Jobs client={{} as any} workspaceId={'a'.repeat(32)} native={false}/>);
+  assert.match(html,/Sealed content is refused/);assert.match(html,/10,000 records/);assert.match(html,/256 MiB/);assert.match(html,/Project and its current members/);assert.match(html,/Selected records/);assert.doesNotMatch(html,/Download complete export/);
+});
 
 const workspace = {
   contractVersion: 1,
@@ -56,7 +62,7 @@ test('navigation has a small active set, complete grouped unavailable tools and 
   assert.ok(html.includes('aria-label="Main navigation"'));
   assert.ok(html.includes('aria-current="page"'));
   assert.ok(html.includes('disabled=""'));
-  assert.equal((html.match(/<button/g) || []).length, 9);
+  assert.equal((html.match(/<button/g) || []).length, 10);
   for (const group of plannedGroups) for (const item of group.items) assert.ok(html.includes(item));
   assert.ok(html.includes('not available yet'));
   assert.ok(html.includes('separate consent'));

@@ -2,6 +2,15 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { decodeReadiness, httpClient, nativeClient } from '../packages/contracts/src/client.ts';
 const actual={applicationName:'ANANSI Ultimate',applicationVersion:'0.1.0',apiVersion:null,contractVersion:1,coreVersion:'0.1.0',operatingSystem:'windows',uptimeMs:5};
+test('jobs use scoped HTTP commands and malformed artifacts are refused',async()=>{
+  const original=globalThis.fetch;let path='',request:Record<string,unknown>={};
+  try{
+    globalThis.fetch=async(url,options)=>{path=String(url);request=JSON.parse(options!.body as string);return new Response(JSON.stringify({contractVersion:1,jobs:[],nextOffset:null}));};
+    const client=httpClient('http://127.0.0.1:1451','a'.repeat(64));
+    await client.listJobs('b'.repeat(32),50);assert.equal(path,'http://127.0.0.1:1451/v1/jobs/list');assert.deepEqual(request,{contractVersion:1,workspaceId:'b'.repeat(32),offset:50});
+    await assert.rejects(client.readArtifact('b'.repeat(32),'c'.repeat(32),'d'.repeat(32),0),/incompatible response/);
+  }finally{globalThis.fetch=original;}
+});
 test('lifecycle and note options remain bounded command data with sanitized conflicts',async()=>{
   const original=globalThis.fetch;let body:Record<string,unknown>={};
   try{

@@ -57,10 +57,69 @@ pub fn run() {
             get_readiness,
             workspace_command,
             memory_command,
-            relationship_command
+            relationship_command,
+            job_command,
+            save_export
         ])
         .run(tauri::generate_context!())
         .expect("ANANSI desktop failed to start");
+}
+
+#[cfg(windows)]
+#[tauri::command]
+async fn job_command(
+    core: tauri::State<'_, Core>,
+    command: String,
+    request: serde_json::Value,
+) -> Result<serde_json::Value, CommandError> {
+    let core = core.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || core.job_command(&command, request))
+        .await
+        .map_err(|_| anansi_core::storage::unavailable())?
+}
+
+#[cfg(windows)]
+#[tauri::command]
+async fn save_export(
+    core: tauri::State<'_, Core>,
+    request: serde_json::Value,
+) -> Result<bool, CommandError> {
+    let core = core.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        use std::os::windows::process::CommandExt;
+        let parsed: anansi_core::jobs::ReadArtifactRequest =
+            serde_json::from_value(request.clone())
+                .map_err(|_| anansi_core::jobs::request_error())?;
+        if parsed.offset != 0 {
+            return Err(anansi_core::jobs::request_error());
+        }
+        // Validate ownership/completion before opening any trusted system dialog.
+        core.job_command("artifact", request)?;
+        let output = std::process::Command::new("powershell.exe")
+            .args([
+                "-NoProfile",
+                "-NonInteractive",
+                "-STA",
+                "-Command",
+                include_str!("export-save.ps1"),
+            ])
+            .creation_flags(0x08000000)
+            .env("ANANSI_EXPORT_PARENT_PID", std::process::id().to_string())
+            .output()
+            .map_err(|_| anansi_core::storage::unavailable())?;
+        if !output.status.success() {
+            return Err(anansi_core::storage::unavailable());
+        }
+        let chosen =
+            String::from_utf8(output.stdout).map_err(|_| anansi_core::storage::unavailable())?;
+        if chosen.is_empty() {
+            return Ok(false);
+        }
+        core.save_complete_export(&parsed, std::path::Path::new(&chosen))?;
+        Ok(true)
+    })
+    .await
+    .map_err(|_| anansi_core::storage::unavailable())?
 }
 #[cfg(test)]
 mod tests {

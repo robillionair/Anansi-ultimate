@@ -11,7 +11,7 @@ for(const [name,schema] of Object.entries(schemas))types+=await compile(schema,n
 // Independently compiled DTOs can share named enum definitions. Keep one identical
 // declaration and reject collisions rather than emitting duplicate type aliases.
 const aliases=new Map();
-types=types.replace(/export type (\w+) = [\s\S]*?;\n/g,(declaration,name)=>{
+types=types.replace(/^export type (\w+) =[\s\S]*?;\n(?=\n*(?:export |$))/gm,(declaration,name)=>{
   const previous=aliases.get(name);
   if(previous&&previous!==declaration)throw Error('Conflicting generated alias: '+name);
   aliases.set(name,declaration);return previous?'':declaration;
