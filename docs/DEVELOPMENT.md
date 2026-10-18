@@ -1,5 +1,13 @@
 # Development contract
 
+## Local title search — M3.1
+
+After creating or opening a workspace, choose **Search**, enter up to eight title words and select **Search titles**. All words must match; optional record-type, archive and expiry filters apply within the selected workspace. Open a result to read its returned revision and source references. Search again after an edit to retrieve its new title. The reader is literal text; source links/HTML are not executed.
+
+This slice searches titles only. It does not scan bodies, run a model, transmit data or create a persistent index. Sealed remains unavailable, and existing Private storage remains unencrypted. Corpus limits are 10,000 eligible records and 32 MiB metadata; narrow the record type if exceeded. Full-body/semantic retrieval, inference and encrypted indexing remain later tasks. See [the plan](../plans/03-search-and-ollama.md) and [executed evidence](evidence/M3-1.md).
+
+Use the existing `pnpm dev:desktop` entry point, or `pnpm dev:api` with `pnpm dev:web` in separate terminals and the current private pairing token for the browser. No model or provider is needed for Search. For isolated acceptance, build the API and web bundle before running `pnpm exec playwright test tests/e2e/search.spec.ts`. The tracked `scripts/verify-memory.mjs --configured-cdp` also tests title search through the real desktop and browser after the debug-only native build. Run UI verifiers sequentially because they share ports; stop owned test processes before rebuilding their Windows executables.
+
 M0/M1 are verified; M2.1 adds local memory revisions through the shared desktop/browser core. Read BUILD_STATUS.md for current verification/publication and the sections below as historical context. Inference, encrypted vault and automated backups remain unimplemented.
 
 ## Foundation setup and verification
