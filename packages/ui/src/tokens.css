@@ -6,6 +6,7 @@ textarea{display:block;width:100%;max-width:100%;font:inherit;color:inherit;bord
 .memory pre{white-space:pre-wrap;overflow-wrap:anywhere;border:1px solid #dedbe4;padding:12px;border-radius:7px;max-height:24rem;overflow:auto}.memory select{max-width:100%;padding:10px;border:1px solid #c6c1cf;border-radius:7px;background:#fff;color:inherit}.memory select:focus-visible{outline:3px solid #9370e8;outline-offset:3px}
 .entity-controls{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-top:16px}.entity-controls>*{flex:0 0 auto;max-width:100%}.entity-controls label{margin:0}
 .jobs{overflow-wrap:anywhere}.jobs .check-label{align-items:flex-start}
+.backups{overflow-wrap:anywhere}.backups .check-label{align-items:flex-start;min-height:44px;margin:18px 0}.backups input[type=checkbox]{min-height:20px;padding:0}.backups input[type=file]{max-width:100%;padding:8px}.backups code{overflow-wrap:anywhere}
 :root{font-family:"Segoe UI",system-ui,sans-serif}
 button,input,select,summary{font:inherit}
 main{min-width:0}main h1:focus{outline:none}

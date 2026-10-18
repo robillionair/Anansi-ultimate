@@ -40,6 +40,22 @@ fn real_catalog_snapshot_restores_settings_history_edges_and_preserves_originals
     store.execute_backup(&lease).unwrap();
     let complete = store.read_job(&w, &job.id).unwrap();
     let artifact = complete.artifact_id.unwrap();
+    let package = fs::read(
+        root.join("exports")
+            .join(&w)
+            .join(format!("{artifact}.tar")),
+    )
+    .unwrap();
+    assert!(
+        !package
+            .windows(other.len())
+            .any(|window| window == other.as_bytes())
+    );
+    assert!(
+        !package
+            .windows(b"excluded bytes".len())
+            .any(|window| window == b"excluded bytes")
+    );
     let preview = core
         .job_command(
             "preview",

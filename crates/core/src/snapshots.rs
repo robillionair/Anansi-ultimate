@@ -1026,5 +1026,19 @@ mod tests {
             assert!(unpack(&bytes, &target).is_err());
         }
         assert!(unpack(&[0; 512], temp.path()).is_err());
+        let mut members = std::collections::BTreeMap::new();
+        members.insert(format!("bodies/{}.md", "a".repeat(32)), b"x".to_vec());
+        let regular = make_archive(temp.path(), &members);
+        for flag in *b"125x" {
+            let mut linked = regular.clone();
+            linked[156] = flag;
+            linked[148..156].fill(b' ');
+            let sum: u32 = linked[..512].iter().map(|b| u32::from(*b)).sum();
+            linked[148..156].copy_from_slice(format!("{sum:06o}\0 ").as_bytes());
+            assert!(
+                unpack(&linked, temp.path()).is_err(),
+                "link/directory/extension flag must be rejected"
+            );
+        }
     }
 }
