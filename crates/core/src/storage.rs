@@ -124,6 +124,9 @@ pub struct Storage {
     pub(crate) root: PathBuf,
 }
 impl Storage {
+    pub fn root_path(&self) -> &Path {
+        &self.root
+    }
     pub fn new(root: PathBuf) -> Result<Self, CommandError> {
         validate_root(&root)?;
         Ok(Self { root })

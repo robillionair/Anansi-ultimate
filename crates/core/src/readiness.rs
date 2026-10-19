@@ -99,6 +99,12 @@ impl Core {
             .as_ref()
             .map_err(|_| crate::storage::unavailable())
     }
+
+    /// Returns the configured local storage root for trusted native adapters.
+    /// This path is never exposed to browser clients.
+    pub fn storage_root(&self) -> Result<std::path::PathBuf, CommandError> {
+        Ok(self.storage()?.root_path().to_path_buf())
+    }
     pub fn readiness(&self, input: serde_json::Value) -> Result<Readiness, CommandError> {
         let request: ReadinessRequest = serde_json::from_value(input).map_err(|_| {
             CommandError::new(
