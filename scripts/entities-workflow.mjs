@@ -59,6 +59,7 @@ export async function prepareEntities(page, label) {
 
   await button(page, 'Projects').click();
   await button(page, label + ' Alpha Project').click();
+  await expect(page.locator('.card.memory')).not.toHaveAttribute('aria-busy', 'true');
   await expect(page.getByText('Core initiative description for ' + label)).toBeVisible();
   await expect(page.getByText(label + ' Primary Task (Completed)')).toBeVisible();
 
@@ -79,10 +80,12 @@ export async function prepareEntities(page, label) {
     const id=(await page.locator('.help code').innerText()).trim();
     await button(page,'Projects').click();
     await button(page,label+' Alpha Project').click();
+    await expect(page.locator('.card.memory')).not.toHaveAttribute('aria-busy','true');
     await page.getByLabel('Target record ID').fill(id);
     await page.getByLabel('Predicate').selectOption('references');
     await button(page,'Add relationship').click();
     await saved(page,'Relationship created.');
+    await expect(page.getByRole('list',{name:'Relationships for this project'}).getByText(id)).toBeVisible();
   }
   await expect(page.getByRole('list',{name:'Relationships for this project'}).getByRole('listitem')).toHaveCount(9);
   await page.getByLabel('Description & objectives',{exact:true}).fill('Updated project '+label);
