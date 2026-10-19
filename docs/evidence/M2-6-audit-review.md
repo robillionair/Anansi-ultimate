@@ -1,5 +1,7 @@
 # M2.6 G1 — Pure-Rust audit evidence follow-up
 
+Later Owner amendment (2026-10-19): [explicit unaudited-primitive risk acceptance](../approvals/M2-6-owner-risk-acceptance.md) authorizes isolated M2.7 engineering after M2.5 verification. G1-External-Audit remains open for post-M3/pre-production/commercialization certification. Earlier implementation-block language below is historical and superseded for engineering only; factual evidence and provenance limitations are retained.
+
 Review date: 2026-10-19. Status: evidence review completed; G1 remains open. The user selected **“Retain pure Rust; obtain matching audit evidence.”** This preserves Argon2id m=65536 KiB/t=3/p=4, supported import bounds, the original conditional authorization and adopted G2–G4 corrections. Native libsodium is comparison evidence only, not a selected implementation. No M2.7 work is authorized by an unverified audit claim.
 
 ## Acceptance and method

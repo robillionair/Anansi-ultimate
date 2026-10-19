@@ -1,5 +1,7 @@
 # ANANSI M2.6 G1 — Independent review brief
 
+Later Owner amendment (2026-10-19): [explicit unaudited-primitive risk acceptance](../approvals/M2-6-owner-risk-acceptance.md) authorizes isolated M2.7 engineering after M2.5 verification. G1-External-Audit remains open for post-M3/pre-production/commercialization certification. Earlier implementation-block language below is historical and superseded for engineering only; factual evidence and provenance limitations are retained.
+
 Prepared 2026-10-19. Draft scoping artifact only; not a commissioned audit, proof of security, gate closure or permission to implement vault cryptography. Stored outside the shared checkout because another AI owns M3. Repository plans and adopted contracts remain authoritative.
 
 ## Objective

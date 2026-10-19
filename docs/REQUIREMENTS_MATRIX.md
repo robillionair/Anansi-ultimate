@@ -2,6 +2,8 @@
 
 ## Owner amendment — M2.7-Core isolation (2026-10-19)
 
+M2.7-Core initial parser/keys/session/policy/native-store/shadow-preparation subset is implemented and tested in isolation; [evidence](evidence/M2-7.md) lists exact limits and remaining integration. It is not a complete or application-enabled vault.
+
 [Owner risk acceptance](approvals/M2-6-owner-risk-acceptance.md) explicitly supersedes historical G1 pre-implementation stop language below. G1-External-Audit remains open for post-M3/pre-production/commercialization certification; no audit coverage is fabricated. M2.5 source/CI recovery baseline was reverified. M2.7-Core is authorized in a separate worktree; M3 Search/UI wiring and shared-checkout files remain untouched. G2–G4 are unchanged. No vault completion, production certification or implemented UI disclosure is claimed. AN-018/019/031 remain in progress.
 
 M3.1 (2026-10-19) is an explicitly authorized scheduling exception for local titles-only lexical retrieval, with [acceptance/evidence](evidence/M3-1.md). AN-005 stays in progress for this subset; full-body/vector/hybrid retrieval remains M3.2/M4. AN-006/009/010 inference/runtime/context scope is not implemented. AN-018/019/031 retain the M2 audit/vault/certification gaps despite the new slice. All 90 master section owners and 33 requirements remain represented.

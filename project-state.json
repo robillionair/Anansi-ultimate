@@ -3,7 +3,7 @@
   "activeMilestone": "M2",
   "activeTask": "M2.7",
   "plan": "plans/M2-vault-security.md",
-  "implementationStatus": "Isolated M2.7-Core engineering authorized under Owner risk acceptance, not integrated or complete. G1-External-Audit open. M3 is owned by another AI; do not edit or publish its checkout.",
+  "implementationStatus": "Isolated M2.7-Core parser, context-bound keys/recovery, process sessions, policy hook, real native wrapped-slot store and authenticated shadow preparation implemented. Core-level tests passed; complete domain/schema/adapter/Search integration and full certification remain pending. G1-External-Audit open; no application vault activation.",
   "lastVerifiedCommit": "8798fadd266a87723efe4f8237d24c1ee29eb6cf",
   "evidence": [
     "docs/evidence/M0.md",
@@ -20,7 +20,8 @@
     "docs/evidence/M2-5.md",
     "docs/evidence/M2-6.md",
     "docs/evidence/M2-6-audit-review.md",
-    "docs/evidence/M3-1.md"
+    "docs/evidence/M3-1.md",
+    "docs/evidence/M2-7.md"
   ],
   "blockers": [
     {
@@ -33,7 +34,7 @@
     }
   ],
   "nextTask": "M2.7",
-  "nextTaskScope": "Implement and verify isolated vault core in order, preserve application fail-closed policy until schema/domain/session/adapter integration is certified. No M2.8 or M3 implementation.",
+  "nextTaskScope": "Continue M2.7-Core with the normative complete record/history/graph payload, schema-9 and cross-process fencing/publication; retain original bytes and all failure tests. Search/UI/adapters remain behind the ownership boundary. Current checkpoint is a verified core-library subset, not a completed or application-enabled vault. G1-External-Audit remains open. No M2.8 or M3 work.",
   "productImplementation": "M1 and M2.1-M2.5 verified subsets: memory/lifecycle/entities, immutable relationship history, durable exports, coherent workspace/application catalog backups, opt-in schedules, owned saved-file import and verified fresh restore. Audited vault and integrated M2 certification remain required.",
   "milestoneComplete": false
 }
