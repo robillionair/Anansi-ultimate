@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "activeMilestone": "M3",
-  "activeTask": "M3.5",
-  "plan": "plans/03-search-and-ollama.md",
-  "implementationStatus": "M3.5 integrated certification across full-body search, runtime discovery, minimum Context Compiler, and local Ask ANANSI verified.",
-  "lastVerifiedCommit": "bd2e2a9b407421ce8e13765e903ff8ca993b4f62",
+  "activeMilestone": "M4",
+  "activeTask": "M4.1",
+  "plan": "plans/PHASE-004-semantic-intelligence.md",
+  "implementationStatus": "M4.1 local embedding generation and pure Rust vector space primitives verified.",
+  "lastVerifiedCommit": "342e753457a419be20d4f3b7ff4b8e2197f1f0a8",
   "evidence": [
     "docs/evidence/M0.md",
     "docs/evidence/M1.md",
@@ -27,7 +27,8 @@
     "docs/evidence/M3-2.md",
     "docs/evidence/M3-3.md",
     "docs/evidence/M3-4.md",
-    "docs/evidence/M3-5.md"
+    "docs/evidence/M3-5.md",
+    "docs/evidence/M4-1.md"
   ],
   "blockers": [
     {
@@ -35,8 +36,8 @@
       "detail": "Explicit Owner exception authorizes engineering only. Independent audit remains open for post-M3/pre-production/commercialization certification; exact pinned primitives and G2-G4 retained."
     }
   ],
-  "nextTask": "M4",
-  "nextTaskScope": "Milestone 4 vector indexing, embeddings, and semantic search integration.",
-  "productImplementation": "M1 and M2.1-M2.5 verified subsets: memory/lifecycle/entities, immutable relationship history, durable exports, coherent workspace/application catalog backups, opt-in schedules, owned saved-file import, verified fresh restore, M2.7 native desktop encrypted vault integration, M3.1/M3.2 full-body search, M3.3 local AI runtime discovery, M3.4 local Ask ANANSI, and M3.5 integrated acceptance.",
-  "milestoneComplete": true
+  "nextTask": "M4.2",
+  "nextTaskScope": "Vector search and SQLite cache sync across active workspace records.",
+  "productImplementation": "M1 and M2.1-M2.5 verified subsets: memory/lifecycle/entities, immutable relationship history, durable exports, coherent workspace/application catalog backups, opt-in schedules, owned saved-file import, verified fresh restore, M2.7 native desktop encrypted vault integration, M3.1/M3.2 full-body search, M3.3 local AI runtime discovery, M3.4 local Ask ANANSI, M3.5 integrated acceptance, and M4.1 local vector embeddings.",
+  "milestoneComplete": false
 }
