@@ -13,5 +13,6 @@ anansi-core = { path = "../../../crates/core" }
 serde_json.workspace = true
 [target.'cfg(windows)'.dependencies]
 tauri = { version = "=2.12.4", features = [] }
+windows-sys = { version = "=0.61.2", features = ["Win32_Security_Credentials", "Win32_Foundation"] }
 [target.'cfg(windows)'.build-dependencies]
 tauri-build = { version = "=2.7.3", features = [] }

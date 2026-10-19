@@ -1,4 +1,6 @@
 use anansi_core::{CommandError, Core, Readiness};
+#[cfg(windows)]
+mod vault_prompt;
 pub fn desktop_readiness(
     core: &Core,
     request: serde_json::Value,
