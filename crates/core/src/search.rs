@@ -147,6 +147,7 @@ pub(crate) fn sync_index_tx(
 ) -> Result<(), CommandError> {
     ensure_fts_table(tx)?;
     SearchBoundary::invalidate_record(tx, workspace_id, record).map_err(|_| unavailable())?;
+    let _ = crate::vector::invalidate_embeddings(tx, workspace_id, record);
     if SearchBoundary::may_index(*privacy) {
         tx.execute(
             "INSERT INTO memory_body_fts(workspace_id, memory_id, revision_id, title, body)

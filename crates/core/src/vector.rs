@@ -483,3 +483,81 @@ pub fn list_embeddings_for_workspace(
 
     Ok(results)
 }
+
+pub use delete_embeddings_for_memory as invalidate_embeddings;
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct VectorSearchResult {
+    pub memory_id: String,
+    pub chunk_index: usize,
+    pub model: String,
+    pub score: f32,
+}
+
+pub fn vector_search(
+    conn: &Connection,
+    workspace_id: &str,
+    query_vector: &EmbeddingVector,
+    model: &str,
+    limit: usize,
+    min_score: Option<f32>,
+) -> Result<Vec<VectorSearchResult>, VectorError> {
+    ensure_embeddings_table(conn)?;
+
+    let bounded_limit = limit.clamp(1, 100);
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT me.memory_id, me.chunk_index, me.embedding
+             FROM memory_embeddings me
+             JOIN memories m ON m.workspace_id = me.workspace_id AND m.id = me.memory_id
+             WHERE me.workspace_id = ?1
+               AND me.model = ?2
+               AND m.archived = 0
+               AND m.privacy != 'sealed'",
+        )
+        .map_err(|e| VectorError::StorageError(e.to_string()))?;
+
+    let rows = stmt
+        .query_map(params![workspace_id, model], |row| {
+            let memory_id: String = row.get(0)?;
+            let chunk_index: i64 = row.get(1)?;
+            let bytes: Vec<u8> = row.get(2)?;
+            Ok((memory_id, chunk_index as usize, bytes))
+        })
+        .map_err(|e| VectorError::StorageError(e.to_string()))?;
+
+    let mut results = Vec::new();
+    for row in rows {
+        let (memory_id, chunk_index, bytes) =
+            row.map_err(|e| VectorError::StorageError(e.to_string()))?;
+        let candidate_vector = EmbeddingVector::from_bytes(&bytes)?;
+        let sim = query_vector.cosine_similarity(&candidate_vector)?;
+
+        if let Some(min) = min_score
+            && sim < min
+        {
+            continue;
+        }
+
+        results.push(VectorSearchResult {
+            memory_id,
+            chunk_index,
+            model: model.to_string(),
+            score: sim,
+        });
+    }
+
+    results.sort_by(|a, b| {
+        b.score
+            .partial_cmp(&a.score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| a.memory_id.cmp(&b.memory_id))
+    });
+
+    if results.len() > bounded_limit {
+        results.truncate(bounded_limit);
+    }
+
+    Ok(results)
+}

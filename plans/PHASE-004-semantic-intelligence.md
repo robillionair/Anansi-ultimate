@@ -72,3 +72,45 @@ Bounds:
 - Text input bounded to 8,192 UTF-8 bytes per embedding call.
 - Strict loopback validation: `127.0.0.1` and `localhost` only.
 - Fail-closed privacy: Sealed records never embedded.
+
+Acceptance: defined in M4.1 evidence. All 5/5 targeted vector tests pass; pure Rust vector math, SQLite cache persistence, loopback-only client, and fail-closed Sealed exclusion verified.
+
+## M4.2 implementation contract — defined before coding
+
+Objective: Implement vector search ranking active workspace records by cosine similarity against a query embedding vector, with SQLite cache synchronization, metadata filtering (excluding archived records), and fail-closed Sealed exclusion.
+
+Authority: Master Spec §11, §19, §77–78; Requirements Matrix AN-005, AN-020.
+
+Files:
+- Create: `crates/core/tests/vector_search.rs`, `docs/evidence/M4-2.md`
+- Modify: `crates/core/src/vector.rs`, `crates/core/src/memory.rs`, `plans/PHASE-004-semantic-intelligence.md`, `project-state.json`, `docs/BUILD_STATUS.md`, `docs/REQUIREMENTS_MATRIX.md`
+
+Steps:
+1. Define `VectorSearchResult` in `crates/core/src/vector.rs`:
+   - `memory_id: String`
+   - `chunk_index: usize`
+   - `model: String`
+   - `score: f32` (cosine similarity clamped to [-1.0, 1.0])
+2. Implement `vector_search` in `crates/core/src/vector.rs`:
+   - Inputs: `conn: &Connection`, `workspace_id: &str`, `query_vector: &EmbeddingVector`, `model: &str`, `limit: usize`, `min_score: Option<f32>`.
+   - Query joins `memory_embeddings` with `memories`:
+     `SELECT me.memory_id, me.chunk_index, me.embedding FROM memory_embeddings me JOIN memories m ON m.workspace_id = me.workspace_id AND m.id = me.memory_id WHERE me.workspace_id = ?1 AND me.model = ?2 AND m.archived = 0 AND m.privacy != 'sealed'`
+   - Computes cosine similarity for each candidate.
+   - Filters candidates matching `min_score`.
+   - Sorts results descending by score, ties broken stably by memory ID.
+   - Returns top `limit` results (limit bounded to 1..100).
+3. Implement cache invalidation and synchronization helpers:
+   - `invalidate_embeddings(conn: &Connection, workspace_id: &str, memory_id: &str) -> Result<(), VectorError>`.
+   - In `crates/core/src/memory.rs`, when a memory is revised or archived, invoke embedding invalidation to prevent stale vector matches.
+4. Author comprehensive test suite `crates/core/tests/vector_search.rs`:
+   - Multi-record vector ranking: nearest vector ranks first.
+   - Threshold filtering: items below `min_score` omitted.
+   - Archived record exclusion: archived memories omitted from search results.
+   - Fail-closed Sealed exclusion: Sealed memories strictly excluded even if embeddings are present.
+   - Revision cache invalidation: revising a memory clears its old embedding.
+5. Verify across Rust workspace tests, strict Clippy, formatting, and planning validation.
+
+Bounds:
+- Result limit bounded to 1..100 records.
+- Query vector dimension must match stored model dimensions.
+- Zero network traffic or cloud leakage; strictly in-memory cosine ranking and local SQLite access.

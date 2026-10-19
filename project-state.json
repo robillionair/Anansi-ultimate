@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
   "activeMilestone": "M4",
-  "activeTask": "M4.1",
+  "activeTask": "M4.2",
   "plan": "plans/PHASE-004-semantic-intelligence.md",
-  "implementationStatus": "M4.1 local embedding generation and pure Rust vector space primitives verified.",
-  "lastVerifiedCommit": "342e753457a419be20d4f3b7ff4b8e2197f1f0a8",
+  "implementationStatus": "M4.2 vector search and SQLite cache synchronization verified.",
+  "lastVerifiedCommit": "4994f53531b6df5272a74c43666d95aa42d4a530",
   "evidence": [
     "docs/evidence/M0.md",
     "docs/evidence/M1.md",
@@ -28,7 +28,8 @@
     "docs/evidence/M3-3.md",
     "docs/evidence/M3-4.md",
     "docs/evidence/M3-5.md",
-    "docs/evidence/M4-1.md"
+    "docs/evidence/M4-1.md",
+    "docs/evidence/M4-2.md"
   ],
   "blockers": [
     {
@@ -36,8 +37,8 @@
       "detail": "Explicit Owner exception authorizes engineering only. Independent audit remains open for post-M3/pre-production/commercialization certification; exact pinned primitives and G2-G4 retained."
     }
   ],
-  "nextTask": "M4.2",
-  "nextTaskScope": "Vector search and SQLite cache sync across active workspace records.",
-  "productImplementation": "M1 and M2.1-M2.5 verified subsets: memory/lifecycle/entities, immutable relationship history, durable exports, coherent workspace/application catalog backups, opt-in schedules, owned saved-file import, verified fresh restore, M2.7 native desktop encrypted vault integration, M3.1/M3.2 full-body search, M3.3 local AI runtime discovery, M3.4 local Ask ANANSI, M3.5 integrated acceptance, and M4.1 local vector embeddings.",
+  "nextTask": "M4.3",
+  "nextTaskScope": "Hybrid retrieval and fusion pipeline (Reciprocal Rank Fusion).",
+  "productImplementation": "M1 and M2.1-M2.5 verified subsets: memory/lifecycle/entities, immutable relationship history, durable exports, coherent workspace/application catalog backups, opt-in schedules, owned saved-file import, verified fresh restore, M2.7 native desktop encrypted vault integration, M3.1/M3.2 full-body search, M3.3 local AI runtime discovery, M3.4 local Ask ANANSI, M3.5 integrated acceptance, M4.1 local vector embeddings, and M4.2 vector search.",
   "milestoneComplete": false
 }
