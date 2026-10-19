@@ -99,7 +99,10 @@ struct ManifestWrite<'a> {
 
 impl VaultStore {
     pub fn new(root: PathBuf, host_namespace: PathBuf) -> Result<Self> {
-        Storage::new(root.clone()).map_err(invalid)?;
+        let storage = Storage::new(root.clone()).map_err(invalid)?;
+        if !root.join(".anansi-root").exists() {
+            storage.connection(true).map_err(invalid)?;
+        }
         if !root.is_dir() || !host_namespace.is_absolute() {
             return Err(VaultError::StorageUnavailable);
         }

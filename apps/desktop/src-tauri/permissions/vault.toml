@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-vault-command"
+description = "Allow the local main window to request native vault setup, sealing, unlock, authenticated read and lock. Credentials remain in native controls."
+commands.allow = ["vault_command"]

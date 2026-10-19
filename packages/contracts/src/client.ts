@@ -129,3 +129,7 @@ export function nativeClient():Client {
 export async function saveNativeExport(workspaceId:string,jobId:string,artifactId:string):Promise<boolean>{
   try {const saved=await invoke('save_export',{request:{contractVersion:1,workspaceId,jobId,artifactId,offset:0}});if(typeof saved!=='boolean')throw Error();return saved;}catch(error){throw failure(error);}
 }
+
+export async function nativeVaultCommand(command:'setup'|'seal'|'unlock'|'read'|'lock',request:Record<string,unknown>):Promise<unknown>{
+  try{return await invoke('vault_command',{command,request:{contractVersion:1,...request}});}catch(error){throw failure(error,'vault/'+command);}
+}

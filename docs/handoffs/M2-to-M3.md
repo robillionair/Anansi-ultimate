@@ -27,3 +27,5 @@ This handoff does not activate Sealed commands or claim M2.8 acceptance.
 ## Runtime integration note (6f9aafb follow-up)
 
 `anansi_core::vault::runtime::VaultRuntime` now exposes `context(workspace)` and `read(caller, token, now)` for adapter integration. Adapters must obtain the context only after a sealed generation exists, keep the returned session token in process memory, and call `read` for every authorized snapshot. These methods preserve the existing second publication authorization check and do not serialize credentials, DEKs or recovery material. Native prompt and desktop/browser command transport remain adapter-owned.
+
+The M2 desktop adapter now owns the process-local `VaultService`, session handles and native `vault_command`. No M3 search interface changed. Search remains responsible for the existing `SearchBoundary` obligations; schema-9 startup must not route through schema-8 memory/search commands until the vault adapter explicitly decrypts and authorizes the snapshot.
