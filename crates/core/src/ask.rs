@@ -250,6 +250,10 @@ impl Core {
         let max_context_chars = 4000usize;
 
         for meta in candidate_memories {
+            if !crate::vault::policy::SearchBoundary::may_index(meta.privacy) {
+                continue;
+            }
+
             if meta.duplicate_of.is_some() {
                 continue;
             }
