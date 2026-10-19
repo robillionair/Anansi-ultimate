@@ -1,5 +1,14 @@
 # ANANSI Ultimate — Architecture Decisions
 
+## ADR-0028: Authorized local AI runtime discovery, hardware inspection, and consent boundary
+
+- **Authority:** User instruction to continue; Master Spec §7, §18–19, §69–70; Requirements Matrix AN-009, AN-020, AN-026.
+- **Decision:** Implement local AI runtime discovery and truthful hardware resource profiling in anansi-core (`ai_discovery.rs`).
+- **Hardware profiling:** Inspect available logical CPU cores, total/free physical memory via OS metrics (Win32 `GlobalMemoryStatusEx` on Windows, standard sysconf/meminfo on Unix), disk capacity, and architecture without requiring elevated privileges.
+- **Runtime probing:** Probe configured loopback ports (Ollama on 11434, LM Studio on 1234) with strict short timeouts (2s) and fail-safe offline handling. Probes must be read-only status inspections (`/api/tags`, `/v1/models`).
+- **Consent boundary:** Probing and discovery MUST NEVER trigger background model pulling, downloads, installation scripts, or cloud inference. Model recommendations are capacity-based advisories only (e.g. 7B/8B Q4 for 8–16 GB RAM).
+- **Status:** accepted design baseline for M3.3; implementation defined before coding.
+
 ## ADR-0027: Rebuildable full-body FTS5 index, privacy boundaries, and retrieval evaluation suite
 
 - **Authority:** User instruction to continue on M3 while keeping M2 untouched and logging all changes. M3.2 detailed design precedes implementation under [the M3 plan](../plans/03-search-and-ollama.md) and [M3.2 evidence](evidence/M3-2.md).

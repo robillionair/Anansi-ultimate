@@ -62,3 +62,34 @@ Bounds: at most 512 UTF-8 query bytes, 16 terms, 10,000 active records, 256 KiB 
 
 Acceptance: defined in [M3.2 evidence](../docs/evidence/M3-2.md). Rebuildable index accurately reflects all current plaintext records; Sealed records are never indexed; exact phrase, prefix, and metadata filters work reliably; grounded section headings and lines are returned; evaluation suite passes all benchmarks.
 
+## M3.3 implementation contract — defined before coding
+
+Objective: Detect local AI runtimes (Ollama, LM Studio, and compatible loopback inference endpoints) and perform hardware resource inspection (CPU cores, total/free system RAM, GPU detection/VRAM where available, free storage on workspace drive, system architecture). Provide model recommendations scaled to detected capacity with strict offline resilience, user-chosen endpoint configuration, explicit download consent requirements, and refusal of automatic model downloads or unprompted background inference.
+
+Authority: Master Spec §7, §18–19, §67, §69–70; Requirements Matrix AN-009, AN-020, AN-026.
+
+Files:
+- Create: `crates/core/src/ai_discovery.rs`, `crates/core/tests/ai_discovery.rs`, `docs/evidence/M3-3.md`
+- Modify: `crates/core/src/lib.rs`, `crates/core/src/storage.rs`, `crates/core/Cargo.toml`, `packages/contracts/src/client.ts`, `packages/ui/src/Navigation.tsx`, `packages/ui/src/Workspace.tsx`, `tests/contracts.test.ts`
+- Update: `docs/DECISIONS.md`, `docs/BUILD_STATUS.md`, `project-state.json`
+
+Steps:
+1. Define hardware analysis types (`HardwareProfile`: architecture, logical CPU cores, total/available physical RAM, disk available space, optional GPU name and VRAM) and runtime probe types (`RuntimeKind`: Ollama, LmStudio, CustomLoopback; `RuntimeStatus`: Available, Offline, Unsupported).
+2. Implement native hardware discovery in `crates/core/src/ai_discovery.rs`:
+   - On Windows, read memory status via standard Win32 API (`GlobalMemoryStatusEx`) and disk free space via standard filesystem metadata.
+   - Capture CPU architecture and thread count using `std::env::consts::ARCH` and `std::thread::available_parallelism`.
+   - Provide fallback heuristics when high-privilege GPU discovery is unavailable without crashing or blocking.
+3. Implement non-blocking loopback runtime probe (TCP connect / HTTP GET probe to configured loopback ports: Ollama default `http://127.0.0.1:11434/api/tags`, LM Studio `http://127.0.0.1:1234/v1/models`) with a strict 2-second timeout.
+4. Implement model recommendations based on detected RAM/VRAM:
+   - >= 16 GB RAM/VRAM: 8B–14B quantized models recommended (e.g. Llama 3 8B, Qwen 2.5 7B/14B).
+   - 8–16 GB RAM/VRAM: 7B–8B Q4 quantized models recommended.
+   - < 8 GB RAM: lightweight 1B–3B models or CPU-only advisory.
+5. Guarantee strict constraints:
+   - Probing must never trigger automatic downloads, model pulling, or cloud telemetry.
+   - Offline environments return truthful `Offline` / `Unavailable` statuses without crashing.
+   - Explicit consent is required before any model configuration or future inference.
+6. Expose the `ai_discovery` query through the Core API and TypeScript contracts.
+7. Integrate UI component under "SYSTEM -> Local Models" in navigation, displaying hardware capabilities, detected local servers, and recommendation cards.
+8. Validate across Rust unit/integration tests, UI tests, and planning validators before status claims.
+
+
