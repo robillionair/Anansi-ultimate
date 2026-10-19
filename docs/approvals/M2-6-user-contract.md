@@ -10,7 +10,7 @@ Defines the normative cryptographic contract for the Sealed-memory vault (`vault
 ---
 
 ## 1. Audited Cryptographic Library & Pinned Versions (Decision 1)
-All cryptographic primitives use pure-Rust, constant-time crates from the **RustCrypto** project (audited by NCC Group) and cross-platform OS secret storage:
+Provenance correction under the [Owner amendment](M2-6-owner-risk-acceptance.md): use exact-pinned pure-Rust RustCrypto primitives and cross-platform OS secret storage. NCC reviewed specified historical AEAD source; no matching independent Argon2 audit or externally reviewed current AEAD delta is established. M2.7 engineering proceeds under explicit unaudited-primitive risk acceptance; G1-External-Audit stays open. No blanket current RustCrypto audit or universal constant-time guarantee is claimed:
 
 * **AEAD Cipher:** `chacha20poly1305 = "=0.11.0"` (or `"=0.10.1"` if workspace MSRV < 1.85) — Using **`XChaCha20Poly1305`** (256-bit key, 192-bit extended nonce, 128-bit Poly1305 tag) to eliminate random nonce collision risks across local snapshots.
 * **Key Derivation (KDF):** `argon2 = "=0.6.0"` (or `"=0.5.3"` if workspace MSRV < 1.85) — Using **`Argon2id` v0x13** (RFC 9106 hybrid memory-hard KDF resistant to both GPU cracking and side-channel timing attacks).

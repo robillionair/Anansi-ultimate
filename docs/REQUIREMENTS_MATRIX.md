@@ -1,6 +1,12 @@
 # ANANSI Ultimate — Requirements Matrix
 
-M3.1 & M3.2 (2026-10-19) are explicitly authorized scheduling exceptions for local lexical title and full-body retrieval with grounded evidence citations and evaluation benchmark suite, with [M3.1 evidence](evidence/M3-1.md) and [M3.2 evidence](evidence/M3-2.md). AN-005 stays in progress for these subsets; vector/hybrid retrieval remains M4. AN-006/009/010 inference/runtime/context scope is not implemented. AN-018/019/031 retain the M2 audit/vault/certification gaps despite the new slice. All 90 master section owners and 33 requirements remain represented.
+## Owner amendment — M2.7-Core isolation and M2/M3 integration (2026-10-19)
+
+M2.7-Core initial parser/keys/session/policy/native-store/shadow-preparation subset is implemented and tested in isolation; [Increment 1 evidence](evidence/M2-7.md) records its scope. [Increment 2 evidence](evidence/M2-7-increment2.md) tracks explicit schema-9 encrypted history/graph generations, cross-process admission and epochs, full DEK rotation, recovery acknowledgement and encrypted export/fresh restore. M2.7 native application integration adds verified Windows desktop adapter workflow: [evidence](evidence/M2-7-native-application.md). AN-018/019/031/033 gain core and native desktop coverage; they remain in progress for complete browser authorization and certified M2.8 release.
+
+[Owner risk acceptance](approvals/M2-6-owner-risk-acceptance.md) explicitly supersedes historical G1 pre-implementation stop language below. G1-External-Audit remains open for post-M3/pre-production/commercialization certification; no audit coverage is fabricated. M2.5 source/CI recovery baseline was reverified. G2–G4 are unchanged.
+
+M3.1 & M3.2 (2026-10-19) are explicitly authorized scheduling exceptions for local lexical title and full-body retrieval with grounded evidence citations and evaluation benchmark suite, with [M3.1 evidence](evidence/M3-1.md) and [M3.2 evidence](evidence/M3-2.md). AN-005 stays in progress for these subsets; vector/hybrid retrieval remains M4. AN-006/009/010 inference/runtime/context scope is not implemented. All 90 master section owners and 33 requirements remain represented.
 
 M2.6 audit follow-up (2026-10-19): AN-018/019/031 remain in progress. [Direct source identities and report scope exclusions](evidence/M2-6-audit-review.md) add evidence without certifying encryption. The user retained pure Rust, p=4 defaults and the independent-audit gate; no native substitute or requirement weakening is adopted. All existing requirement rows and milestone owners remain intact.
 
@@ -47,7 +53,7 @@ Milestones now follow the approved canonical roadmap and master section 82. Plan
 | AN-028 | Unified lifecycle and Launch Studio | M12 | planned | Section 85 workflow; real approval before publishing |
 | AN-029 | Persistent jobs and recovery | M2, M3, M6, M13 | in progress | M2.4 export-handler six states, leases, headless wake-up, cancel/retry/restart, ownership and resource limits verified: [evidence](evidence/M2-4.md); remaining job categories stay in their owning milestones |
 | AN-030 | Native macOS/Apple Silicon, updates/credential vaults | M14, M15 | planned | Native signed installation/update and offline verification |
-| AN-031 | Encryption, privacy classes, optional audited vault | M2, M15 | in progress | M2.1 native privacy, Sealed refusal and plaintext disclosure: [evidence](evidence/M2-1.md); [M2.6 reconciliation](evidence/M2-6.md) preserves approval and records adopted corrections G2–G4 and open audit gate G1. M2.7 encryption remains unimplemented; no verified encryption claim |
+| AN-031 | Encryption, privacy classes, optional audited vault | M2, M15 | in progress | M2.1 privacy and Sealed refusal: [evidence](evidence/M2-1.md); [M2.7-Core Increment 2](evidence/M2-7-increment2.md) records isolated encryption/history/rotation/recovery core coverage; the tested vault-owned search authorization hook is documented in [the M2→M3 handoff](handoffs/M2-to-M3.md). Application integration and native/browser certification remain pending; G1-External-Audit remains open under the explicit Owner engineering exception |
 | AN-032 | Performance, accessibility, engine evaluation | M3–M15 | planned | 1k/10k/100k datasets, engine suites, keyboard/2D fallback evidence |
 | AN-033 | Export/ownership and synthetic provenance | M2–M15 | in progress | M2.1 readable Markdown/user provenance/Proposed state: [evidence](evidence/M2-1.md); exports/engine scope remain later tasks |
 

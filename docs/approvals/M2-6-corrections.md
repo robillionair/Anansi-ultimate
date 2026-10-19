@@ -1,6 +1,6 @@
 # M2.6 — Adopted contract corrections
 
-Authority: direct user reply in this development session, 2026-10-18: **“Adopt these corrections; retain audit gate.”** The question explicitly named authenticated migration journals with preserved staging, realistic memory-erasure limits, identity binding and encrypted-only ordinary Sealed exports. This addendum supersedes the corresponding conflicting wording in [the original contract](M2-6-user-contract.md); it does not replace its other requirements or waive master section 75's audited-library prerequisite.
+Authority: direct user reply in this development session, 2026-10-18: **“Adopt these corrections; retain audit gate.”** The question explicitly named authenticated migration journals with preserved staging, realistic memory-erasure limits, identity binding and encrypted-only ordinary Sealed exports. This addendum supersedes the corresponding conflicting wording in [the original contract](M2-6-user-contract.md); it does not replace its other requirements. The later [Owner amendment](M2-6-owner-risk-acceptance.md) explicitly excepts master §75 for engineering only.
 
 ## Adopted normative corrections
 
@@ -8,7 +8,7 @@ Authority: direct user reply in this development session, 2026-10-18: **“Adopt
 2. Lock/restart revokes authorization logically. Guard and zeroize Rust-owned secret buffers on normal cleanup paths. Do not claim physical erasure after abrupt termination, absence from every OS dump/swap/register copy, protection from a privileged debugger, or retraction of plaintext already displayed. No application secret logging or deliberate plaintext crash-report capture.
 3. Bind vault/workspace/record/revision/generation and operation purpose inside authenticated payloads, and verify them against authorization context. Preserve the approved 64-byte header as exact AAD. A valid tag alone never authorizes a swapped record, keyslot, generation or workspace.
 4. Ordinary Sealed exports are encrypted-only, in both locked and unlocked states. No plaintext-export exception or purge/reset command is authorized by this design increment. Public/Standard/Private export retains existing behavior.
-5. The audit gate remains mandatory. Version availability, matching test vectors and upstream historical audit statements do not by themselves establish audit coverage of every proposed primitive/version. No cryptographic dependency or M2.7 implementation starts until that prerequisite is resolved and documented.
+5. Superseded for engineering by the [Owner risk-acceptance amendment](M2-6-owner-risk-acceptance.md): G1-External-Audit remains open for pre-production/commercialization certification, while M2.7 engineering and exact-pinned dependencies are authorized after M2.5 verification. Version availability, vectors and historical statements are not third-party audit coverage. Corrections 1–4 and concrete G2–G4 definitions remain unchanged.
 
 ## Concrete format and resource refinements
 

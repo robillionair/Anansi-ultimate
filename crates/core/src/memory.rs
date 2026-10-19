@@ -141,7 +141,6 @@ pub struct MemoryMetadata {
     pub due_date: Option<String>,
     #[serde(default)]
     pub completed: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub snippet: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub section_heading: Option<String>,
@@ -178,11 +177,11 @@ pub struct MemoryListRequest {
     pub kind: Option<String>,
     pub query: Option<String>,
     #[serde(default)]
+    pub full_body: bool,
+    #[serde(default)]
     pub include_archived: bool,
     #[serde(default)]
     pub include_expired: bool,
-    #[serde(default)]
-    pub full_body: bool,
 }
 #[derive(Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -328,7 +327,12 @@ impl Core {
                 if r.offset > 1_000_000 || !(1..=100).contains(&r.limit.unwrap_or(50)) {
                     return Err(invalid());
                 }
-                serde_json::to_value(self.storage()?.memory_list(r)?).map_err(|_| unavailable())
+                let result = if r.full_body {
+                    self.storage()?.body_search(r)?
+                } else {
+                    self.storage()?.memory_list(r)?
+                };
+                serde_json::to_value(result).map_err(|_| unavailable())
             }
             "reindex" => {
                 #[derive(serde::Deserialize)]
@@ -352,9 +356,6 @@ impl Core {
             )),
         }
     }
-    pub fn rebuild_search_index(&self, workspace_id: &str) -> Result<u32, CommandError> {
-        self.storage()?.rebuild_search_index(workspace_id)
-    }
 }
 fn metadata(
     connection: &Connection,
@@ -377,6 +378,13 @@ fn metadata(
     }
     Ok((meta, hash))
 }
+impl Core {
+    pub fn rebuild_search_index(&self, workspace_id: &str) -> Result<u32, CommandError> {
+        id(workspace_id)?;
+        self.storage()?.rebuild_search_index(workspace_id)
+    }
+}
+
 impl Storage {
     pub(crate) fn memory_write(
         &self,
@@ -648,7 +656,7 @@ impl Storage {
             params![r.workspace_id, record, revision],
         )
         .map_err(|_| unavailable())?;
-        let _ = crate::search::sync_index_tx(
+        crate::search::sync_index_tx(
             &tx,
             &r.workspace_id,
             &record,
@@ -656,7 +664,7 @@ impl Storage {
             &memory.title,
             &r.draft.body,
             &memory.privacy,
-        );
+        )?;
         #[cfg(test)]
         fault("before_commit");
         tx.commit().map_err(|_| unavailable())?;

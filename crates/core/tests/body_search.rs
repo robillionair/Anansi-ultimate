@@ -168,6 +168,9 @@ fn body_search_phrases_prefixes_revisions_rebuild_and_sealed_exclusion() {
         )
         .unwrap();
         tx.commit().unwrap();
+        // Close the observer connection before application search/rebuild so
+        // Windows SQLite can acquire its immediate transaction lock.
+        drop(db);
 
         // Write a body on disk using canonical content::write helper for private permissions
         let _ = anansi_core::content::write(
@@ -195,7 +198,8 @@ fn body_search_phrases_prefixes_revisions_rebuild_and_sealed_exclusion() {
         core.rebuild_search_index(&w).unwrap();
 
         // Verify FTS table directly has no rows for sealed_mem_id
-        let fts_sealed_count: i64 = db
+        let verify_db = rusqlite::Connection::open(&db_path).unwrap();
+        let fts_sealed_count: i64 = verify_db
             .query_row(
                 "SELECT COUNT(1) FROM memory_body_fts WHERE memory_id = ?1",
                 rusqlite::params![sealed_mem_id],
@@ -208,7 +212,7 @@ fn body_search_phrases_prefixes_revisions_rebuild_and_sealed_exclusion() {
         );
 
         // Clean up injected test record
-        let tx_clean = db.transaction().unwrap();
+        let tx_clean = verify_db.unchecked_transaction().unwrap();
         tx_clean
             .execute(
                 "DELETE FROM memory_revisions WHERE memory_id = ?1",

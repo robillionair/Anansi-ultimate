@@ -16,4 +16,5 @@ pub mod search;
 pub mod settings;
 pub mod snapshots;
 pub mod storage;
+pub mod vault;
 pub mod workspace;

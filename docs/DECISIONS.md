@@ -1,6 +1,6 @@
 # ANANSI Ultimate — Architecture Decisions
 
-## ADR-0025: Rebuildable full-body FTS5 index, privacy boundaries, and retrieval evaluation suite
+## ADR-0027: Rebuildable full-body FTS5 index, privacy boundaries, and retrieval evaluation suite
 
 - **Authority:** User instruction to continue on M3 while keeping M2 untouched and logging all changes. M3.2 detailed design precedes implementation under [the M3 plan](../plans/03-search-and-ollama.md) and [M3.2 evidence](evidence/M3-2.md).
 - **Decision:** Implement full-body lexical retrieval using a rebuildable SQLite FTS5 index synchronized with active current revisions (`memories.current_revision`). The index is completely reconstructible from canonical UTF-8 Markdown files (`content/{workspace}/{record}/{revision}.md`) and SQLite metadata.
@@ -10,6 +10,18 @@
 - **Deduplication & Recency:** Detect duplicate content via SHA-256 body hashes and blend lexical BM25 ranking with temporal decay (`updated_at` / `event_date`).
 - **Retrieval evaluation:** Master Spec §11 and §78 benchmark requirements are implemented in an automated suite (`retrieval_evaluation.rs`) testing paraphrase baselines, contradiction resolution, temporal facts, and missing evidence.
 - **Status:** accepted design baseline for M3.2; implementation follows acceptance criteria defined before code.
+
+## ADR-0026: Explicit schema-9 vault core and transactional generation authority
+
+Owner-authorized M2.7-Core Increment 2 is isolated from M3 Search/UI/adapters/workflows. It adds an explicit core API, not an automatic live migration. Ordinary Core remains schema 8 and refuses schema 9; schema-9 triggers reject stale plaintext writers. A verified matching M2.5 snapshot and recovery acknowledgement precede the initial whole-workspace cutover. No partial selection or plaintext truncation is inferred.
+
+OS root locks and a shared configured private host/user KDF namespace admit operations. Synced authenticated generation files precede an immediate SQLite transaction committing active generation, opaque membership/file inventory and durable epoch. Old generation is authoritative before commit, new generation after commit; errors from post-commit observers cannot imply rollback. Explicit authenticated rollback is a new epoch-advancing transaction. Old slots/generations, source backups/body files, database remnants and interrupted staging remain preserved. This is not forensic erasure or certified full at-rest conversion of previous copies.
+
+Record metadata/history and graph revisions are typed authenticated payloads. Opaque inventory permits locked ciphertext backup without exposing per-record revision mappings; coarse identifiers/file counts/lengths still leak. Fresh restore verifies all members, assigns fresh IDs and keys and retains origin mappings. Recovery activation needs a private receipt after saved-copy consent, one-time display challenge and actual recovery-slot unwrap. All live Sealed commands stay refused until coordinated integration and native/browser acceptance. [Increment 2 evidence](evidence/M2-7-increment2.md) records tests and limitations. G1-External-Audit remains open under ADR-0025; no audit is replaced by tests.
+
+## ADR-0025: Owner risk acceptance and isolated M2.7-Core engineering
+
+[Owner risk acceptance](approvals/M2-6-owner-risk-acceptance.md) explicitly supersedes historical G1 pre-implementation stop language below. G1-External-Audit remains open for post-M3/pre-production/commercialization certification; no audit coverage is fabricated. M2.5 source/CI recovery baseline was reverified. M2.7-Core is authorized in a separate worktree; M3 Search/UI wiring and shared-checkout files remain untouched. G2–G4 are unchanged. No vault completion, production certification or implemented UI disclosure is claimed. AN-018/019/031 remain in progress.
 
 ## ADR-0024: Vault-independent title search scheduling exception
 
@@ -209,3 +221,7 @@ The earlier generic JSON catalog and directory-copy helper were development grou
 - G2–G4 in [the detailed plan](../plans/M2-vault-security.md) record journal authentication/locked recovery, physical-erasure and export-policy contradictions, and missing purpose/context/schema/resource encoding. The user replied “Adopt these corrections; retain audit gate.” [The normative addendum](approvals/M2-6-corrections.md) resolves G2–G4 with context-bound keyslots/journals, preserved staging, realistic erasure limits and encrypted-only ordinary Sealed export. G1 audit coverage remains open.
 - Native-only trusted secret entry is proposed to satisfy the no-frontend-passphrase rule; it is not implemented by a React password form. Independent desktop/API key lifetimes and logical cross-process revocation must be tested. OS stores remain optional wrapped-token storage, not implicit restart unlock.
 - No new dependency, product code, capability, schema or credential-store write. Schema 8 and current Sealed refusal remain. This planning checkpoint adds evidence and concrete gates, not a completed encrypted product. M2.7 remains gated; M2.8 and M3 are unstarted.
+
+## ADR-0027: Vault-owned search authorization boundary
+
+M2 owns the privacy boundary even while M3 owns search implementation. `vault::policy::SearchBoundary` is the narrow integration hook: Sealed records are excluded before any persistent index insert/count, and Sealed result publication must revalidate the bound caller session and durable generation epoch. The hook returns no vault key or decrypted payload. M3 consumers must remove stale FTS rows on sealing/revocation and recheck before snippets, counts, titles, bodies or graph metadata are returned. This preserves ownership separation and prevents a persistent plaintext search index from bypassing vault lock or generation fencing. See [M2-to-M3 handoff](handoffs/M2-to-M3.md).

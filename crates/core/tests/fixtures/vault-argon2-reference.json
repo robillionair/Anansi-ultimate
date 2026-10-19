@@ -1,0 +1,19 @@
+{
+  "provenance": {
+    "generator": "Node built-in crypto.argon2Sync; independent of RustCrypto",
+    "node": "v26.7.0",
+    "openssl": "3.5.7",
+    "documentation": "https://nodejs.org/api/crypto.html#cryptoargon2syncalgorithm-parameters",
+    "rfcCheck": "RFC9106 §5.3 p=4 passed before generating production-profile vectors",
+    "scope": "Synthetic deterministic interoperability fixture, not third-party security review"
+  },
+  "algorithm": "argon2id",
+  "version": 19,
+  "memoryKib": 65536,
+  "iterations": 3,
+  "outputBytes": 32,
+  "passwordHex": "0101010101010101010101010101010101010101010101010101010101010101",
+  "saltHex": "02020202020202020202020202020202",
+  "p4": "fedd802b86b17230843c6d3f025c81d3f472fbf9daaf26897fa88844732167ec",
+  "p1": "577a81cb3dc2546446cda5871efa74c3393a40b1708589be07bd4c95afd1223e"
+}

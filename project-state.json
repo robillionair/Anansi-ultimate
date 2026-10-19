@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "activeMilestone": "M3",
-  "activeTask": "M3.2",
-  "plan": "plans/03-search-and-ollama.md",
-  "implementationStatus": "M3.1 verified complete and published to master. M3.2 full-body rebuildable FTS5 index, current-pointer synchronization, privacy boundary (Sealed refusal), and retrieval evaluation benchmark suite designed before coding.",
-  "lastVerifiedCommit": "436b01cf5c60a51baf3828665d88d2de3caa0d2f",
+  "activeMilestone": "M2",
+  "activeTask": "M2.7",
+  "plan": "plans/M2-vault-security.md",
+  "implementationStatus": "Integrated M2.7 vault core and M3.2 search stream: schema-9 encrypted vault core, process-owned VaultService, native Windows credential provider, verified-backup sealing, authorized read, lock/restart denial, rebuildable FTS5 index with SearchBoundary invalidation and retrieval evaluation benchmarks verified locally.",
+  "lastVerifiedCommit": "bd2e2a9b407421ce8e13765e903ff8ca993b4f62",
   "evidence": [
     "docs/evidence/M0.md",
     "docs/evidence/M1.md",
@@ -20,17 +20,20 @@
     "docs/evidence/M2-5.md",
     "docs/evidence/M2-6.md",
     "docs/evidence/M2-6-audit-review.md",
+    "docs/evidence/M2-7.md",
+    "docs/evidence/M2-7-increment2.md",
+    "docs/evidence/M2-7-native-application.md",
     "docs/evidence/M3-1.md",
     "docs/evidence/M3-2.md"
   ],
   "blockers": [
     {
-      "scope": "M2.6 technical readiness",
-      "detail": "G1 remains open after RustCrypto member tarcieri's qualified statement that he does not think argon2 has ever been audited. Independent implementation review or newly supplied matching report and current AEAD/dependency mapping are required. Pure Rust, p=4 and adopted G2-G4 remain. User-authorized acknowledgement was posted; no paid review commissioned. M3.1 alone has the explicit independent scheduling exception."
+      "scope": "G1-External-Audit",
+      "detail": "Explicit Owner exception authorizes engineering only. Independent audit remains open for post-M3/pre-production/commercialization certification; exact pinned primitives and G2-G4 retained."
     }
   ],
-  "nextTask": "M3.2",
-  "nextTaskScope": "Implement rebuildable body index, synchronization, evidence locations, and evaluation suite per accepted M3.2 design.",
-  "productImplementation": "M1 and M2.1-M2.5 verified subsets, plus verified M3.1 local title search across native and browser without persistent index; M2/G1 remains open without vault code or models.",
+  "nextTask": "M2.8",
+  "nextTaskScope": "Finalize integrated M2 certification: complete browser authorization boundary, portable encrypted backup export/restore, and cross-adapter verification before M3.3 runtime discovery.",
+  "productImplementation": "M1 and M2.1-M2.5 verified subsets: memory/lifecycle/entities, immutable relationship history, durable exports, coherent workspace/application catalog backups, opt-in schedules, owned saved-file import, verified fresh restore, and M2.7 native desktop encrypted vault integration with M3.1/M3.2 full-body search.",
   "milestoneComplete": false
 }

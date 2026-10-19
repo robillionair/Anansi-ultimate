@@ -102,7 +102,7 @@ Dependency: M2.5 verified. Create plans/M2-vault-security.md and docs/evidence/M
 
 Resolve audited library/platform/version, authenticated format, threat model, key generation/derivation/storage, unlock lifetime and restart locking, recovery key/passphrase, rotation, zeroization limits, metadata leaks, backup confidentiality and disposal. Verify current official library/audit sources then; M2.0 selects no library and claims no audit. Explain BitLocker/FileVault versus application lock/encryption. Use non-destructive opt-in import, never promise secure deletion of old plaintext/WAL/snapshots.
 
-Acceptance: reviewable per-operation allow/deny table for list/read/history/edges/export/backup/restore, reproducible known-vector/tamper/wrong-key/recovery tests, exact implementation/dependency/key-storage/migration files and commands, and explicit approval. Inability to meet audit/platform/recovery requirements blocks M2 completion. Ordinary continuation or M2.0 approval cannot waive this gate. Stop for vault-plan approval before M2.7.
+Acceptance: reviewable per-operation allow/deny table for list/read/history/edges/export/backup/restore, reproducible known-vector/tamper/wrong-key/recovery tests, exact implementation/dependency/key-storage/migration files and commands, and explicit approval. Platform/recovery verification remains required for M2 completion. The explicit [Owner amendment](../docs/approvals/M2-6-owner-risk-acceptance.md) authorizes M2.7 engineering after M2.5 verification, deferring G1-External-Audit to post-M3/pre-production certification; it does not close that requirement or waive G2–G4.
 
 ### M2.7 — Optional encrypted vault and Sealed workflows
 

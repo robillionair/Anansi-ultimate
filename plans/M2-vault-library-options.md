@@ -1,5 +1,7 @@
 # M2.6 G1 — Crypto library decision proposal
 
+Later Owner amendment (2026-10-19): [explicit unaudited-primitive risk acceptance](../docs/approvals/M2-6-owner-risk-acceptance.md) authorizes isolated M2.7 engineering after M2.5 verification. G1-External-Audit remains open for post-M3/pre-production/commercialization certification. Earlier implementation-block language below is historical and superseded for engineering only; factual evidence and provenance limitations are retained.
+
 Status: user selected Option A on 2026-10-19: **“Retain pure Rust; obtain matching audit evidence.”** G1 remains open. Option B is retained as comparison research only and is not selected. No dependency, native binary, KDF profile or product behavior changes. The original [contract](../docs/approvals/M2-6-user-contract.md) and [adopted corrections](../docs/approvals/M2-6-corrections.md) remain normative. See [the follow-up evidence](../docs/evidence/M2-6-audit-review.md).
 
 ## Objective and acceptance

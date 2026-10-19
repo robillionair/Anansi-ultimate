@@ -1,6 +1,6 @@
 {
   "identifier": "main",
-  "description": "Local main window may read readiness and manage workspaces/settings and scoped memory revisions. No remote access or filesystem/process plugins.",
+  "description": "Local main window may read readiness, manage scoped workspace data and request native vault operations. No remote access or filesystem/process plugins.",
   "windows": ["main"],
-  "permissions": ["allow-readiness", "allow-workspaces", "allow-memories", "allow-relationships", "allow-job-command"]
+  "permissions": ["allow-readiness", "allow-workspaces", "allow-memories", "allow-relationships", "allow-job-command", "allow-vault-command"]
 }

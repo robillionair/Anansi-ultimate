@@ -5,13 +5,16 @@ edition.workspace = true
 build = "build.rs"
 [features]
 custom-protocol = ["tauri/custom-protocol"]
+vault-test-provider = []
 [lib]
 name = "anansi_desktop_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 [dependencies]
 anansi-core = { path = "../../../crates/core" }
 serde_json.workspace = true
+zeroize = "=1.9.1"
 [target.'cfg(windows)'.dependencies]
 tauri = { version = "=2.12.4", features = [] }
+windows-sys = { version = "=0.61.2", features = ["Win32_Security_Credentials", "Win32_Foundation", "Win32_UI_WindowsAndMessaging"] }
 [target.'cfg(windows)'.build-dependencies]
 tauri-build = { version = "=2.7.3", features = [] }
