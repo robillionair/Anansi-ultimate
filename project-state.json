@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "activeMilestone": "M3",
-  "activeTask": "M3.3",
+  "activeTask": "M3.4",
   "plan": "plans/03-search-and-ollama.md",
-  "implementationStatus": "M3.3 authorized local AI runtime discovery, native Win32 hardware inspection, tiered recommendations, strict loopback isolation and explicit download consent UI verified locally.",
+  "implementationStatus": "M3.4 minimum Context Compiler, local Ask ANANSI query pipeline, grounded citations, truthful missing-evidence handling, offline resilience, and data disclosure manifest verified locally.",
   "lastVerifiedCommit": "bd2e2a9b407421ce8e13765e903ff8ca993b4f62",
   "evidence": [
     "docs/evidence/M0.md",
@@ -25,7 +25,8 @@
     "docs/evidence/M2-7-native-application.md",
     "docs/evidence/M3-1.md",
     "docs/evidence/M3-2.md",
-    "docs/evidence/M3-3.md"
+    "docs/evidence/M3-3.md",
+    "docs/evidence/M3-4.md"
   ],
   "blockers": [
     {
@@ -33,8 +34,8 @@
       "detail": "Explicit Owner exception authorizes engineering only. Independent audit remains open for post-M3/pre-production/commercialization certification; exact pinned primitives and G2-G4 retained."
     }
   ],
-  "nextTask": "M3.4",
-  "nextTaskScope": "Implement Context Compiler and local Ask ANANSI grounded answering workflow.",
-  "productImplementation": "M1 and M2.1-M2.5 verified subsets: memory/lifecycle/entities, immutable relationship history, durable exports, coherent workspace/application catalog backups, opt-in schedules, owned saved-file import, verified fresh restore, M2.7 native desktop encrypted vault integration, M3.1/M3.2 full-body search, and M3.3 local AI runtime discovery.",
+  "nextTask": "M3.5",
+  "nextTaskScope": "Integrated M3 certification and end-to-end local search and Ask ANANSI workflow verification with M2 integration.",
+  "productImplementation": "M1 and M2.1-M2.5 verified subsets: memory/lifecycle/entities, immutable relationship history, durable exports, coherent workspace/application catalog backups, opt-in schedules, owned saved-file import, verified fresh restore, M2.7 native desktop encrypted vault integration, M3.1/M3.2 full-body search, M3.3 local AI runtime discovery, and M3.4 local Ask ANANSI.",
   "milestoneComplete": false
 }

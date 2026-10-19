@@ -681,6 +681,16 @@ impl Core {
                 let response = self.ai_discovery(req)?;
                 serde_json::to_value(response).map_err(|_| crate::storage::unavailable())
             }
+            "ask" => {
+                let req: crate::ask::AskRequest = serde_json::from_value(value).map_err(|_| {
+                    CommandError::new(
+                        ErrorCode::InvalidRequest,
+                        "Use the supported Ask ANANSI request.",
+                    )
+                })?;
+                let response = self.ask_anansi(req)?;
+                serde_json::to_value(response).map_err(|_| crate::storage::unavailable())
+            }
             _ => Err(CommandError::new(
                 ErrorCode::InvalidRequest,
                 "Use a supported AI command.",

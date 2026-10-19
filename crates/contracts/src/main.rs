@@ -64,7 +64,11 @@ fn main() {
         "AiDiscoveryResponse":schemars::schema_for!(anansi_core::ai_discovery::AiDiscoveryResponse),
         "HardwareProfile":schemars::schema_for!(anansi_core::ai_discovery::HardwareProfile),
         "DiscoveredRuntime":schemars::schema_for!(anansi_core::ai_discovery::DiscoveredRuntime),
-        "ModelRecommendation":schemars::schema_for!(anansi_core::ai_discovery::ModelRecommendation)
+        "ModelRecommendation":schemars::schema_for!(anansi_core::ai_discovery::ModelRecommendation),
+        "AskRequest":schemars::schema_for!(anansi_core::ask::AskRequest),
+        "AskResponse":schemars::schema_for!(anansi_core::ask::AskResponse),
+        "GroundedCitation":schemars::schema_for!(anansi_core::ask::GroundedCitation),
+        "DisclosureManifest":schemars::schema_for!(anansi_core::ask::DisclosureManifest)
     });
     println!("{}", serde_json::to_string_pretty(&schemas).unwrap());
 }

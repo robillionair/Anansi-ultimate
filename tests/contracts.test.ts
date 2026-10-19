@@ -192,3 +192,75 @@ test('ai discovery HTTP/native operations use scoped routes and validated DTOs',
   }finally{if(window)Object.defineProperty(globalThis,'window',window);else Reflect.deleteProperty(globalThis,'window');}
 });
 
+test('ask anansi HTTP/native operations use scoped routes and validated DTOs',async()=>{
+  const original=globalThis.fetch;let address='';let body:Record<string,unknown>={};
+  const askResponse={
+    contractVersion:1,
+    status:'answered' as const,
+    answer:'According to [1], we adopt SQLite with FTS5.',
+    citations:[
+      {
+        index:1,
+        memoryId:'m'.repeat(32),
+        title:'Project Aurora Decision',
+        kind:'decision',
+        sectionHeading:'# Architecture',
+        lineNumber:12,
+        snippet:'We adopt SQLite with FTS5 for local search.',
+      },
+    ],
+    manifest:{
+      runtimeKind:'ollama',
+      endpoint:'http://127.0.0.1:11434',
+      modelTag:'llama3.1:8b',
+      sourceMemories:[
+        {
+          id:'m'.repeat(32),
+          title:'Project Aurora Decision',
+          kind:'decision',
+        },
+      ],
+      characterCount:250,
+      estimatedTokens:62,
+      routingReason:'local-first offline inference',
+      compiledPrompt:'You are ANANSI...',
+    },
+  };
+  try{
+    globalThis.fetch=async(url,options)=>{
+      address=String(url);
+      body=JSON.parse(options!.body as string);
+      return new Response(JSON.stringify(askResponse));
+    };
+    const client=httpClient('http://127.0.0.1:1451','a'.repeat(64));
+    const res=await client.askAnansi('w'.repeat(32),'What did we decide about search?',{
+      runtimeEndpoint:'http://127.0.0.1:11434',
+      modelTag:'llama3.1:8b',
+      maxEvidenceItems:3,
+    });
+    assert.equal(new URL(address).pathname,'/v1/ai/ask');
+    assert.equal(body.workspaceId,'w'.repeat(32));
+    assert.equal(body.prompt,'What did we decide about search?');
+    assert.equal(body.runtimeEndpoint,'http://127.0.0.1:11434');
+    assert.equal(body.modelTag,'llama3.1:8b');
+    assert.equal(body.maxEvidenceItems,3);
+    assert.equal(res.status,'answered');
+    assert.equal(res.citations.length,1);
+    assert.equal(res.citations[0].title,'Project Aurora Decision');
+
+    // Incompatible contract rejection
+    globalThis.fetch=async()=>new Response(JSON.stringify({...askResponse,contractVersion:99}));
+    await assert.rejects(client.askAnansi('w'.repeat(32),'Test'),/incompatible/);
+  }finally{globalThis.fetch=original;}
+
+  const window=Object.getOwnPropertyDescriptor(globalThis,'window');let command='',args:unknown;
+  Object.defineProperty(globalThis,'window',{configurable:true,value:{__TAURI_INTERNALS__:{invoke:async(c:string,a:unknown)=>{command=c;args=a;return askResponse;}}}});
+  try{
+    const nativeRes=await nativeClient().askAnansi('w'.repeat(32),'What is our deployment target?');
+    assert.equal(command,'ai_command');
+    assert.deepEqual(args,{command:'ask',request:{contractVersion:1,workspaceId:'w'.repeat(32),prompt:'What is our deployment target?'}});
+    assert.equal(nativeRes.status,'answered');
+    assert.equal(nativeRes.manifest.modelTag,'llama3.1:8b');
+  }finally{if(window)Object.defineProperty(globalThis,'window',window);else Reflect.deleteProperty(globalThis,'window');}
+});
+

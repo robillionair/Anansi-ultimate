@@ -68,6 +68,7 @@ pub fn command_path(path: &str) -> bool {
             | "/v1/workspaces/open"
             | "/v1/workspaces/settings"
             | "/v1/ai/discovery"
+            | "/v1/ai/ask"
     )
 }
 

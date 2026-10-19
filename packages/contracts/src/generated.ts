@@ -42,6 +42,47 @@ export interface ArtifactChunk {
   bytes: number[];
   contractVersion: number;
 }
+export interface AskRequest {
+  contractVersion: number;
+  maxEvidenceItems?: number | null;
+  modelTag?: string | null;
+  prompt: string;
+  runtimeEndpoint?: string | null;
+  workspaceId: string;
+}
+export type AskStatus = "answered" | "insufficientEvidence" | "offline" | "error";
+
+export interface AskResponse {
+  answer: string;
+  citations: GroundedCitation[];
+  contractVersion: number;
+  manifest: DisclosureManifest;
+  status: AskStatus;
+}
+export interface GroundedCitation {
+  index: number;
+  kind: string;
+  lineNumber?: number | null;
+  memoryId: string;
+  sectionHeading?: string | null;
+  snippet: string;
+  title: string;
+}
+export interface DisclosureManifest {
+  characterCount: number;
+  compiledPrompt: string;
+  endpoint: string;
+  estimatedTokens: number;
+  modelTag: string;
+  routingReason: string;
+  runtimeKind: string;
+  sourceMemories: SourceMemoryReference[];
+}
+export interface SourceMemoryReference {
+  id: string;
+  kind: string;
+  title: string;
+}
 export interface BackupRequest {
   application: boolean;
   contractVersion: number;
@@ -112,6 +153,21 @@ export interface DeleteRelationshipRequest {
   id: string;
   workspaceId: string;
 }
+export interface DisclosureManifest {
+  characterCount: number;
+  compiledPrompt: string;
+  endpoint: string;
+  estimatedTokens: number;
+  modelTag: string;
+  routingReason: string;
+  runtimeKind: string;
+  sourceMemories: SourceMemoryReference[];
+}
+export interface SourceMemoryReference {
+  id: string;
+  kind: string;
+  title: string;
+}
 
 export interface DiscoveredRuntime {
   endpoint: string;
@@ -141,6 +197,15 @@ export interface EnqueueExportRequest {
   contractVersion: number;
   selection: ExportSelection;
   workspaceId: string;
+}
+export interface GroundedCitation {
+  index: number;
+  kind: string;
+  lineNumber?: number | null;
+  memoryId: string;
+  sectionHeading?: string | null;
+  snippet: string;
+  title: string;
 }
 export interface HardwareProfile {
   architecture: string;

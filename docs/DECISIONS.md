@@ -244,3 +244,19 @@ The earlier generic JSON catalog and directory-copy helper were development grou
 ## ADR-0027: Vault-owned search authorization boundary
 
 M2 owns the privacy boundary even while M3 owns search implementation. `vault::policy::SearchBoundary` is the narrow integration hook: Sealed records are excluded before any persistent index insert/count, and Sealed result publication must revalidate the bound caller session and durable generation epoch. The hook returns no vault key or decrypted payload. M3 consumers must remove stale FTS rows on sealing/revocation and recheck before snippets, counts, titles, bodies or graph metadata are returned. This preserves ownership separation and prevents a persistent plaintext search index from bypassing vault lock or generation fencing. See [M2-to-M3 handoff](handoffs/M2-to-M3.md).
+
+## ADR-0029: Minimum Context Compiler and local Ask ANANSI query pipeline
+
+- Authority: Master Spec §11, §13, §16–19, §66–67, §71, §74, §78, §84; Requirements Matrix AN-006, AN-009, AN-010, AN-018, AN-029.
+- Decision: Implement deterministic minimum Context Compiler and local Ask ANANSI pipeline directly in `crates/core/src/ask.rs`.
+- Context compilation & privacy boundary:
+  - Full-body FTS5 search queries top matching active records in the current workspace. Sealed records are permanently excluded from compilation.
+  - Context budget is strictly capped at 4,000 characters (~1,000 tokens) to guarantee fit in small local LLM context windows (1.5B/3B/8B).
+  - Deduplication prevents repetitive or duplicate memory content from inflating context.
+  - Citations include index, memory ID, title, kind, section heading, line number, and exact text snippet.
+- Truthful missing evidence & offline resilience:
+  - When zero matching records are found in the workspace, the system returns `AskStatus::InsufficientEvidence` with zero citations and an honest explanation, never hallucinating answers.
+  - When local inference engines (Ollama / LM Studio) are offline or unreachable, the system returns `AskStatus::Offline` along with the full compiled citations and disclosure manifest, advising the user without throwing, crashing, or falling back to remote clouds.
+- Full Data Disclosure ("View What ANANSI Sent"):
+  - Every Ask request produces a verifiable `DisclosureManifest` detailing runtime kind, loopback endpoint, model tag, character count, estimated tokens, routing reason, referenced source memories, and exact compiled prompt text sent to the local inference server.
+  - Zero telemetry, zero unprompted background downloads, zero cloud leakage: all inference endpoints are strictly validated to loopback (`127.0.0.1`, `localhost`, `[::1]`).

@@ -12,6 +12,7 @@ import { Jobs } from '../src/Jobs';
 import {Backups} from '../src/Backups';
 import {Search} from '../src/Search';
 import {LocalModels} from '../src/LocalModels';
+import {AskAnansi} from '../src/AskAnansi';
 
 test('search states its title-only scope, limits and explicit local submission',()=>{
   const html=renderToStaticMarkup(<Search client={{} as any} workspaceId={'a'.repeat(32)}/>);
@@ -107,11 +108,13 @@ test('navigation has a small active set, complete grouped unavailable tools and 
   assert.ok(html.includes('aria-label="Main navigation"'));
   assert.ok(html.includes('aria-current="page"'));
   assert.ok(html.includes('disabled=""'));
-  assert.equal((html.match(/<button/g) || []).length, 13);
+  assert.equal((html.match(/<button/g) || []).length, 14);
   assert.ok(!plannedGroups.some(group=>group.items.includes('Search')));
   assert.ok(!plannedGroups.some(group=>group.items.includes('Local Models')));
+  assert.ok(!plannedGroups.some(group=>group.items.includes('Ask ANANSI')));
   assert.match(renderToStaticMarkup(<Navigation view="search" hasWorkspace={true} onNavigate={()=>{}}/>),/aria-current="page"[^>]*>Search<\/button>/);
   assert.match(renderToStaticMarkup(<Navigation view="models" hasWorkspace={true} onNavigate={()=>{}}/>),/aria-current="page"[^>]*>Local Models<\/button>/);
+  assert.match(renderToStaticMarkup(<Navigation view="ask" hasWorkspace={true} onNavigate={()=>{}}/>),/aria-current="page"[^>]*>Ask ANANSI<\/button>/);
   for (const group of plannedGroups) for (const item of group.items) assert.ok(html.includes(item));
   assert.ok(html.includes('not available yet'));
   assert.ok(html.includes('separate consent'));
@@ -176,4 +179,14 @@ test('local models view renders hardware profile, discovered runtimes, and expli
   assert.ok(html.includes('Automatic background model downloads and unprompted cloud fallbacks are disabled'));
   assert.ok(html.includes('Add Custom Loopback Endpoint'));
   assert.ok(html.includes('Re-probe System'));
+});
+
+test('ask anansi view renders prompt input, local privacy disclosure, and submission controls', () => {
+  const html = renderToStaticMarkup(<AskAnansi client={mockClient} workspaceId="ws1" />);
+  assert.ok(html.includes('Ask ANANSI</h2>'));
+  assert.ok(html.includes('Ask questions grounded strictly in your saved workspace memories'));
+  assert.ok(html.includes('Zero telemetry, zero cloud data transfer'));
+  assert.ok(html.includes('id="ask-prompt"'));
+  assert.ok(html.includes('maxLength="500"'));
+  assert.ok(html.includes('Ask Question'));
 });

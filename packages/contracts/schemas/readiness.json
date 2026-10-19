@@ -235,6 +235,209 @@
     "title": "ArtifactChunk",
     "type": "object"
   },
+  "AskRequest": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "maxEvidenceItems": {
+        "format": "uint",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "modelTag": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "prompt": {
+        "type": "string"
+      },
+      "runtimeEndpoint": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "workspaceId",
+      "prompt"
+    ],
+    "title": "AskRequest",
+    "type": "object"
+  },
+  "AskResponse": {
+    "$defs": {
+      "AskStatus": {
+        "enum": [
+          "answered",
+          "insufficientEvidence",
+          "offline",
+          "error"
+        ],
+        "type": "string"
+      },
+      "DisclosureManifest": {
+        "additionalProperties": false,
+        "properties": {
+          "characterCount": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "compiledPrompt": {
+            "type": "string"
+          },
+          "endpoint": {
+            "type": "string"
+          },
+          "estimatedTokens": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "modelTag": {
+            "type": "string"
+          },
+          "routingReason": {
+            "type": "string"
+          },
+          "runtimeKind": {
+            "type": "string"
+          },
+          "sourceMemories": {
+            "items": {
+              "$ref": "#/$defs/SourceMemoryReference"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "runtimeKind",
+          "endpoint",
+          "modelTag",
+          "sourceMemories",
+          "characterCount",
+          "estimatedTokens",
+          "routingReason",
+          "compiledPrompt"
+        ],
+        "type": "object"
+      },
+      "GroundedCitation": {
+        "additionalProperties": false,
+        "properties": {
+          "index": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "lineNumber": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "memoryId": {
+            "type": "string"
+          },
+          "sectionHeading": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "snippet": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "index",
+          "memoryId",
+          "title",
+          "kind",
+          "snippet"
+        ],
+        "type": "object"
+      },
+      "SourceMemoryReference": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "kind"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "answer": {
+        "type": "string"
+      },
+      "citations": {
+        "items": {
+          "$ref": "#/$defs/GroundedCitation"
+        },
+        "type": "array"
+      },
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "manifest": {
+        "$ref": "#/$defs/DisclosureManifest"
+      },
+      "status": {
+        "$ref": "#/$defs/AskStatus"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "status",
+      "answer",
+      "citations",
+      "manifest"
+    ],
+    "title": "AskResponse",
+    "type": "object"
+  },
   "BackupRequest": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
@@ -502,6 +705,77 @@
     "title": "DeleteRelationshipRequest",
     "type": "object"
   },
+  "DisclosureManifest": {
+    "$defs": {
+      "SourceMemoryReference": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "kind"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "characterCount": {
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "compiledPrompt": {
+        "type": "string"
+      },
+      "endpoint": {
+        "type": "string"
+      },
+      "estimatedTokens": {
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "modelTag": {
+        "type": "string"
+      },
+      "routingReason": {
+        "type": "string"
+      },
+      "runtimeKind": {
+        "type": "string"
+      },
+      "sourceMemories": {
+        "items": {
+          "$ref": "#/$defs/SourceMemoryReference"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "runtimeKind",
+      "endpoint",
+      "modelTag",
+      "sourceMemories",
+      "characterCount",
+      "estimatedTokens",
+      "routingReason",
+      "compiledPrompt"
+    ],
+    "title": "DisclosureManifest",
+    "type": "object"
+  },
   "DiscoveredRuntime": {
     "$defs": {
       "RuntimeKind": {
@@ -651,6 +925,52 @@
       "selection"
     ],
     "title": "EnqueueExportRequest",
+    "type": "object"
+  },
+  "GroundedCitation": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "index": {
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "kind": {
+        "type": "string"
+      },
+      "lineNumber": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "memoryId": {
+        "type": "string"
+      },
+      "sectionHeading": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "snippet": {
+        "type": "string"
+      },
+      "title": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "index",
+      "memoryId",
+      "title",
+      "kind",
+      "snippet"
+    ],
+    "title": "GroundedCitation",
     "type": "object"
   },
   "HardwareProfile": {
