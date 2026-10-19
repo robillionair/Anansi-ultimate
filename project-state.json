@@ -4,7 +4,7 @@
   "activeTask": "M4.5",
   "plan": "plans/PHASE-004-semantic-intelligence.md",
   "implementationStatus": "M4.5 cross-edition UI and integrated acceptance verified; Milestone 4 (Semantic Intelligence) 100% complete.",
-  "lastVerifiedCommit": "86c9ac0510fb9b3a337542cecfa65be356f01ab8",
+  "lastVerifiedCommit": "83818457e87f466c633bed5b8b06d6baf36023db",
   "evidence": [
     "docs/evidence/M0.md",
     "docs/evidence/M1.md",
