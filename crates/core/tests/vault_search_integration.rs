@@ -11,7 +11,10 @@ fn rebuild_removes_plaintext_fts_rows_after_sealing_transition() {
     let root = temp.path().join("store");
     let core = Core::with_storage_root(root.clone());
     let workspace = core
-        .workspace_command("create", json!({"contractVersion":1,"name":"Vault boundary"}))
+        .workspace_command(
+            "create",
+            json!({"contractVersion":1,"name":"Vault boundary"}),
+        )
         .unwrap()["workspace"]["id"]
         .as_str()
         .unwrap()

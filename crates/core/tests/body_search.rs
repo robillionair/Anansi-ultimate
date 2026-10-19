@@ -125,8 +125,7 @@ fn body_search_phrases_prefixes_revisions_rebuild_and_sealed_exclusion() {
     assert_eq!(multi_res["memories"][0]["lineNumber"].as_u64(), Some(5));
 
     // 5. Sealed records must NEVER be indexed or matched in full-body search
-    // Note: Creating Sealed memory directly without vault is refused by memory service.
-    // If a request somehow had privacy 'sealed', it fails closed and is never indexed.
+    // 5a. Creating Sealed memory directly without vault is refused by memory service.
     let sealed_err = core.memory_command(
         "create",
         json!({
@@ -142,14 +141,89 @@ fn body_search_phrases_prefixes_revisions_rebuild_and_sealed_exclusion() {
     );
     assert_eq!(sealed_err.unwrap_err().code, ErrorCode::VaultUnavailable);
 
-    let secret_search = list_search(
-        &core,
-        &w,
-        "SuperSecretTokenThatMustNeverLeak",
-        true,
-        json!({}),
-    );
-    assert!(secret_search["memories"].as_array().unwrap().is_empty());
+    // 5b. Direct database injection test:
+    // If a sealed record exists in the SQLite catalog (e.g. from vault staging or external source),
+    // it MUST NOT be indexed by rebuild or returned by body search.
+    {
+        let db_path = root.join(anansi_core::storage::DATABASE_NAME);
+        let mut db = rusqlite::Connection::open(&db_path).unwrap();
+        let sealed_mem_id = "00000000000000000000000000000099";
+        let sealed_rev_id = "0000000000000000000000000000009a";
+        let mut sealed_meta = doc1["memory"].clone();
+        sealed_meta["id"] = json!(sealed_mem_id);
+        sealed_meta["revisionId"] = json!(sealed_rev_id);
+        sealed_meta["title"] = json!("Injected Sealed Record");
+        sealed_meta["privacy"] = json!("sealed");
+
+        let tx = db.transaction().unwrap();
+        tx.execute(
+            "INSERT INTO memories(workspace_id, id, current_revision) VALUES(?1, ?2, ?3)",
+            rusqlite::params![w, sealed_mem_id, sealed_rev_id],
+        )
+        .unwrap();
+        tx.execute(
+            "INSERT INTO memory_revisions(workspace_id, memory_id, id, version, metadata, body_hash)
+             VALUES(?1, ?2, ?3, 1, ?4, ?5)",
+            rusqlite::params![w, sealed_mem_id, sealed_rev_id, sealed_meta.to_string(), "0".repeat(64)],
+        )
+        .unwrap();
+        tx.commit().unwrap();
+
+        // Write a body on disk using canonical content::write helper for private permissions
+        let _ = anansi_core::content::write(
+            &root,
+            &w,
+            sealed_mem_id,
+            sealed_rev_id,
+            "# Vault Secret\nTopSecretKeywordInsideSealedVaultBody that must never be searchable.",
+        );
+
+        // Search must NOT find the sealed record
+        let secret_search = list_search(
+            &core,
+            &w,
+            "TopSecretKeywordInsideSealedVaultBody",
+            true,
+            json!({}),
+        );
+        assert!(
+            secret_search["memories"].as_array().unwrap().is_empty(),
+            "Sealed record must never be returned"
+        );
+
+        // Rebuild search index: must explicitly skip the sealed record
+        core.rebuild_search_index(&w).unwrap();
+
+        // Verify FTS table directly has no rows for sealed_mem_id
+        let fts_sealed_count: i64 = db
+            .query_row(
+                "SELECT COUNT(1) FROM memory_body_fts WHERE memory_id = ?1",
+                rusqlite::params![sealed_mem_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            fts_sealed_count, 0,
+            "FTS5 table must not contain sealed memory entries"
+        );
+
+        // Clean up injected test record
+        let tx_clean = db.transaction().unwrap();
+        tx_clean
+            .execute(
+                "DELETE FROM memory_revisions WHERE memory_id = ?1",
+                rusqlite::params![sealed_mem_id],
+            )
+            .unwrap();
+        tx_clean
+            .execute(
+                "DELETE FROM memories WHERE id = ?1",
+                rusqlite::params![sealed_mem_id],
+            )
+            .unwrap();
+        tx_clean.commit().unwrap();
+        let _ = std::fs::remove_dir_all(root.join("content").join(&w).join(sealed_mem_id));
+    }
 
     // 6. Revision update behavior:
     // When doc1 is revised, terms unique to revision 1 must no longer match;

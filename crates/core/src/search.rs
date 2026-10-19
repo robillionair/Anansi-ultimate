@@ -277,6 +277,13 @@ impl Storage {
             .map_err(|_| unavailable())?;
         drop(stmt);
 
+        if rows.len() > MAX_RECORDS {
+            return Err(CommandError::new(
+                ErrorCode::InvalidSearch,
+                "Body search exceeds 10,000 records. Narrow the record type and try again; no partial results were returned.",
+            ));
+        }
+
         let mut indexed_count = 0u32;
         for (memory_id, revision_id, body_hash, metadata_str) in rows {
             let metadata: MemoryMetadata =
@@ -284,6 +291,13 @@ impl Storage {
             if metadata.privacy == Privacy::Sealed {
                 continue;
             }
+            if metadata.workspace_id != workspace_id
+                || metadata.id != memory_id
+                || metadata.revision_id != revision_id
+            {
+                return Err(content::integrity());
+            }
+            metadata.privacy.allow_plaintext()?;
             let body = content::read(
                 &self.root,
                 workspace_id,
@@ -318,7 +332,7 @@ impl Storage {
             )
             .unwrap_or(0);
 
-        if fts_count == 0 {
+        let conn = if fts_count == 0 {
             let raw_count: i64 = conn
                 .query_row(
                     "SELECT COUNT(1) FROM memories m
@@ -328,10 +342,14 @@ impl Storage {
                     |row| row.get(0),
                 )
                 .unwrap_or(0);
+            drop(conn);
             if raw_count > 0 {
-                let _ = self.rebuild_search_index(&r.workspace_id);
+                self.rebuild_search_index(&r.workspace_id)?;
             }
-        }
+            self.connection(false)?.ok_or_else(unavailable)?
+        } else {
+            conn
+        };
 
         let mut stmt = conn
             .prepare(
@@ -340,8 +358,7 @@ impl Storage {
                     m.id,
                     r.id,
                     r.body_hash,
-                    bm25(memory_body_fts),
-                    snippet(memory_body_fts, 4, '<mark>', '</mark>', '...', 24)
+                    bm25(memory_body_fts)
                  FROM memory_body_fts
                  JOIN memories m ON m.workspace_id = memory_body_fts.workspace_id
                                 AND m.id = memory_body_fts.memory_id
@@ -352,27 +369,27 @@ impl Storage {
                  WHERE memory_body_fts.workspace_id = ?1
                    AND memory_body_fts MATCH ?2
                    AND json_extract(r.metadata, '$.privacy') != 'sealed'
-                   AND (?3 IS NULL OR json_extract(r.metadata, '$.kind') = ?3)
-                   AND (?4 OR json_extract(r.metadata, '$.status') != 'archived')
-                   AND (?5 OR json_extract(r.metadata, '$.validUntil') IS NULL
-                           OR julianday(json_extract(r.metadata, '$.validUntil')) > julianday(?6))
+                   AND (?3 IS NULL OR m.id = ?3)
+                   AND (?4 IS NULL OR json_extract(r.metadata, '$.kind') = ?4)
+                   AND (?5 OR json_extract(r.metadata, '$.status') != 'archived')
+                   AND (?6 OR json_extract(r.metadata, '$.validUntil') IS NULL
+                           OR julianday(json_extract(r.metadata, '$.validUntil')) > julianday(?7))
                  ORDER BY bm25(memory_body_fts), m.id
-                 LIMIT ?7 OFFSET ?8",
+                 LIMIT ?8",
             )
             .map_err(|_| unavailable())?;
 
-        let limit = r.limit.unwrap_or(50);
         let rows = stmt
             .query_map(
                 params![
                     r.workspace_id,
                     expression,
+                    r.id,
                     r.kind,
                     r.include_archived,
                     r.include_expired,
                     Utc::now().to_rfc3339(),
-                    (limit + 1) as i64,
-                    r.offset as i64
+                    (MAX_RECORDS + 1) as i64
                 ],
                 |row| {
                     Ok((
@@ -381,69 +398,95 @@ impl Storage {
                         row.get::<_, String>(2)?,
                         row.get::<_, String>(3)?,
                         row.get::<_, f64>(4)?,
-                        row.get::<_, String>(5)?,
                     ))
                 },
             )
             .map_err(|_| unavailable())?;
 
         let mut candidate_list = Vec::new();
-        let mut seen_hashes: std::collections::HashMap<String, String> =
-            std::collections::HashMap::new();
+        let mut count = 0usize;
 
         for row in rows {
-            let (meta_json, mem_id, rev_id, body_hash, bm25_val, fts_snippet) =
+            count += 1;
+            if count > MAX_RECORDS {
+                return Err(CommandError::new(
+                    ErrorCode::InvalidSearch,
+                    "Body search exceeds 10,000 records. Narrow the record type and try again; no partial results were returned.",
+                ));
+            }
+            let (meta_json, mem_id, rev_id, body_hash, bm25_val) =
                 row.map_err(|_| content::integrity())?;
             let mut metadata: MemoryMetadata =
                 serde_json::from_str(&meta_json).map_err(|_| content::integrity())?;
-            metadata.privacy.allow_plaintext()?;
-
-            let (section_heading, line_number, snippet) = if let Ok(body) =
-                content::read(&self.root, &r.workspace_id, &mem_id, &rev_id, &body_hash)
+            if metadata.workspace_id != r.workspace_id
+                || metadata.id != mem_id
+                || metadata.revision_id != rev_id
             {
-                locate_evidence(&body, &terms)
-            } else {
-                (None, None, fts_snippet)
-            };
+                return Err(content::integrity());
+            }
+            metadata.privacy.allow_plaintext()?;
 
             let recency_factor =
                 calculate_recency_score(&metadata.updated_at, metadata.event_date.as_deref());
             let lexical_score = -bm25_val;
             let search_score = lexical_score * recency_factor;
-
-            let duplicate_of = if let Some(orig_id) = seen_hashes.get(&body_hash) {
-                Some(orig_id.clone())
-            } else {
-                seen_hashes.insert(body_hash.clone(), mem_id.clone());
-                None
-            };
-
-            metadata.snippet = Some(snippet);
-            metadata.section_heading = section_heading;
-            metadata.line_number = line_number;
-            metadata.duplicate_of = duplicate_of;
             metadata.search_score = Some(search_score);
 
-            candidate_list.push(metadata);
+            candidate_list.push((metadata, body_hash));
         }
 
-        candidate_list.sort_by(|a, b| {
+        candidate_list.sort_by(|(a, _), (b, _)| {
             b.search_score
                 .partial_cmp(&a.search_score)
                 .unwrap_or(std::cmp::Ordering::Equal)
                 .then_with(|| a.id.cmp(&b.id))
         });
 
-        let next_offset = if candidate_list.len() > limit as usize {
-            candidate_list.pop();
-            Some(r.offset + limit)
+        let mut seen_hashes: std::collections::HashMap<String, String> =
+            std::collections::HashMap::new();
+        for (metadata, body_hash) in &mut candidate_list {
+            if let Some(orig_id) = seen_hashes.get(body_hash) {
+                metadata.duplicate_of = Some(orig_id.clone());
+            } else {
+                seen_hashes.insert(body_hash.clone(), metadata.id.clone());
+            }
+        }
+
+        let limit = r.limit.unwrap_or(50) as usize;
+        let offset = r.offset as usize;
+        let total_matches = candidate_list.len();
+
+        let next_offset = if total_matches > offset.saturating_add(limit) {
+            Some(r.offset.saturating_add(limit as u32))
         } else {
             None
         };
 
+        let page_items: Vec<_> = candidate_list
+            .into_iter()
+            .skip(offset)
+            .take(limit)
+            .collect();
+
+        let mut memories = Vec::with_capacity(page_items.len());
+        for (mut metadata, body_hash) in page_items {
+            let body = content::read(
+                &self.root,
+                &r.workspace_id,
+                &metadata.id,
+                &metadata.revision_id,
+                &body_hash,
+            )?;
+            let (section_heading, line_number, snippet) = locate_evidence(&body, &terms);
+            metadata.snippet = Some(snippet);
+            metadata.section_heading = section_heading;
+            metadata.line_number = line_number;
+            memories.push(metadata);
+        }
+
         Ok(MemoryList {
             contract_version: 1,
-            memories: candidate_list,
+            memories,
             next_offset,
         })
     }

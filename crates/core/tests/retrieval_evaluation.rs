@@ -67,11 +67,13 @@ fn retrieval_evaluation_suite_paraphrase_contradiction_temporal_and_missing_evid
     );
 
     // =========================================================================
-    // 2. BENCHMARK: Contradiction Handling & Recency Resolution (Master Spec §78)
+    // 2. BENCHMARK: Contradiction Handling & Recency Ordering (Master Spec §78)
     // =========================================================================
     // Two records make conflicting statements regarding a project milestone deadline.
     // Record A has an older update date; Record B has a newer update date.
-    // Lexical search for the topic matches both, but Record B must rank first.
+    // Lexical search matches both candidates; temporal decay heuristic ranks Record B first.
+    // NOTE: Lexical retrieval does NOT evaluate epistemic truth or resolve semantics;
+    // recency weighting provides chronological candidate prioritization only.
     let old_fact = core
         .memory_command(
             "create",
@@ -111,10 +113,10 @@ fn retrieval_evaluation_suite_paraphrase_contradiction_temporal_and_missing_evid
     let contra_res = search_body(&core, &w, "\"product launch date\"", json!({}));
     let contra_list = contra_res["memories"].as_array().unwrap();
     assert_eq!(contra_list.len(), 2);
-    // The newer fact (Decision Beta, September event date) must be ranked ahead of Decision Alpha
+    // The temporally newer record (Decision Beta, September event date) ranks ahead of Decision Alpha
     assert_eq!(
         contra_list[0]["id"], new_fact_id,
-        "Newer fact must rank before older contradicting statement"
+        "Temporally newer record ranks before older record under recency decay model"
     );
     assert_eq!(contra_list[1]["id"], old_fact_id);
 
