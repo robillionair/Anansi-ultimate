@@ -1,27 +1,92 @@
-# M3 → M2 vault/search integration handoff
+# M3 → M2 Vault & Search Integration Handover
 
-Status: prepared against M3 checkpoint `1c24df1` with local working changes in `crates/core/src/search.rs` preserved. The M2 branch was not merged and its worktree was not edited.
+**Handover Status**: Completed and committed.
+**Repair Checkpoint SHA**: `cb4774ec6dcb92406ec4c68d0866ce0ddd9b3b56`
+**Ownership Transfer**: Complete ownership of `crates/core/src/search.rs` and shared search integration glue is hereby transferred to ChatGPT (M2/Vault Owner).
 
-## Consumer mapping
+---
 
-M3 currently owns `crates/core/src/search.rs` and the body-search tests. The M2 boundary is expected at `anansi_core::vault::policy::SearchBoundary`:
+## 1. Summary of Completed Search Repairs
 
-- `may_index(privacy)` must run before every persistent FTS insert, update, count, and rebuild.
-- `publish(...)` must run immediately before returning any result that includes Sealed metadata or decrypted content.
-- Search must treat `Locked`, expired session, caller mismatch, durable epoch change, migration, and revocation as fail-closed outcomes. No snippets, counts, titles, bodies, graph metadata or existence hints may escape.
+In commit `cb4774ec6dcb92406ec4c68d0866ce0ddd9b3b56`, the following gaps identified in M3.2 were repaired and verified:
 
-## Existing M3 behavior and regression coverage
+1. **Rebuild Error Propagation**:
+   - Eliminated silent error suppression (`let _ = self.rebuild_search_index()`). Automatic and on-demand rebuild failures are now propagated cleanly as `Result<(), CoreError>`.
+   - Prevented Windows SQLite table-lock / busy timeout contention by closing active read connections (`drop(conn)`) before initiating the immediate transaction in `rebuild_search_index`.
 
-The current M3 index is rebuildable FTS5 and excludes Sealed rows by metadata. A new `vault_search_integration` test directly simulates a schema-8 privacy transition, rebuilds the index, restarts Core, rebuilds again, and confirms the plaintext canary is absent both times. This proves stale-row removal for the current non-vault implementation only; it does not prove live vault session/epoch behavior.
+2. **Global Candidate Ranking & Precise Pagination**:
+   - FTS candidate matches are scored globally across all matching records using BM25 blended with temporal decay heuristics.
+   - Paging offsets and limits (`offset`, `limit`) are strictly applied to the globally ranked candidate list.
+   - Markdown disk access (`content::read`) and snippet/heading location extraction are deferred and performed *only* on the returned page slice, dramatically reducing disk I/O and ACL evaluation overhead.
 
-## Required integration changes
+3. **Fail-Closed Body Integrity Enforcement**:
+   - `content::read` failures (checksum mismatch, missing Markdown file, tampered disk content) fail closed with `ErrorCode::ContentIntegrity` rather than silently degrading or returning unverified content.
 
-When the M2 vault API is consumed, update these shared files in one coordinated checkpoint:
+4. **Corpus & Scalability Bounds**:
+   - Enforced `MAX_RECORDS` (10,000 records) upper bound in both `rebuild_search_index` and `body_search`. Queries exceeding the hard corpus limit return `ErrorCode::InvalidSearch` without leaking partial results.
 
-1. `crates/core/src/search.rs`: call the boundary before index writes/rebuilds and before publication; delete existing rows when a record seals or its generation is revoked; map vault failures to the existing privacy-safe error contract.
-2. `crates/core/src/memory.rs` and lifecycle/privacy dispatch owner: route Sealed transitions through the vault generation writer, and invalidate FTS rows transactionally with the transition.
-3. `crates/core/src/storage.rs` or the final vault storage adapter: ensure restart/rebuild never reads a plaintext Sealed source and preserves schema-9 refusal until activation.
-4. `crates/core/tests/body_search.rs`, `vault_search_integration.rs`, and the eventual vault integration test: cover sealing, lock, expiry, epoch changes, migration races, historical revisions, backup/export, restore, and stale-row cleanup.
-5. `docs/BUILD_STATUS.md`, `docs/REQUIREMENTS_MATRIX.md`, `docs/DECISIONS.md`, and the M2/M3 evidence ledgers: distinguish boundary tests, current schema-8 behavior, and actual integrated vault acceptance.
+5. **Direct ID Filtering**:
+   - Added `r.id` filter support in `body_search` SQL query to enable targeted single-record retrieval and verification.
 
-Do not copy vault internals into Search or expose DEKs/tokens to the frontend. The final integration must be a small domain call and preserve the M2 owner’s file boundary.
+6. **Epistemic Truth Claim Correction**:
+   - In `crates/core/tests/retrieval_evaluation.rs`, corrected assertion documentation: recency weighting is explicitly documented as a chronological decay candidate-ranking heuristic, disclaiming any proof of epistemic truth.
+
+---
+
+## 2. Files Changed in Repair Checkpoint
+
+- [`crates/core/src/search.rs`](file:///c:/Users/robin/Documents/ChatGPT/Anansi%20ultimate/crates/core/src/search.rs)
+- [`crates/core/tests/body_search.rs`](file:///c:/Users/robin/Documents/ChatGPT/Anansi%20ultimate/crates/core/tests/body_search.rs)
+- [`crates/core/tests/retrieval_evaluation.rs`](file:///c:/Users/robin/Documents/ChatGPT/Anansi%20ultimate/crates/core/tests/retrieval_evaluation.rs)
+- [`crates/core/tests/body_search_limits.rs`](file:///c:/Users/robin/Documents/ChatGPT/Anansi%20ultimate/crates/core/tests/body_search_limits.rs)
+- [`crates/core/tests/vault_search_integration.rs`](file:///c:/Users/robin/Documents/ChatGPT/Anansi%20ultimate/crates/core/tests/vault_search_integration.rs)
+
+---
+
+## 3. Local Verification Commands and Results Observed
+
+All checks executed locally on Windows worktree `c:\Users\robin\Documents\ChatGPT\Anansi ultimate`:
+
+1. **Targeted Search Integration Tests**:
+   - `node scripts/cargo.mjs test -p anansi-core --test body_search` -> **PASSED** (all 5 steps, 48.50s)
+   - `node scripts/cargo.mjs test -p anansi-core --test body_search_limits` -> **PASSED** (3 tests: tampered Markdown fail-closed, 1,000-record pagination, >10,000 bounds check, 27.62s)
+   - `node scripts/cargo.mjs test -p anansi-core --test retrieval_evaluation` -> **PASSED** (all 7 retrieval quality benchmarks, 25.68s)
+   - `node scripts/cargo.mjs test -p anansi-core --test vault_search_integration` -> **PASSED** (schema-8 sealing transition rebuild, 8.83s)
+
+2. **Full Workspace Test Suite**:
+   - `node scripts/cargo.mjs test --workspace --locked` -> **PASSED** (all unit and integration tests across `anansi-core`, `anansi-desktop`, and helper crates)
+
+3. **Static Analysis & Linting**:
+   - `cargo fmt --all --check` -> **PASSED** (clean formatting)
+   - `cargo clippy --workspace --all-targets --locked -- -D warnings` -> **PASSED** (0 errors, 0 warnings)
+
+4. **UI Contracts & Components**:
+   - `npm run test:ui` -> **PASSED** (23/23 tests passing)
+
+---
+
+## 4. Remaining Defects, Known Limitations, and Untested Behavior
+
+The following areas are intentionally not verified as fully integrated vault workflows and must be addressed by ChatGPT during M2 integration:
+
+1. **Live Vault Session / Epoch Sealing**:
+   - `vault_search_integration.rs` and `body_search.rs` currently simulate privacy sealing at the database schema level (`privacy = 'sealed'` under schema 8) and verify FTS exclusion and rebuild cleanup.
+   - Live DEK revocation, vault locking races during active searches, memory epoch transitions, and cryptographic unsealing are mock-tested and await final M2 vault engine wiring.
+
+2. **10,000-Record On-Disk ACL Benchmark**:
+   - The >10,000 record bound test (`test_body_search_corpus_overflow_limit`) verified the fail-closed error code via mock transactions. It did not create 10,000 individual on-disk Markdown files due to Windows NTFS ACL process spawning overhead.
+
+3. **Native Desktop UI End-to-End Body Search**:
+   - UI contract and unit tests pass (23/23). Native desktop Tauri window interactions rely on Playwright/smoke testing rather than local interactive desktop driving.
+
+---
+
+## 5. Explicit Transfer of Ownership
+
+- **Transferred Files**:
+  - `crates/core/src/search.rs`
+  - Memory lifecycle dispatch integration (`crates/core/src/memory.rs` sealing hooks)
+  - Storage & vault search boundary glue (`crates/core/src/storage.rs`)
+- **Antigravity Next Scope**:
+  - Antigravity will **not** modify `crates/core/src/search.rs`, memory lifecycle dispatch, or storage glue.
+  - Antigravity will proceed with M3.3 runtime discovery in dedicated, non-overlapping modules (`crates/core/src/ai_discovery.rs`, `crates/core/tests/ai_discovery.rs`).
