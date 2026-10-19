@@ -35,11 +35,11 @@ In commit `cb4774ec6dcb92406ec4c68d0866ce0ddd9b3b56`, the following gaps identif
 
 ## 2. Files Changed in Repair Checkpoint
 
-- [`crates/core/src/search.rs`](file:///c:/Users/robin/Documents/ChatGPT/Anansi%20ultimate/crates/core/src/search.rs)
-- [`crates/core/tests/body_search.rs`](file:///c:/Users/robin/Documents/ChatGPT/Anansi%20ultimate/crates/core/tests/body_search.rs)
-- [`crates/core/tests/retrieval_evaluation.rs`](file:///c:/Users/robin/Documents/ChatGPT/Anansi%20ultimate/crates/core/tests/retrieval_evaluation.rs)
-- [`crates/core/tests/body_search_limits.rs`](file:///c:/Users/robin/Documents/ChatGPT/Anansi%20ultimate/crates/core/tests/body_search_limits.rs)
-- [`crates/core/tests/vault_search_integration.rs`](file:///c:/Users/robin/Documents/ChatGPT/Anansi%20ultimate/crates/core/tests/vault_search_integration.rs)
+- [`crates/core/src/search.rs`](../../crates/core/src/search.rs)
+- [`crates/core/tests/body_search.rs`](../../crates/core/tests/body_search.rs)
+- [`crates/core/tests/retrieval_evaluation.rs`](../../crates/core/tests/retrieval_evaluation.rs)
+- [`crates/core/tests/body_search_limits.rs`](../../crates/core/tests/body_search_limits.rs)
+- [`crates/core/tests/vault_search_integration.rs`](../../crates/core/tests/vault_search_integration.rs)
 
 ---
 
