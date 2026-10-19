@@ -1,5 +1,15 @@
 # ANANSI Ultimate — Architecture Decisions
 
+## ADR-0029: Minimum context compiler and grounded local Ask ANANSI
+
+- **Authority:** User instruction to continue Milestone 3; Master Spec §11, §13, §16–19, §66–67, §71, §74, §78, §84; Requirements Matrix AN-006, AN-009, AN-010, AN-018, AN-029.
+- **Context Compiler:** Implement deterministic context compilation from FTS5 body search results. Grounded evidence packs extract memory ID, title, kind, section heading, line number, and snippet.
+- **Privacy & Sealed Boundary:** Sealed records are strictly excluded from context compilation. Plaintext context is bounded by a strict budget (4,000 characters / ~1,000 tokens) and deduplicated across overlapping body SHA-256 hashes.
+- **Disclosure Manifest ("View What ANANSI Sent"):** Every context pack generates an inspectable manifest recording provider, endpoint, model tag, source memory IDs/titles, character count, estimated tokens, and routing reason ("local-first offline inference").
+- **Local Ask ANANSI Inference:** Direct loopback inference against local runtimes (Ollama `/api/generate`, LM Studio `/v1/chat/completions`) with strict 30-second timeout.
+- **Truthful Insufficient Evidence & Offline Resilience:** When zero records match the query, the engine returns an explicit `InsufficientEvidence` status with zero citations rather than hallucinating. When local runtimes are unreachable, returns truthful `Offline` status with compiled evidence pack rather than crashing or falling back to cloud APIs.
+- **Status:** accepted design baseline for M3.4; acceptance criteria and contract defined before coding.
+
 ## ADR-0028: Authorized local AI runtime discovery, hardware inspection, and consent boundary
 
 - **Authority:** User instruction to continue; Master Spec §7, §18–19, §69–70; Requirements Matrix AN-009, AN-020, AN-026.

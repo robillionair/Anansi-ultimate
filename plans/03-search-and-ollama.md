@@ -92,4 +92,38 @@ Steps:
 7. Integrate UI component under "SYSTEM -> Local Models" in navigation, displaying hardware capabilities, detected local servers, and recommendation cards.
 8. Validate across Rust unit/integration tests, UI tests, and planning validators before status claims.
 
+## M3.4 implementation contract — defined before coding
+
+Objective: Implement the deterministic minimum Context Compiler and local Ask ANANSI query pipeline. Grounded queries compile evidence packs from authorized plaintext records, enforce strict context budgets, deduplicate overlapping sources, generate an inspectable "View What ANANSI Sent" disclosure manifest, refuse hallucination on missing evidence, and execute local loopback inference via Ollama/LM Studio with robust offline fallback.
+
+Authority: Master Spec §11, §13, §16–19, §66–67, §71, §74, §78, §84; Requirements Matrix AN-006, AN-009, AN-010, AN-018, AN-029.
+
+Files:
+- Create: `crates/core/src/ask.rs`, `crates/core/tests/ask_anansi.rs`, `packages/ui/src/AskAnansi.tsx`, `docs/evidence/M3-4.md`
+- Modify: `crates/core/src/lib.rs`, `crates/contracts/src/main.rs`, `packages/contracts/src/client.ts`, `packages/ui/src/Navigation.tsx`, `packages/ui/src/Workspace.tsx`, `packages/ui/tests/components.test.tsx`, `tests/contracts.test.ts`
+- Update: `docs/DECISIONS.md`, `docs/REQUIREMENTS_MATRIX.md`, `docs/BUILD_STATUS.md`, `project-state.json`
+
+Steps:
+1. Define Context Compiler types (`GroundedCitation`: index, memory_id, title, kind, section_heading, line_number, snippet; `DisclosureManifest`: runtime_kind, endpoint, model_tag, source_memories, character_count, estimated_tokens, routing_reason; `AskStatus`: Answered, InsufficientEvidence, Offline, Error; `AskRequest`, `AskResponse`).
+2. Implement `compile_context` in `crates/core/src/ask.rs`:
+   - Queries workspace FTS5 body search for top matching current plaintext records.
+   - Enforces privacy boundary: Sealed records are NEVER included.
+   - Applies deduplication on matching body hashes or snippets.
+   - Bounds total context to 4,000 characters (~1,000 tokens) to guarantee fit in small local LLM context windows.
+   - Constructs deterministic grounding system prompt with clear instructions: cite claims as `[1]`, `[2]`, refuse fabrication when facts are not in context.
+   - Generates the `DisclosureManifest` ("View What ANANSI Sent").
+3. Implement `execute_ask` in `crates/core/src/ask.rs`:
+   - If 0 matching records: return `AskStatus::InsufficientEvidence` with clear explanation and 0 citations.
+   - If runtime is offline: return `AskStatus::Offline` with compiled prompt, citations, manifest, and offline instructions without throwing or crashing.
+   - If runtime is online: send HTTP POST to Ollama `/api/generate` or LM Studio `/v1/chat/completions` on loopback with strict 30s timeout and return `AskStatus::Answered` with answer text, citations, and manifest.
+4. Expose `ai_command("ask", ...)` in Core, Tauri, and `/v1/ai/ask` in Web API.
+5. Expose in TypeScript contracts and create `AskAnansi.tsx` UI under `HOME -> Ask ANANSI` navigation.
+6. Author comprehensive test suite `crates/core/tests/ask_anansi.rs` verifying context compilation, citation correctness, insufficient evidence handling, offline resilience, and manifest integrity.
+7. Verify across tests, linting, formatting, and planning validators before status claims.
+
+Bounds: at most 500 characters prompt, at most 10 citations, at most 4,000 characters compiled context. Strict loopback-only inference endpoints (127.0.0.1 / localhost). Zero cloud telemetry or unapproved network requests.
+
+Acceptance: defined in M3.4 evidence. Ask ANANSI truthfully answers grounded questions with citations; missing evidence yields explicit InsufficientEvidence status; offline runtimes yield helpful guidance; disclosure manifest shows exact source records and prompt text sent.
+
+
 
