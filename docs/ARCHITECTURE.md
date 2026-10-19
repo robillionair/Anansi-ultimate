@@ -2,7 +2,7 @@
 
 ## Owner amendment — M2.7-Core isolation (2026-10-19)
 
-M2.7-Core initial parser/keys/session/policy/native-store/shadow-preparation subset is implemented and tested in isolation; [evidence](evidence/M2-7.md) lists exact limits and remaining integration. It is not a complete or application-enabled vault.
+M2.7-Core initial parser/keys/session/policy/native-store/shadow-preparation subset is implemented and tested in isolation; [Increment 1 evidence](evidence/M2-7.md) records its scope. [Increment 2](evidence/M2-7-increment2.md) adds an explicit schema-9 core boundary, OS admission locks, durable epochs, typed encrypted history/graph generations, full DEK rotation, recovery acknowledgement and ciphertext export/restore. ADR-0026 defines committed-generation authority and retained-copy limits. Existing application Core stays schema 8 and refuses schema 9; no adapter calls the new API. It is not a complete or application-enabled vault.
 
 [Owner risk acceptance](approvals/M2-6-owner-risk-acceptance.md) explicitly supersedes historical G1 pre-implementation stop language below. G1-External-Audit remains open for post-M3/pre-production/commercialization certification; no audit coverage is fabricated. M2.5 source/CI recovery baseline was reverified. M2.7-Core is authorized in a separate worktree; M3 Search/UI wiring and shared-checkout files remain untouched. G2–G4 are unchanged. No vault completion, production certification or implemented UI disclosure is claimed. AN-018/019/031 remain in progress.
 

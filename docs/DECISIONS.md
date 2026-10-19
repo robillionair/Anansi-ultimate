@@ -1,5 +1,13 @@
 # ANANSI Ultimate — Architecture Decisions
 
+## ADR-0026: Explicit schema-9 vault core and transactional generation authority
+
+Owner-authorized M2.7-Core Increment 2 is isolated from M3 Search/UI/adapters/workflows. It adds an explicit core API, not an automatic live migration. Ordinary Core remains schema 8 and refuses schema 9; schema-9 triggers reject stale plaintext writers. A verified matching M2.5 snapshot and recovery acknowledgement precede the initial whole-workspace cutover. No partial selection or plaintext truncation is inferred.
+
+OS root locks and a shared configured private host/user KDF namespace admit operations. Synced authenticated generation files precede an immediate SQLite transaction committing active generation, opaque membership/file inventory and durable epoch. Old generation is authoritative before commit, new generation after commit; errors from post-commit observers cannot imply rollback. Explicit authenticated rollback is a new epoch-advancing transaction. Old slots/generations, source backups/body files, database remnants and interrupted staging remain preserved. This is not forensic erasure or certified full at-rest conversion of previous copies.
+
+Record metadata/history and graph revisions are typed authenticated payloads. Opaque inventory permits locked ciphertext backup without exposing per-record revision mappings; coarse identifiers/file counts/lengths still leak. Fresh restore verifies all members, assigns fresh IDs and keys and retains origin mappings. Recovery activation needs a private receipt after saved-copy consent, one-time display challenge and actual recovery-slot unwrap. All live Sealed commands stay refused until coordinated integration and native/browser acceptance. [Increment 2 evidence](evidence/M2-7-increment2.md) records tests and limitations. G1-External-Audit remains open under ADR-0025; no audit is replaced by tests.
+
 ## ADR-0025: Owner risk acceptance and isolated M2.7-Core engineering
 
 [Owner risk acceptance](approvals/M2-6-owner-risk-acceptance.md) explicitly supersedes historical G1 pre-implementation stop language below. G1-External-Audit remains open for post-M3/pre-production/commercialization certification; no audit coverage is fabricated. M2.5 source/CI recovery baseline was reverified. M2.7-Core is authorized in a separate worktree; M3 Search/UI wiring and shared-checkout files remain untouched. G2–G4 are unchanged. No vault completion, production certification or implemented UI disclosure is claimed. AN-018/019/031 remain in progress.

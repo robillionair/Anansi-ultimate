@@ -75,7 +75,7 @@ impl KeySlots {
         let slots = Self::wrap(context, &dek, password, &recovery)?;
         Ok((slots, recovery))
     }
-    fn wrap(
+    pub(crate) fn wrap(
         context: &Context,
         dek: &[u8; 32],
         password: &[u8],

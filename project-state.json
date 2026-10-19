@@ -3,8 +3,8 @@
   "activeMilestone": "M2",
   "activeTask": "M2.7",
   "plan": "plans/M2-vault-security.md",
-  "implementationStatus": "Isolated M2.7-Core parser, context-bound keys/recovery, process sessions, policy hook, real native wrapped-slot store and authenticated shadow preparation implemented. Core-level tests passed; complete domain/schema/adapter/Search integration and full certification remain pending. G1-External-Audit open; no application vault activation.",
-  "lastVerifiedCommit": "8798fadd266a87723efe4f8237d24c1ee29eb6cf",
+  "implementationStatus": "Isolated M2.7-Core Increment 2 local acceptance passed: explicit schema-9 encrypted full metadata/history/graph generations, cross-process admission, durable epochs and cutover, full DEK rotation, recovery acknowledgement and ciphertext backup/export/fresh restore. Exact test sequencing and retained host-sleep interruption are in evidence; full ten-point matrix rerun passed without bypass. Live Sealed commands remain refused. G1-External-Audit open; no application activation or integrated certification.",
+  "lastVerifiedCommit": "a7b4794fd0a0f4d39d9999f278a536711efa767d",
   "evidence": [
     "docs/evidence/M0.md",
     "docs/evidence/M1.md",
@@ -21,7 +21,8 @@
     "docs/evidence/M2-6.md",
     "docs/evidence/M2-6-audit-review.md",
     "docs/evidence/M3-1.md",
-    "docs/evidence/M2-7.md"
+    "docs/evidence/M2-7.md",
+    "docs/evidence/M2-7-increment2.md"
   ],
   "blockers": [
     {
@@ -34,7 +35,7 @@
     }
   ],
   "nextTask": "M2.7",
-  "nextTaskScope": "Continue M2.7-Core with the normative complete record/history/graph payload, schema-9 and cross-process fencing/publication; retain original bytes and all failure tests. Search/UI/adapters remain behind the ownership boundary. Current checkpoint is a verified core-library subset, not a completed or application-enabled vault. G1-External-Audit remains open. No M2.8 or M3 work.",
+  "nextTaskScope": "Increment 2 local acceptance passed; inspect its external source/CI ledger before continuation. Coordinate M2.7-Integration ownership/design before any Search/UI/adapter/schema-9 application or encrypted job/scheduler wiring. Preserve legacy copies/staging and explicit rollback rules. No active M3 file edits, live vault activation, M2.8 or M3 implementation automatically. G1-External-Audit remains open.",
   "productImplementation": "M1 and M2.1-M2.5 verified subsets: memory/lifecycle/entities, immutable relationship history, durable exports, coherent workspace/application catalog backups, opt-in schedules, owned saved-file import and verified fresh restore. Audited vault and integrated M2 certification remain required.",
   "milestoneComplete": false
 }

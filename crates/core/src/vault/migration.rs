@@ -108,7 +108,7 @@ fn write_private(path: &Path, bytes: &[u8]) -> Result<()> {
         .and_then(|_| file.sync_all())
         .map_err(failure)
 }
-fn read_bounded(path: &Path, maximum: usize) -> Result<Vec<u8>> {
+pub(crate) fn read_bounded(path: &Path, maximum: usize) -> Result<Vec<u8>> {
     reject_links(path).map_err(failure)?;
     private_permissions(path, false, true).map_err(failure)?;
     let mut out = Vec::new();
