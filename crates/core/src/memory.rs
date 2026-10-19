@@ -141,6 +141,16 @@ pub struct MemoryMetadata {
     pub due_date: Option<String>,
     #[serde(default)]
     pub completed: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub snippet: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub section_heading: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub line_number: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub duplicate_of: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub search_score: Option<f64>,
 }
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -171,6 +181,8 @@ pub struct MemoryListRequest {
     pub include_archived: bool,
     #[serde(default)]
     pub include_expired: bool,
+    #[serde(default)]
+    pub full_body: bool,
 }
 #[derive(Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -294,7 +306,11 @@ impl Core {
             "list" => {
                 let r: MemoryListRequest = input(value)?;
                 if let Some(query) = &r.query {
-                    crate::search::query(query)?;
+                    if r.full_body {
+                        crate::search::validate_body_query(query)?;
+                    } else {
+                        crate::search::query(query)?;
+                    }
                     if r.id.is_some() {
                         return Err(crate::search::invalid());
                     }
@@ -314,11 +330,30 @@ impl Core {
                 }
                 serde_json::to_value(self.storage()?.memory_list(r)?).map_err(|_| unavailable())
             }
+            "reindex" => {
+                #[derive(serde::Deserialize)]
+                #[serde(rename_all = "camelCase")]
+                struct ReindexRequest {
+                    workspace_id: String,
+                }
+                let r: ReindexRequest = input(value)?;
+                id(&r.workspace_id)?;
+                let count = self.storage()?.rebuild_search_index(&r.workspace_id)?;
+                serde_json::to_value(serde_json::json!({
+                    "contractVersion": 1,
+                    "workspaceId": r.workspace_id,
+                    "indexedCount": count
+                }))
+                .map_err(|_| unavailable())
+            }
             _ => Err(CommandError::new(
                 ErrorCode::NotFound,
                 "Memory command not found.",
             )),
         }
+    }
+    pub fn rebuild_search_index(&self, workspace_id: &str) -> Result<u32, CommandError> {
+        self.storage()?.rebuild_search_index(workspace_id)
     }
 }
 fn metadata(
@@ -504,6 +539,11 @@ impl Storage {
             supersedes: old.as_ref().and_then(|m| m.supersedes.clone()),
             due_date: r.draft.due_date,
             completed: r.draft.completed,
+            snippet: None,
+            section_heading: None,
+            line_number: None,
+            duplicate_of: None,
+            search_score: None,
         };
         if let Some(previous) = &old {
             if r.restore_archive {
@@ -608,6 +648,15 @@ impl Storage {
             params![r.workspace_id, record, revision],
         )
         .map_err(|_| unavailable())?;
+        let _ = crate::search::sync_index_tx(
+            &tx,
+            &r.workspace_id,
+            &record,
+            &revision,
+            &memory.title,
+            &r.draft.body,
+            &memory.privacy,
+        );
         #[cfg(test)]
         fault("before_commit");
         tx.commit().map_err(|_| unavailable())?;
@@ -647,7 +696,11 @@ impl Storage {
     }
     pub(crate) fn memory_list(&self, r: MemoryListRequest) -> Result<MemoryList, CommandError> {
         if r.query.is_some() {
-            return self.title_search(r);
+            if r.full_body {
+                return self.body_search(r);
+            } else {
+                return self.title_search(r);
+            }
         }
         let connection = self.connection(false)?.ok_or_else(missing)?;
         let limit = r.limit.unwrap_or(50);

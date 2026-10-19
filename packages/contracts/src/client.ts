@@ -16,7 +16,7 @@ export interface Client {
   listJobs(workspaceId:string,offset?:number):Promise<JobList>;
   controlJob(workspaceId:string,id:string,expectedVersion:number,action:JobAction):Promise<JobDetails>;
   readArtifact(workspaceId:string,jobId:string,artifactId:string,offset:number):Promise<ArtifactChunk>;
-  listMemories(workspaceId:string, options?:{id?:string;offset?:number;limit?:number;kind?:string;query?:string;includeArchived?:boolean;includeExpired?:boolean}): Promise<MemoryList>;
+  listMemories(workspaceId:string, options?:{id?:string;offset?:number;limit?:number;kind?:string;query?:string;includeArchived?:boolean;includeExpired?:boolean;fullBody?:boolean}): Promise<MemoryList>;
   readMemory(workspaceId:string,id:string,revisionId?:string): Promise<MemoryDetails>;
   createMemory(workspaceId:string,draft:MemoryDraft,kind?:string): Promise<MemoryDetails>;
   reviseMemory(workspaceId:string,id:string,expectedRevision:string,draft:MemoryDraft,confirmPrivacyChange?:boolean,options?:{lifecycle?:LifecycleChange;restoreArchive?:boolean;restoreRevision?:string}): Promise<MemoryDetails>;

@@ -1072,6 +1072,12 @@
               "null"
             ]
           },
+          "duplicateOf": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "eventDate": {
             "type": [
               "string",
@@ -1089,6 +1095,14 @@
           },
           "kind": {
             "type": "string"
+          },
+          "lineNumber": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
           },
           "privacy": {
             "$ref": "#/$defs/Privacy"
@@ -1117,6 +1131,25 @@
           },
           "revisionId": {
             "type": "string"
+          },
+          "searchScore": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "sectionHeading": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "snippet": {
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "sourceReferences": {
             "items": {
@@ -1359,6 +1392,12 @@
               "null"
             ]
           },
+          "duplicateOf": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "eventDate": {
             "type": [
               "string",
@@ -1376,6 +1415,14 @@
           },
           "kind": {
             "type": "string"
+          },
+          "lineNumber": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
           },
           "privacy": {
             "$ref": "#/$defs/Privacy"
@@ -1404,6 +1451,25 @@
           },
           "revisionId": {
             "type": "string"
+          },
+          "searchScore": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "sectionHeading": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "snippet": {
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "sourceReferences": {
             "items": {
@@ -1537,6 +1603,10 @@
         "minimum": 0,
         "type": "integer"
       },
+      "fullBody": {
+        "default": false,
+        "type": "boolean"
+      },
       "id": {
         "type": [
           "string",
@@ -1649,6 +1719,12 @@
           "null"
         ]
       },
+      "duplicateOf": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
       "eventDate": {
         "type": [
           "string",
@@ -1666,6 +1742,14 @@
       },
       "kind": {
         "type": "string"
+      },
+      "lineNumber": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
       },
       "privacy": {
         "$ref": "#/$defs/Privacy"
@@ -1694,6 +1778,25 @@
       },
       "revisionId": {
         "type": "string"
+      },
+      "searchScore": {
+        "format": "double",
+        "type": [
+          "number",
+          "null"
+        ]
+      },
+      "sectionHeading": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "snippet": {
+        "type": [
+          "string",
+          "null"
+        ]
       },
       "sourceReferences": {
         "items": {

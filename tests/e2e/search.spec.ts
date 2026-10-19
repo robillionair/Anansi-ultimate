@@ -36,6 +36,14 @@ test('local title search filters, exact revision reader, literal content, update
     await call('memories','revise',{workspaceId:workspace.id,id:original.memory.id,expectedRevision:original.memory.revisionId,draft:{...draft,title:'Updated research'}});
     await stop();await start();await pair();await page.getByLabel('Existing workspace').selectOption(workspace.id);await page.getByRole('button',{name:'Open workspace',exact:true}).click();await page.getByRole('button',{name:'Search',exact:true}).click();
     await search('世界');await expect(page.getByRole('status').filter({hasText:'No matching titles'})).toBeVisible();await search('Updated');await results.getByRole('button',{name:'Updated research',exact:true}).click();await expect(reader).toContainText('Revision 2');
+    await page.getByLabel('Full-body search (includes Markdown text)').check();
+    await page.getByLabel('Search query').fill('searchExecuted');
+    await page.getByRole('button',{name:'Search knowledge',exact:true}).click();
+    await expect(page.locator('section[aria-labelledby="search-title"]')).toHaveAttribute('aria-busy','false');
+    const bodyResults=page.getByRole('list',{name:'Search results'});
+    await expect(bodyResults.getByRole('button')).toHaveCount(1);
+    await expect(bodyResults).toContainText('Updated research');
+    await expect(bodyResults.locator('blockquote.search-snippet')).toBeVisible();
     await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);expect(external).toBe(0);expect(await page.evaluate(()=>localStorage.length+sessionStorage.length)).toBe(0);
     await page.screenshot({path:'test-results/browser-title-search-reader.png',fullPage:true});
   }finally{await stop();}
