@@ -141,6 +141,16 @@ pub struct MemoryMetadata {
     pub due_date: Option<String>,
     #[serde(default)]
     pub completed: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub search_score: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub duplicate_of: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub snippet: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub section_heading: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub line_number: Option<u32>,
 }
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -167,6 +177,8 @@ pub struct MemoryListRequest {
     pub limit: Option<u32>,
     pub kind: Option<String>,
     pub query: Option<String>,
+    #[serde(default)]
+    pub full_body: bool,
     #[serde(default)]
     pub include_archived: bool,
     #[serde(default)]
@@ -294,7 +306,11 @@ impl Core {
             "list" => {
                 let r: MemoryListRequest = input(value)?;
                 if let Some(query) = &r.query {
-                    crate::search::query(query)?;
+                    if r.full_body {
+                        crate::search::validate_body_query(query)?;
+                    } else {
+                        crate::search::query(query)?;
+                    }
                     if r.id.is_some() {
                         return Err(crate::search::invalid());
                     }
@@ -312,7 +328,12 @@ impl Core {
                 if r.offset > 1_000_000 || !(1..=100).contains(&r.limit.unwrap_or(50)) {
                     return Err(invalid());
                 }
-                serde_json::to_value(self.storage()?.memory_list(r)?).map_err(|_| unavailable())
+                let result = if r.full_body {
+                    self.storage()?.body_search(r)?
+                } else {
+                    self.storage()?.memory_list(r)?
+                };
+                serde_json::to_value(result).map_err(|_| unavailable())
             }
             _ => Err(CommandError::new(
                 ErrorCode::NotFound,
@@ -342,6 +363,13 @@ fn metadata(
     }
     Ok((meta, hash))
 }
+impl Core {
+    pub fn rebuild_search_index(&self, workspace_id: &str) -> Result<u32, CommandError> {
+        id(workspace_id)?;
+        self.storage()?.rebuild_search_index(workspace_id)
+    }
+}
+
 impl Storage {
     pub(crate) fn memory_write(
         &self,
@@ -504,6 +532,11 @@ impl Storage {
             supersedes: old.as_ref().and_then(|m| m.supersedes.clone()),
             due_date: r.draft.due_date,
             completed: r.draft.completed,
+            search_score: None,
+            duplicate_of: None,
+            snippet: None,
+            section_heading: None,
+            line_number: None,
         };
         if let Some(previous) = &old {
             if r.restore_archive {
@@ -608,6 +641,15 @@ impl Storage {
             params![r.workspace_id, record, revision],
         )
         .map_err(|_| unavailable())?;
+        crate::search::sync_index_tx(
+            &tx,
+            &r.workspace_id,
+            &record,
+            &revision,
+            &memory.title,
+            &r.draft.body,
+            &memory.privacy,
+        )?;
         #[cfg(test)]
         fault("before_commit");
         tx.commit().map_err(|_| unavailable())?;

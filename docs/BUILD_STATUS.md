@@ -10,6 +10,8 @@ M2 integration increment: the vault-owned `SearchBoundary` is now a tested domai
 
 M2 integration increment 2 adds vault-owned transactional FTS invalidation helpers for one record or an entire workspace, with focused in-memory SQLite tests. They are designed to run in the same sealing/revocation/generation transaction and do not expose vault keys. M3 application wiring, native/browser workflows, encrypted backup/restore integration, and M2.8 acceptance remain pending.
 
+M2/M3 shared search integration is now applied at `94c27b8` plus local contract repairs: M3’s bounded body search and rebuild/error-integrity fixes are present, `MemoryMetadata` carries optional response-only ranking/evidence fields, and memory writes synchronize or invalidate FTS rows in the same SQLite transaction. Local body-search, corpus-limit, and schema-8 sealing-transition tests pass. The true Sealed vertical slice remains blocked by the missing adapter-facing vault setup/session command and trusted native credential/prompt path; Sealed creation continues to fail closed. No whole-root encryption or secure erasure is inferred from search exclusion.
+
 [Owner risk acceptance](approvals/M2-6-owner-risk-acceptance.md) explicitly supersedes historical G1 pre-implementation stop language below. G1-External-Audit remains open for post-M3/pre-production/commercialization certification; no audit coverage is fabricated. M2.5 source/CI recovery baseline was reverified. M2.7-Core is authorized in a separate worktree; M3 Search/UI wiring and shared-checkout files remain untouched. G2–G4 are unchanged. No vault completion, production certification or implemented UI disclosure is claimed. AN-018/019/031 remain in progress.
 
 ## Current state — 2026-10-19

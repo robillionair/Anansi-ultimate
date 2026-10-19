@@ -7,6 +7,7 @@ use crate::{
     memory::{MemoryList, MemoryListRequest, MemoryMetadata},
     privacy::Privacy,
     storage::{Storage, unavailable},
+    vault::policy::SearchBoundary,
 };
 use chrono::Utc;
 use rusqlite::{Connection, Transaction, params};
@@ -145,12 +146,8 @@ pub(crate) fn sync_index_tx(
     privacy: &Privacy,
 ) -> Result<(), CommandError> {
     ensure_fts_table(tx)?;
-    tx.execute(
-        "DELETE FROM memory_body_fts WHERE workspace_id=?1 AND memory_id=?2",
-        params![workspace_id, record],
-    )
-    .map_err(|_| unavailable())?;
-    if *privacy != Privacy::Sealed {
+    SearchBoundary::invalidate_record(tx, workspace_id, record).map_err(|_| unavailable())?;
+    if SearchBoundary::may_index(*privacy) {
         tx.execute(
             "INSERT INTO memory_body_fts(workspace_id, memory_id, revision_id, title, body)
              VALUES(?1, ?2, ?3, ?4, ?5)",
@@ -244,11 +241,7 @@ impl Storage {
         let tx = conn
             .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
             .map_err(|_| unavailable())?;
-        tx.execute(
-            "DELETE FROM memory_body_fts WHERE workspace_id = ?1",
-            params![workspace_id],
-        )
-        .map_err(|_| unavailable())?;
+        SearchBoundary::invalidate_workspace(&tx, workspace_id).map_err(|_| unavailable())?;
 
         let mut stmt = tx
             .prepare(
