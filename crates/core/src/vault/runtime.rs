@@ -83,6 +83,24 @@ impl VaultRuntime {
         self.store.lock(workspace, &mut self.sessions)
     }
 
+    /// Returns the active vault context and durable epoch after sealing.
+    /// Adapters use this to construct a caller-bound session; no key material
+    /// crosses this boundary.
+    pub fn context(&self, workspace: &str) -> Result<(super::keys::Context, u64)> {
+        self.store.context(workspace)
+    }
+
+    /// Reads a fully authenticated snapshot for an already authorized handle.
+    /// The store performs a second epoch/session check before returning data.
+    pub fn read(
+        &mut self,
+        caller: &Caller,
+        token: &[u8; 16],
+        now: Instant,
+    ) -> Result<super::payload::Snapshot> {
+        self.store.read(&mut self.sessions, caller, token, now)
+    }
+
     pub fn seal_workspace(
         &mut self,
         backup: &BackupReference,

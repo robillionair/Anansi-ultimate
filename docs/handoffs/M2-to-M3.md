@@ -23,3 +23,7 @@ The persistent FTS5 table must be reviewed during M2 integration for stale rows 
 - M3 consumer: its search/indexing implementation and tests, after an explicit merge/integration checkpoint.
 
 This handoff does not activate Sealed commands or claim M2.8 acceptance.
+
+## Runtime integration note (6f9aafb follow-up)
+
+`anansi_core::vault::runtime::VaultRuntime` now exposes `context(workspace)` and `read(caller, token, now)` for adapter integration. Adapters must obtain the context only after a sealed generation exists, keep the returned session token in process memory, and call `read` for every authorized snapshot. These methods preserve the existing second publication authorization check and do not serialize credentials, DEKs or recovery material. Native prompt and desktop/browser command transport remain adapter-owned.
