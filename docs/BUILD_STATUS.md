@@ -16,6 +16,8 @@ M2.7 runtime increment adds `VaultRuntime`, which owns the non-serializable ackn
 
 The follow-up runtime increment adds adapter-facing `context` and authenticated `read` methods. They return only a vault context/snapshot after the existing session, caller, deadline and epoch checks; no key or credential transport is introduced. Focused runtime test and warnings-denied Clippy pass. Native prompt, command transport, browser authorization and integrated Sealed workflow remain pending.
 
+The process-owned `VaultService` increment now provides a cloneable adapter handle over a mutex-protected `VaultRuntime`, with setup, seal, unlock, authenticated read, lock and context operations. This preserves process-local secret/session ownership and is locally compiled and linted. It does not claim desktop/browser activation; native prompt and transport wiring remain incomplete.
+
 [Owner risk acceptance](approvals/M2-6-owner-risk-acceptance.md) explicitly supersedes historical G1 pre-implementation stop language below. G1-External-Audit remains open for post-M3/pre-production/commercialization certification; no audit coverage is fabricated. M2.5 source/CI recovery baseline was reverified. M2.7-Core is authorized in a separate worktree; M3 Search/UI wiring and shared-checkout files remain untouched. G2–G4 are unchanged. No vault completion, production certification or implemented UI disclosure is claimed. AN-018/019/031 remain in progress.
 
 ## Current state — 2026-10-19
