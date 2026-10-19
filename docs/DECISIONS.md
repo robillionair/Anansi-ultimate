@@ -1,5 +1,14 @@
 # ANANSI Ultimate — Architecture Decisions
 
+## ADR-0030: Big Brain deliberative reasoning architecture and multi-chunk Context Compiler
+
+- **Authority:** User instruction to continue Milestone 4; Master Spec §8, §11, §13, §19, §66–67, §71, §74, §77–78; Requirements Matrix AN-006, AN-010, AN-011; `docs/designs/BIG_BRAIN_SPEC.md`.
+- **Context Compiler:** Implement section-aware multi-chunk Markdown context compilation with heading and line number preservation. Strict character budgeting (configurable, default 4,000, max 32,000) guarantees prompt bounded limits. Duplicate text chunks are deterministically deduplicated via SHA-256 fingerprinting.
+- **Privacy & Sealed Boundary:** Sealed records are strictly forbidden from compilation or disclosure manifests. Any reference to a sealed record is rejected fail-closed.
+- **Disclosure Manifest ("View What ANANSI Sent"):** Every compilation yields an inspectable `DisclosureManifest` recording target endpoint, model tag, character count, estimated tokens, source memory IDs/titles, and zero-cloud local offline justification.
+- **Big Brain Architecture (AN-011 Design Gate Resolved):** Formalize deliberative reasoning contract (`BIG_BRAIN_SPEC.md`) specifying a 5-step state machine (Plan -> Retrieve -> Critique -> Execute -> Reflect), bounded at 10 cycles, with cycle loop detection, zero-cost lock, and fail-closed privacy.
+- **Status:** accepted design baseline for M4.4 and M5 Big Brain; contract and acceptance criteria defined before code.
+
 ## ADR-0029: Minimum context compiler and grounded local Ask ANANSI
 
 - **Authority:** User instruction to continue Milestone 3; Master Spec §11, §13, §16–19, §66–67, §71, §74, §78, §84; Requirements Matrix AN-006, AN-009, AN-010, AN-018, AN-029.

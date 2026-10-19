@@ -3,7 +3,7 @@
 //! and fail-closed Sealed record exclusion.
 
 use chrono::Utc;
-use rusqlite::{Connection, params};
+use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 use std::{
     io::{Read, Write},
@@ -369,11 +369,23 @@ pub fn store_embedding(
     // Fail-closed privacy check: Verify memory is not Sealed
     let privacy: Option<String> = conn
         .query_row(
-            "SELECT privacy FROM memories WHERE workspace_id = ?1 AND id = ?2",
+            "SELECT json_extract(r.metadata, '$.privacy')
+             FROM memory_revisions r
+             JOIN memories m ON m.workspace_id = r.workspace_id AND m.id = r.memory_id AND m.current_revision = r.id
+             WHERE m.workspace_id = ?1 AND m.id = ?2",
             params![workspace_id, memory_id],
             |row| row.get(0),
         )
-        .map_err(|e| VectorError::StorageError(e.to_string()))?;
+        .or_else(|_| {
+            conn.query_row(
+                "SELECT privacy FROM memories WHERE workspace_id = ?1 AND id = ?2",
+                params![workspace_id, memory_id],
+                |row| row.get(0),
+            )
+        })
+        .optional()
+        .map_err(|e| VectorError::StorageError(e.to_string()))?
+        .flatten();
 
     if let Some(p) = privacy
         && p.eq_ignore_ascii_case("sealed")
@@ -506,17 +518,31 @@ pub fn vector_search(
 
     let bounded_limit = limit.clamp(1, 100);
 
-    let mut stmt = conn
-        .prepare(
-            "SELECT me.memory_id, me.chunk_index, me.embedding
-             FROM memory_embeddings me
-             JOIN memories m ON m.workspace_id = me.workspace_id AND m.id = me.memory_id
-             WHERE me.workspace_id = ?1
-               AND me.model = ?2
-               AND m.archived = 0
-               AND m.privacy != 'sealed'",
-        )
-        .map_err(|e| VectorError::StorageError(e.to_string()))?;
+    let stmt_res = conn.prepare(
+        "SELECT me.memory_id, me.chunk_index, me.embedding
+         FROM memory_embeddings me
+         JOIN memories m ON m.workspace_id = me.workspace_id AND m.id = me.memory_id
+         JOIN memory_revisions r ON r.workspace_id = m.workspace_id AND r.memory_id = m.id AND r.id = m.current_revision
+         WHERE me.workspace_id = ?1
+           AND me.model = ?2
+           AND json_extract(r.metadata, '$.status') != 'archived'
+           AND json_extract(r.metadata, '$.privacy') != 'sealed'",
+    );
+
+    let mut stmt = match stmt_res {
+        Ok(s) => s,
+        Err(_) => conn
+            .prepare(
+                "SELECT me.memory_id, me.chunk_index, me.embedding
+                 FROM memory_embeddings me
+                 JOIN memories m ON m.workspace_id = me.workspace_id AND m.id = me.memory_id
+                 WHERE me.workspace_id = ?1
+                   AND me.model = ?2
+                   AND m.archived = 0
+                   AND m.privacy != 'sealed'",
+            )
+            .map_err(|e| VectorError::StorageError(e.to_string()))?,
+    };
 
     let rows = stmt
         .query_map(params![workspace_id, model], |row| {

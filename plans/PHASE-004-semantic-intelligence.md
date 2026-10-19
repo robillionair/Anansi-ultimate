@@ -170,3 +170,75 @@ Bounds:
 - Result limit bounded to 1..100 records.
 - RRF constant k default 60.0, bounded to >= 1.0.
 - Zero network traffic or cloud leakage. Fail-closed privacy preserved at all boundaries.
+
+Acceptance: defined in M4.3 evidence. All 5/5 benchmark tests pass; exact lexical retrieval, semantic paraphrase retrieval, hybrid synergy, missing-evidence handling, and fail-closed privacy boundaries verified.
+
+## M4.4 implementation contract — defined before coding
+
+Objective: Implement the complete multi-chunk, section-aware Context Compiler with token budgeting, deduplication, grounded citations, and transparent disclosure manifest ("View What ANANSI Sent"), while authoring the Big Brain tracked architectural design specification resolving the AN-011 design gate.
+
+Authority: Master Spec §8, §11, §19, §71, §77–78; Requirements Matrix AN-006, AN-010, AN-011.
+
+Files:
+- Create: `crates/core/src/context.rs`, `crates/core/tests/context_compiler.rs`, `docs/designs/BIG_BRAIN_SPEC.md`, `docs/evidence/M4-4.md`
+- Modify: `crates/core/src/lib.rs`, `docs/DECISIONS.md`, `plans/PHASE-004-semantic-intelligence.md`, `project-state.json`, `docs/BUILD_STATUS.md`, `docs/REQUIREMENTS_MATRIX.md`
+
+Steps:
+1. Define Section-Aware Context Compiler in `crates/core/src/context.rs`:
+   - `ContextChunk`: `memory_id`, `chunk_index`, `title`, `kind`, `section_heading`, `line_number`, `content`, `token_estimate`.
+   - `CompiledContext`: `evidence_chunks: Vec<ContextChunk>`, `citations: Vec<GroundedCitation>`, `disclosure_manifest: DisclosureManifest`, `system_prompt: String`, `total_characters: usize`, `total_tokens: usize`.
+   - Implement `compile_hybrid_context`:
+     - Queries hybrid retrieval for top relevant records.
+     - Splits records into section-level chunks based on Markdown headings (`# ...`).
+     - Deduplicates identical content chunks or body hashes.
+     - Enforces strict token/character budget (default 4,000 chars, configurable up to 32,000 chars).
+     - Assembles structured grounding prompt with indexed citations `[1]`, `[2]`.
+     - Generates inspectable `DisclosureManifest` ("View What ANANSI Sent") detailing model, provider, source memories, character/token counts, and routing reason.
+     - Enforces fail-closed Sealed exclusion: Sealed records are permanently refused.
+2. Resolve Big Brain AN-011 Design Gate:
+   - Author `docs/designs/BIG_BRAIN_SPEC.md` specifying the Big Brain multi-agent orchestration architecture:
+     - Multi-step reasoning loops (Plan -> Retrieve -> Critique -> Execute -> Reflect).
+     - State machine and bounded execution steps (max 10 iterations).
+     - Zero-Cost Lock & offline-first local LLM preference.
+     - Fail-closed security boundaries (zero cloud leakage for Sealed/Private memories).
+   - Record ADR-0025 in `docs/DECISIONS.md`.
+   - Update `docs/REQUIREMENTS_MATRIX.md` transitioning AN-011 to in progress with verified design specification reference.
+3. Author targeted test suite `crates/core/tests/context_compiler.rs`:
+   - Section chunking and heading preservation.
+   - Strict budget enforcement (large bodies trimmed to fit budget).
+   - Chunk deduplication (identical paragraphs deduplicated).
+   - Fail-closed Sealed privacy refusal.
+   - Disclosure manifest completeness.
+4. Verify across Rust workspace tests, strict Clippy, formatting, and planning validation.
+
+Bounds:
+- Default context budget: 4,000 characters (~1,000 tokens), max 32,000 characters.
+- Section chunks bounded to at most 1,000 characters per chunk.
+- Zero network traffic or cloud leakage. Fail-closed privacy preserved at all boundaries.
+
+Acceptance: defined in [M4.4 evidence](../docs/evidence/M4-4.md). All 5/5 targeted Context Compiler tests pass; multi-chunk Markdown sectioning, token budgeting, chunk deduplication, fail-closed Sealed privacy refusal, and disclosure manifest completeness verified; Big Brain architectural specification authored in `docs/designs/BIG_BRAIN_SPEC.md` and ADR-0030 recorded.
+
+## M4.5 implementation contract — defined before coding
+
+Objective: Implement cross-edition UI and integrated end-to-end acceptance certification for Semantic Intelligence. Expose search mode selection ("Lexical", "Semantic", "Hybrid") in the shared search UI and Ask ANANSI, wire HTTP and Tauri IPC endpoints for hybrid retrieval and context compilation, and verify desktop/browser parity via Playwright E2E integration and unit test batteries.
+
+Authority: Master Spec §77–78, §82–84; Requirements Matrix AN-002, AN-005, AN-006, AN-010.
+
+Files:
+- Create: `docs/evidence/M4-5.md`
+- Modify: `packages/ui/src/search/index.tsx`, `packages/ui/src/ask/index.tsx`, `apps/desktop/src/App.tsx`, `crates/api/src/routes.rs`, `crates/contracts/src/lib.rs`, `plans/PHASE-004-semantic-intelligence.md`, `project-state.json`, `docs/BUILD_STATUS.md`, `docs/REQUIREMENTS_MATRIX.md`
+
+Steps:
+1. Extend shared contracts in `crates/contracts/` and TypeScript types for hybrid search requests/responses (`searchMode`: `lexical`, `semantic`, `hybrid`).
+2. Add API routes in `crates/api/src/routes.rs` and Tauri IPC command in `apps/desktop/src-tauri/` for `hybrid_search` and `compile_context`.
+3. Update shared UI components in `packages/ui/src/`:
+   - Search UI: segmented control or radio toggle allowing user to select "Lexical (FTS5)", "Semantic (Vector)", or "Hybrid (RRF)".
+   - Grounded evidence display: show citation index `[n]`, section heading, line number, and RRF/similarity score breakdown.
+   - Disclosure modal: "View What ANANSI Sent" inspector displaying the compiled prompt, target endpoint, model, and source memories.
+4. Execute full automated verification battery:
+   - Cargo tests, Clippy with `-D warnings`, Rust formatting.
+   - UI unit and component tests (`npm run test:ui`).
+   - Playwright E2E browser and native parity test runs.
+   - Planning self-test validation (`validate-planning.mjs`).
+5. Author final Milestone 4 evidence ledger `docs/evidence/M4-5.md` certifying Milestone 4 completion.
+

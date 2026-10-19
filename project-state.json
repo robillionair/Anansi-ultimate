@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
   "activeMilestone": "M4",
-  "activeTask": "M4.3",
+  "activeTask": "M4.4",
   "plan": "plans/PHASE-004-semantic-intelligence.md",
-  "implementationStatus": "M4.3 hybrid retrieval fusing SQLite FTS5 lexical BM25 and vector cosine ranking via Reciprocal Rank Fusion verified.",
-  "lastVerifiedCommit": "8e2c53a6699d91f2be05fa4f997dbb1f5fc5baee",
+  "implementationStatus": "M4.4 Context Compiler and Big Brain design gate verified; M4.5 implementation contract defined.",
+  "lastVerifiedCommit": "d2379d5",
   "evidence": [
     "docs/evidence/M0.md",
     "docs/evidence/M1.md",
@@ -30,7 +30,8 @@
     "docs/evidence/M3-5.md",
     "docs/evidence/M4-1.md",
     "docs/evidence/M4-2.md",
-    "docs/evidence/M4-3.md"
+    "docs/evidence/M4-3.md",
+    "docs/evidence/M4-4.md"
   ],
   "blockers": [
     {
@@ -38,8 +39,8 @@
       "detail": "Explicit Owner exception authorizes engineering only. Independent audit remains open for post-M3/pre-production/commercialization certification; exact pinned primitives and G2-G4 retained."
     }
   ],
-  "nextTask": "M4.4",
-  "nextTaskScope": "Complete Context Compiler and Big Brain tracked design.",
-  "productImplementation": "M1 and M2.1-M2.5 verified subsets: memory/lifecycle/entities, immutable relationship history, durable exports, coherent workspace/application catalog backups, opt-in schedules, owned saved-file import, verified fresh restore, M2.7 native desktop encrypted vault integration, M3.1/M3.2 full-body search, M3.3 local AI runtime discovery, M3.4 local Ask ANANSI, M3.5 integrated acceptance, M4.1 local vector embeddings, M4.2 vector search, and M4.3 hybrid retrieval (RRF).",
+  "nextTask": "M4.5",
+  "nextTaskScope": "Cross-edition UI and integrated acceptance certification.",
+  "productImplementation": "M1 and M2.1-M2.5 verified subsets: memory/lifecycle/entities, immutable relationship history, durable exports, coherent workspace/application catalog backups, opt-in schedules, owned saved-file import, verified fresh restore, M2.7 native desktop encrypted vault integration, M3.1/M3.2 full-body search, M3.3 local AI runtime discovery, M3.4 local Ask ANANSI, M3.5 integrated acceptance, M4.1 local vector embeddings, M4.2 vector search, M4.3 hybrid retrieval (RRF), and M4.4 multi-chunk Context Compiler.",
   "milestoneComplete": false
 }

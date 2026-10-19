@@ -128,23 +128,43 @@ pub fn hybrid_search(
 
     for memory_id in candidate_ids {
         // Query memory metadata and verify privacy & archive boundaries
-        let meta = conn.query_row(
-            "SELECT title, kind, archived, privacy
-             FROM memories
-             WHERE workspace_id = ?1 AND id = ?2",
+        let meta_res = conn.query_row(
+            "SELECT r.metadata
+             FROM memory_revisions r
+             JOIN memories m ON m.workspace_id = r.workspace_id AND m.id = r.memory_id AND m.current_revision = r.id
+             WHERE m.workspace_id = ?1 AND m.id = ?2",
             params![request.workspace_id, memory_id],
-            |row| {
-                let title: String = row.get(0)?;
-                let kind: String = row.get(1)?;
-                let archived: i64 = row.get(2)?;
-                let privacy: String = row.get(3)?;
-                Ok((title, kind, archived != 0, privacy))
-            },
+            |row| row.get::<_, String>(0),
         );
 
-        let (title, kind, is_archived, privacy) = match meta {
-            Ok(data) => data,
-            Err(_) => continue, // Record deleted or missing
+        let (title, kind, is_archived, privacy) = if let Ok(json_str) = meta_res {
+            if let Ok(val) = serde_json::from_str::<serde_json::Value>(&json_str) {
+                let title = val["title"].as_str().unwrap_or("").to_string();
+                let kind = val["kind"].as_str().unwrap_or("note").to_string();
+                let is_archived = val["status"].as_str() == Some("archived");
+                let privacy = val["privacy"].as_str().unwrap_or("standard").to_string();
+                (title, kind, is_archived, privacy)
+            } else {
+                continue;
+            }
+        } else {
+            let fallback = conn.query_row(
+                "SELECT title, kind, archived, privacy
+                 FROM memories
+                 WHERE workspace_id = ?1 AND id = ?2",
+                params![request.workspace_id, memory_id],
+                |row| {
+                    let title: String = row.get(0)?;
+                    let kind: String = row.get(1)?;
+                    let archived: i64 = row.get(2)?;
+                    let privacy: String = row.get(3)?;
+                    Ok((title, kind, archived != 0, privacy))
+                },
+            );
+            match fallback {
+                Ok(data) => data,
+                Err(_) => continue,
+            }
         };
 
         // Fail-closed Sealed memory exclusion

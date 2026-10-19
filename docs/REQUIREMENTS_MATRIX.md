@@ -23,8 +23,8 @@ Status vocabulary: `provisional`, `planned`, `in progress`, `verified`, `blocked
 | AN-007 | AI Matrix | AI/orchestration | P1 | Provider contracts | M5 | planned | Multi-provider routing and failure tests |
 | AN-008 | OAuth and API keys | Integrations/security | P0 | Secret storage, auth | M5 | planned | Token lifecycle and redaction tests |
 | AN-009 | Local LLMs | AI/providers | P0 | Provider adapter, Ollama contract | M3, M14 | in progress | M3.3 runtime discovery, hardware inspection, tiered recommendations, explicit download consent, and M3.5 integrated workflow verified: [evidence](evidence/M3-3.md), [M3.5 evidence](evidence/M3-5.md) |
-| AN-010 | Context Compiler | AI/context | P0 | Memory/search, policy | M3, M4 | in progress | M3.4 deterministic minimum context compilation, budget enforcement (4,000 chars), deduplication, and M3.5 integrated disclosure verified: [M3.4 evidence](evidence/M3-4.md), [M3.5 evidence](evidence/M3-5.md) |
-| AN-011 | Big Brain | AI/orchestration | P1 | Context Compiler, providers | M4 (design gate) | blocked | End-to-end reasoning workflow and audit evidence |
+| AN-010 | Context Compiler | AI/context | P0 | Memory/search, policy | M3, M4 | in progress | M3.4 deterministic minimum context compilation, budget enforcement (4,000 chars), deduplication, and M3.5 integrated disclosure verified: [M3.4 evidence](evidence/M3-4.md), [M3.5 evidence](evidence/M3-5.md); M4.4 multi-chunk section-aware compilation, token budgeting, and manifest verified: [M4.4 evidence](evidence/M4-4.md) |
+| AN-011 | Big Brain | AI/orchestration | P1 | Context Compiler, providers | M4 (design gate), M5 | in progress | Architectural design gate resolved via formal specification (`docs/designs/BIG_BRAIN_SPEC.md` and ADR-0030); deliberative loop implementation tracked in M5: [M4.4 evidence](evidence/M4-4.md) |
 | AN-012 | Product Forge | Product/workflow | P1 | Core, permissions | M7, M12 | planned | Real artifact workflow and persistence tests |
 | AN-013 | LEXI-COLLIDER | Language/workflow | P1 | Core, AI contracts | M8 | planned | Input/output fixture and safety tests |
 | AN-014 | SwarmTank 3D | Visualization | P2 | Shared UI, Three.js | M9 | planned | Interactive render smoke test and performance budget |
@@ -38,7 +38,7 @@ Status vocabulary: `provisional`, `planned`, `in progress`, `verified`, `blocked
 
 ## Matrix notes
 
-Milestones now follow the approved canonical roadmap and master section 82. Planned means retained and assigned, not implemented or tested. AN-011 remains blocked on behavior design: Big Brain is named but not specified. AN-021 remains deferred as future commercial architecture under section 81; tenancy/isolation and security review are prerequisites, with no enterprise claims allowed. Other rows await their milestone dependencies and detailed plans.
+Milestones now follow the approved canonical roadmap and master section 82. Planned means retained and assigned, not implemented or tested. AN-011 design gate is resolved via `docs/designs/BIG_BRAIN_SPEC.md` and ADR-0030, with deliberative reasoning execution tracked in M5. AN-021 remains deferred as future commercial architecture under section 81; tenancy/isolation and security review are prerequisites, with no enterprise claims allowed. Other rows await their milestone dependencies and detailed plans.
 
 [The full coverage ledger](SPEC_COVERAGE.md) retains all 90 source sections, including requirements absent from the original coarse matrix.
 
