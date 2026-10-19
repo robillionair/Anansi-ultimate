@@ -8,6 +8,8 @@ Increment 2 local core acceptance passed: explicit schema-9 encrypted full metad
 
 M2 integration increment: the vault-owned `SearchBoundary` is now a tested domain hook for the later M3 consumer. It excludes Sealed records before persistent indexing and rechecks caller, session lifetime and durable generation epoch immediately before any Sealed result publication. [Handoff](handoffs/M2-to-M3.md) records the boundary and the required stale-FTS/rebuild/lock/revocation review. This does not activate Sealed commands, modify M3 search/UI files, or claim M2.8 acceptance.
 
+M2 integration increment 2 adds vault-owned transactional FTS invalidation helpers for one record or an entire workspace, with focused in-memory SQLite tests. They are designed to run in the same sealing/revocation/generation transaction and do not expose vault keys. M3 application wiring, native/browser workflows, encrypted backup/restore integration, and M2.8 acceptance remain pending.
+
 [Owner risk acceptance](approvals/M2-6-owner-risk-acceptance.md) explicitly supersedes historical G1 pre-implementation stop language below. G1-External-Audit remains open for post-M3/pre-production/commercialization certification; no audit coverage is fabricated. M2.5 source/CI recovery baseline was reverified. M2.7-Core is authorized in a separate worktree; M3 Search/UI wiring and shared-checkout files remain untouched. G2–G4 are unchanged. No vault completion, production certification or implemented UI disclosure is claimed. AN-018/019/031 remain in progress.
 
 ## Current state — 2026-10-19

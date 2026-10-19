@@ -2,7 +2,7 @@
 
 Status: local acceptance passed on 2026-10-19 in the isolated M2 worktree. This increment does not activate Sealed commands or certify M2.8.
 
-Implemented `anansi_core::vault::policy::SearchBoundary` and its focused integration tests. The boundary excludes Sealed records before indexing and requires a current vault session for Sealed publication, rechecking caller identity, token, idle/absolute deadlines and durable generation epoch. It returns no key or decrypted payload.
+Implemented `anansi_core::vault::policy::SearchBoundary` and its focused integration tests. The boundary excludes Sealed records before indexing, requires a current vault session for Sealed publication, and provides transactional record/workspace FTS invalidation for sealing or revocation. Publication rechecks caller identity, token, idle/absolute deadlines and durable generation epoch. It returns no key or decrypted payload.
 
 Verification:
 

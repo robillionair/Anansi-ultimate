@@ -9,6 +9,7 @@ M2 exposes `anansi_core::vault::policy::SearchBoundary` as the only search-facin
 1. `may_index(privacy)` excludes `Privacy::Sealed` before an FTS/vector index is populated or counted.
 2. `publish(...)` permits non-Sealed results without a vault session and requires a current `Sessions` capability for Sealed results.
 3. The Sealed publication path rechecks caller identity, token, idle/absolute deadlines, and the durable generation epoch. It returns no DEK, keyslot, or vault payload.
+4. `invalidate_record(...)` and `invalidate_workspace(...)` delete plaintext FTS rows and are intended to run in the same transaction as a sealing/revocation/generation transition.
 
 ## M3 integration obligations
 
