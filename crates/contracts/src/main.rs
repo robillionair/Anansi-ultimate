@@ -1,3 +1,5 @@
+#![recursion_limit = "256"]
+
 use anansi_core::jobs::{
     ArtifactChunk, ControlJobRequest, EnqueueExportRequest, Job, JobDetails, JobList,
     ListJobsRequest, ReadArtifactRequest,
@@ -57,7 +59,12 @@ fn main() {
         "WorkspaceList":schemars::schema_for!(WorkspaceList),
         "CreateWorkspaceRequest":schemars::schema_for!(CreateWorkspaceRequest),
         "OpenWorkspaceRequest":schemars::schema_for!(OpenWorkspaceRequest),
-        "UpdateSettingsRequest":schemars::schema_for!(UpdateSettingsRequest)
+        "UpdateSettingsRequest":schemars::schema_for!(UpdateSettingsRequest),
+        "AiDiscoveryRequest":schemars::schema_for!(anansi_core::ai_discovery::AiDiscoveryRequest),
+        "AiDiscoveryResponse":schemars::schema_for!(anansi_core::ai_discovery::AiDiscoveryResponse),
+        "HardwareProfile":schemars::schema_for!(anansi_core::ai_discovery::HardwareProfile),
+        "DiscoveredRuntime":schemars::schema_for!(anansi_core::ai_discovery::DiscoveredRuntime),
+        "ModelRecommendation":schemars::schema_for!(anansi_core::ai_discovery::ModelRecommendation)
     });
     println!("{}", serde_json::to_string_pretty(&schemas).unwrap());
 }

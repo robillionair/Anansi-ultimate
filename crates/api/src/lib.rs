@@ -25,6 +25,7 @@ pub fn router(state: Arc<ApiState>) -> Router {
         .route("/v1/memories/{operation}", post(memory))
         .route("/v1/relationships/{operation}", post(relationship))
         .route("/v1/jobs/{operation}", post(job))
+        .route("/v1/ai/{operation}", post(ai))
         .fallback(|| async {
             error(
                 StatusCode::NOT_FOUND,
@@ -66,6 +67,7 @@ pub fn command_path(path: &str) -> bool {
             | "/v1/workspaces/create"
             | "/v1/workspaces/open"
             | "/v1/workspaces/settings"
+            | "/v1/ai/discovery"
     )
 }
 
@@ -272,6 +274,50 @@ async fn relationship(
                 | ErrorCode::ContentIntegrity
                 | ErrorCode::UnsupportedSchema => StatusCode::CONFLICT,
                 ErrorCode::VaultUnavailable => StatusCode::FORBIDDEN,
+                ErrorCode::StorageUnavailable => StatusCode::SERVICE_UNAVAILABLE,
+                _ => StatusCode::BAD_REQUEST,
+            };
+            (status, Json(e)).into_response()
+        }
+        Err(_) => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(anansi_core::storage::unavailable()),
+        )
+            .into_response(),
+    }
+}
+
+async fn ai(
+    Path(operation): Path<String>,
+    State(state): State<Arc<ApiState>>,
+    request: Request<Body>,
+) -> Response {
+    let bytes = match axum::body::to_bytes(request.into_body(), 64 * 1024).await {
+        Ok(v) => v,
+        Err(_) => {
+            return error(
+                StatusCode::BAD_REQUEST,
+                ErrorCode::InvalidRequest,
+                "AI request exceeds its limit.",
+            );
+        }
+    };
+    let input = match serde_json::from_slice(&bytes) {
+        Ok(v) => v,
+        Err(_) => {
+            return error(
+                StatusCode::BAD_REQUEST,
+                ErrorCode::InvalidRequest,
+                "Use the supported AI request.",
+            );
+        }
+    };
+    match tokio::task::spawn_blocking(move || state.core.ai_command(&operation, input)).await {
+        Ok(Ok(value)) => Json(value).into_response(),
+        Ok(Err(e)) => {
+            let status = match e.code {
+                ErrorCode::NotFound => StatusCode::NOT_FOUND,
+                ErrorCode::UnsupportedContract => StatusCode::BAD_REQUEST,
                 ErrorCode::StorageUnavailable => StatusCode::SERVICE_UNAVAILABLE,
                 _ => StatusCode::BAD_REQUEST,
             };

@@ -153,6 +153,18 @@ async fn relationship_command(
         .map_err(|_| anansi_core::storage::unavailable())?
 }
 #[cfg(windows)]
+#[tauri::command]
+async fn ai_command(
+    core: tauri::State<'_, Core>,
+    command: String,
+    request: serde_json::Value,
+) -> Result<serde_json::Value, CommandError> {
+    let core = core.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || core.ai_command(&command, request))
+        .await
+        .map_err(|_| anansi_core::storage::unavailable())?
+}
+#[cfg(windows)]
 pub fn run() {
     let core = Core::for_host();
     let root = core
@@ -183,6 +195,7 @@ pub fn run() {
             relationship_command,
             job_command,
             vault_command,
+            ai_command,
             save_export
         ])
         .run(tauri::generate_context!())

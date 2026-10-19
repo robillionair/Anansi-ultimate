@@ -1,4 +1,213 @@
 {
+  "AiDiscoveryRequest": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "customEndpoints": {
+        "items": {
+          "type": "string"
+        },
+        "type": [
+          "array",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "contractVersion"
+    ],
+    "title": "AiDiscoveryRequest",
+    "type": "object"
+  },
+  "AiDiscoveryResponse": {
+    "$defs": {
+      "DiscoveredRuntime": {
+        "additionalProperties": false,
+        "properties": {
+          "endpoint": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/$defs/RuntimeKind"
+          },
+          "models": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "status": {
+            "$ref": "#/$defs/RuntimeStatus"
+          },
+          "version": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "kind",
+          "endpoint",
+          "status",
+          "models"
+        ],
+        "type": "object"
+      },
+      "FitLevel": {
+        "enum": [
+          "recommended",
+          "comfortable",
+          "tight",
+          "insufficient"
+        ],
+        "type": "string"
+      },
+      "HardwareProfile": {
+        "additionalProperties": false,
+        "properties": {
+          "architecture": {
+            "type": "string"
+          },
+          "availableRamBytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "freeStorageBytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "gpuName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "logicalCpuCores": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "totalRamBytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "vramBytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "architecture",
+          "logicalCpuCores",
+          "totalRamBytes",
+          "availableRamBytes",
+          "freeStorageBytes"
+        ],
+        "type": "object"
+      },
+      "ModelRecommendation": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "fitLevel": {
+            "$ref": "#/$defs/FitLevel"
+          },
+          "minimumRamBytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "modelTag": {
+            "type": "string"
+          },
+          "parameterSize": {
+            "type": "string"
+          },
+          "quantization": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "modelTag",
+          "parameterSize",
+          "quantization",
+          "minimumRamBytes",
+          "description",
+          "fitLevel"
+        ],
+        "type": "object"
+      },
+      "RuntimeKind": {
+        "enum": [
+          "ollama",
+          "lmStudio",
+          "customLoopback"
+        ],
+        "type": "string"
+      },
+      "RuntimeStatus": {
+        "enum": [
+          "available",
+          "offline",
+          "unsupported"
+        ],
+        "type": "string"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "downloadConsentRequired": {
+        "type": "boolean"
+      },
+      "hardware": {
+        "$ref": "#/$defs/HardwareProfile"
+      },
+      "recommendations": {
+        "items": {
+          "$ref": "#/$defs/ModelRecommendation"
+        },
+        "type": "array"
+      },
+      "runtimes": {
+        "items": {
+          "$ref": "#/$defs/DiscoveredRuntime"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "hardware",
+      "runtimes",
+      "recommendations",
+      "downloadConsentRequired"
+    ],
+    "title": "AiDiscoveryResponse",
+    "type": "object"
+  },
   "ArtifactChunk": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
@@ -293,6 +502,59 @@
     "title": "DeleteRelationshipRequest",
     "type": "object"
   },
+  "DiscoveredRuntime": {
+    "$defs": {
+      "RuntimeKind": {
+        "enum": [
+          "ollama",
+          "lmStudio",
+          "customLoopback"
+        ],
+        "type": "string"
+      },
+      "RuntimeStatus": {
+        "enum": [
+          "available",
+          "offline",
+          "unsupported"
+        ],
+        "type": "string"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "endpoint": {
+        "type": "string"
+      },
+      "kind": {
+        "$ref": "#/$defs/RuntimeKind"
+      },
+      "models": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "status": {
+        "$ref": "#/$defs/RuntimeStatus"
+      },
+      "version": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "kind",
+      "endpoint",
+      "status",
+      "models"
+    ],
+    "title": "DiscoveredRuntime",
+    "type": "object"
+  },
   "EnqueueExportRequest": {
     "$defs": {
       "ExportSelection": {
@@ -389,6 +651,58 @@
       "selection"
     ],
     "title": "EnqueueExportRequest",
+    "type": "object"
+  },
+  "HardwareProfile": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "architecture": {
+        "type": "string"
+      },
+      "availableRamBytes": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "freeStorageBytes": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "gpuName": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "logicalCpuCores": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "totalRamBytes": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "vramBytes": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "architecture",
+      "logicalCpuCores",
+      "totalRamBytes",
+      "availableRamBytes",
+      "freeStorageBytes"
+    ],
+    "title": "HardwareProfile",
     "type": "object"
   },
   "Job": {
@@ -2083,6 +2397,53 @@
       "draft"
     ],
     "title": "MemoryWriteRequest",
+    "type": "object"
+  },
+  "ModelRecommendation": {
+    "$defs": {
+      "FitLevel": {
+        "enum": [
+          "recommended",
+          "comfortable",
+          "tight",
+          "insufficient"
+        ],
+        "type": "string"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "description": {
+        "type": "string"
+      },
+      "fitLevel": {
+        "$ref": "#/$defs/FitLevel"
+      },
+      "minimumRamBytes": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "modelTag": {
+        "type": "string"
+      },
+      "parameterSize": {
+        "type": "string"
+      },
+      "quantization": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "modelTag",
+      "parameterSize",
+      "quantization",
+      "minimumRamBytes",
+      "description",
+      "fitLevel"
+    ],
+    "title": "ModelRecommendation",
     "type": "object"
   },
   "OpenWorkspaceRequest": {

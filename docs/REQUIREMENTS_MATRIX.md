@@ -22,7 +22,7 @@ Status vocabulary: `provisional`, `planned`, `in progress`, `verified`, `blocked
 | AN-006 | Ask ANANSI | AI/orchestration | P0 | Search, providers, context | M3, M4 | planned | Grounded answer workflow with citations/provenance |
 | AN-007 | AI Matrix | AI/orchestration | P1 | Provider contracts | M5 | planned | Multi-provider routing and failure tests |
 | AN-008 | OAuth and API keys | Integrations/security | P0 | Secret storage, auth | M5 | planned | Token lifecycle and redaction tests |
-| AN-009 | Local LLMs | AI/providers | P0 | Provider adapter, Ollama contract | M3, M14 | in progress | M3.3 runtime discovery and truthful hardware profiling designed before coding; offline inference smoke test with explicit consent |
+| AN-009 | Local LLMs | AI/providers | P0 | Provider adapter, Ollama contract | M3, M14 | in progress | M3.3 runtime discovery, hardware inspection, tiered recommendations and explicit download consent verified: [evidence](evidence/M3-3.md); offline inference smoke test with explicit consent |
 | AN-010 | Context Compiler | AI/context | P0 | Memory/search, policy | M3, M4 | planned | Deterministic context fixture tests |
 | AN-011 | Big Brain | AI/orchestration | P1 | Context Compiler, providers | M4 (design gate) | blocked | End-to-end reasoning workflow and audit evidence |
 | AN-012 | Product Forge | Product/workflow | P1 | Core, permissions | M7, M12 | planned | Real artifact workflow and persistence tests |

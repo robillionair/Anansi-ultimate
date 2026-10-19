@@ -128,3 +128,67 @@ test('relationship HTTP/native operations use scoped routes, validated DTOs and 
     assert.deepEqual(args,{command:'create',request:{contractVersion:1,workspaceId:'w'.repeat(32),draft:{sourceId:'s'.repeat(32),targetId:'t'.repeat(32),predicate:'relates_to'}}});
   }finally{if(window)Object.defineProperty(globalThis,'window',window);else Reflect.deleteProperty(globalThis,'window');}
 });
+
+test('ai discovery HTTP/native operations use scoped routes and validated DTOs',async()=>{
+  const original=globalThis.fetch;let address='';let body:Record<string,unknown>={};
+  const discoveryResponse={
+    contractVersion:1,
+    downloadConsentRequired:true,
+    hardware:{
+      architecture:'x86_64',
+      logicalCpuCores:8,
+      totalRamBytes:16*1024*1024*1024,
+      availableRamBytes:10*1024*1024*1024,
+      freeStorageBytes:100*1024*1024*1024,
+      gpuName:'NVIDIA GeForce GTX 1050',
+      vramBytes:2*1024*1024*1024,
+    },
+    runtimes:[
+      {
+        endpoint:'http://127.0.0.1:11434',
+        kind:'ollama' as const,
+        status:'available' as const,
+        models:['llama3.1:8b'],
+        version:'0.3.12',
+      },
+    ],
+    recommendations:[
+      {
+        modelTag:'llama3.1:8b-instruct-q4_K_M',
+        parameterSize:'8B',
+        quantization:'Q4_K_M',
+        minimumRamBytes:8*1024*1024*1024,
+        description:'Balanced general reasoning',
+        fitLevel:'recommended' as const,
+      },
+    ],
+  };
+  try{
+    globalThis.fetch=async(url,options)=>{
+      address=String(url);
+      body=JSON.parse(options!.body as string);
+      return new Response(JSON.stringify(discoveryResponse));
+    };
+    const client=httpClient('http://127.0.0.1:1451','a'.repeat(64));
+    const res=await client.aiDiscovery(['http://127.0.0.1:8080']);
+    assert.equal(new URL(address).pathname,'/v1/ai/discovery');
+    assert.deepEqual(body.customEndpoints,['http://127.0.0.1:8080']);
+    assert.equal(res.downloadConsentRequired,true);
+    assert.equal(res.hardware.architecture,'x86_64');
+    assert.equal(res.runtimes[0].kind,'ollama');
+
+    // Rejection on malformed response
+    globalThis.fetch=async()=>new Response(JSON.stringify({...discoveryResponse,contractVersion:2}));
+    await assert.rejects(client.aiDiscovery(),/incompatible/);
+  }finally{globalThis.fetch=original;}
+
+  const window=Object.getOwnPropertyDescriptor(globalThis,'window');let command='',args:unknown;
+  Object.defineProperty(globalThis,'window',{configurable:true,value:{__TAURI_INTERNALS__:{invoke:async(c:string,a:unknown)=>{command=c;args=a;return discoveryResponse;}}}});
+  try{
+    const nativeRes=await nativeClient().aiDiscovery();
+    assert.equal(command,'ai_command');
+    assert.deepEqual(args,{command:'discovery',request:{contractVersion:1,customEndpoints:undefined}});
+    assert.equal(nativeRes.downloadConsentRequired,true);
+  }finally{if(window)Object.defineProperty(globalThis,'window',window);else Reflect.deleteProperty(globalThis,'window');}
+});
+

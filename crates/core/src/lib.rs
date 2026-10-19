@@ -1,5 +1,6 @@
 pub mod readiness;
 pub use readiness::*;
+pub mod ai_discovery;
 pub mod backup;
 pub mod backup_commands;
 pub mod backup_upload;

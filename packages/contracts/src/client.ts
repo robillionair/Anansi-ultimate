@@ -1,8 +1,8 @@
-import { validReadiness, validError, validWorkspaceDetails, validWorkspaceList, validMemoryDetails, validMemoryList, validRelationshipDetails, validRelationshipList, validJobDetails, validJobList, validArtifactChunk } from './validators.mjs';
+import { validReadiness, validError, validWorkspaceDetails, validWorkspaceList, validMemoryDetails, validMemoryList, validRelationshipDetails, validRelationshipList, validJobDetails, validJobList, validArtifactChunk, validAiDiscoveryResponse } from './validators.mjs';
 import { invoke } from '@tauri-apps/api/core';
 import {validSnapshotPreview,validRestoreResult,validBackupSchedule,validUploadStatus} from './validators.mjs';
-import type {SnapshotPreview,RestoreResult,BackupSchedule} from './generated';
-export type {SnapshotPreview,RestoreResult,BackupSchedule} from './generated';
+import type {SnapshotPreview,RestoreResult,BackupSchedule,AiDiscoveryResponse,HardwareProfile,DiscoveredRuntime,ModelRecommendation,RuntimeKind,RuntimeStatus,FitLevel} from './generated';
+export type {SnapshotPreview,RestoreResult,BackupSchedule,AiDiscoveryResponse,HardwareProfile,DiscoveredRuntime,ModelRecommendation,RuntimeKind,RuntimeStatus,FitLevel} from './generated';
 import type { Readiness, WorkspaceDetails, WorkspaceList, Intent, MemoryDraft, MemoryDetails, MemoryList, MemoryMetadata, Privacy, LifecycleChange, RelationshipDraft, RelationshipRecord, RelationshipDetails, RelationshipList, Job, JobDetails, JobList, ArtifactChunk, ExportSelection, JobAction } from './generated';
 export type { Readiness, WorkspaceDetails, WorkspaceList, Intent, MemoryDraft, MemoryDetails, MemoryList, MemoryMetadata, Privacy, LifecycleChange, RelationshipDraft, RelationshipRecord, RelationshipDetails, RelationshipList, Job, JobDetails, JobList, ArtifactChunk, ExportSelection, JobAction } from './generated';
 export interface Client {
@@ -29,6 +29,7 @@ export interface Client {
   createWorkspace(name: string): Promise<WorkspaceDetails>;
   openWorkspace(id: string): Promise<WorkspaceDetails>;
   updateSettings(id: string, reducedMotion: boolean, preferences?: {intent?:Intent;onboardingComplete?:boolean}): Promise<WorkspaceDetails>;
+  aiDiscovery(customEndpoints?: string[]): Promise<AiDiscoveryResponse>;
 }
 function decode<T extends {contractVersion:number}>(value:unknown, validate:(value:unknown)=>value is T):T {
   if(!validate(value)||value.contractVersion!==1)throw new Error('The core returned an incompatible response. Update both applications.');
@@ -93,6 +94,7 @@ function client(call:Call):Client {
     createWorkspace:async name=>decode(await call('create',{name}),validWorkspaceDetails),
     openWorkspace:async id=>decode(await call('open',{id}),validWorkspaceDetails),
     updateSettings:async(id,reducedMotion,preferences={})=>decode(await call('settings',{id,reducedMotion,...preferences}),validWorkspaceDetails),
+    aiDiscovery:async(customEndpoints)=>decode(await call('ai/discovery',{customEndpoints}),validAiDiscoveryResponse),
   };
 }
 export function httpClient(endpoint:string,token:string):Client {
@@ -102,7 +104,7 @@ export function httpClient(endpoint:string,token:string):Client {
   if(!/^[a-f0-9]{64}$/.test(token))throw new Error('Enter the 64-character token from the current private pairing file.');
   return client(async(operation,request)=>{
     let response:Response;
-    const path = operation.startsWith('jobs/') || operation.startsWith('memories/') || operation.startsWith('relationships/')
+    const path = operation.startsWith('jobs/') || operation.startsWith('memories/') || operation.startsWith('relationships/') || operation.startsWith('ai/')
       ? operation
       : operation === 'readiness'
       ? 'readiness'
@@ -119,6 +121,7 @@ export function nativeClient():Client {
       if(operation.startsWith('jobs/'))return await invoke('job_command',{command:operation.slice(5),request:{contractVersion:1,...request}});
       if(operation.startsWith('memories/'))return await invoke('memory_command',{command:operation.slice(9),request:{contractVersion:1,...request}});
       if(operation.startsWith('relationships/'))return await invoke('relationship_command',{command:operation.slice(14),request:{contractVersion:1,...request}});
+      if(operation.startsWith('ai/'))return await invoke('ai_command',{command:operation.slice(3),request:{contractVersion:1,...request}});
       if(operation==='readiness')return await invoke('get_readiness',{request:{contractVersion:1}});
       return await invoke('workspace_command',{command:operation,request:{contractVersion:1,...request}});
     }

@@ -1,5 +1,7 @@
 // Generated from Rust schemas.
-import type {ArtifactChunk,BackupRequest,BackupSchedule,CommandError,ControlJobRequest,CreateRelationshipRequest,CreateWorkspaceRequest,DeleteRelationshipRequest,EnqueueExportRequest,Job,JobDetails,JobList,ListJobsRequest,ListRelationshipsRequest,MemoryDetails,MemoryDraft,MemoryList,MemoryListRequest,MemoryMetadata,MemoryReadRequest,MemoryWriteRequest,OpenWorkspaceRequest,ReadArtifactRequest,Readiness,ReadinessRequest,RelationshipDetails,RelationshipDraft,RelationshipList,RelationshipRecord,RestoreRequest,RestoreResult,ScheduleReadRequest,ScheduleRequest,SnapshotPreview,SnapshotRequest,UpdateSettingsRequest,UploadBegin,UploadPart,UploadStatus,WorkspaceDetails,WorkspaceList} from './generated';
+import type {AiDiscoveryRequest,AiDiscoveryResponse,ArtifactChunk,BackupRequest,BackupSchedule,CommandError,ControlJobRequest,CreateRelationshipRequest,CreateWorkspaceRequest,DeleteRelationshipRequest,DiscoveredRuntime,EnqueueExportRequest,HardwareProfile,Job,JobDetails,JobList,ListJobsRequest,ListRelationshipsRequest,MemoryDetails,MemoryDraft,MemoryList,MemoryListRequest,MemoryMetadata,MemoryReadRequest,MemoryWriteRequest,ModelRecommendation,OpenWorkspaceRequest,ReadArtifactRequest,Readiness,ReadinessRequest,RelationshipDetails,RelationshipDraft,RelationshipList,RelationshipRecord,RestoreRequest,RestoreResult,ScheduleReadRequest,ScheduleRequest,SnapshotPreview,SnapshotRequest,UpdateSettingsRequest,UploadBegin,UploadPart,UploadStatus,WorkspaceDetails,WorkspaceList} from './generated';
+export function validAiDiscoveryRequest(value:unknown):value is AiDiscoveryRequest;
+export function validAiDiscoveryResponse(value:unknown):value is AiDiscoveryResponse;
 export function validArtifactChunk(value:unknown):value is ArtifactChunk;
 export function validBackupRequest(value:unknown):value is BackupRequest;
 export function validBackupSchedule(value:unknown):value is BackupSchedule;
@@ -8,7 +10,9 @@ export function validControlJobRequest(value:unknown):value is ControlJobRequest
 export function validCreateRelationshipRequest(value:unknown):value is CreateRelationshipRequest;
 export function validCreateWorkspaceRequest(value:unknown):value is CreateWorkspaceRequest;
 export function validDeleteRelationshipRequest(value:unknown):value is DeleteRelationshipRequest;
+export function validDiscoveredRuntime(value:unknown):value is DiscoveredRuntime;
 export function validEnqueueExportRequest(value:unknown):value is EnqueueExportRequest;
+export function validHardwareProfile(value:unknown):value is HardwareProfile;
 export function validJob(value:unknown):value is Job;
 export function validJobDetails(value:unknown):value is JobDetails;
 export function validJobList(value:unknown):value is JobList;
@@ -21,6 +25,7 @@ export function validMemoryListRequest(value:unknown):value is MemoryListRequest
 export function validMemoryMetadata(value:unknown):value is MemoryMetadata;
 export function validMemoryReadRequest(value:unknown):value is MemoryReadRequest;
 export function validMemoryWriteRequest(value:unknown):value is MemoryWriteRequest;
+export function validModelRecommendation(value:unknown):value is ModelRecommendation;
 export function validOpenWorkspaceRequest(value:unknown):value is OpenWorkspaceRequest;
 export function validReadArtifactRequest(value:unknown):value is ReadArtifactRequest;
 export function validReadiness(value:unknown):value is Readiness;

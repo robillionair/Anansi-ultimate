@@ -1,4 +1,43 @@
 // Generated from Rust serde DTOs. Run pnpm contracts:generate.
+export interface AiDiscoveryRequest {
+  contractVersion: number;
+  customEndpoints?: string[] | null;
+}
+export type FitLevel = "recommended" | "comfortable" | "tight" | "insufficient";
+export type RuntimeKind = "ollama" | "lmStudio" | "customLoopback";
+export type RuntimeStatus = "available" | "offline" | "unsupported";
+
+export interface AiDiscoveryResponse {
+  contractVersion: number;
+  downloadConsentRequired: boolean;
+  hardware: HardwareProfile;
+  recommendations: ModelRecommendation[];
+  runtimes: DiscoveredRuntime[];
+}
+export interface HardwareProfile {
+  architecture: string;
+  availableRamBytes: number;
+  freeStorageBytes: number;
+  gpuName?: string | null;
+  logicalCpuCores: number;
+  totalRamBytes: number;
+  vramBytes?: number | null;
+}
+export interface ModelRecommendation {
+  description: string;
+  fitLevel: FitLevel;
+  minimumRamBytes: number;
+  modelTag: string;
+  parameterSize: string;
+  quantization: string;
+}
+export interface DiscoveredRuntime {
+  endpoint: string;
+  kind: RuntimeKind;
+  models: string[];
+  status: RuntimeStatus;
+  version?: string | null;
+}
 export interface ArtifactChunk {
   bytes: number[];
   contractVersion: number;
@@ -73,6 +112,14 @@ export interface DeleteRelationshipRequest {
   id: string;
   workspaceId: string;
 }
+
+export interface DiscoveredRuntime {
+  endpoint: string;
+  kind: RuntimeKind;
+  models: string[];
+  status: RuntimeStatus;
+  version?: string | null;
+}
 export type ExportSelection =
   | {
       kind: "workspace";
@@ -94,6 +141,15 @@ export interface EnqueueExportRequest {
   contractVersion: number;
   selection: ExportSelection;
   workspaceId: string;
+}
+export interface HardwareProfile {
+  architecture: string;
+  availableRamBytes: number;
+  freeStorageBytes: number;
+  gpuName?: string | null;
+  logicalCpuCores: number;
+  totalRamBytes: number;
+  vramBytes?: number | null;
 }
 export type JobState = "Queued" | "Running" | "Paused" | "Completed" | "Failed" | "Cancelled";
 
@@ -352,6 +408,15 @@ export interface LifecycleChange {
   confirmed: boolean;
   state: MemoryState;
   successorId?: string | null;
+}
+
+export interface ModelRecommendation {
+  description: string;
+  fitLevel: FitLevel;
+  minimumRamBytes: number;
+  modelTag: string;
+  parameterSize: string;
+  quantization: string;
 }
 export interface OpenWorkspaceRequest {
   contractVersion: number;

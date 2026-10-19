@@ -11,6 +11,7 @@ import { KnowledgeRecords } from '../src/KnowledgeRecords';
 import { Jobs } from '../src/Jobs';
 import {Backups} from '../src/Backups';
 import {Search} from '../src/Search';
+import {LocalModels} from '../src/LocalModels';
 
 test('search states its title-only scope, limits and explicit local submission',()=>{
   const html=renderToStaticMarkup(<Search client={{} as any} workspaceId={'a'.repeat(32)}/>);
@@ -57,6 +58,38 @@ const mockClient: any = {
     body: 'Sample body',
   }),
   listRelationships: async () => ({ contractVersion: 1, relationships: [] }),
+  aiDiscovery: async () => ({
+    contractVersion: 1,
+    downloadConsentRequired: true,
+    hardware: {
+      architecture: 'x86_64',
+      logicalCpuCores: 8,
+      totalRamBytes: 16 * 1024 * 1024 * 1024,
+      availableRamBytes: 10 * 1024 * 1024 * 1024,
+      freeStorageBytes: 100 * 1024 * 1024 * 1024,
+      gpuName: 'NVIDIA GeForce GTX 1050',
+      vramBytes: 2 * 1024 * 1024 * 1024,
+    },
+    runtimes: [
+      {
+        endpoint: 'http://127.0.0.1:11434',
+        kind: 'ollama',
+        status: 'available',
+        models: ['llama3.1:8b'],
+        version: '0.3.12',
+      },
+    ],
+    recommendations: [
+      {
+        modelTag: 'llama3.1:8b-instruct-q4_K_M',
+        parameterSize: '8B',
+        quantization: 'Q4_K_M',
+        minimumRamBytes: 8 * 1024 * 1024 * 1024,
+        description: 'Balanced general reasoning',
+        fitLevel: 'recommended',
+      },
+    ],
+  }),
 };
 
 test('all five intents have labeled native radio controls and one checked choice', () => {
@@ -74,9 +107,11 @@ test('navigation has a small active set, complete grouped unavailable tools and 
   assert.ok(html.includes('aria-label="Main navigation"'));
   assert.ok(html.includes('aria-current="page"'));
   assert.ok(html.includes('disabled=""'));
-  assert.equal((html.match(/<button/g) || []).length, 12);
+  assert.equal((html.match(/<button/g) || []).length, 13);
   assert.ok(!plannedGroups.some(group=>group.items.includes('Search')));
+  assert.ok(!plannedGroups.some(group=>group.items.includes('Local Models')));
   assert.match(renderToStaticMarkup(<Navigation view="search" hasWorkspace={true} onNavigate={()=>{}}/>),/aria-current="page"[^>]*>Search<\/button>/);
+  assert.match(renderToStaticMarkup(<Navigation view="models" hasWorkspace={true} onNavigate={()=>{}}/>),/aria-current="page"[^>]*>Local Models<\/button>/);
   for (const group of plannedGroups) for (const item of group.items) assert.ok(html.includes(item));
   assert.ok(html.includes('not available yet'));
   assert.ok(html.includes('separate consent'));
@@ -131,4 +166,14 @@ test('knowledge records view renders kind selector, filter and entity editor', (
   assert.ok(html.includes('Filter by kind:'));
   assert.ok(html.includes('Record kind'));
   assert.ok(html.includes('Create a knowledge record'));
+});
+
+test('local models view renders hardware profile, discovered runtimes, and explicit consent callout', () => {
+  const html = renderToStaticMarkup(<LocalModels client={mockClient} />);
+  assert.ok(html.includes('System Capability &amp; Hardware Profile'));
+  assert.ok(html.includes('Detected Local AI Runtimes'));
+  assert.ok(html.includes('Recommended Local Models for Your Hardware'));
+  assert.ok(html.includes('Automatic background model downloads and unprompted cloud fallbacks are disabled'));
+  assert.ok(html.includes('Add Custom Loopback Endpoint'));
+  assert.ok(html.includes('Re-probe System'));
 });
