@@ -68,7 +68,13 @@ fn main() {
         "AskRequest":schemars::schema_for!(anansi_core::ask::AskRequest),
         "AskResponse":schemars::schema_for!(anansi_core::ask::AskResponse),
         "GroundedCitation":schemars::schema_for!(anansi_core::ask::GroundedCitation),
-        "DisclosureManifest":schemars::schema_for!(anansi_core::ask::DisclosureManifest)
+        "DisclosureManifest":schemars::schema_for!(anansi_core::ask::DisclosureManifest),
+        "HybridSearchRequest":schemars::schema_for!(anansi_core::hybrid::HybridSearchRequest),
+        "HybridSearchResult":schemars::schema_for!(anansi_core::hybrid::HybridSearchResult),
+        "HybridSearchResponse":schemars::schema_for!(anansi_core::hybrid::HybridSearchResponse),
+        "ContextCompilationRequest":schemars::schema_for!(anansi_core::context::ContextCompilationRequest),
+        "CompiledContext":schemars::schema_for!(anansi_core::context::CompiledContext),
+        "ContextChunk":schemars::schema_for!(anansi_core::context::ContextChunk)
     });
     println!("{}", serde_json::to_string_pretty(&schemas).unwrap());
 }

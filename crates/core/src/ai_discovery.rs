@@ -691,6 +691,41 @@ impl Core {
                 let response = self.ask_anansi(req)?;
                 serde_json::to_value(response).map_err(|_| crate::storage::unavailable())
             }
+            "hybrid-search" => {
+                let req: crate::hybrid::HybridSearchRequest = serde_json::from_value(value)
+                    .map_err(|_| {
+                        CommandError::new(
+                            ErrorCode::InvalidRequest,
+                            "Use the supported hybrid search request.",
+                        )
+                    })?;
+                let storage = self.storage()?;
+                let conn = storage
+                    .connection(false)?
+                    .ok_or_else(crate::storage::unavailable)?;
+                let results = crate::hybrid::hybrid_search(&conn, &req)?;
+                let response = crate::hybrid::HybridSearchResponse {
+                    contract_version: 1,
+                    results,
+                };
+                serde_json::to_value(response).map_err(|_| crate::storage::unavailable())
+            }
+            "context" => {
+                let req: crate::context::ContextCompilationRequest = serde_json::from_value(value)
+                    .map_err(|_| {
+                        CommandError::new(
+                            ErrorCode::InvalidRequest,
+                            "Use the supported context compilation request.",
+                        )
+                    })?;
+                let storage = self.storage()?;
+                let conn = storage
+                    .connection(false)?
+                    .ok_or_else(crate::storage::unavailable)?;
+                let root = storage.root_path();
+                let response = crate::context::compile_context(&conn, root, &req)?;
+                serde_json::to_value(response).map_err(|_| crate::storage::unavailable())
+            }
             _ => Err(CommandError::new(
                 ErrorCode::InvalidRequest,
                 "Use a supported AI command.",

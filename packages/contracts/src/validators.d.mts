@@ -1,5 +1,5 @@
 // Generated from Rust schemas.
-import type {AiDiscoveryRequest,AiDiscoveryResponse,ArtifactChunk,AskRequest,AskResponse,BackupRequest,BackupSchedule,CommandError,ControlJobRequest,CreateRelationshipRequest,CreateWorkspaceRequest,DeleteRelationshipRequest,DisclosureManifest,DiscoveredRuntime,EnqueueExportRequest,GroundedCitation,HardwareProfile,Job,JobDetails,JobList,ListJobsRequest,ListRelationshipsRequest,MemoryDetails,MemoryDraft,MemoryList,MemoryListRequest,MemoryMetadata,MemoryReadRequest,MemoryWriteRequest,ModelRecommendation,OpenWorkspaceRequest,ReadArtifactRequest,Readiness,ReadinessRequest,RelationshipDetails,RelationshipDraft,RelationshipList,RelationshipRecord,RestoreRequest,RestoreResult,ScheduleReadRequest,ScheduleRequest,SnapshotPreview,SnapshotRequest,UpdateSettingsRequest,UploadBegin,UploadPart,UploadStatus,WorkspaceDetails,WorkspaceList} from './generated';
+import type {AiDiscoveryRequest,AiDiscoveryResponse,ArtifactChunk,AskRequest,AskResponse,BackupRequest,BackupSchedule,CommandError,CompiledContext,ContextChunk,ContextCompilationRequest,ControlJobRequest,CreateRelationshipRequest,CreateWorkspaceRequest,DeleteRelationshipRequest,DisclosureManifest,DiscoveredRuntime,EnqueueExportRequest,GroundedCitation,HardwareProfile,HybridSearchRequest,HybridSearchResponse,HybridSearchResult,Job,JobDetails,JobList,ListJobsRequest,ListRelationshipsRequest,MemoryDetails,MemoryDraft,MemoryList,MemoryListRequest,MemoryMetadata,MemoryReadRequest,MemoryWriteRequest,ModelRecommendation,OpenWorkspaceRequest,ReadArtifactRequest,Readiness,ReadinessRequest,RelationshipDetails,RelationshipDraft,RelationshipList,RelationshipRecord,RestoreRequest,RestoreResult,ScheduleReadRequest,ScheduleRequest,SnapshotPreview,SnapshotRequest,UpdateSettingsRequest,UploadBegin,UploadPart,UploadStatus,WorkspaceDetails,WorkspaceList} from './generated';
 export function validAiDiscoveryRequest(value:unknown):value is AiDiscoveryRequest;
 export function validAiDiscoveryResponse(value:unknown):value is AiDiscoveryResponse;
 export function validArtifactChunk(value:unknown):value is ArtifactChunk;
@@ -8,6 +8,9 @@ export function validAskResponse(value:unknown):value is AskResponse;
 export function validBackupRequest(value:unknown):value is BackupRequest;
 export function validBackupSchedule(value:unknown):value is BackupSchedule;
 export function validError(value:unknown):value is CommandError;
+export function validCompiledContext(value:unknown):value is CompiledContext;
+export function validContextChunk(value:unknown):value is ContextChunk;
+export function validContextCompilationRequest(value:unknown):value is ContextCompilationRequest;
 export function validControlJobRequest(value:unknown):value is ControlJobRequest;
 export function validCreateRelationshipRequest(value:unknown):value is CreateRelationshipRequest;
 export function validCreateWorkspaceRequest(value:unknown):value is CreateWorkspaceRequest;
@@ -17,6 +20,9 @@ export function validDiscoveredRuntime(value:unknown):value is DiscoveredRuntime
 export function validEnqueueExportRequest(value:unknown):value is EnqueueExportRequest;
 export function validGroundedCitation(value:unknown):value is GroundedCitation;
 export function validHardwareProfile(value:unknown):value is HardwareProfile;
+export function validHybridSearchRequest(value:unknown):value is HybridSearchRequest;
+export function validHybridSearchResponse(value:unknown):value is HybridSearchResponse;
+export function validHybridSearchResult(value:unknown):value is HybridSearchResult;
 export function validJob(value:unknown):value is Job;
 export function validJobDetails(value:unknown):value is JobDetails;
 export function validJobList(value:unknown):value is JobList;

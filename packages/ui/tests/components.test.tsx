@@ -19,6 +19,18 @@ test('search states its title-only scope, limits and explicit local submission',
   assert.match(html,/Search saved titles/);assert.match(html,/Bodies and semantic search are not included/);assert.match(html,/10,000/);assert.match(html,/Nothing is sent/);assert.match(html,/Search titles/);assert.doesNotMatch(html,/Search result revision/);
 });
 
+test('search renders mode selector with title, full body, and hybrid semantic options',()=>{
+  const html=renderToStaticMarkup(<Search client={{} as any} workspaceId={'a'.repeat(32)}/>);
+  assert.match(html,/Search mode/);
+  assert.match(html,/Title only/);
+  assert.match(html,/Full-body/);
+  assert.match(html,/Hybrid semantic/);
+  assert.match(html,/value="title"/);
+  assert.match(html,/value="body"/);
+  assert.match(html,/value="hybrid"/);
+});
+
+
 test('backup creation and restore expose real plaintext/destination/retention consent',()=>{
   const html=renderToStaticMarkup(<Backups client={{} as any} workspaceId={'a'.repeat(32)}/>);
   assert.match(html,/Create backup/);assert.match(html,/disabled=""/);assert.match(html,/plaintext/);assert.match(html,/Keep all versions/);assert.match(html,/Runs only while/);assert.doesNotMatch(html,/Restore verified backup/);

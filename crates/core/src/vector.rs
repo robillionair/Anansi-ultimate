@@ -4,6 +4,7 @@
 
 use chrono::Utc;
 use rusqlite::{Connection, OptionalExtension, params};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::{
     io::{Read, Write},
@@ -15,9 +16,9 @@ pub const MIN_DIMENSIONS: usize = 2;
 pub const MAX_DIMENSIONS: usize = 1536;
 pub const MAX_EMBEDDING_INPUT_BYTES: usize = 8192;
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct EmbeddingVector {
-    values: Vec<f32>,
+    pub values: Vec<f32>,
 }
 
 #[derive(Debug)]

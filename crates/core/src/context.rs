@@ -11,11 +11,13 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::path::Path;
 
+use schemars::JsonSchema;
+
 pub const DEFAULT_MAX_BUDGET_CHARS: usize = 4_000;
 pub const MAX_ALLOWED_BUDGET_CHARS: usize = 32_000;
 pub const MAX_CHUNK_CHARS: usize = 1_000;
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ContextChunk {
     pub memory_id: String,
@@ -28,9 +30,10 @@ pub struct ContextChunk {
     pub token_estimate: usize,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct CompiledContext {
+    pub contract_version: u8,
     pub evidence_chunks: Vec<ContextChunk>,
     pub citations: Vec<GroundedCitation>,
     pub disclosure_manifest: DisclosureManifest,
@@ -39,7 +42,7 @@ pub struct CompiledContext {
     pub total_tokens: usize,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ContextCompilationRequest {
     pub workspace_id: String,
@@ -331,6 +334,7 @@ pub fn compile_context(
     };
 
     Ok(CompiledContext {
+        contract_version: 1,
         evidence_chunks,
         citations,
         disclosure_manifest: manifest,

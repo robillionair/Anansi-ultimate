@@ -557,6 +557,312 @@
     "title": "CommandError",
     "type": "object"
   },
+  "CompiledContext": {
+    "$defs": {
+      "ContextChunk": {
+        "properties": {
+          "chunkIndex": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "content": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "lineNumber": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "memoryId": {
+            "type": "string"
+          },
+          "sectionHeading": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "tokenEstimate": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "memoryId",
+          "chunkIndex",
+          "title",
+          "kind",
+          "content",
+          "tokenEstimate"
+        ],
+        "type": "object"
+      },
+      "DisclosureManifest": {
+        "additionalProperties": false,
+        "properties": {
+          "characterCount": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "compiledPrompt": {
+            "type": "string"
+          },
+          "endpoint": {
+            "type": "string"
+          },
+          "estimatedTokens": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "modelTag": {
+            "type": "string"
+          },
+          "routingReason": {
+            "type": "string"
+          },
+          "runtimeKind": {
+            "type": "string"
+          },
+          "sourceMemories": {
+            "items": {
+              "$ref": "#/$defs/SourceMemoryReference"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "runtimeKind",
+          "endpoint",
+          "modelTag",
+          "sourceMemories",
+          "characterCount",
+          "estimatedTokens",
+          "routingReason",
+          "compiledPrompt"
+        ],
+        "type": "object"
+      },
+      "GroundedCitation": {
+        "additionalProperties": false,
+        "properties": {
+          "index": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "lineNumber": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "memoryId": {
+            "type": "string"
+          },
+          "sectionHeading": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "snippet": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "index",
+          "memoryId",
+          "title",
+          "kind",
+          "snippet"
+        ],
+        "type": "object"
+      },
+      "SourceMemoryReference": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "kind"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "citations": {
+        "items": {
+          "$ref": "#/$defs/GroundedCitation"
+        },
+        "type": "array"
+      },
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "disclosureManifest": {
+        "$ref": "#/$defs/DisclosureManifest"
+      },
+      "evidenceChunks": {
+        "items": {
+          "$ref": "#/$defs/ContextChunk"
+        },
+        "type": "array"
+      },
+      "systemPrompt": {
+        "type": "string"
+      },
+      "totalCharacters": {
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "totalTokens": {
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "evidenceChunks",
+      "citations",
+      "disclosureManifest",
+      "systemPrompt",
+      "totalCharacters",
+      "totalTokens"
+    ],
+    "title": "CompiledContext",
+    "type": "object"
+  },
+  "ContextChunk": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "chunkIndex": {
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "content": {
+        "type": "string"
+      },
+      "kind": {
+        "type": "string"
+      },
+      "lineNumber": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "memoryId": {
+        "type": "string"
+      },
+      "sectionHeading": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "title": {
+        "type": "string"
+      },
+      "tokenEstimate": {
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "memoryId",
+      "chunkIndex",
+      "title",
+      "kind",
+      "content",
+      "tokenEstimate"
+    ],
+    "title": "ContextChunk",
+    "type": "object"
+  },
+  "ContextCompilationRequest": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "kindFilter": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "maxBudgetChars": {
+        "format": "uint",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "modelTag": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "runtimeEndpoint": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "userPrompt": {
+        "type": "string"
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "workspaceId",
+      "userPrompt"
+    ],
+    "title": "ContextCompilationRequest",
+    "type": "object"
+  },
   "ControlJobRequest": {
     "$defs": {
       "JobAction": {
@@ -1023,6 +1329,236 @@
       "freeStorageBytes"
     ],
     "title": "HardwareProfile",
+    "type": "object"
+  },
+  "HybridSearchRequest": {
+    "$defs": {
+      "EmbeddingVector": {
+        "properties": {
+          "values": {
+            "items": {
+              "format": "float",
+              "type": "number"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "values"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "includeArchived": {
+        "default": false,
+        "type": "boolean"
+      },
+      "kind": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "lexicalWeight": {
+        "default": 1,
+        "format": "float",
+        "type": "number"
+      },
+      "limit": {
+        "default": 10,
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "model": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "query": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "queryVector": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/EmbeddingVector"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "rrfK": {
+        "default": 60,
+        "format": "float",
+        "type": "number"
+      },
+      "semanticWeight": {
+        "default": 1,
+        "format": "float",
+        "type": "number"
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "workspaceId"
+    ],
+    "title": "HybridSearchRequest",
+    "type": "object"
+  },
+  "HybridSearchResponse": {
+    "$defs": {
+      "HybridSearchResult": {
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "lexicalRank": {
+            "format": "uint",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "lineNumber": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "memoryId": {
+            "type": "string"
+          },
+          "rrfScore": {
+            "format": "float",
+            "type": "number"
+          },
+          "sectionHeading": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "semanticRank": {
+            "format": "uint",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "snippet": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "memoryId",
+          "title",
+          "kind",
+          "rrfScore"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "results": {
+        "items": {
+          "$ref": "#/$defs/HybridSearchResult"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "results"
+    ],
+    "title": "HybridSearchResponse",
+    "type": "object"
+  },
+  "HybridSearchResult": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "kind": {
+        "type": "string"
+      },
+      "lexicalRank": {
+        "format": "uint",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "lineNumber": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "memoryId": {
+        "type": "string"
+      },
+      "rrfScore": {
+        "format": "float",
+        "type": "number"
+      },
+      "sectionHeading": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "semanticRank": {
+        "format": "uint",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "snippet": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "title": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "memoryId",
+      "title",
+      "kind",
+      "rrfScore"
+    ],
+    "title": "HybridSearchResult",
     "type": "object"
   },
   "Job": {

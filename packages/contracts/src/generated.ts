@@ -121,6 +121,67 @@ export interface CommandError {
   code: ErrorCode;
   message: string;
 }
+export interface CompiledContext {
+  citations: GroundedCitation[];
+  contractVersion: number;
+  disclosureManifest: DisclosureManifest;
+  evidenceChunks: ContextChunk[];
+  systemPrompt: string;
+  totalCharacters: number;
+  totalTokens: number;
+}
+export interface GroundedCitation {
+  index: number;
+  kind: string;
+  lineNumber?: number | null;
+  memoryId: string;
+  sectionHeading?: string | null;
+  snippet: string;
+  title: string;
+}
+export interface DisclosureManifest {
+  characterCount: number;
+  compiledPrompt: string;
+  endpoint: string;
+  estimatedTokens: number;
+  modelTag: string;
+  routingReason: string;
+  runtimeKind: string;
+  sourceMemories: SourceMemoryReference[];
+}
+export interface SourceMemoryReference {
+  id: string;
+  kind: string;
+  title: string;
+}
+export interface ContextChunk {
+  chunkIndex: number;
+  content: string;
+  kind: string;
+  lineNumber?: number | null;
+  memoryId: string;
+  sectionHeading?: string | null;
+  title: string;
+  tokenEstimate: number;
+}
+export interface ContextChunk {
+  chunkIndex: number;
+  content: string;
+  kind: string;
+  lineNumber?: number | null;
+  memoryId: string;
+  sectionHeading?: string | null;
+  title: string;
+  tokenEstimate: number;
+}
+export interface ContextCompilationRequest {
+  kindFilter?: string | null;
+  maxBudgetChars?: number | null;
+  modelTag?: string | null;
+  runtimeEndpoint?: string | null;
+  userPrompt: string;
+  workspaceId: string;
+}
 export type JobAction = "pause" | "resume" | "cancel" | "retry";
 
 export interface ControlJobRequest {
@@ -215,6 +276,47 @@ export interface HardwareProfile {
   logicalCpuCores: number;
   totalRamBytes: number;
   vramBytes?: number | null;
+}
+export interface HybridSearchRequest {
+  includeArchived?: boolean;
+  kind?: string | null;
+  lexicalWeight?: number;
+  limit?: number;
+  model?: string | null;
+  query?: string | null;
+  queryVector?: EmbeddingVector | null;
+  rrfK?: number;
+  semanticWeight?: number;
+  workspaceId: string;
+}
+export interface EmbeddingVector {
+  values: number[];
+}
+export interface HybridSearchResponse {
+  contractVersion: number;
+  results: HybridSearchResult[];
+}
+export interface HybridSearchResult {
+  kind: string;
+  lexicalRank?: number | null;
+  lineNumber?: number | null;
+  memoryId: string;
+  rrfScore: number;
+  sectionHeading?: string | null;
+  semanticRank?: number | null;
+  snippet?: string | null;
+  title: string;
+}
+export interface HybridSearchResult {
+  kind: string;
+  lexicalRank?: number | null;
+  lineNumber?: number | null;
+  memoryId: string;
+  rrfScore: number;
+  sectionHeading?: string | null;
+  semanticRank?: number | null;
+  snippet?: string | null;
+  title: string;
 }
 export type JobState = "Queued" | "Running" | "Paused" | "Completed" | "Failed" | "Cancelled";
 

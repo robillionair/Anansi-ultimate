@@ -264,3 +264,135 @@ test('ask anansi HTTP/native operations use scoped routes and validated DTOs',as
   }finally{if(window)Object.defineProperty(globalThis,'window',window);else Reflect.deleteProperty(globalThis,'window');}
 });
 
+test('hybrid search HTTP/native operations use scoped routes and validated DTOs',async()=>{
+  const original=globalThis.fetch;let address='';let body:Record<string,unknown>={};
+  const hybridResponse={
+    contractVersion:1,
+    results:[
+      {
+        memoryId:'m'.repeat(32),
+        title:'Vector Search Strategy',
+        kind:'decision',
+        rrfScore:0.032,
+        lexicalRank:1,
+        semanticRank:2,
+        sectionHeading:'# Vectors',
+        lineNumber:42,
+        snippet:'Pure Rust SIMD vector search.',
+      },
+    ],
+  };
+  try{
+    globalThis.fetch=async(url,options)=>{
+      address=String(url);
+      body=JSON.parse(options!.body as string);
+      return new Response(JSON.stringify(hybridResponse));
+    };
+    const client=httpClient('http://127.0.0.1:1451','a'.repeat(64));
+    const res=await client.hybridSearch('w'.repeat(32),{query:'vector search',kind:'decision',limit:10});
+    assert.equal(new URL(address).pathname,'/v1/ai/hybrid-search');
+    assert.equal(body.workspaceId,'w'.repeat(32));
+    assert.equal(body.query,'vector search');
+    assert.equal(body.kind,'decision');
+    assert.equal(body.limit,10);
+    assert.equal(res.contractVersion,1);
+    assert.equal(res.results.length,1);
+    assert.equal(res.results[0].rrfScore,0.032);
+    assert.equal(res.results[0].title,'Vector Search Strategy');
+
+    globalThis.fetch=async()=>new Response(JSON.stringify({...hybridResponse,contractVersion:99}));
+    await assert.rejects(client.hybridSearch('w'.repeat(32),{query:'test'}),/incompatible/);
+  }finally{globalThis.fetch=original;}
+
+  const window=Object.getOwnPropertyDescriptor(globalThis,'window');let command='',args:unknown;
+  Object.defineProperty(globalThis,'window',{configurable:true,value:{__TAURI_INTERNALS__:{invoke:async(c:string,a:unknown)=>{command=c;args=a;return hybridResponse;}}}});
+  try{
+    const nativeRes=await nativeClient().hybridSearch('w'.repeat(32),{query:'vector search'});
+    assert.equal(command,'ai_command');
+    assert.deepEqual(args,{command:'hybrid-search',request:{contractVersion:1,workspaceId:'w'.repeat(32),query:'vector search'}});
+    assert.equal(nativeRes.results.length,1);
+    assert.equal(nativeRes.results[0].title,'Vector Search Strategy');
+  }finally{if(window)Object.defineProperty(globalThis,'window',window);else Reflect.deleteProperty(globalThis,'window');}
+});
+
+test('context compilation HTTP/native operations use scoped routes and validated DTOs',async()=>{
+  const original=globalThis.fetch;let address='';let body:Record<string,unknown>={};
+  const compiledContextResponse={
+    contractVersion:1,
+    systemPrompt:'You are ANANSI...',
+    evidenceChunks:[
+      {
+        memoryId:'m'.repeat(32),
+        title:'Vector Search Strategy',
+        kind:'decision',
+        sectionHeading:'# Vectors',
+        lineNumber:42,
+        content:'Pure Rust SIMD vector search.',
+        tokenEstimate:8,
+        chunkIndex:0,
+      },
+    ],
+    citations:[
+      {
+        index:1,
+        memoryId:'m'.repeat(32),
+        title:'Vector Search Strategy',
+        kind:'decision',
+        sectionHeading:'# Vectors',
+        lineNumber:42,
+        snippet:'Pure Rust SIMD vector search.',
+      },
+    ],
+    disclosureManifest:{
+      runtimeKind:'ollama',
+      endpoint:'http://127.0.0.1:11434',
+      modelTag:'llama3.1:8b',
+      sourceMemories:[
+        {
+          id:'m'.repeat(32),
+          title:'Vector Search Strategy',
+          kind:'decision',
+        },
+      ],
+      characterCount:30,
+      estimatedTokens:8,
+      routingReason:'context compilation verification',
+      compiledPrompt:'Pure Rust SIMD vector search.',
+    },
+    totalCharacters:30,
+    totalTokens:8,
+  };
+  try{
+    globalThis.fetch=async(url,options)=>{
+      address=String(url);
+      body=JSON.parse(options!.body as string);
+      return new Response(JSON.stringify(compiledContextResponse));
+    };
+    const client=httpClient('http://127.0.0.1:1451','a'.repeat(64));
+    const res=await client.compileContext('w'.repeat(32),'vector search',{maxBudgetChars:1000});
+    assert.equal(new URL(address).pathname,'/v1/ai/context');
+    assert.equal(body.workspaceId,'w'.repeat(32));
+    assert.equal(body.userPrompt,'vector search');
+    assert.equal(body.maxBudgetChars,1000);
+    assert.equal(res.contractVersion,1);
+    assert.equal(res.evidenceChunks.length,1);
+    assert.equal(res.totalTokens,8);
+    assert.equal(res.citations.length,1);
+
+    globalThis.fetch=async()=>new Response(JSON.stringify({...compiledContextResponse,contractVersion:99}));
+    await assert.rejects(client.compileContext('w'.repeat(32),'test'),/incompatible/);
+  }finally{globalThis.fetch=original;}
+
+  const window=Object.getOwnPropertyDescriptor(globalThis,'window');let command='',args:unknown;
+  Object.defineProperty(globalThis,'window',{configurable:true,value:{__TAURI_INTERNALS__:{invoke:async(c:string,a:unknown)=>{command=c;args=a;return compiledContextResponse;}}}});
+  try{
+    const nativeRes=await nativeClient().compileContext('w'.repeat(32),'vector search');
+    assert.equal(command,'ai_command');
+    assert.deepEqual(args,{command:'context',request:{contractVersion:1,workspaceId:'w'.repeat(32),userPrompt:'vector search'}});
+    assert.equal(nativeRes.evidenceChunks.length,1);
+    assert.equal(nativeRes.totalTokens,8);
+  }finally{if(window)Object.defineProperty(globalThis,'window',window);else Reflect.deleteProperty(globalThis,'window');}
+});
+
+
+

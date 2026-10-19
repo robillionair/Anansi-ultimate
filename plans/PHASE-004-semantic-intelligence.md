@@ -242,3 +242,10 @@ Steps:
    - Planning self-test validation (`validate-planning.mjs`).
 5. Author final Milestone 4 evidence ledger `docs/evidence/M4-5.md` certifying Milestone 4 completion.
 
+Bounds:
+- Bounded to 1..100 records for hybrid search queries.
+- Zero network traffic or cloud leakage. Fail-closed privacy preserved at all boundaries.
+
+Acceptance: defined in [M4.5 evidence](../docs/evidence/M4-5.md). Search mode selection ("Title only", "Full-body search (includes Markdown text)", "Hybrid semantic") exposed across desktop and web browser editions, HTTP & Tauri IPC endpoints wired, grounded evidence with RRF scores and section headings displayed, fail-closed Sealed privacy refusal verified, full workspace unit and integration test suites passing, Playwright browser E2E tests passing, and Milestone 4 (Semantic Intelligence) 100% certified.
+
+

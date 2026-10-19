@@ -19,7 +19,9 @@ fn default_rrf_k() -> f32 {
     60.0
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+use schemars::JsonSchema;
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct HybridSearchRequest {
     pub workspace_id: String,
@@ -39,7 +41,7 @@ pub struct HybridSearchRequest {
     pub include_archived: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct HybridSearchResult {
     pub memory_id: String,
@@ -51,6 +53,13 @@ pub struct HybridSearchResult {
     pub snippet: Option<String>,
     pub section_heading: Option<String>,
     pub line_number: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct HybridSearchResponse {
+    pub contract_version: u8,
+    pub results: Vec<HybridSearchResult>,
 }
 
 struct LexicalHit {
