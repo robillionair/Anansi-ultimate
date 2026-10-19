@@ -125,5 +125,35 @@ Bounds: at most 500 characters prompt, at most 10 citations, at most 4,000 chara
 
 Acceptance: defined in M3.4 evidence. Ask ANANSI truthfully answers grounded questions with citations; missing evidence yields explicit InsufficientEvidence status; offline runtimes yield helpful guidance; disclosure manifest shows exact source records and prompt text sent.
 
+## M3.5 implementation contract — defined before coding
+
+Objective: Integrated acceptance certification across search, runtime discovery, and local Ask ANANSI. Verify desktop and browser parity, offline and connection recovery, query bounds enforcement, disclosure manifest verification in live workflows, and coordinated fail-closed Sealed exclusion with M2 vault boundary.
+
+Authority: Master Spec §77–78, §82–84; Requirements Matrix AN-005, AN-006, AN-009, AN-010, AN-018, AN-032.
+
+Files:
+- Create: `tests/e2e/ask_anansi.spec.ts` (or integration test verification fixture), `docs/evidence/M3-5.md`
+- Modify: `docs/BUILD_STATUS.md`, `docs/REQUIREMENTS_MATRIX.md`, `project-state.json`
+
+Steps:
+1. Define end-to-end integration scenario covering:
+   - Workspace creation with multiple record types (notes, decisions, tasks) containing distinct Markdown headings and body sections.
+   - Grounded Ask ANANSI queries correctly citing section headings and line numbers.
+   - Truthful missing-evidence scenario verifying zero false positives or ungrounded claims.
+   - Offline local inference scenario returning compiled citations and data disclosure manifest without crashing or throwing.
+   - Sealed record exclusion: verify Sealed memories are never exposed through title search, full-body search, or Ask ANANSI grounded citations.
+2. Verify browser application and desktop application parity:
+   - Browser client paired over authenticated loopback HTTP API (`/v1/ai/discovery`, `/v1/ai/ask`).
+   - Desktop client invoking native IPC commands (`ai_command`).
+3. Run complete verification battery:
+   - Tooling and planning validation (`node scripts/validate-planning.mjs --self-test`).
+   - UI and contracts test suite (`npm run test:ui`).
+   - Full workspace test suite (`node scripts/cargo.mjs test --workspace --locked`).
+   - Rust formatting and strict Clippy (`node scripts/cargo.mjs fmt --all --check`, `node scripts/cargo.mjs clippy --workspace --all-targets --locked -- -D warnings`).
+4. Record verified evidence ledger in `docs/evidence/M3-5.md`.
+5. Update canonical matrices and project state.
+
+Bounds: Zero cloud fallback, zero unprompted inference, zero auto-downloads. All inference endpoints verified to loopback only. Fail-closed privacy preserved at all boundaries.
+
 
 
