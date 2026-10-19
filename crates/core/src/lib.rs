@@ -8,6 +8,7 @@ pub mod backup_upload;
 pub mod content;
 pub mod entities;
 pub mod export;
+pub mod hybrid;
 pub mod jobs;
 pub mod lifecycle;
 pub mod memory;

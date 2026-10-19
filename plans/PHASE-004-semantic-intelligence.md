@@ -114,3 +114,59 @@ Bounds:
 - Result limit bounded to 1..100 records.
 - Query vector dimension must match stored model dimensions.
 - Zero network traffic or cloud leakage; strictly in-memory cosine ranking and local SQLite access.
+
+Acceptance: defined in M4.2 evidence. All 5/5 targeted vector search tests pass; cosine similarity ranking, limit/threshold filtering, archive exclusion, fail-closed Sealed privacy, and transactional cache invalidation verified.
+
+## M4.3 implementation contract — defined before coding
+
+Objective: Implement hybrid retrieval fusing SQLite FTS5 lexical BM25 ranking and vector cosine ranking using Reciprocal Rank Fusion (RRF), with metadata/kind/archive filtering, recency handling, deduplication, and a semantic evaluation benchmark suite testing paraphrases, contradictions, temporal facts, and missing evidence.
+
+Authority: Master Spec §11, §19, §77–78; Requirements Matrix AN-005, AN-010, AN-029.
+
+Files:
+- Create: `crates/core/src/hybrid.rs`, `crates/core/tests/hybrid_retrieval.rs`, `docs/evidence/M4-3.md`
+- Modify: `crates/core/src/lib.rs`, `plans/PHASE-004-semantic-intelligence.md`, `project-state.json`, `docs/BUILD_STATUS.md`, `docs/REQUIREMENTS_MATRIX.md`
+
+Steps:
+1. Define `HybridSearchRequest` and `HybridSearchResult` in `crates/core/src/hybrid.rs`:
+   - `HybridSearchRequest`:
+     - `workspace_id: String`
+     - `query: Option<String>`
+     - `query_vector: Option<EmbeddingVector>`
+     - `model: Option<String>`
+     - `limit: usize` (bounded 1..100)
+     - `lexical_weight: f32` (default 1.0)
+     - `semantic_weight: f32` (default 1.0)
+     - `rrf_k: f32` (default 60.0)
+     - `kind: Option<String>`
+     - `include_archived: bool`
+   - `HybridSearchResult`:
+     - `memory_id: String`
+     - `title: String`
+     - `kind: String`
+     - `rrf_score: f32`
+     - `lexical_rank: Option<usize>`
+     - `semantic_rank: Option<usize>`
+     - `snippet: Option<String>`
+     - `section_heading: Option<String>`
+     - `line_number: Option<u32>`
+2. Implement `hybrid_search` in `crates/core/src/hybrid.rs`:
+   - Query Analysis: execute FTS5 search (if `query` provided) and vector search (if `query_vector` provided).
+   - Reciprocal Rank Fusion (RRF):
+     $$\text{RRF Score}(d) = \frac{w_{\text{lex}}}{k + \text{rank}_{\text{lex}}(d)} + \frac{w_{\text{sem}}}{k + \text{rank}_{\text{sem}}(d)}$$
+   - Metadata & Entity filtering: apply kind filtering, archive filtering (`archived = 0`), and fail-closed Sealed exclusion (`privacy != 'sealed'`).
+   - Extract grounded citation metadata (section heading and line number) from lexical evidence or active record content.
+   - Sort descending by RRF score, breaking ties stably by memory ID.
+   - Truncate to requested limit.
+3. Author comprehensive evaluation test suite `crates/core/tests/hybrid_retrieval.rs`:
+   - Benchmark 1 (Exact lexical): exact keyword queries retrieve matching records with 1st rank.
+   - Benchmark 2 (Semantic paraphrase): queries with 0 keyword overlap retrieve the correct record via semantic vector rank (e.g. "feline health care" -> "Cat Nutrition and Veterinary Care Guide").
+   - Benchmark 3 (Hybrid synergy): records matching both lexical keywords and semantic vector space rank higher than records matching only one.
+   - Benchmark 4 (Missing evidence): queries with neither lexical nor semantic match return empty results.
+   - Benchmark 5 (Privacy & Boundaries): Sealed records are fail-closed excluded from hybrid results; archived records are omitted unless requested.
+4. Verify across Rust workspace tests, strict Clippy, formatting, and planning validation.
+
+Bounds:
+- Result limit bounded to 1..100 records.
+- RRF constant k default 60.0, bounded to >= 1.0.
+- Zero network traffic or cloud leakage. Fail-closed privacy preserved at all boundaries.
