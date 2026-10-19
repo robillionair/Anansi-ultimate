@@ -41,18 +41,26 @@ fn entry(context: &Context) -> Result<keyring::Entry> {
     #[cfg(target_os = "macos")]
     let credential =
         keyring::macos::MacCredential::new_with_target(None, SERVICE, context.vault_id());
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", feature = "linux-secret-service"))]
     let credential =
         keyring::secret_service::SsCredential::new_with_target(None, SERVICE, context.vault_id());
-    #[cfg(any(windows, target_os = "macos", target_os = "linux"))]
+    #[cfg(any(
+        windows,
+        target_os = "macos",
+        all(target_os = "linux", feature = "linux-secret-service")
+    ))]
     {
         credential
             .map(|c| keyring::Entry::new_with_credential(Box::new(c)))
             .map_err(|_| VaultError::CredentialUnavailable)
     }
-    #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
+    #[cfg(not(any(
+        windows,
+        target_os = "macos",
+        all(target_os = "linux", feature = "linux-secret-service")
+    )))]
     {
-        let _ = context;
+        let _ = (context, SERVICE);
         Err(VaultError::CredentialUnavailable)
     }
 }

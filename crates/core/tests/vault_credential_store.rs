@@ -1,4 +1,19 @@
 //! Explicit opt-in synthetic OS-store verification; never run on real vault IDs.
+#[cfg(all(target_os = "linux", not(feature = "linux-secret-service")))]
+#[test]
+fn disabled_linux_native_store_never_uses_mock() {
+    use anansi_core::vault::{VaultError, credential_store, keys::Context};
+    let context = Context::new(&"a".repeat(32), &"b".repeat(32), &"c".repeat(32)).unwrap();
+    assert_eq!(
+        credential_store::load(&context).err(),
+        Some(VaultError::CredentialUnavailable)
+    );
+    assert_eq!(
+        credential_store::forget(&context, true).err(),
+        Some(VaultError::CredentialUnavailable)
+    );
+}
+
 #[cfg(windows)]
 #[test]
 #[ignore = "writes and removes one unique synthetic Windows credential; run explicitly"]

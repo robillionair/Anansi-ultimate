@@ -3,6 +3,11 @@ name = "anansi-core"
 version.workspace = true
 edition.workspace = true
 
+[features]
+# Explicit platform integration: requires system D-Bus development/runtime setup.
+# Without this feature Linux native-store operations fail closed, never use mock.
+linux-secret-service = ["keyring/sync-secret-service", "keyring/crypto-rust"]
+
 [dependencies]
 serde.workspace = true
 serde_json.workspace = true
@@ -20,6 +25,6 @@ keyring = { version = "=3.6.3", default-features = false, features = ["windows-n
 [target.'cfg(target_os = "macos")'.dependencies]
 keyring = { version = "=3.6.3", default-features = false, features = ["apple-native"] }
 [target.'cfg(target_os = "linux")'.dependencies]
-keyring = { version = "=3.6.3", default-features = false, features = ["sync-secret-service", "crypto-rust"] }
+keyring = { version = "=3.6.3", default-features = false }
 [dev-dependencies]
 tempfile = "=3.27.0"
