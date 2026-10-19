@@ -1,6 +1,8 @@
 //! Vault-owned filtering boundary. Search integration is deliberately deferred.
+use super::session::{Caller, Sessions};
 use super::{Result, VaultError};
 use crate::privacy::Privacy;
+use std::time::Instant;
 
 #[derive(Clone, Copy)]
 pub enum Operation {
@@ -32,6 +34,37 @@ pub fn allow(privacy: Privacy, operation: Operation, authorized: bool) -> Result
 pub trait SearchVisibility {
     fn may_index(&self, privacy: Privacy) -> bool;
     fn recheck_publication(&self) -> Result<()>;
+}
+
+/// Vault-owned search boundary for the application integration layer.
+///
+/// Search may build an index only from records that are already known to be
+/// non-Sealed. If a request is authorized to inspect Sealed metadata, the
+/// integration must call `publish` immediately before returning results; the
+/// session check revalidates caller identity, idle/absolute deadlines, and the
+/// durable generation epoch. This interface intentionally returns no key or
+/// decrypted payload.
+pub struct SearchBoundary;
+
+impl SearchBoundary {
+    pub fn may_index(privacy: Privacy) -> bool {
+        privacy != Privacy::Sealed
+    }
+
+    pub fn publish<T>(
+        sessions: &mut Sessions,
+        caller: &Caller,
+        token: &[u8; 16],
+        epoch: u64,
+        now: Instant,
+        privacy: Privacy,
+        operation: impl FnOnce() -> Result<T>,
+    ) -> Result<T> {
+        if privacy != Privacy::Sealed {
+            return operation();
+        }
+        sessions.authorize(caller, token, epoch, now, |_| operation())
+    }
 }
 
 /// The only current index policy: Sealed is excluded even if another caller unlocks.
