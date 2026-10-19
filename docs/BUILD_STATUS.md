@@ -1,5 +1,9 @@
 # ANANSI Ultimate — Build Status
 
+## Owner amendment — M2.7-Core isolation (2026-10-19)
+
+[Owner risk acceptance](approvals/M2-6-owner-risk-acceptance.md) explicitly supersedes historical G1 pre-implementation stop language below. G1-External-Audit remains open for post-M3/pre-production/commercialization certification; no audit coverage is fabricated. M2.5 source/CI recovery baseline was reverified. M2.7-Core is authorized in a separate worktree; M3 Search/UI wiring and shared-checkout files remain untouched. G2–G4 are unchanged. No vault completion, production certification or implemented UI disclosure is claimed. AN-018/019/031 remain in progress.
+
 ## Current state — 2026-10-19
 
 M3.1 local acceptance passed at implementation `734a94b`: bounded FTS5 title search across all nine record kinds, visibility/type filters, ranked pagination and exact-revision/source reader work in actual Windows desktop and browser. No schema, persistent plaintext index or model was introduced. Passed: 85 Rust, 23 UI/contract, 40 tooling and 13 recovery tests, types/contracts/fmt/clippy/build/docs and actual native/browser workflow. Full browser run: 12 passed and an obsolete planned-Search assertion failed; the corrected onboarding file reran with all three tests passed. [Evidence](evidence/M3-1.md) preserves the exact results. Corrected checkpoint CI and protected publication remain pending; no corrected full local rerun or new release certification is claimed. Source backup/restore is verified for the implementation and finalized for the evidence checkpoint in its external ledger. Last fully verified/published source checkpoint is `8798fad`; M2/M3 as milestones remain incomplete. Next functional scope is M3.2 detailed design after M3.1 publication, not automatic implementation.

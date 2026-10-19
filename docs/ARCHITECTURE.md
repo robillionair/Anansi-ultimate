@@ -1,5 +1,9 @@
 # ANANSI Ultimate — Architecture
 
+## Owner amendment — M2.7-Core isolation (2026-10-19)
+
+[Owner risk acceptance](approvals/M2-6-owner-risk-acceptance.md) explicitly supersedes historical G1 pre-implementation stop language below. G1-External-Audit remains open for post-M3/pre-production/commercialization certification; no audit coverage is fabricated. M2.5 source/CI recovery baseline was reverified. M2.7-Core is authorized in a separate worktree; M3 Search/UI wiring and shared-checkout files remain untouched. G2–G4 are unchanged. No vault completion, production certification or implemented UI disclosure is claimed. AN-018/019/031 remain in progress.
+
 ## Architectural principles
 
 1. Local-first ownership: user data remains local by default.

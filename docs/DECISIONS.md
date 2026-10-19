@@ -1,5 +1,9 @@
 # ANANSI Ultimate — Architecture Decisions
 
+## ADR-0025: Owner risk acceptance and isolated M2.7-Core engineering
+
+[Owner risk acceptance](approvals/M2-6-owner-risk-acceptance.md) explicitly supersedes historical G1 pre-implementation stop language below. G1-External-Audit remains open for post-M3/pre-production/commercialization certification; no audit coverage is fabricated. M2.5 source/CI recovery baseline was reverified. M2.7-Core is authorized in a separate worktree; M3 Search/UI wiring and shared-checkout files remain untouched. G2–G4 are unchanged. No vault completion, production certification or implemented UI disclosure is claimed. AN-018/019/031 remain in progress.
+
 ## ADR-0024: Vault-independent title search scheduling exception
 
 On 2026-10-19 the user explicitly requested continuing the next phase with work possible without upstream audit feedback. This supersedes the earlier blanket stop-before-M3 scheduling instruction for [M3.1](../plans/03-search-and-ollama.md) only. M2.6/G1, M2.7/M2.8 and their requirement coverage remain incomplete. No audit requirement or encryption contract is weakened.

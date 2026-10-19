@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
-  "activeMilestone": "M3",
-  "activeTask": "M3.1",
-  "plan": "plans/03-search-and-ollama.md",
-  "implementationStatus": "M3.1 local native/browser and core acceptance passed at implementation 734a94b. Full browser run passed 12/13, obsolete onboarding assertion repaired and all three onboarding tests passed on rerun. Corrected exact-SHA CI/publication pending. M2/G1 remains open; pure Rust and p=4 retained. No crypto, model or persistent index added.",
+  "activeMilestone": "M2",
+  "activeTask": "M2.7",
+  "plan": "plans/M2-vault-security.md",
+  "implementationStatus": "Isolated M2.7-Core engineering authorized under Owner risk acceptance, not integrated or complete. G1-External-Audit open. M3 is owned by another AI; do not edit or publish its checkout.",
   "lastVerifiedCommit": "8798fadd266a87723efe4f8237d24c1ee29eb6cf",
   "evidence": [
     "docs/evidence/M0.md",
@@ -24,12 +24,16 @@
   ],
   "blockers": [
     {
-      "scope": "M2.6 technical readiness",
-      "detail": "G1 remains open after RustCrypto member tarcieri's qualified statement that he does not think argon2 has ever been audited. Independent implementation review or newly supplied matching report and current AEAD/dependency mapping are required. Pure Rust, p=4 and adopted G2-G4 remain. User-authorized acknowledgement was posted; no paid review commissioned. M3.1 alone has the explicit independent scheduling exception."
+      "scope": "G1-External-Audit",
+      "detail": "Explicit Owner exception authorizes engineering only. Independent audit remains open for post-M3/pre-production/commercialization certification; exact pinned primitives and G2-G4 retained."
+    },
+    {
+      "scope": "M2.7 integration boundary",
+      "detail": "Search/UI/adapters and active M3 files are not owned by this branch. Complete core verification and arrange coordinated ownership transfer before wiring or any live vault activation."
     }
   ],
-  "nextTask": "M3.1",
-  "nextTaskScope": "Finish corrected M3.1 exact-SHA CI and protected publication/source recovery. Next functional work is M3.2 detailed body-index/privacy design, not automatic implementation. Keep M2/G1 open and review new audit evidence on hourly follow-up; no crypto or inference until prerequisites pass.",
+  "nextTask": "M2.7",
+  "nextTaskScope": "Implement and verify isolated vault core in order, preserve application fail-closed policy until schema/domain/session/adapter integration is certified. No M2.8 or M3 implementation.",
   "productImplementation": "M1 and M2.1-M2.5 verified subsets: memory/lifecycle/entities, immutable relationship history, durable exports, coherent workspace/application catalog backups, opt-in schedules, owned saved-file import and verified fresh restore. Audited vault and integrated M2 certification remain required.",
   "milestoneComplete": false
 }

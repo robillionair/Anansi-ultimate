@@ -1,5 +1,9 @@
 # ANANSI Ultimate — Recovery Guide
 
+## Owner amendment — M2.7-Core isolation (2026-10-19)
+
+[Owner risk acceptance](approvals/M2-6-owner-risk-acceptance.md) explicitly supersedes historical G1 pre-implementation stop language below. G1-External-Audit remains open for post-M3/pre-production/commercialization certification; no audit coverage is fabricated. M2.5 source/CI recovery baseline was reverified. M2.7-Core is authorized in a separate worktree; M3 Search/UI wiring and shared-checkout files remain untouched. G2–G4 are unchanged. No vault completion, production certification or implemented UI disclosure is claimed. AN-018/019/031 remain in progress.
+
 ## Current resume gate — M3.1 with M2/G1 retained
 
 Local M3.1 functional acceptance is complete at implementation `734a94b`. Full browser run initially passed 12/13; the sole stale planned-Search assertion was corrected and all three onboarding tests passed on rerun. Do not report a second local full run. Finish corrected exact-SHA CI/protected publication and inspect `C:/Users/robin/Documents/ChatGPT/Anansi-source-recovery/M3-1-title-search-20261019/source-verification.json` for actual checkpoint/tree/bundle/restore/results. The implementation source bundle restored matching HEAD/tree and passed documentation/hygiene validation. Prior audit checkpoint `8798fad` is now published on protected master. Do not publish the superseded search checkpoint whose Linux run contains the stale assertion. Next functional scope is the M3.2 detailed design; no body indexing, inference or crypto implementation starts automatically.
