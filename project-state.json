@@ -3,8 +3,8 @@
   "activeMilestone": "M3",
   "activeTask": "M3.1",
   "plan": "plans/03-search-and-ollama.md",
-  "implementationStatus": "M3.1 local native/browser and core acceptance passed at implementation 734a94b. Full browser run passed 12/13, obsolete onboarding assertion repaired and all three onboarding tests passed on rerun. Corrected exact-SHA CI/publication pending. M2/G1 remains open; pure Rust and p=4 retained. No crypto, model or persistent index added.",
-  "lastVerifiedCommit": "8798fadd266a87723efe4f8237d24c1ee29eb6cf",
+  "implementationStatus": "M3.1 verified complete at implementation checkpoint 436b01cf5c60a51baf3828665d88d2de3caa0d2f. All three CI jobs passed in run 39199251819 (Ubuntu, Windows Foundation, and Windows native smoke release packaging). Published to master. M3.2 body search design is the next task.",
+  "lastVerifiedCommit": "436b01cf5c60a51baf3828665d88d2de3caa0d2f",
   "evidence": [
     "docs/evidence/M0.md",
     "docs/evidence/M1.md",
@@ -28,8 +28,8 @@
       "detail": "G1 remains open after RustCrypto member tarcieri's qualified statement that he does not think argon2 has ever been audited. Independent implementation review or newly supplied matching report and current AEAD/dependency mapping are required. Pure Rust, p=4 and adopted G2-G4 remain. User-authorized acknowledgement was posted; no paid review commissioned. M3.1 alone has the explicit independent scheduling exception."
     }
   ],
-  "nextTask": "M3.1",
-  "nextTaskScope": "Finish corrected M3.1 exact-SHA CI and protected publication/source recovery. Next functional work is M3.2 detailed body-index/privacy design, not automatic implementation. Keep M2/G1 open and review new audit evidence on hourly follow-up; no crypto or inference until prerequisites pass.",
-  "productImplementation": "M1 and M2.1-M2.5 verified subsets: memory/lifecycle/entities, immutable relationship history, durable exports, coherent workspace/application catalog backups, opt-in schedules, owned saved-file import and verified fresh restore. Audited vault and integrated M2 certification remain required.",
+  "nextTask": "M3.2",
+  "nextTaskScope": "Detailed full-body indexing, privacy boundaries, and query syntax design; unstarted",
+  "productImplementation": "M1 and M2.1-M2.5 verified subsets, plus verified M3.1 local title search across native and browser without persistent index; M2/G1 remains open without vault code or models.",
   "milestoneComplete": false
 }
