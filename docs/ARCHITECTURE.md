@@ -12,6 +12,10 @@
 
 The latest user authorized independent local title search before M2 vault certification; see ADR-0024 and [the detailed plan](../plans/03-search-and-ollama.md). Existing native and authenticated HTTP memory-list contracts gain optional `query`; Rust validates literal bounded terms, scopes current metadata before ranking and builds a request-local in-memory SQLite FTS5 index. No canonical schema change or persistent plaintext derivative. Sealed metadata is excluded. Private remains locally stored without encryption, with no transmission or forensic erasure claim. Ranked results preserve revision/source identity; the read-only shared Search view opens the exact returned revision through existing integrity/privacy checks. Full-body/job indexing, semantic retrieval and inference remain separate tasks with explicit resource/vault/context dependencies. [Evidence](evidence/M3-1.md) distinguishes implementation from actual acceptance results.
 
+## M3.2 full-body indexing and retrieval evaluation design
+
+M3.2 extends lexical retrieval to full Markdown record bodies while strictly preserving the privacy boundary; see ADR-0025, [the detailed plan](../plans/03-search-and-ollama.md) and [evidence](evidence/M3-2.md). A rebuildable SQLite FTS5 index is synchronized with active current revisions (`memories.current_revision`), populated from canonical UTF-8 Markdown bodies (`content/{workspace}/{record}/{revision}.md`) and metadata. Sealed memories are strictly excluded (`WHERE privacy != 'sealed'`) to ensure no sensitive/vault terms leak into plaintext SQLite tables. Current-pointer synchronization ensures revisions updated or archived do not appear in active search. Retrieval extracts snippets with enclosing Markdown section headings and line numbers for grounded citations. Deduplication identifies identical content hashes, and recency weighting blends BM25 relevance with temporal decay. An automated evaluation suite (`retrieval_evaluation.rs`) verifies paraphrase baselines, contradiction resolution, temporal facts, and missing evidence.
+
 ## Target system
 
 ```text

@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "activeMilestone": "M3",
-  "activeTask": "M3.1",
+  "activeTask": "M3.2",
   "plan": "plans/03-search-and-ollama.md",
-  "implementationStatus": "M3.1 verified complete at implementation checkpoint 436b01cf5c60a51baf3828665d88d2de3caa0d2f. All three CI jobs passed in run 39199251819 (Ubuntu, Windows Foundation, and Windows native smoke release packaging). Published to master. M3.2 body search design is the next task.",
+  "implementationStatus": "M3.1 verified complete and published to master. M3.2 full-body rebuildable FTS5 index, current-pointer synchronization, privacy boundary (Sealed refusal), and retrieval evaluation benchmark suite designed before coding.",
   "lastVerifiedCommit": "436b01cf5c60a51baf3828665d88d2de3caa0d2f",
   "evidence": [
     "docs/evidence/M0.md",
@@ -20,7 +20,8 @@
     "docs/evidence/M2-5.md",
     "docs/evidence/M2-6.md",
     "docs/evidence/M2-6-audit-review.md",
-    "docs/evidence/M3-1.md"
+    "docs/evidence/M3-1.md",
+    "docs/evidence/M3-2.md"
   ],
   "blockers": [
     {
@@ -29,7 +30,7 @@
     }
   ],
   "nextTask": "M3.2",
-  "nextTaskScope": "Detailed full-body indexing, privacy boundaries, and query syntax design; unstarted",
+  "nextTaskScope": "Implement rebuildable body index, synchronization, evidence locations, and evaluation suite per accepted M3.2 design.",
   "productImplementation": "M1 and M2.1-M2.5 verified subsets, plus verified M3.1 local title search across native and browser without persistent index; M2/G1 remains open without vault code or models.",
   "milestoneComplete": false
 }

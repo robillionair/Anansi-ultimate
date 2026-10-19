@@ -41,3 +41,24 @@ Acceptance: native and browser search real saved titles, Unicode/diacritic match
 Verification: `pnpm check`, `node scripts/validate-planning.mjs --self-test`, `pnpm test`, `pnpm contracts:check`, `pnpm typecheck`, `pnpm test:ui`, `node scripts/cargo.mjs fmt --all --check`, `node scripts/cargo.mjs test --workspace --locked`, `node scripts/cargo.mjs clippy --workspace --all-targets --locked -- -D warnings`, `pnpm build:web`, `node scripts/cargo.mjs build --locked -p anansi-api`, `pnpm test:e2e`, build native test configuration and run the updated actual native/browser verifier. Inspect actual screenshots; retain synthetic evidence. Add targeted core tests for stale revisions, isolation, type/archive/expiry, literal operators, Unicode, bounds and integrity.
 
 Recovery/DoD: preserve master and all original requirements; current schema 8 and backups stay compatible. Reverting this code changes no canonical data. Keep user changes and failed evidence. Commit/push a small checkpoint, verify exact-SHA required CI before protected-master publication, independently restore a source bundle and record actual HEAD/tree/digest/results. Report pending checks honestly. Stop after M3.1; no runtime/inference/crypto implementation. The hourly audit follow-up remains responsible for evidence review, not a waiver.
+
+## M3.2 implementation contract — defined before coding
+
+Objective: a rebuildable full-body FTS5 index across Markdown content files and SQLite metadata, current-pointer synchronization, metadata/entity filtering, grounded evidence locations (Markdown heading and line number), deduplication, recency weighting, Sealed privacy boundary, and an automated retrieval evaluation benchmark suite (paraphrases, contradictions, temporal facts, missing evidence).
+
+Files: create `crates/core/tests/body_search.rs`, `crates/core/tests/retrieval_evaluation.rs`, `docs/evidence/M3-2.md`; modify `crates/core/src/search.rs`, `crates/core/src/memory.rs`, `crates/core/src/storage.rs`, `packages/contracts/src/client.ts`, generated schemas/validators/types, `packages/ui/src/Search.tsx`, `tests/contracts.test.ts`, and verification scripts. Update roadmap/architecture/decisions/status/matrix/recovery/state. No unvetted crypto, external runtimes, or network connections.
+
+Steps:
+1. Define query parser in `crates/core/src/search.rs` supporting literal multi-word AND queries, exact phrase matching (`"..."`), and prefix queries (`*`), bounded to 512 UTF-8 bytes and 16 terms with safe sanitization.
+2. Implement rebuildable SQLite FTS5 table `memory_body_fts` and rebuild function `rebuild_search_index` scanning current active Markdown revisions and metadata, strictly excluding `WHERE privacy != 'sealed'`.
+3. Implement current-pointer synchronization so memory creation, revision, archive, and restoration update the indexed record to match the active revision only.
+4. Implement `body_search` returning ranked matching records with snippets, enclosing Markdown section headings (`# Heading`), and approximate line numbers.
+5. Implement deduplication flagging (identical body SHA-256 hashes) and recency weighting combining BM25 relevance with temporal decay from `updated_at` and `event_date`.
+6. Implement the retrieval evaluation benchmark suite in `crates/core/tests/retrieval_evaluation.rs` testing paraphrase baselines, contradiction resolution, temporal facts, and missing evidence.
+7. Update shared contracts and UI Search component to display snippet, matched heading, line number, and full-body toggle.
+8. Validate locally across Rust workspace, UI tests, evaluation suite, and native/browser workflows before status claims.
+
+Bounds: at most 512 UTF-8 query bytes, 16 terms, 10,000 active records, 256 KiB body limit per record. Sealed memories are strictly excluded from the FTS5 index. Results paged with limit 1..100.
+
+Acceptance: defined in [M3.2 evidence](../docs/evidence/M3-2.md). Rebuildable index accurately reflects all current plaintext records; Sealed records are never indexed; exact phrase, prefix, and metadata filters work reliably; grounded section headings and lines are returned; evaluation suite passes all benchmarks.
+

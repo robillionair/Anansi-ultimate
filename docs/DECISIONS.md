@@ -1,5 +1,16 @@
 # ANANSI Ultimate — Architecture Decisions
 
+## ADR-0025: Rebuildable full-body FTS5 index, privacy boundaries, and retrieval evaluation suite
+
+- **Authority:** User instruction to continue on M3 while keeping M2 untouched and logging all changes. M3.2 detailed design precedes implementation under [the M3 plan](../plans/03-search-and-ollama.md) and [M3.2 evidence](evidence/M3-2.md).
+- **Decision:** Implement full-body lexical retrieval using a rebuildable SQLite FTS5 index synchronized with active current revisions (`memories.current_revision`). The index is completely reconstructible from canonical UTF-8 Markdown files (`content/{workspace}/{record}/{revision}.md`) and SQLite metadata.
+- **Privacy boundary:** In accordance with Master Spec §75 and AN-031, Sealed memories MUST NEVER be inserted into the plaintext SQLite FTS5 index. All index creation, synchronization, and rebuild queries strictly enforce `WHERE privacy != 'sealed'`. Private records remain stored locally with OS-level private permissions.
+- **Synchronization:** When memories are created, updated, archived, or restored, index entries are synchronized so that only current revisions are indexed, preventing obsolete revision matches from appearing in active search results.
+- **Evidence locations & snippets:** Retrieval extracts search term snippets, enclosing Markdown headings (`# Heading`), and line numbers to support grounded citations for downstream Context Compiler (AN-010) and Ask ANANSI (AN-006).
+- **Deduplication & Recency:** Detect duplicate content via SHA-256 body hashes and blend lexical BM25 ranking with temporal decay (`updated_at` / `event_date`).
+- **Retrieval evaluation:** Master Spec §11 and §78 benchmark requirements are implemented in an automated suite (`retrieval_evaluation.rs`) testing paraphrase baselines, contradiction resolution, temporal facts, and missing evidence.
+- **Status:** accepted design baseline for M3.2; implementation follows acceptance criteria defined before code.
+
 ## ADR-0024: Vault-independent title search scheduling exception
 
 On 2026-10-19 the user explicitly requested continuing the next phase with work possible without upstream audit feedback. This supersedes the earlier blanket stop-before-M3 scheduling instruction for [M3.1](../plans/03-search-and-ollama.md) only. M2.6/G1, M2.7/M2.8 and their requirement coverage remain incomplete. No audit requirement or encryption contract is weakened.
