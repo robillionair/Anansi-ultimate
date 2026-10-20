@@ -41,6 +41,7 @@ pub struct Dispatcher<'a> {
     used_permits: Arc<Mutex<HashSet<String>>>,
 }
 
+#[derive(Debug)]
 pub struct DispatchOutcome {
     pub response: CompletionResponse,
     pub disclosure: DisclosureRecord,
@@ -49,6 +50,14 @@ pub struct DispatchOutcome {
 pub struct StreamOutcome {
     pub events: Receiver<Result<StreamEvent, ProviderError>>,
     pub disclosure: DisclosureRecord,
+}
+
+impl std::fmt::Debug for StreamOutcome {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("StreamOutcome")
+            .field("disclosure", &self.disclosure)
+            .finish_non_exhaustive()
+    }
 }
 
 /// Everything a dispatch needs beyond the request itself.
@@ -433,6 +442,16 @@ impl<'a> Dispatcher<'a> {
                     }
                     match body.read(&mut buf) {
                         Ok(0) => {
+                            // A cancelled stream also surfaces as EOF
+                            // (the token shuts the socket down); report
+                            // cancellation, not a clean finish.
+                            if cancel.is_cancelled() {
+                                send_err(ProviderError::new(
+                                    ProviderErrorCode::Cancelled,
+                                    "stream cancelled by caller",
+                                ));
+                                return;
+                            }
                             match decoder.finish() {
                                 Ok(events) => {
                                     for ev in events {
