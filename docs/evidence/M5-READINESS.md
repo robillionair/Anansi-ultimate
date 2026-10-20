@@ -1,19 +1,19 @@
-# M5 readiness — integration assessment in progress
+# M5 readiness — local integration verification and remaining gates
 
-Date: 2026-10-20. M5 implementation is not authorized by this task. M2–M4 are not yet locally complete or release-certified.
+Date: 2026-10-20. M5 implementation is not authorized by this task. Local engineering implementation and regression across M2–M4 are verified on `codex/m2-m3-integration` through implementation commits `ee92afb` and `b6d472c`, with exact remaining manual/external gates documented below.
 
-Inspected checkpoints: integration `5dd40d3`, retained M2 `bd2e2a9`. Both worktrees were clean at inspection. [Ownership/checklist](../handoffs/M2-M4-integration-owner.md).
+Inspected checkpoints: integration starting `5dd40d3`, intermediate `b543c7b`, implementation commits `ee92afb` and `b6d472c`; retained M2 `bd2e2a9`. [Ownership/checklist](../handoffs/M2-M4-integration-owner.md).
 
 | Requirement | Observed implementation/evidence | Remaining acceptance |
 |---|---|---|
-| AN-004 Memory OS; AN-024 project contracts | Existing M2.1–M2.5 workflow evidence retained | Regression after vault/schema integration |
-| AN-018/031 vault privacy | Core crypto/generations/session tests; native IPC synthetic-provider workflow | Real native credential/recovery controls, UI workflow, browser authorization, expiry/revocation/publication race |
-| AN-019/033 encrypted recovery/export | Core archive/restore functions | Application encrypted export/backup/fresh restore; tamper/wrong-key/cancel/interruption |
-| AN-005 retrieval | FTS, synthetic seeded-vectors, and verified real loopback embedding pipeline (`all-minilm:22m`) | Reranking distinct from RRF, real-model temporal/contradiction evaluation |
-| AN-006/009 local Ask | Discovery, offline and missing-evidence paths | Selected installed runtime/model, successful desktop/browser answers, streaming/backend cancellation/timeouts/restart |
-| AN-010 Context Compiler | Separate section compiler; Ask has separate minimum implementation | Unified Ask/compiler policy; semantic query vectors; complete chunks/Unicode/budgets/source lines |
-| AN-011 Big Brain | Design document only | Design traceability; no implemented deliberative workflow claim |
-| AN-002 cross-edition UI; AN-029 jobs | Earlier scoped workflow evidence | Updated native/browser regression and local M2.8 |
+| AN-004 Memory OS; AN-024 project contracts | Existing M2.1–M2.5 workflow evidence retained; contract/schema/onboarding/search/vault E2E regressions pass | Deferred remote CI/protected publication |
+| AN-018/031 vault privacy | Core crypto/generations/session/epoch/publication-race tests; desktop UI and paired browser native authorization (`/v1/vault/*`, no secret DTOs); Win32 prompt flags + zeroized buffers | Manual human operation of real Win32 credential/recovery dialogs (`scripts/manual-vault-acceptance.mjs`); pre-production `G1-External-Audit` |
+| AN-019/033 encrypted recovery/export | Application ciphertext backup, encrypted export, locked archive preview, tamper/wrong-key/cancel refusal, and fresh sealed restore in desktop and browser (`verify-vault-desktop.mjs`, `tests/e2e/vault.spec.ts`) | Manual human Win32 dialog confirmation; pre-production `G1-External-Audit` |
+| AN-005 retrieval | FTS, explicit Search UI model/endpoint selection and workspace indexing, visible `.status-lexical-fallback` / `.status-semantic-active` indicators, atomic `SAVEPOINT` chunk publication, distinct post-fusion reranking (`rerankScore` + `rerankProvenance`), real-model paraphrase/revision-invalidation/restart E2E (`all-minilm:22m`) | Deferred remote CI/protected publication |
+| AN-006/009 local Ask | Separate generation (`modelTag`) and embedding (`embeddingModel`) configuration; selected installed runtime/model (`qwen2.5:0.5b`, `all-minilm:22m`), desktop/browser streaming answers, backend socket cancellation, offline and missing-evidence disclosures | Model output quality remains small-model bound (UI instructs citation verification); deferred remote CI |
+| AN-010 Context Compiler | Unified Ask/compiler section pipeline; separate `embeddingModel` query vector generation; UTF-8/line-offset preservation, budget packing, canonical integrity refusal | Deferred remote CI/protected publication |
+| AN-011 Big Brain | Design document and formal state machine specification (`docs/designs/BIG_BRAIN_SPEC.md`, ADR-0030) | Design traceability only; no implemented deliberative workflow claim |
+| AN-002 cross-edition UI; AN-029 jobs | Desktop Tauri/WebView2 (`verify-ask-native.mjs`, `verify-vault-desktop.mjs`) and Playwright browser (`onboarding`, `search`, `ask_anansi`, `vault`) parity | Manual production Win32 prompt check; deferred remote CI |
 
 ## Current verification
 
@@ -100,4 +100,50 @@ Executed locally (exit 0):
 - `node scripts/validate-planning.mjs --self-test`: passed (74 Markdown files, 90 section owners, 16 milestone plans, 33 requirements).
 - `node scripts/with-application-test-lease.mjs node_modules/@playwright/test/cli.js test tests/e2e/ask_anansi.spec.ts tests/e2e/search.spec.ts`: 2/2 passed (59.3s).
 - `node scripts/with-application-test-lease.mjs scripts/verify-ask-native.mjs`: passed (actual native UI streaming, answer, disclosure, cancellation).
+
+### Semantic UI indexing, visible lexical fallback, atomic publication, and reranking — `ee92afb` (2026-10-20)
+
+Implementation commit `ee92afb` (`feat(search): wire explicit embedding indexing, visible lexical fallback, atomic publication, and reranking`) completes Tasks 1–5 and 7:
+- **Separate Embedding and Generation Model Configuration (Task 1)**: Separated `embeddingModel` from `modelTag` across `ContextCompilationRequest`, `AskRequest`, `packages/contracts`, and `packages/ui/src/AskAnansi.tsx` (`#ask-embedding-model`). `ContextCompiler` generates semantic query vectors using `embedding_model` while recording the generation `model_tag` in the disclosure manifest.
+- **Explicit Search UI Indexing and Visible Lexical Fallback (Tasks 2 & 3)**: Added `IndexEmbeddingsRequest` / `IndexEmbeddingsResponse` and extended `HybridSearchResponse` (`lexicalOnly`, `fallbackReason`, `embeddingModel`, `rerankScore`, `cosineSimilarity`, `rerankProvenance`). Wired `#search-embedding-model`, `#search-embedding-endpoint`, and `#search-index-embeddings` into `packages/ui/src/Search.tsx`, alongside explicit `.status-lexical-fallback` and `.status-semantic-active` banners so users always know when hybrid results are lexical-only vs. semantically fused and reranked.
+- **Atomic Multi-Chunk Embedding Publication (Task 4)**: `embed_memory` in `crates/core/src/semantic.rs` splits document sections into bounded chunks and publishes the complete chunk set inside `SAVEPOINT anansi_embed_publish`, rechecking `current_revision`, `body_hash`, `privacy != 'sealed'`, and `status = 'active'` immediately before replacing prior vectors. Verified by `concurrent_edit_and_privacy_change_abort_atomic_embedding_publication` and `partial_chunk_insert_failure_rolls_back_complete_chunk_set` in `crates/core/tests/semantic_workflow.rs`.
+- **Real UI Semantic Workflow (Task 5)**: Verified in `tests/e2e/search.spec.ts` (`real semantic UI workflow: save record -> index -> retrieve paraphrase with zero keyword overlap -> revise -> verify old embeddings invalidated -> restart and search again`) against live `all-minilm:22m` over loopback: creates a record, observes `.status-lexical-fallback` (`no_workspace_embeddings`) before indexing, indexes via `#search-index-embeddings`, retrieves a zero-keyword-overlap paraphrase with `.status-semantic-active`, revises the record to a new topic, verifies old embeddings are transactionally invalidated on edit, re-indexes, restarts the API server, and verifies persistent semantic retrieval after restart.
+- **Post-Fusion Reranking & Temporal/Contradiction Evaluation (Task 7)**: `hybrid_search` in `crates/core/src/hybrid.rs` computes a distinct second-stage `rerank_score` combining RRF base score with recency decay, `MemoryStatus` lifecycle multipliers (`Active` > `Superseded`/`Contradicted`), confidence weighting, and cosine similarity boost, emitting human-readable `rerank_provenance` and filtering expired records via `validUntil`. Verified in `reranking_temporal_validity_and_contradiction_lifecycle_evaluation` (`crates/core/tests/semantic_workflow.rs`) against live `all-minilm:22m`.
+
+### Paired browser native vault authorization and encrypted backup/export/restore workflows — `b6d472c` (2026-10-20)
+
+Implementation commit `b6d472c` (`feat(vault): add paired browser native authorization and encrypted backup/export/restore workflows`) completes Task 6:
+- **Origin/Workspace/Process-Bound Browser Native Authorization**: Added `WindowsCredentialProvider::for_browser` (`crates/core/src/vault/native_prompt.rs`) naming the paired requesting browser origin and workspace in the native prompt caption, while keeping initial vault `setup` and `seal` strictly desktop-only (`runtime_rejects_browser_setup_before_any_credential_input`). Exposed `/v1/vault/{operation}` in `crates/api/src/lib.rs` bound to verified loopback session/CSRF/origin headers and rejecting any secret-bearing DTO keys (`passphrase`, `password`, `recoveryKey`, `dek`, `token`).
+- **Encrypted Backup, Export, Locked Preview, and Fresh Sealed Restore**: Extended `VaultRuntime` and `VaultService` (`crates/core/src/vault/runtime.rs`, `crates/core/src/vault/service.rs`) with `AdapterVaultState`, `rotate`, `ciphertext_backup`, `encrypted_export`, `preview_archive`, `restore_archive`, and `restore_archive_observed`, setting private leaf DACLs (`private_permissions`) on written `.anansi-vault-archive` artifacts. Wired desktop IPC (`apps/desktop/src-tauri/src/lib.rs`), HTTP API (`crates/api/src/lib.rs`), typed client (`packages/contracts/src/client.ts`), and shared UI (`packages/ui/src/Vault.tsx`, `packages/ui/src/Workspace.tsx`).
+- **Observed Desktop & Browser Vault Verification**:
+  - `node scripts/cargo.mjs test -p anansi-core --test vault_runtime --locked`: 2/2 passed (including desktop-only setup/seal enforcement, paired browser unlock/read/backup/export/preview/restore, wrong-key/tamper/cancel refusal, and interrupted restore preservation).
+  - `node scripts/cargo.mjs test -p anansi-api --test vault --locked`: 1/1 passed (paired browser HTTP native authorization, secret DTO rejection, ciphertext backup/export/preview/fresh restore, wrong-key/tamper refusal, lock/restart denial).
+  - `node scripts/with-application-test-lease.mjs node_modules/@playwright/test/cli.js test tests/e2e/vault.spec.ts`: 1/1 passed (1.8m) in real browser UI against loopback API.
+  - `node scripts/build-desktop-test.mjs` + `node scripts/with-application-test-lease.mjs scripts/verify-vault-desktop.mjs`: exited 0 against actual Windows Tauri/WebView2 application (`http://tauri.localhost/`), verifying setup, seal, unlock, authorized read, ciphertext backup, locked preview, encrypted export, tamper refusal, fresh sealed restore into a clean workspace root, manual lock denial, and restart persistence (`C:/Users/robin/AppData/Local\Temp/anansi-vault-desktop-VNaSJ7`).
+
+### Local regression battery — 2026-10-20 (Task 8)
+
+Executed locally on `codex/m2-m3-integration` at `b6d472c` (all exited 0):
+- `node scripts/contracts.mjs --check`: passed (0 contract or schema drift).
+- `node node_modules/typescript/bin/tsc --noEmit`: passed.
+- `npm run test:ui`: 33/33 passed (`tests/contracts.test.ts` and `packages/ui/tests/components.test.tsx`).
+- `node scripts/cargo.mjs fmt --all -- --check`: passed (0 formatting diffs).
+- `node scripts/cargo.mjs clippy --workspace --all-targets --locked -- -D warnings`: passed (0 warnings).
+- `node scripts/cargo.mjs test -p anansi-api --locked`: 17/17 integration tests passed (`ai`, `backup_restore`, `csrf_session`, `export_delete`, `fts_rebuild`, `health_workspace`, `jobs`, `lifecycle_history`, `memories`, `onboarding_workspace_settings`, `projects`, `relationships`, `search`, `security_headers`, `static_csp`, `vault`).
+- `node scripts/cargo.mjs test -p anansi-desktop --locked`: passed.
+- `node scripts/cargo.mjs test -p anansi-core --test semantic_workflow --test context_compiler --test hybrid_retrieval --test ask_anansi --test ask_streaming --test vector_embeddings --test vector_search --test body_search --test embedding_invalidation --test vault_search_integration --locked`: 36/36 passed (5 `ask_anansi`, 1 `ask_streaming`, 1 `body_search`, 7 `context_compiler`, 1 `embedding_invalidation`, 6 `hybrid_retrieval`, 4 `semantic_workflow`, 1 `vault_search_integration`, 5 `vector_embeddings`, 5 `vector_search`).
+- Playwright E2E suites (under exclusive application lease):
+  - `tests/e2e/onboarding.spec.ts`: 3/3 passed.
+  - `tests/e2e/search.spec.ts`: 2/2 passed (including real `all-minilm:22m` semantic UI indexing, zero-keyword-overlap paraphrase retrieval, revision invalidation, and API restart persistence).
+  - `tests/e2e/vault.spec.ts`: 1/1 passed.
+  - `tests/e2e/ask_anansi.spec.ts` (with `ANANSI_REAL_MODEL=1`): 1/1 passed.
+
+### Exact remaining gates before M5 implementation / release certification
+
+1. **Manual Production Win32 Credential & Recovery Dialog Check (Owner-in-the-loop)**:
+   - Because computer-use rules forbid automating OS authentication prompts, a human operator must run `node scripts/with-application-test-lease.mjs scripts/manual-vault-acceptance.mjs` (which launches the desktop app without `ANANSI_VAULT_TEST_PROVIDER` against a synthetic workspace and verified backup) and confirm real Win32 `CredUIPromptForCredentialsW` and `MessageBoxW` dialogs for setup, seal, unlock, wrong-passphrase refusal, prompt cancellation, and recovery unlock.
+2. **Pre-Production External Cryptographic Audit (`G1-External-Audit`)**:
+   - Remains an open pre-production/commercialization gate under explicit [Owner engineering risk acceptance](../approvals/M2-6-owner-risk-acceptance.md); never counted as passed by local tests.
+3. **Remote CI & Protected-Branch Publication**:
+   - Deferred by Owner capacity policy; local verification does not substitute for remote CI or protected `master` publication.
 
