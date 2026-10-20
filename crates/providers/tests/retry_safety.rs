@@ -59,8 +59,8 @@ fn paid_5xx_is_never_retried() {
     let transport = StdHttpTransport;
     let res = resolver();
     let dispatcher = dispatcher(&transport, &res); // rig allows 2 retries
-    let mut ledger = QuotaLedger::new();
-    let mut c = test_ctx(&mut ledger, RoutingMode::Auto, ZeroCostLock::off());
+    let ledger = std::sync::Arc::new(std::sync::Mutex::new(QuotaLedger::new()));
+    let mut c = test_ctx(ledger.clone(), RoutingMode::Auto, ZeroCostLock::off());
     c.permit = Some(test_permit("openai", "gpt-x"));
     let err = dispatcher
         .execute(
@@ -86,8 +86,8 @@ fn unknown_cost_is_treated_as_billable() {
     let transport = StdHttpTransport;
     let res = resolver();
     let dispatcher = dispatcher(&transport, &res);
-    let mut ledger = QuotaLedger::new();
-    let mut c = test_ctx(&mut ledger, RoutingMode::Auto, ZeroCostLock::off());
+    let ledger = std::sync::Arc::new(std::sync::Mutex::new(QuotaLedger::new()));
+    let mut c = test_ctx(ledger.clone(), RoutingMode::Auto, ZeroCostLock::off());
     let mut p = test_permit("openai", "gpt-x");
     p.allow_unknown_cost = true;
     c.permit = Some(p);
@@ -112,8 +112,8 @@ fn paid_5xx_does_not_fall_back_to_another_provider() {
     let transport = StdHttpTransport;
     let res = resolver();
     let dispatcher = dispatcher(&transport, &res);
-    let mut ledger = QuotaLedger::new();
-    let mut c = test_ctx(&mut ledger, RoutingMode::Auto, ZeroCostLock::off());
+    let ledger = std::sync::Arc::new(std::sync::Mutex::new(QuotaLedger::new()));
+    let mut c = test_ctx(ledger.clone(), RoutingMode::Auto, ZeroCostLock::off());
     c.permit = Some(test_permit("openai", "gpt-x"));
     let err = dispatcher
         .execute(
@@ -146,8 +146,8 @@ fn paid_drop_after_send_is_never_retried() {
     let transport = StdHttpTransport;
     let res = resolver();
     let dispatcher = dispatcher(&transport, &res);
-    let mut ledger = QuotaLedger::new();
-    let mut c = test_ctx(&mut ledger, RoutingMode::Auto, ZeroCostLock::off());
+    let ledger = std::sync::Arc::new(std::sync::Mutex::new(QuotaLedger::new()));
+    let mut c = test_ctx(ledger.clone(), RoutingMode::Auto, ZeroCostLock::off());
     c.permit = Some(test_permit("openai", "gpt-x"));
     let err = dispatcher
         .execute(
@@ -189,8 +189,8 @@ fn paid_timeout_is_never_retried() {
         idle_ms: 500,
         total_ms: 1500,
     });
-    let mut ledger = QuotaLedger::new();
-    let mut c = test_ctx(&mut ledger, RoutingMode::Auto, ZeroCostLock::off());
+    let ledger = std::sync::Arc::new(std::sync::Mutex::new(QuotaLedger::new()));
+    let mut c = test_ctx(ledger.clone(), RoutingMode::Auto, ZeroCostLock::off());
     c.permit = Some(test_permit("openai", "gpt-x"));
     let err = dispatcher
         .execute(
@@ -218,8 +218,8 @@ fn paid_429_is_retried_because_it_proves_non_execution() {
     let transport = StdHttpTransport;
     let res = resolver();
     let dispatcher = dispatcher(&transport, &res);
-    let mut ledger = QuotaLedger::new();
-    let mut c = test_ctx(&mut ledger, RoutingMode::Auto, ZeroCostLock::off());
+    let ledger = std::sync::Arc::new(std::sync::Mutex::new(QuotaLedger::new()));
+    let mut c = test_ctx(ledger.clone(), RoutingMode::Auto, ZeroCostLock::off());
     c.permit = Some(test_permit("openai", "gpt-x"));
     let outcome = dispatcher
         .execute(
@@ -264,8 +264,8 @@ fn paid_pre_send_failure_still_falls_back() {
             vec![model("gpt-x", "openai", CostClass::Paid)],
         ),
     ];
-    let mut ledger = QuotaLedger::new();
-    let mut c = test_ctx(&mut ledger, RoutingMode::Auto, ZeroCostLock::off());
+    let ledger = std::sync::Arc::new(std::sync::Mutex::new(QuotaLedger::new()));
+    let mut c = test_ctx(ledger.clone(), RoutingMode::Auto, ZeroCostLock::off());
     c.permit = Some(test_permit("openai", "gpt-x"));
     let outcome = dispatcher
         .execute(&regs, &test_request("gpt-x"), c, &CancellationToken::new())
@@ -283,12 +283,12 @@ fn free_5xx_keeps_availability_retry_and_fallback() {
     let transport = StdHttpTransport;
     let res = resolver();
     let dispatcher = dispatcher(&transport, &res);
-    let mut ledger = QuotaLedger::new();
+    let ledger = std::sync::Arc::new(std::sync::Mutex::new(QuotaLedger::new()));
     let outcome = dispatcher
         .execute(
             &two_paid_regs(&down, &up, CostClass::Free),
             &test_request("gpt-x"),
-            test_ctx(&mut ledger, RoutingMode::Auto, ZeroCostLock::off()),
+            test_ctx(ledger.clone(), RoutingMode::Auto, ZeroCostLock::off()),
             &CancellationToken::new(),
         )
         .unwrap();
@@ -311,8 +311,8 @@ fn paid_stream_establishment_5xx_does_not_fall_back() {
     let transport = StdHttpTransport;
     let res = resolver();
     let dispatcher = dispatcher(&transport, &res);
-    let mut ledger = QuotaLedger::new();
-    let mut c = test_ctx(&mut ledger, RoutingMode::Auto, ZeroCostLock::off());
+    let ledger = std::sync::Arc::new(std::sync::Mutex::new(QuotaLedger::new()));
+    let mut c = test_ctx(ledger.clone(), RoutingMode::Auto, ZeroCostLock::off());
     c.permit = Some(test_permit("openai", "gpt-x"));
     let err = dispatcher
         .execute_stream(
@@ -345,8 +345,8 @@ fn paid_5xx_over_https_is_a_single_attempt() {
         true,
         vec![model("gpt-x", "openai", CostClass::Paid)],
     )];
-    let mut ledger = QuotaLedger::new();
-    let mut c = test_ctx(&mut ledger, RoutingMode::Auto, ZeroCostLock::off());
+    let ledger = std::sync::Arc::new(std::sync::Mutex::new(QuotaLedger::new()));
+    let mut c = test_ctx(ledger.clone(), RoutingMode::Auto, ZeroCostLock::off());
     c.permit = Some(test_permit("openai", "gpt-x"));
     let err = dispatcher
         .execute(&regs, &test_request("gpt-x"), c, &CancellationToken::new())

@@ -34,7 +34,7 @@ use crate::secrets::AuthMaterial;
 use crate::types::{CompletionRequest, CompletionResponse, StreamEvent};
 use std::time::Duration;
 
-pub trait ProviderAdapter {
+pub trait ProviderAdapter: Send + Sync {
     fn provider_id(&self) -> &str;
 
     /// Build one HTTP attempt. Pure: no I/O, no secret logging. The

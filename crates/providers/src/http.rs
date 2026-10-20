@@ -172,7 +172,7 @@ impl Deadline {
     }
 }
 
-pub trait Transport {
+pub trait Transport: Send + Sync {
     fn execute(
         &self,
         request: &HttpRequest,

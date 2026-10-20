@@ -252,6 +252,30 @@ pub struct QuotaLedger {
     total_requests: u64,
     total_tokens: u64,
     total_estimated_cost_micro_usd: u64,
+    // Live reservations (see `reserve`): amounts committed by
+    // in-flight dispatches. Budget checks count actuals + reserved,
+    // so concurrent dispatches cannot each pass a check against the
+    // same headroom and collectively overrun the budget.
+    reserved_requests: u64,
+    reserved_tokens: u64,
+    reserved_cost_micro_usd: u64,
+    reservations: HashMap<u64, Reservation>,
+    next_reservation_id: u64,
+}
+
+/// A live budget reservation, created by `QuotaLedger::reserve` and
+/// closed by exactly one of `settle` (dispatch completed), `release`
+/// (dispatch failed before completion) or the stream pair
+/// `begin_stream` + `settle_stream`. While it lives, its request,
+/// estimated tokens and estimated cost count against every budget
+/// check — the mechanism that makes concurrent dispatch accounting
+/// safe instead of check-then-act.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Reservation {
+    id: u64,
+    tokens: u64,
+    cost_micro_usd: u64,
+    request_pending: bool,
 }
 
 /// Whether provider-reported quota/usage information is available.
@@ -275,28 +299,31 @@ impl QuotaLedger {
         estimated_cost_micro_usd: Option<u64>,
     ) -> Result<(), ProviderError> {
         if let Some(max) = budget.max_requests
-            && self.total_requests + 1 > max
-        {
-            return Err(ProviderError::new(
-                ProviderErrorCode::QuotaExceeded,
-                format!("request budget exhausted ({}/{max})", self.total_requests),
-            ));
-        }
-        if let Some(max) = budget.max_total_tokens
-            && self.total_tokens + estimated_total_tokens > max
+            && self.total_requests + self.reserved_requests + 1 > max
         {
             return Err(ProviderError::new(
                 ProviderErrorCode::QuotaExceeded,
                 format!(
-                    "token budget would be exceeded ({} used + {estimated_total_tokens} estimated > {max})",
-                    self.total_tokens
+                    "request budget exhausted ({}/{} used, {} reserved, max {max})",
+                    self.total_requests, self.total_requests, self.reserved_requests
+                ),
+            ));
+        }
+        if let Some(max) = budget.max_total_tokens
+            && self.total_tokens + self.reserved_tokens + estimated_total_tokens > max
+        {
+            return Err(ProviderError::new(
+                ProviderErrorCode::QuotaExceeded,
+                format!(
+                    "token budget would be exceeded ({} used + {} reserved + {estimated_total_tokens} estimated > {max})",
+                    self.total_tokens, self.reserved_tokens
                 ),
             ));
         }
         if let (Some(max), Some(cost)) = (
             budget.max_estimated_cost_micro_usd,
             estimated_cost_micro_usd,
-        ) && self.total_estimated_cost_micro_usd + cost > max
+        ) && self.total_estimated_cost_micro_usd + self.reserved_cost_micro_usd + cost > max
         {
             return Err(ProviderError::new(
                 ProviderErrorCode::QuotaExceeded,
@@ -304,6 +331,110 @@ impl QuotaLedger {
             ));
         }
         Ok(())
+    }
+
+    /// Check the budget and, if it passes, atomically hold the
+    /// request slot, the estimated tokens and the estimated cost
+    /// until the dispatch settles or releases. Callers holding the
+    /// ledger lock (the dispatcher's `Arc<Mutex<QuotaLedger>>`)
+    /// therefore get reservation semantics, not check-then-act.
+    pub fn reserve(
+        &mut self,
+        budget: &Budget,
+        estimated_total_tokens: u64,
+        estimated_cost_micro_usd: Option<u64>,
+    ) -> Result<Reservation, ProviderError> {
+        self.check_budget(budget, estimated_total_tokens, estimated_cost_micro_usd)?;
+        self.next_reservation_id += 1;
+        let reservation = Reservation {
+            id: self.next_reservation_id,
+            tokens: estimated_total_tokens,
+            cost_micro_usd: estimated_cost_micro_usd.unwrap_or(0),
+            request_pending: true,
+        };
+        self.reserved_requests += 1;
+        self.reserved_tokens += reservation.tokens;
+        self.reserved_cost_micro_usd += reservation.cost_micro_usd;
+        self.reservations.insert(reservation.id, reservation);
+        Ok(reservation)
+    }
+
+    fn take_reservation(&mut self, reservation: Reservation) -> Option<Reservation> {
+        let live = self.reservations.remove(&reservation.id)?;
+        if live.request_pending {
+            self.reserved_requests = self.reserved_requests.saturating_sub(1);
+        }
+        self.reserved_tokens = self.reserved_tokens.saturating_sub(live.tokens);
+        self.reserved_cost_micro_usd = self
+            .reserved_cost_micro_usd
+            .saturating_sub(live.cost_micro_usd);
+        Some(live)
+    }
+
+    /// The dispatch completed: release the hold and record the
+    /// actual usage.
+    pub fn settle(
+        &mut self,
+        reservation: Reservation,
+        provider: &str,
+        usage: Option<crate::types::Usage>,
+        estimated_cost_micro_usd: Option<u64>,
+    ) {
+        if self.take_reservation(reservation).is_some() {
+            self.record(provider, usage, estimated_cost_micro_usd);
+        }
+    }
+
+    /// The dispatch failed before completion: release the hold,
+    /// record nothing.
+    pub fn release(&mut self, reservation: Reservation) {
+        let _ = self.take_reservation(reservation);
+    }
+
+    /// A stream was established: the request itself is real, so
+    /// record it now and release the request hold — but keep the
+    /// token/cost hold until the stream ends (`settle_stream`),
+    /// because the tokens are still in flight.
+    pub fn begin_stream(
+        &mut self,
+        reservation: Reservation,
+        provider: &str,
+        estimated_cost_micro_usd: Option<u64>,
+    ) {
+        if let Some(mut live) = self.reservations.remove(&reservation.id) {
+            if live.request_pending {
+                self.reserved_requests = self.reserved_requests.saturating_sub(1);
+                live.request_pending = false;
+                self.record(provider, None, estimated_cost_micro_usd);
+            }
+            self.reservations.insert(live.id, live);
+        }
+    }
+
+    /// The stream ended (completed, errored or cancelled): release
+    /// the remaining hold and record the tokens the provider
+    /// actually reported, if any. The request was already recorded
+    /// by `begin_stream`.
+    pub fn settle_stream(
+        &mut self,
+        reservation: Reservation,
+        provider: &str,
+        usage: Option<crate::types::Usage>,
+    ) {
+        if self.take_reservation(reservation).is_some()
+            && let Some(u) = usage
+        {
+            self.total_tokens += u.total();
+            let entry = self.totals.entry(provider.to_string()).or_default();
+            entry.input_tokens += u.input_tokens;
+            entry.output_tokens += u.output_tokens;
+        }
+    }
+
+    /// Amounts currently held by live reservations (observability
+    /// and tests).
+    pub fn reserved(&self) -> (u64, u64) {
+        (self.reserved_requests, self.reserved_tokens)
     }
 
     pub fn record(
@@ -443,5 +574,87 @@ mod tests {
         );
         assert!(ledger.check_budget(&budget, 60, None).is_err());
         assert!(ledger.check_budget(&budget, 50, None).is_ok());
+    }
+}
+
+#[cfg(test)]
+mod reservation_tests {
+    use super::*;
+
+    fn budget_tokens(max: u64) -> Budget {
+        Budget {
+            max_total_tokens: Some(max),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn concurrent_reservations_cannot_overrun_the_budget() {
+        // Two dispatches each estimating 60 against a 100-token
+        // budget: check-then-act would pass both; reservations must
+        // refuse the second.
+        let mut ledger = QuotaLedger::new();
+        let budget = budget_tokens(100);
+        let first = ledger.reserve(&budget, 60, None).unwrap();
+        let err = ledger.reserve(&budget, 60, None).unwrap_err();
+        assert_eq!(err.code, ProviderErrorCode::QuotaExceeded);
+        // Settling the first with 50 actual frees real headroom:
+        // a 45 reservation now fits alongside the 50 recorded.
+        ledger.settle(
+            first,
+            "openai",
+            Some(crate::types::Usage {
+                input_tokens: 30,
+                output_tokens: 20,
+            }),
+            None,
+        );
+        assert!(ledger.reserve(&budget, 45, None).is_ok());
+        assert_eq!(ledger.reserved().1, 45);
+    }
+
+    #[test]
+    fn release_frees_the_hold_without_recording() {
+        let mut ledger = QuotaLedger::new();
+        let budget = budget_tokens(100);
+        let r = ledger.reserve(&budget, 90, None).unwrap();
+        ledger.release(r);
+        assert_eq!(ledger.reserved(), (0, 0));
+        assert_eq!(ledger.total_requests(), 0);
+        assert!(ledger.reserve(&budget, 90, None).is_ok());
+    }
+
+    #[test]
+    fn request_budget_counts_reservations() {
+        let mut ledger = QuotaLedger::new();
+        let budget = Budget {
+            max_requests: Some(2),
+            ..Default::default()
+        };
+        let _a = ledger.reserve(&budget, 1, None).unwrap();
+        let _b = ledger.reserve(&budget, 1, None).unwrap();
+        assert!(ledger.reserve(&budget, 1, None).is_err());
+    }
+
+    #[test]
+    fn stream_lifecycle_records_request_then_tokens() {
+        let mut ledger = QuotaLedger::new();
+        let budget = Budget::default();
+        let r = ledger.reserve(&budget, 80, None).unwrap();
+        ledger.begin_stream(r, "openai", None);
+        assert_eq!(ledger.total_requests(), 1);
+        assert_eq!(ledger.reserved(), (0, 80), "token hold survives establishment");
+        ledger.settle_stream(
+            r,
+            "openai",
+            Some(crate::types::Usage {
+                input_tokens: 10,
+                output_tokens: 5,
+            }),
+        );
+        assert_eq!(ledger.reserved(), (0, 0));
+        let totals = ledger.totals_for("openai");
+        assert_eq!(totals.requests, 1);
+        assert_eq!(totals.input_tokens + totals.output_tokens, 15);
     }
 }

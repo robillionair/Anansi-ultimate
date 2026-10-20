@@ -125,13 +125,13 @@ fn dribbling_tls_handshake_is_bounded_by_the_overall_deadline() {
         true,
         vec![model("gpt-x", "openai", CostClass::Free)],
     )];
-    let mut ledger = QuotaLedger::new();
+    let ledger = std::sync::Arc::new(std::sync::Mutex::new(QuotaLedger::new()));
     let started = Instant::now();
     let err = dispatcher
         .execute(
             &regs,
             &test_request("gpt-x"),
-            test_ctx(&mut ledger, RoutingMode::Auto, ZeroCostLock::off()),
+            test_ctx(ledger.clone(), RoutingMode::Auto, ZeroCostLock::off()),
             &CancellationToken::new(),
         )
         .unwrap_err();
@@ -182,13 +182,13 @@ fn silent_server_handshake_times_out_pre_send() {
         true,
         vec![model("gpt-x", "openai", CostClass::Free)],
     )];
-    let mut ledger = QuotaLedger::new();
+    let ledger = std::sync::Arc::new(std::sync::Mutex::new(QuotaLedger::new()));
     let started = Instant::now();
     let err = dispatcher
         .execute(
             &regs,
             &test_request("gpt-x"),
-            test_ctx(&mut ledger, RoutingMode::Auto, ZeroCostLock::off()),
+            test_ctx(ledger.clone(), RoutingMode::Auto, ZeroCostLock::off()),
             &CancellationToken::new(),
         )
         .unwrap_err();
@@ -224,13 +224,13 @@ fn dribbling_response_body_is_bounded_by_the_overall_deadline() {
         true,
         vec![model("gpt-x", "openai", CostClass::Free)],
     )];
-    let mut ledger = QuotaLedger::new();
+    let ledger = std::sync::Arc::new(std::sync::Mutex::new(QuotaLedger::new()));
     let started = Instant::now();
     let err = dispatcher
         .execute(
             &regs,
             &test_request("gpt-x"),
-            test_ctx(&mut ledger, RoutingMode::Auto, ZeroCostLock::off()),
+            test_ctx(ledger.clone(), RoutingMode::Auto, ZeroCostLock::off()),
             &CancellationToken::new(),
         )
         .unwrap_err();
@@ -265,12 +265,12 @@ fn fast_https_request_stays_well_within_the_deadline() {
         true,
         vec![model("gpt-x", "openai", CostClass::Free)],
     )];
-    let mut ledger = QuotaLedger::new();
+    let ledger = std::sync::Arc::new(std::sync::Mutex::new(QuotaLedger::new()));
     let outcome = dispatcher
         .execute(
             &regs,
             &test_request("gpt-x"),
-            test_ctx(&mut ledger, RoutingMode::Auto, ZeroCostLock::off()),
+            test_ctx(ledger.clone(), RoutingMode::Auto, ZeroCostLock::off()),
             &CancellationToken::new(),
         )
         .unwrap();

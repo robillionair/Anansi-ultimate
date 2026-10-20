@@ -74,12 +74,12 @@ fn https_success_with_valid_certificate() {
     let transport = tls_transport(&ca);
     let res = resolver();
     let dispatcher = dispatcher(&transport, &res);
-    let mut ledger = QuotaLedger::new();
+    let ledger = std::sync::Arc::new(std::sync::Mutex::new(QuotaLedger::new()));
     let outcome = dispatcher
         .execute(
             &https_regs(&server, "openai", CostClass::Free),
             &test_request("gpt-x"),
-            test_ctx(&mut ledger, RoutingMode::Auto, ZeroCostLock::off()),
+            test_ctx(ledger.clone(), RoutingMode::Auto, ZeroCostLock::off()),
             &CancellationToken::new(),
         )
         .unwrap();
@@ -106,8 +106,8 @@ fn https_anthropic_success_with_api_key_header() {
     let transport = tls_transport(&ca);
     let res = resolver();
     let dispatcher = dispatcher(&transport, &res);
-    let mut ledger = QuotaLedger::new();
-    let mut c = test_ctx(&mut ledger, RoutingMode::Auto, ZeroCostLock::off());
+    let ledger = std::sync::Arc::new(std::sync::Mutex::new(QuotaLedger::new()));
+    let mut c = test_ctx(ledger.clone(), RoutingMode::Auto, ZeroCostLock::off());
     c.permit = Some(test_permit("anthropic", "claude-x"));
     let outcome = dispatcher
         .execute(
@@ -131,12 +131,12 @@ fn https_wrong_host_certificate_is_rejected_before_any_request() {
     let transport = tls_transport(&ca);
     let res = resolver();
     let dispatcher = dispatcher(&transport, &res);
-    let mut ledger = QuotaLedger::new();
+    let ledger = std::sync::Arc::new(std::sync::Mutex::new(QuotaLedger::new()));
     let err = dispatcher
         .execute(
             &https_regs(&server, "openai", CostClass::Free),
             &test_request("gpt-x"),
-            test_ctx(&mut ledger, RoutingMode::Auto, ZeroCostLock::off()),
+            test_ctx(ledger.clone(), RoutingMode::Auto, ZeroCostLock::off()),
             &CancellationToken::new(),
         )
         .unwrap_err();
@@ -162,12 +162,12 @@ fn https_expired_certificate_is_rejected() {
     let transport = tls_transport(&ca);
     let res = resolver();
     let dispatcher = dispatcher(&transport, &res);
-    let mut ledger = QuotaLedger::new();
+    let ledger = std::sync::Arc::new(std::sync::Mutex::new(QuotaLedger::new()));
     let err = dispatcher
         .execute(
             &https_regs(&server, "openai", CostClass::Free),
             &test_request("gpt-x"),
-            test_ctx(&mut ledger, RoutingMode::Auto, ZeroCostLock::off()),
+            test_ctx(ledger.clone(), RoutingMode::Auto, ZeroCostLock::off()),
             &CancellationToken::new(),
         )
         .unwrap_err();
@@ -186,12 +186,12 @@ fn https_untrusted_certificate_is_rejected() {
     let transport = RustlsTransport::new();
     let res = resolver();
     let dispatcher = dispatcher(&transport, &res);
-    let mut ledger = QuotaLedger::new();
+    let ledger = std::sync::Arc::new(std::sync::Mutex::new(QuotaLedger::new()));
     let err = dispatcher
         .execute(
             &https_regs(&server, "openai", CostClass::Free),
             &test_request("gpt-x"),
-            test_ctx(&mut ledger, RoutingMode::Auto, ZeroCostLock::off()),
+            test_ctx(ledger.clone(), RoutingMode::Auto, ZeroCostLock::off()),
             &CancellationToken::new(),
         )
         .unwrap_err();
@@ -212,12 +212,12 @@ fn https_streaming_sse_over_tls() {
     let transport = tls_transport(&ca);
     let res = resolver();
     let dispatcher = dispatcher(&transport, &res);
-    let mut ledger = QuotaLedger::new();
+    let ledger = std::sync::Arc::new(std::sync::Mutex::new(QuotaLedger::new()));
     let outcome = dispatcher
         .execute_stream(
             &https_regs(&server, "openai", CostClass::Free),
             &test_request("gpt-x"),
-            test_ctx(&mut ledger, RoutingMode::Auto, ZeroCostLock::off()),
+            test_ctx(ledger.clone(), RoutingMode::Auto, ZeroCostLock::off()),
             &CancellationToken::new(),
         )
         .unwrap();
@@ -244,12 +244,12 @@ fn https_cancellation_closes_the_tls_session() {
     let res = resolver();
     let dispatcher = dispatcher(&transport, &res);
     let cancel = CancellationToken::new();
-    let mut ledger = QuotaLedger::new();
+    let ledger = std::sync::Arc::new(std::sync::Mutex::new(QuotaLedger::new()));
     let outcome = dispatcher
         .execute_stream(
             &https_regs(&server, "openai", CostClass::Free),
             &test_request("gpt-x"),
-            test_ctx(&mut ledger, RoutingMode::Auto, ZeroCostLock::off()),
+            test_ctx(ledger.clone(), RoutingMode::Auto, ZeroCostLock::off()),
             &cancel,
         )
         .unwrap();
@@ -290,12 +290,12 @@ fn https_redirect_is_never_followed_and_credentials_stay_put() {
     let transport = tls_transport(&ca);
     let res = resolver();
     let dispatcher = dispatcher(&transport, &res);
-    let mut ledger = QuotaLedger::new();
+    let ledger = std::sync::Arc::new(std::sync::Mutex::new(QuotaLedger::new()));
     let err = dispatcher
         .execute(
             &https_regs(&server, "openai", CostClass::Free),
             &test_request("gpt-x"),
-            test_ctx(&mut ledger, RoutingMode::Auto, ZeroCostLock::off()),
+            test_ctx(ledger.clone(), RoutingMode::Auto, ZeroCostLock::off()),
             &CancellationToken::new(),
         )
         .unwrap_err();
@@ -332,13 +332,13 @@ fn https_timeout_remains_bounded() {
         idle_ms: 500,
         total_ms: 1500,
     });
-    let mut ledger = QuotaLedger::new();
+    let ledger = std::sync::Arc::new(std::sync::Mutex::new(QuotaLedger::new()));
     let started = Instant::now();
     let err = dispatcher
         .execute(
             &https_regs(&server, "openai", CostClass::Free),
             &test_request("gpt-x"),
-            test_ctx(&mut ledger, RoutingMode::Auto, ZeroCostLock::off()),
+            test_ctx(ledger.clone(), RoutingMode::Auto, ZeroCostLock::off()),
             &CancellationToken::new(),
         )
         .unwrap_err();

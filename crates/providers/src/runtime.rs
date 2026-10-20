@@ -67,6 +67,11 @@ pub struct RuntimeProvider {
 #[serde(rename_all = "camelCase")]
 pub struct RuntimeConfig {
     pub providers: Vec<RuntimeProvider>,
+    /// The dispatch budget for this configuration (requests, tokens,
+    /// estimated cost). Wired into every dispatch — there is no
+    /// implicit unlimited default once a budget is configured.
+    #[serde(default)]
+    pub budget: Budget,
 }
 
 pub struct ProviderRuntime {
@@ -74,7 +79,8 @@ pub struct ProviderRuntime {
     resolver: Box<dyn SecretResolver + Send + Sync>,
     registrations: Vec<ProviderRegistration>,
     used_permits: Arc<Mutex<HashSet<String>>>,
-    ledger: QuotaLedger,
+    ledger: Arc<Mutex<QuotaLedger>>,
+    budget: Budget,
     timeouts: TimeoutConfig,
     retry: RetryPolicy,
 }
@@ -112,12 +118,14 @@ impl ProviderRuntime {
                 models: provider.models,
             });
         }
+        let budget = config.budget.clone();
         Ok(Self {
             transport,
             resolver,
             registrations,
             used_permits: Arc::new(Mutex::new(HashSet::new())),
-            ledger: QuotaLedger::new(),
+            ledger: Arc::new(Mutex::new(QuotaLedger::new())),
+            budget,
             timeouts: TimeoutConfig::default(),
             retry: RetryPolicy::default(),
         })
@@ -147,9 +155,26 @@ impl ProviderRuntime {
         &self.registrations
     }
 
-    /// Cumulative usage the ledger has recorded across all calls.
-    pub fn ledger(&self) -> &QuotaLedger {
-        &self.ledger
+    /// The shared usage ledger (cumulative across all calls made
+    /// through this runtime — and across runtimes, when shared via
+    /// `with_shared_accounting`).
+    pub fn ledger(&self) -> Arc<Mutex<QuotaLedger>> {
+        self.ledger.clone()
+    }
+
+    /// Replace this runtime's accounting with shared state. The
+    /// application uses this so permit consumption and usage totals
+    /// survive configuration changes: rebuilding the runtime for a
+    /// new configuration must never resurrect a spent permit or
+    /// reset the ledger (proved by the A→B→A replay test in core).
+    pub fn with_shared_accounting(
+        mut self,
+        used_permits: Arc<Mutex<HashSet<String>>>,
+        ledger: Arc<Mutex<QuotaLedger>>,
+    ) -> Self {
+        self.used_permits = used_permits;
+        self.ledger = ledger;
+        self
     }
 
     /// One authorized unary dispatch, with disclosure.
@@ -168,8 +193,8 @@ impl ProviderRuntime {
         let ctx = DispatchContext {
             routing,
             lock,
-            budget: Budget::default(),
-            ledger: &mut self.ledger,
+            budget: self.budget.clone(),
+            ledger: self.ledger.clone(),
             permit,
         };
         dispatcher.execute(&self.registrations, request, ctx, cancel)
@@ -194,8 +219,8 @@ impl ProviderRuntime {
         let ctx = DispatchContext {
             routing,
             lock,
-            budget: Budget::default(),
-            ledger: &mut self.ledger,
+            budget: self.budget.clone(),
+            ledger: self.ledger.clone(),
             permit,
         };
         dispatcher.execute_stream(&self.registrations, request, ctx, cancel)
@@ -226,6 +251,7 @@ mod tests {
         let mut provider = ProviderConfig::new("openai", "https://api.example.invalid/v1");
         provider.credential = Some(CredentialRef::new("openai", "openai-primary"));
         RuntimeConfig {
+            budget: Budget::default(),
             providers: vec![RuntimeProvider {
                 config: provider,
                 locality: LocalityConfig::Cloud,

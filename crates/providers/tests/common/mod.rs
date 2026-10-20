@@ -538,11 +538,11 @@ pub fn test_permit(provider: &str, model: &str) -> PaidInferencePermit {
     }
 }
 
-pub fn test_ctx<'a>(
-    ledger: &'a mut QuotaLedger,
+pub fn test_ctx(
+    ledger: std::sync::Arc<std::sync::Mutex<QuotaLedger>>,
     mode: anansi_providers::routing::RoutingMode,
     lock: ZeroCostLock,
-) -> DispatchContext<'a> {
+) -> DispatchContext {
     DispatchContext {
         routing: RoutingRequest {
             mode,

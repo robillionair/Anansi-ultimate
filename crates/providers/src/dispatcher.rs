@@ -84,11 +84,15 @@ impl std::fmt::Debug for StreamOutcome {
 }
 
 /// Everything a dispatch needs beyond the request itself.
-pub struct DispatchContext<'a> {
+pub struct DispatchContext {
     pub routing: RoutingRequest,
     pub lock: ZeroCostLock,
     pub budget: Budget,
-    pub ledger: &'a mut QuotaLedger,
+    /// The shared usage ledger. Shared (not borrowed) so concurrent
+    /// dispatches reserve against the same accounting and stream
+    /// reader threads can settle their reservation when the stream
+    /// ends — see `QuotaLedger::reserve`.
+    pub ledger: std::sync::Arc<std::sync::Mutex<QuotaLedger>>,
     pub permit: Option<PaidInferencePermit>,
 }
 
@@ -141,7 +145,7 @@ impl<'a> Dispatcher<'a> {
         reg: &ProviderRegistration,
         candidate: &Candidate,
         request: &CompletionRequest,
-        ctx: &DispatchContext<'_>,
+        ctx: &DispatchContext,
         permit_consumed: &mut bool,
     ) -> Result<PreparedDispatch, ProviderError> {
         // Privacy gate first (§19 order).
@@ -177,8 +181,7 @@ impl<'a> Dispatcher<'a> {
             request.estimated_input_tokens(),
             request.estimated_output_tokens(),
         );
-        ctx.ledger
-            .check_budget(&ctx.budget, estimated_total, est_cost)?;
+        let reservation = lock_ledger(&ctx.ledger).reserve(&ctx.budget, estimated_total, est_cost)?;
         // Endpoint validation (single point, config module).
         let endpoint = reg.config.validate()?;
         // Credentials: resolve reference → material; prime redactor.
@@ -201,6 +204,7 @@ impl<'a> Dispatcher<'a> {
             auth,
             redactor,
             estimated_cost_micro_usd: est_cost,
+            reservation,
         })
     }
 
@@ -208,7 +212,7 @@ impl<'a> Dispatcher<'a> {
         &self,
         registrations: &[ProviderRegistration],
         request: &CompletionRequest,
-        ctx: DispatchContext<'_>,
+        ctx: DispatchContext,
         cancel: &CancellationToken,
     ) -> Result<DispatchOutcome, ProviderError> {
         let plan = Router::plan(registrations, &ctx.routing)?;
@@ -236,6 +240,7 @@ impl<'a> Dispatcher<'a> {
                 }
             };
             let Some(adapter) = self.adapter_ref(&candidate.provider) else {
+                lock_ledger(&ctx.ledger).release(prepared.reservation);
                 attempts.push(AttemptRecord {
                     provider: candidate.provider.clone(),
                     model: candidate.model.id.clone(),
@@ -252,7 +257,8 @@ impl<'a> Dispatcher<'a> {
                 candidate,
             ) {
                 Ok(response) => {
-                    ctx.ledger.record(
+                    lock_ledger(&ctx.ledger).settle(
+                        prepared.reservation,
                         &candidate.provider,
                         response.usage,
                         prepared.estimated_cost_micro_usd,
@@ -271,6 +277,7 @@ impl<'a> Dispatcher<'a> {
                     });
                 }
                 Err(e) => {
+                    lock_ledger(&ctx.ledger).release(prepared.reservation);
                     // Availability-class failures may fall back to the
                     // next candidate — unless the failure is ambiguous
                     // for a billable model, where falling back could
@@ -358,7 +365,7 @@ impl<'a> Dispatcher<'a> {
         &self,
         registrations: &[ProviderRegistration],
         request: &CompletionRequest,
-        ctx: DispatchContext<'_>,
+        ctx: DispatchContext,
         cancel: &CancellationToken,
     ) -> Result<StreamOutcome, ProviderError> {
         let plan = Router::plan(registrations, &ctx.routing)?;
@@ -390,6 +397,7 @@ impl<'a> Dispatcher<'a> {
                 match adapter.build_request(&prepared.endpoint, &prepared.auth, request, true) {
                     Ok(r) => r,
                     Err(e) => {
+                        lock_ledger(&ctx.ledger).release(prepared.reservation);
                         last_error = Some(e);
                         continue;
                     }
@@ -401,6 +409,7 @@ impl<'a> Dispatcher<'a> {
             let response = match self.transport.execute(&http_req, &self.timeouts, cancel) {
                 Ok(r) => r,
                 Err(e) => {
+                    lock_ledger(&ctx.ledger).release(prepared.reservation);
                     attempts.push(AttemptRecord {
                         provider: candidate.provider.clone(),
                         model: candidate.model.id.clone(),
@@ -415,6 +424,7 @@ impl<'a> Dispatcher<'a> {
             };
             let status = response.status;
             if (300..400).contains(&status) {
+                lock_ledger(&ctx.ledger).release(prepared.reservation);
                 let err =
                     crate::providers::redirect_error(status, &response.headers, &prepared.redactor);
                 attempts.push(AttemptRecord {
@@ -437,6 +447,7 @@ impl<'a> Dispatcher<'a> {
                         format!("unexpected HTTP {status} for streaming request"),
                     ),
                 };
+                lock_ledger(&ctx.ledger).release(prepared.reservation);
                 attempts.push(AttemptRecord {
                     provider: candidate.provider.clone(),
                     model: candidate.model.id.clone(),
@@ -454,25 +465,52 @@ impl<'a> Dispatcher<'a> {
                 model: candidate.model.id.clone(),
                 outcome: format!("HTTP {status} streaming"),
             });
-            ctx.ledger
-                .record(&candidate.provider, None, prepared.estimated_cost_micro_usd);
+            lock_ledger(&ctx.ledger).begin_stream(
+                prepared.reservation,
+                &candidate.provider,
+                prepared.estimated_cost_micro_usd,
+            );
             let disclosure = self.disclosure(candidate, &prepared, request, &ctx, attempts, None);
             let (tx, rx) = channel::<Result<StreamEvent, ProviderError>>();
             let mut decoder = adapter.new_stream_decoder();
             let mut body = response.into_body();
             let cancel = cancel.clone();
+            // Streaming accounting: the token reservation stays live
+            // until this thread ends — on completion, error AND
+            // cancellation alike — where it settles with whatever
+            // usage the provider actually reported.
+            let stream_ledger = ctx.ledger.clone();
+            let stream_reservation = prepared.reservation;
+            let stream_provider = candidate.provider.clone();
             std::thread::spawn(move || {
+                let mut last_usage: Option<crate::types::Usage> = None;
+                let mut track = |events: &Vec<StreamEvent>, last: &mut Option<crate::types::Usage>| {
+                    for ev in events {
+                        if let StreamEvent::Usage(u) = ev {
+                            *last = Some(*u);
+                        }
+                    }
+                };
+                let settle = |last_usage: Option<crate::types::Usage>| {
+                    lock_ledger(&stream_ledger).settle_stream(
+                        stream_reservation,
+                        &stream_provider,
+                        last_usage,
+                    );
+                };
                 let mut buf = [0u8; 8192];
                 let send_err = |e: ProviderError| {
                     let _ = tx.send(Err(e));
                 };
-                loop {
+                // Every exit from this loop settles the stream's
+                // token reservation exactly once, below.
+                'stream: loop {
                     if cancel.is_cancelled() {
                         send_err(ProviderError::new(
                             ProviderErrorCode::Cancelled,
                             "stream cancelled by caller",
                         ));
-                        return;
+                        break 'stream;
                     }
                     match body.read(&mut buf) {
                         Ok(0) => {
@@ -484,31 +522,33 @@ impl<'a> Dispatcher<'a> {
                                     ProviderErrorCode::Cancelled,
                                     "stream cancelled by caller",
                                 ));
-                                return;
+                                break 'stream;
                             }
                             match decoder.finish() {
                                 Ok(events) => {
+                                    track(&events, &mut last_usage);
                                     for ev in events {
                                         if tx.send(Ok(ev)).is_err() {
-                                            return;
+                                            break 'stream;
                                         }
                                     }
                                 }
                                 Err(e) => send_err(e),
                             }
-                            return;
+                            break 'stream;
                         }
                         Ok(n) => match decoder.feed(&buf[..n]) {
                             Ok(events) => {
+                                track(&events, &mut last_usage);
                                 for ev in events {
                                     if tx.send(Ok(ev)).is_err() {
-                                        return;
+                                        break 'stream;
                                     }
                                 }
                             }
                             Err(e) => {
                                 send_err(e);
-                                return;
+                                break 'stream;
                             }
                         },
                         Err(io_err) => {
@@ -520,10 +560,11 @@ impl<'a> Dispatcher<'a> {
                             } else {
                                 send_err(crate::http::map_io_error(io_err));
                             }
-                            return;
+                            break 'stream;
                         }
                     }
                 }
+                settle(last_usage);
             });
             return Ok(StreamOutcome {
                 events: rx,
@@ -543,7 +584,7 @@ impl<'a> Dispatcher<'a> {
         candidate: &Candidate,
         prepared: &PreparedDispatch,
         request: &CompletionRequest,
-        ctx: &DispatchContext<'_>,
+        ctx: &DispatchContext,
         attempts: Vec<AttemptRecord>,
         usage: Option<crate::types::Usage>,
     ) -> DisclosureRecord {
@@ -572,6 +613,16 @@ struct PreparedDispatch {
     auth: AuthMaterial,
     redactor: Redactor,
     estimated_cost_micro_usd: Option<u64>,
+    /// The budget reservation made by `prepare`. Exactly one of
+    /// settle / release / the stream pair closes it (see
+    /// `QuotaLedger`); the execute loops own that lifecycle.
+    reservation: crate::gates::Reservation,
+}
+
+fn lock_ledger(
+    ledger: &std::sync::Arc<std::sync::Mutex<QuotaLedger>>,
+) -> std::sync::MutexGuard<'_, QuotaLedger> {
+    ledger.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 fn is_fallback_eligible(e: &ProviderError) -> bool {

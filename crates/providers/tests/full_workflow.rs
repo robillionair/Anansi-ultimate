@@ -231,7 +231,7 @@ fn complete_configuration_to_cancellation_workflow() {
     assert_eq!(server.hit_count(), 3);
 
     // -- 9. Ledger accumulated the completed work --------------------
-    let totals = runtime.ledger().totals_for("openai");
+    let totals = runtime.ledger().lock().unwrap().totals_for("openai");
     assert!(
         totals.requests >= 2,
         "ledger saw the completed dispatches: {totals:?}"

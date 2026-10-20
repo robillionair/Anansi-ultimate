@@ -110,7 +110,7 @@ impl fmt::Debug for AuthMaterial {
 /// Resolves a `CredentialRef` to secret material. The production
 /// implementation belongs to the integrator (OS keyring via
 /// `anansi-core`); this crate never persists secrets itself.
-pub trait SecretResolver {
+pub trait SecretResolver: Send + Sync {
     fn resolve(&self, credential: &CredentialRef) -> Result<AuthMaterial, ProviderError>;
 }
 

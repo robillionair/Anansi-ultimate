@@ -19,11 +19,11 @@ use anansi_providers::types::{
 use common::*;
 use std::time::{Duration, Instant};
 
-fn ctx<'a>(
-    ledger: &'a mut QuotaLedger,
+fn ctx(
+    ledger: std::sync::Arc<std::sync::Mutex<QuotaLedger>>,
     mode: RoutingMode,
     lock: ZeroCostLock,
-) -> DispatchContext<'a> {
+) -> DispatchContext {
     DispatchContext {
         routing: RoutingRequest {
             mode,
@@ -74,8 +74,8 @@ fn openai_success_records_usage_and_disclosure() {
     let res = resolver();
     let dispatcher = dispatcher(&transport, &res);
     let regs = cloud_openai_regs(&server, vec![model("gpt-x", "openai", CostClass::Paid)]);
-    let mut ledger = QuotaLedger::new();
-    let mut c = ctx(&mut ledger, RoutingMode::Auto, ZeroCostLock::off());
+    let ledger = std::sync::Arc::new(std::sync::Mutex::new(QuotaLedger::new()));
+    let mut c = ctx(ledger.clone(), RoutingMode::Auto, ZeroCostLock::off());
     c.permit = Some(permit("openai", "gpt-x"));
     let outcome = dispatcher
         .execute(&regs, &user_request("gpt-x"), c, &CancellationToken::new())
@@ -85,8 +85,8 @@ fn openai_success_records_usage_and_disclosure() {
     assert_eq!(outcome.disclosure.provider, "openai");
     assert_eq!(outcome.disclosure.endpoint_host, "127.0.0.1");
     assert!(!outcome.disclosure.local);
-    assert_eq!(ledger.total_requests(), 1);
-    assert_eq!(ledger.totals_for("openai").input_tokens, 12);
+    assert_eq!(ledger.lock().unwrap().total_requests(), 1);
+    assert_eq!(ledger.lock().unwrap().totals_for("openai").input_tokens, 12);
     // The wire request carried the fake key and the right path.
     let recorded = server.recorded();
     assert_eq!(recorded.len(), 1);
@@ -115,12 +115,12 @@ fn ollama_local_success_without_credentials() {
         false,
         vec![model("qwen2.5:0.5b", "ollama", CostClass::Free)],
     )];
-    let mut ledger = QuotaLedger::new();
+    let ledger = std::sync::Arc::new(std::sync::Mutex::new(QuotaLedger::new()));
     let outcome = dispatcher
         .execute(
             &regs,
             &user_request("qwen2.5:0.5b"),
-            ctx(&mut ledger, RoutingMode::Private, ZeroCostLock::on()),
+            ctx(ledger.clone(), RoutingMode::Private, ZeroCostLock::on()),
             &CancellationToken::new(),
         )
         .unwrap();
@@ -147,8 +147,8 @@ fn anthropic_success_with_api_key_header() {
         true,
         vec![model("claude-x", "anthropic", CostClass::Paid)],
     )];
-    let mut ledger = QuotaLedger::new();
-    let mut c = ctx(&mut ledger, RoutingMode::Auto, ZeroCostLock::off());
+    let ledger = std::sync::Arc::new(std::sync::Mutex::new(QuotaLedger::new()));
+    let mut c = ctx(ledger.clone(), RoutingMode::Auto, ZeroCostLock::off());
     c.permit = Some(permit("anthropic", "claude-x"));
     let outcome = dispatcher
         .execute(
@@ -183,8 +183,8 @@ fn gemini_success_with_header_key_not_url() {
         true,
         vec![model("gemini-x", "gemini", CostClass::Paid)],
     )];
-    let mut ledger = QuotaLedger::new();
-    let mut c = ctx(&mut ledger, RoutingMode::Auto, ZeroCostLock::off());
+    let ledger = std::sync::Arc::new(std::sync::Mutex::new(QuotaLedger::new()));
+    let mut c = ctx(ledger.clone(), RoutingMode::Auto, ZeroCostLock::off());
     c.permit = Some(permit("gemini", "gemini-x"));
     let outcome = dispatcher
         .execute(
@@ -215,8 +215,8 @@ fn azure_uses_deployment_path_and_api_key() {
         true,
         vec![model("dep-1", "azure", CostClass::Paid)],
     )];
-    let mut ledger = QuotaLedger::new();
-    let mut c = ctx(&mut ledger, RoutingMode::Auto, ZeroCostLock::off());
+    let ledger = std::sync::Arc::new(std::sync::Mutex::new(QuotaLedger::new()));
+    let mut c = ctx(ledger.clone(), RoutingMode::Auto, ZeroCostLock::off());
     c.permit = Some(permit("azure", "dep-1"));
     let outcome = dispatcher
         .execute(&regs, &user_request("dep-1"), c, &CancellationToken::new())
@@ -239,12 +239,12 @@ fn malformed_success_body_is_a_clean_error() {
     let res = resolver();
     let dispatcher = dispatcher(&transport, &res);
     let regs = cloud_openai_regs(&server, vec![model("gpt-x", "openai", CostClass::Free)]);
-    let mut ledger = QuotaLedger::new();
+    let ledger = std::sync::Arc::new(std::sync::Mutex::new(QuotaLedger::new()));
     let err = dispatcher
         .execute(
             &regs,
             &user_request("gpt-x"),
-            ctx(&mut ledger, RoutingMode::Auto, ZeroCostLock::off()),
+            ctx(ledger.clone(), RoutingMode::Auto, ZeroCostLock::off()),
             &CancellationToken::new(),
         )
         .unwrap_err();
@@ -264,12 +264,12 @@ fn auth_failure_not_retried_and_never_leaks_the_key() {
     let res = resolver();
     let dispatcher = dispatcher(&transport, &res);
     let regs = cloud_openai_regs(&server, vec![model("gpt-x", "openai", CostClass::Free)]);
-    let mut ledger = QuotaLedger::new();
+    let ledger = std::sync::Arc::new(std::sync::Mutex::new(QuotaLedger::new()));
     let err = dispatcher
         .execute(
             &regs,
             &user_request("gpt-x"),
-            ctx(&mut ledger, RoutingMode::Auto, ZeroCostLock::off()),
+            ctx(ledger.clone(), RoutingMode::Auto, ZeroCostLock::off()),
             &CancellationToken::new(),
         )
         .unwrap_err();
@@ -298,12 +298,12 @@ fn rate_limit_retries_then_succeeds() {
     let res = resolver();
     let dispatcher = dispatcher(&transport, &res);
     let regs = cloud_openai_regs(&server, vec![model("gpt-x", "openai", CostClass::Free)]);
-    let mut ledger = QuotaLedger::new();
+    let ledger = std::sync::Arc::new(std::sync::Mutex::new(QuotaLedger::new()));
     let outcome = dispatcher
         .execute(
             &regs,
             &user_request("gpt-x"),
-            ctx(&mut ledger, RoutingMode::Auto, ZeroCostLock::off()),
+            ctx(ledger.clone(), RoutingMode::Auto, ZeroCostLock::off()),
             &CancellationToken::new(),
         )
         .unwrap();
@@ -322,12 +322,12 @@ fn rate_limit_exhaustion_is_bounded() {
     let res = resolver();
     let dispatcher = dispatcher(&transport, &res);
     let regs = cloud_openai_regs(&server, vec![model("gpt-x", "openai", CostClass::Free)]);
-    let mut ledger = QuotaLedger::new();
+    let ledger = std::sync::Arc::new(std::sync::Mutex::new(QuotaLedger::new()));
     let err = dispatcher
         .execute(
             &regs,
             &user_request("gpt-x"),
-            ctx(&mut ledger, RoutingMode::Auto, ZeroCostLock::off()),
+            ctx(ledger.clone(), RoutingMode::Auto, ZeroCostLock::off()),
             &CancellationToken::new(),
         )
         .unwrap_err();
@@ -348,12 +348,12 @@ fn server_error_echo_is_scrubbed() {
     let res = resolver();
     let dispatcher = dispatcher(&transport, &res);
     let regs = cloud_openai_regs(&server, vec![model("gpt-x", "openai", CostClass::Free)]);
-    let mut ledger = QuotaLedger::new();
+    let ledger = std::sync::Arc::new(std::sync::Mutex::new(QuotaLedger::new()));
     let err = dispatcher
         .execute(
             &regs,
             &user_request("gpt-x"),
-            ctx(&mut ledger, RoutingMode::Auto, ZeroCostLock::off()),
+            ctx(ledger.clone(), RoutingMode::Auto, ZeroCostLock::off()),
             &CancellationToken::new(),
         )
         .unwrap_err();
@@ -386,13 +386,13 @@ fn timeout_is_bounded() {
         total_ms: 1500,
     });
     let regs = cloud_openai_regs(&server, vec![model("gpt-x", "openai", CostClass::Free)]);
-    let mut ledger = QuotaLedger::new();
+    let ledger = std::sync::Arc::new(std::sync::Mutex::new(QuotaLedger::new()));
     let started = Instant::now();
     let err = dispatcher
         .execute(
             &regs,
             &user_request("gpt-x"),
-            ctx(&mut ledger, RoutingMode::Auto, ZeroCostLock::off()),
+            ctx(ledger.clone(), RoutingMode::Auto, ZeroCostLock::off()),
             &CancellationToken::new(),
         )
         .unwrap_err();
@@ -428,12 +428,12 @@ fn connection_drop_and_refusal_are_connection_lost() {
         max_retry_after_ms: 10,
     });
     let regs = cloud_openai_regs(&dropping, vec![model("gpt-x", "openai", CostClass::Free)]);
-    let mut ledger = QuotaLedger::new();
+    let ledger = std::sync::Arc::new(std::sync::Mutex::new(QuotaLedger::new()));
     let err = dispatcher
         .execute(
             &regs,
             &user_request("gpt-x"),
-            ctx(&mut ledger, RoutingMode::Auto, ZeroCostLock::off()),
+            ctx(ledger.clone(), RoutingMode::Auto, ZeroCostLock::off()),
             &CancellationToken::new(),
         )
         .unwrap_err();
@@ -454,12 +454,12 @@ fn connection_drop_and_refusal_are_connection_lost() {
         true,
         vec![model("gpt-x", "openai", CostClass::Free)],
     )];
-    let mut ledger = QuotaLedger::new();
+    let ledger = std::sync::Arc::new(std::sync::Mutex::new(QuotaLedger::new()));
     let err = dispatcher
         .execute(
             &regs,
             &user_request("gpt-x"),
-            ctx(&mut ledger, RoutingMode::Auto, ZeroCostLock::off()),
+            ctx(ledger.clone(), RoutingMode::Auto, ZeroCostLock::off()),
             &CancellationToken::new(),
         )
         .unwrap_err();
@@ -480,12 +480,12 @@ fn redirect_is_never_followed() {
     let res = resolver();
     let dispatcher = dispatcher(&transport, &res);
     let regs = cloud_openai_regs(&server, vec![model("gpt-x", "openai", CostClass::Free)]);
-    let mut ledger = QuotaLedger::new();
+    let ledger = std::sync::Arc::new(std::sync::Mutex::new(QuotaLedger::new()));
     let err = dispatcher
         .execute(
             &regs,
             &user_request("gpt-x"),
-            ctx(&mut ledger, RoutingMode::Auto, ZeroCostLock::off()),
+            ctx(ledger.clone(), RoutingMode::Auto, ZeroCostLock::off()),
             &CancellationToken::new(),
         )
         .unwrap_err();
@@ -505,12 +505,12 @@ fn https_endpoint_fails_closed_without_tls_transport() {
         true,
         vec![model("gpt-x", "openai", CostClass::Free)],
     )];
-    let mut ledger = QuotaLedger::new();
+    let ledger = std::sync::Arc::new(std::sync::Mutex::new(QuotaLedger::new()));
     let err = dispatcher
         .execute(
             &regs,
             &user_request("gpt-x"),
-            ctx(&mut ledger, RoutingMode::Auto, ZeroCostLock::off()),
+            ctx(ledger.clone(), RoutingMode::Auto, ZeroCostLock::off()),
             &CancellationToken::new(),
         )
         .unwrap_err();
@@ -527,12 +527,12 @@ fn paid_without_permit_is_refused_before_network() {
     let res = resolver();
     let dispatcher = dispatcher(&transport, &res);
     let regs = cloud_openai_regs(&server, vec![model("gpt-x", "openai", CostClass::Paid)]);
-    let mut ledger = QuotaLedger::new();
+    let ledger = std::sync::Arc::new(std::sync::Mutex::new(QuotaLedger::new()));
     let err = dispatcher
         .execute(
             &regs,
             &user_request("gpt-x"),
-            ctx(&mut ledger, RoutingMode::Auto, ZeroCostLock::off()),
+            ctx(ledger.clone(), RoutingMode::Auto, ZeroCostLock::off()),
             &CancellationToken::new(),
         )
         .unwrap_err();
@@ -555,17 +555,17 @@ fn zero_cost_lock_blocks_paid_but_allows_free() {
             model("free-x", "openai", CostClass::Free),
         ],
     );
-    let mut ledger = QuotaLedger::new();
+    let ledger = std::sync::Arc::new(std::sync::Mutex::new(QuotaLedger::new()));
     // Even an explicit user choice of the paid model is filtered out of
     // the plan by the engaged lock: no candidate, no network.
-    let mut c = ctx(&mut ledger, RoutingMode::ChooseModel, ZeroCostLock::on());
+    let mut c = ctx(ledger.clone(), RoutingMode::ChooseModel, ZeroCostLock::on());
     c.routing.chosen = Some(("openai".to_string(), "gpt-x".to_string()));
     let _err = dispatcher
         .execute(&regs, &user_request("gpt-x"), c, &CancellationToken::new())
         .unwrap_err();
     assert_eq!(server.hit_count(), 0);
     // Free model under the lock succeeds — the lock is not a blanket ban.
-    let c = ctx(&mut ledger, RoutingMode::Auto, ZeroCostLock::on());
+    let c = ctx(ledger.clone(), RoutingMode::Auto, ZeroCostLock::on());
     let outcome = dispatcher
         .execute(&regs, &user_request("free-x"), c, &CancellationToken::new())
         .unwrap();
@@ -588,12 +588,12 @@ fn sealed_content_is_refused_for_local_and_cloud() {
         }],
     );
     let cloud = cloud_openai_regs(&server, vec![model("gpt-x", "openai", CostClass::Free)]);
-    let mut ledger = QuotaLedger::new();
+    let ledger = std::sync::Arc::new(std::sync::Mutex::new(QuotaLedger::new()));
     let err = dispatcher
         .execute(
             &cloud,
             &sealed,
-            ctx(&mut ledger, RoutingMode::Auto, ZeroCostLock::off()),
+            ctx(ledger.clone(), RoutingMode::Auto, ZeroCostLock::off()),
             &CancellationToken::new(),
         )
         .unwrap_err();
@@ -607,12 +607,12 @@ fn sealed_content_is_refused_for_local_and_cloud() {
     )];
     let mut sealed_local = sealed.clone();
     sealed_local.model = "gpt-x".to_string();
-    let mut ledger = QuotaLedger::new();
+    let ledger = std::sync::Arc::new(std::sync::Mutex::new(QuotaLedger::new()));
     let err = dispatcher
         .execute(
             &local,
             &sealed_local,
-            ctx(&mut ledger, RoutingMode::Private, ZeroCostLock::off()),
+            ctx(ledger.clone(), RoutingMode::Private, ZeroCostLock::off()),
             &CancellationToken::new(),
         )
         .unwrap_err();
@@ -638,12 +638,12 @@ fn private_content_needs_explicit_cloud_authorization() {
             )],
         }],
     );
-    let mut ledger = QuotaLedger::new();
+    let ledger = std::sync::Arc::new(std::sync::Mutex::new(QuotaLedger::new()));
     let err = dispatcher
         .execute(
             &regs,
             &private_req,
-            ctx(&mut ledger, RoutingMode::Auto, ZeroCostLock::off()),
+            ctx(ledger.clone(), RoutingMode::Auto, ZeroCostLock::off()),
             &CancellationToken::new(),
         )
         .unwrap_err();
@@ -651,12 +651,12 @@ fn private_content_needs_explicit_cloud_authorization() {
     assert_eq!(server.hit_count(), 0);
     let mut authorized = private_req.clone();
     authorized.explicit_cloud_authorization = true;
-    let mut ledger = QuotaLedger::new();
+    let ledger = std::sync::Arc::new(std::sync::Mutex::new(QuotaLedger::new()));
     dispatcher
         .execute(
             &regs,
             &authorized,
-            ctx(&mut ledger, RoutingMode::Auto, ZeroCostLock::off()),
+            ctx(ledger.clone(), RoutingMode::Auto, ZeroCostLock::off()),
             &CancellationToken::new(),
         )
         .unwrap();
@@ -671,8 +671,8 @@ fn budget_exhaustion_is_refused_before_network() {
     let res = resolver();
     let dispatcher = dispatcher(&transport, &res);
     let regs = cloud_openai_regs(&server, vec![model("gpt-x", "openai", CostClass::Free)]);
-    let mut ledger = QuotaLedger::new();
-    let mut c = ctx(&mut ledger, RoutingMode::Auto, ZeroCostLock::off());
+    let ledger = std::sync::Arc::new(std::sync::Mutex::new(QuotaLedger::new()));
+    let mut c = ctx(ledger.clone(), RoutingMode::Auto, ZeroCostLock::off());
     c.budget = Budget {
         max_total_tokens: Some(10),
         ..Default::default()
@@ -692,15 +692,15 @@ fn permit_is_single_use() {
     let res = resolver();
     let dispatcher = dispatcher(&transport, &res);
     let regs = cloud_openai_regs(&server, vec![model("gpt-x", "openai", CostClass::Paid)]);
-    let mut ledger = QuotaLedger::new();
-    let mut c = ctx(&mut ledger, RoutingMode::Auto, ZeroCostLock::off());
+    let ledger = std::sync::Arc::new(std::sync::Mutex::new(QuotaLedger::new()));
+    let mut c = ctx(ledger.clone(), RoutingMode::Auto, ZeroCostLock::off());
     c.permit = Some(permit("openai", "gpt-x"));
     dispatcher
         .execute(&regs, &user_request("gpt-x"), c, &CancellationToken::new())
         .unwrap();
     assert_eq!(server.hit_count(), 1);
-    let mut ledger = QuotaLedger::new();
-    let mut c = ctx(&mut ledger, RoutingMode::Auto, ZeroCostLock::off());
+    let ledger = std::sync::Arc::new(std::sync::Mutex::new(QuotaLedger::new()));
+    let mut c = ctx(ledger.clone(), RoutingMode::Auto, ZeroCostLock::off());
     c.permit = Some(permit("openai", "gpt-x"));
     let err = dispatcher
         .execute(&regs, &user_request("gpt-x"), c, &CancellationToken::new())
@@ -740,12 +740,12 @@ fn fallback_reaches_second_provider_after_503() {
             vec![model("gpt-x", "openai", CostClass::Free)],
         ),
     ];
-    let mut ledger = QuotaLedger::new();
+    let ledger = std::sync::Arc::new(std::sync::Mutex::new(QuotaLedger::new()));
     let outcome = dispatcher
         .execute(
             &regs,
             &user_request("gpt-x"),
-            ctx(&mut ledger, RoutingMode::Auto, ZeroCostLock::off()),
+            ctx(ledger.clone(), RoutingMode::Auto, ZeroCostLock::off()),
             &CancellationToken::new(),
         )
         .unwrap();
@@ -793,12 +793,12 @@ fn fallback_never_crosses_from_free_to_paid_under_lock() {
             vec![model("gpt-x", "openai", CostClass::Paid)],
         ),
     ];
-    let mut ledger = QuotaLedger::new();
+    let ledger = std::sync::Arc::new(std::sync::Mutex::new(QuotaLedger::new()));
     let err = dispatcher
         .execute(
             &regs,
             &user_request("free-x"),
-            ctx(&mut ledger, RoutingMode::AutoFree, ZeroCostLock::on()),
+            ctx(ledger.clone(), RoutingMode::AutoFree, ZeroCostLock::on()),
             &CancellationToken::new(),
         )
         .unwrap_err();
@@ -852,12 +852,12 @@ fn openai_streaming_over_dribbled_chunks() {
     let res = resolver();
     let dispatcher = dispatcher(&transport, &res);
     let regs = cloud_openai_regs(&server, vec![model("gpt-x", "openai", CostClass::Free)]);
-    let mut ledger = QuotaLedger::new();
+    let ledger = std::sync::Arc::new(std::sync::Mutex::new(QuotaLedger::new()));
     let outcome = dispatcher
         .execute_stream(
             &regs,
             &user_request("gpt-x"),
-            ctx(&mut ledger, RoutingMode::Auto, ZeroCostLock::off()),
+            ctx(ledger.clone(), RoutingMode::Auto, ZeroCostLock::off()),
             &CancellationToken::new(),
         )
         .unwrap();
@@ -891,12 +891,12 @@ fn ollama_streaming_ndjson() {
         false,
         vec![model("qwen2.5:0.5b", "ollama", CostClass::Free)],
     )];
-    let mut ledger = QuotaLedger::new();
+    let ledger = std::sync::Arc::new(std::sync::Mutex::new(QuotaLedger::new()));
     let outcome = dispatcher
         .execute_stream(
             &regs,
             &user_request("qwen2.5:0.5b"),
-            ctx(&mut ledger, RoutingMode::Private, ZeroCostLock::on()),
+            ctx(ledger.clone(), RoutingMode::Private, ZeroCostLock::on()),
             &CancellationToken::new(),
         )
         .unwrap();
@@ -922,12 +922,12 @@ fn streaming_cancellation_closes_the_stream() {
     let dispatcher = dispatcher(&transport, &res);
     let regs = cloud_openai_regs(&server, vec![model("gpt-x", "openai", CostClass::Free)]);
     let cancel = CancellationToken::new();
-    let mut ledger = QuotaLedger::new();
+    let ledger = std::sync::Arc::new(std::sync::Mutex::new(QuotaLedger::new()));
     let outcome = dispatcher
         .execute_stream(
             &regs,
             &user_request("gpt-x"),
-            ctx(&mut ledger, RoutingMode::Auto, ZeroCostLock::off()),
+            ctx(ledger.clone(), RoutingMode::Auto, ZeroCostLock::off()),
             &cancel,
         )
         .unwrap();
@@ -982,12 +982,12 @@ fn streaming_falls_back_before_first_byte() {
             vec![model("gpt-x", "openai", CostClass::Free)],
         ),
     ];
-    let mut ledger = QuotaLedger::new();
+    let ledger = std::sync::Arc::new(std::sync::Mutex::new(QuotaLedger::new()));
     let outcome = dispatcher
         .execute_stream(
             &regs,
             &user_request("gpt-x"),
-            ctx(&mut ledger, RoutingMode::Auto, ZeroCostLock::off()),
+            ctx(ledger.clone(), RoutingMode::Auto, ZeroCostLock::off()),
             &CancellationToken::new(),
         )
         .unwrap();
