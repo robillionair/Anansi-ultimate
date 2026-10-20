@@ -818,10 +818,7 @@ pub fn configured_config_json(scope: &CallerScope) -> Option<String> {
 /// Returns Ok(false) when a configuration is already present (the
 /// in-memory one wins). Validation failures are errors: a bad
 /// persisted file must be visible, not silently ignored.
-pub fn install_persisted_config(
-    scope: &CallerScope,
-    json: &str,
-) -> Result<bool, CommandError> {
+pub fn install_persisted_config(scope: &CallerScope, json: &str) -> Result<bool, CommandError> {
     let config: RuntimeConfig = serde_json::from_str(json).map_err(|_| {
         invalid("The persisted provider configuration is unreadable; reconfigure providers.")
     })?;
@@ -967,7 +964,7 @@ pub fn providers_command(
                 Ok(())
             })?;
             to_value(&ProviderAuthorizeResponse {
-            contract_version: 1,
+                contract_version: 1,
                 permit_id,
                 expires_at_ms,
             })
@@ -995,7 +992,7 @@ pub fn providers_command(
                 .dispatch(&req.request, routing, permit, &CancellationToken::new())
                 .map_err(to_command_error)?;
             to_value(&ProviderDispatchResponse {
-            contract_version: 1,
+                contract_version: 1,
                 response: ProviderResponseBody {
                     text: outcome.response.text,
                     model: outcome.response.model,
@@ -1054,7 +1051,7 @@ pub fn providers_command(
                     },
                 );
                 Ok(ProviderStreamStartResponse {
-            contract_version: 1,
+                    contract_version: 1,
                     run_id,
                     capability,
                     disclosure,
@@ -1115,7 +1112,7 @@ pub fn providers_command(
                     state.streams.remove(&req.run_id);
                 }
                 to_value(&ProviderPollResponse {
-            contract_version: 1,
+                    contract_version: 1,
                     events,
                     done,
                     disclosure,
@@ -1161,7 +1158,7 @@ pub fn providers_command(
                     .unwrap_or_else(|poisoned| poisoned.into_inner());
                 let (reserved_requests, reserved_tokens) = ledger.reserved();
                 to_value(&ProviderUsageResponse {
-            contract_version: 1,
+                    contract_version: 1,
                     total_requests: ledger.total_requests(),
                     reserved_requests,
                     reserved_tokens,

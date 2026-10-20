@@ -9,9 +9,9 @@ use anansi_core::memory::{
     MemoryWriteRequest,
 };
 use anansi_core::provider_dispatch::{
-    ProviderAuthorizeRequest, ProviderAuthorizeResponse, ProviderConfigureRequest,
-    ProviderConfigureResponse, ProviderDispatchRequest, ProviderDispatchResponse,
-    ProviderCatalogResponse, ProviderGrantRequest, ProviderPollResponse, ProviderRunRequest,
+    ProviderAuthorizeRequest, ProviderAuthorizeResponse, ProviderCatalogResponse,
+    ProviderConfigureRequest, ProviderConfigureResponse, ProviderDispatchRequest,
+    ProviderDispatchResponse, ProviderGrantRequest, ProviderPollResponse, ProviderRunRequest,
     ProviderStreamStartResponse, ProviderUsageResponse, ProviderWorkspaceRequest,
 };
 use anansi_core::relationships::{

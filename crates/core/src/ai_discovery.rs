@@ -899,18 +899,15 @@ impl Core {
                     "providers-dispatch" | "providers-stream-start" | "providers-usage"
                 ) && !crate::provider_dispatch::has_config(&scope)
                     && let (Ok(root), Some(wid)) = (self.storage_root(), &workspace_id)
-                    && let Some(json) =
-                        crate::provider_dispatch::load_config_file(&root, wid)?
+                    && let Some(json) = crate::provider_dispatch::load_config_file(&root, wid)?
                 {
                     crate::provider_dispatch::install_persisted_config(&scope, &json)?;
                 }
-                let result =
-                    crate::provider_dispatch::providers_command(operation, value, &scope);
+                let result = crate::provider_dispatch::providers_command(operation, value, &scope);
                 if operation == "providers-configure"
                     && result.is_ok()
                     && let (Ok(root), Some(wid)) = (self.storage_root(), &workspace_id)
-                    && let Some(json) =
-                        crate::provider_dispatch::configured_config_json(&scope)
+                    && let Some(json) = crate::provider_dispatch::configured_config_json(&scope)
                 {
                     crate::provider_dispatch::persist_config_file(&root, wid, &json)?;
                 }

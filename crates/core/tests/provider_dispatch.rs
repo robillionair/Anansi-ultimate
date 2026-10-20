@@ -989,7 +989,9 @@ fn configuration_persists_across_real_process_restarts() {
         .trim()
         .to_string();
     let persisted = std::fs::read_to_string(
-        dir.path().join("provider-config").join(format!("{ws}.json")),
+        dir.path()
+            .join("provider-config")
+            .join(format!("{ws}.json")),
     )
     .expect("configuration persisted next to the storage root");
     assert!(persisted.contains("llama-x"));
@@ -1017,15 +1019,14 @@ fn configuration_persists_across_real_process_restarts() {
         .unwrap()
         .trim()
         .to_string();
-    let path = dir2.path().join("provider-config").join(format!("{ws2}.json"));
+    let path = dir2
+        .path()
+        .join("provider-config")
+        .join(format!("{ws2}.json"));
     let text = std::fs::read_to_string(&path).unwrap();
     std::fs::write(&path, text.replace("\"local\"", "\"cloud\"")).unwrap();
     let hits_before = fake.hits.load(Ordering::SeqCst);
-    let stdout = run_phase(
-        dir2.path(),
-        "serve",
-        &[("ANANSI_PROVIDER_RESTART_WS", ws2)],
-    );
+    let stdout = run_phase(dir2.path(), "serve", &[("ANANSI_PROVIDER_RESTART_WS", ws2)]);
     assert!(stdout.contains("RESTART_ERR=InvalidRequest"), "{stdout}");
     assert_eq!(fake.hits.load(Ordering::SeqCst), hits_before);
 }
