@@ -117,6 +117,7 @@ dependencies = [
  "rustls",
  "rustls-pemfile",
  "rustls-pki-types",
+ "schemars 1.2.3",
  "serde",
  "serde_json",
  "time",

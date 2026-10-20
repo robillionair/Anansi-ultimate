@@ -13,6 +13,7 @@ linux-secret-service = ["keyring/sync-secret-service", "keyring/crypto-rust"]
 [dependencies]
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = { version = "=1.0.154" }
+schemars.workspace = true
 # TLS: rustls with the ring crypto provider and Mozilla root set
 # (webpki-roots). Certificate and hostname validation are rustls
 # defaults and are never disabled in this crate (no danger APIs).

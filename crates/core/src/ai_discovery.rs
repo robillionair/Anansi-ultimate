@@ -668,7 +668,7 @@ impl Core {
     pub fn ai_command(
         &self,
         operation: &str,
-        value: serde_json::Value,
+        mut value: serde_json::Value,
     ) -> Result<serde_json::Value, CommandError> {
         match operation {
             "ask-start" => {
@@ -803,11 +803,39 @@ impl Core {
                 serde_json::to_value(response).map_err(|_| crate::storage::unavailable())
             }
             "providers-catalog"
+            | "providers-configure"
+            | "providers-authorize"
             | "providers-dispatch"
             | "providers-stream-start"
             | "providers-stream-poll"
-            | "providers-stream-cancel" => {
-                crate::provider_dispatch::providers_command(operation, value)
+            | "providers-stream-cancel"
+            | "providers-usage" => {
+                // The workspace scope is derived from this Core's
+                // own storage, never from request JSON. The session
+                // scope arrives only via `callerContext`, which the
+                // API layer stamps from the authenticated token
+                // (overwriting client input); in-process host calls
+                // fall back to the host session.
+                let workspace = self
+                    .storage_root()
+                    .map(|root| {
+                        crate::provider_dispatch::fingerprint(&root.to_string_lossy())
+                    })
+                    .unwrap_or_else(|_| "no-workspace".to_string());
+                let session = value
+                    .get("callerContext")
+                    .and_then(|c| c.get("session"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("host-session")
+                    .to_string();
+                // The stamp is transport metadata, not part of any
+                // provider contract: consume it so the strict DTOs
+                // (deny_unknown_fields) never see it.
+                if let Some(obj) = value.as_object_mut() {
+                    obj.remove("callerContext");
+                }
+                let scope = crate::provider_dispatch::CallerScope { session, workspace };
+                crate::provider_dispatch::providers_command(operation, value, &scope)
             }
             _ => Err(CommandError::new(
                 ErrorCode::InvalidRequest,

@@ -97,10 +97,13 @@ pub fn command_path(path: &str) -> bool {
             | "/v1/ai/ask-cancel"
             | "/v1/ai/ask-forget"
             | "/v1/ai/providers-catalog"
+            | "/v1/ai/providers-configure"
+            | "/v1/ai/providers-authorize"
             | "/v1/ai/providers-dispatch"
             | "/v1/ai/providers-stream-start"
             | "/v1/ai/providers-stream-poll"
             | "/v1/ai/providers-stream-cancel"
+            | "/v1/ai/providers-usage"
             | "/v1/ai/hybrid-search"
             | "/v1/ai/context"
             | "/v1/ai/index-embeddings"
@@ -348,7 +351,7 @@ async fn ai(
             );
         }
     };
-    let input = match serde_json::from_slice(&bytes) {
+    let input: serde_json::Value = match serde_json::from_slice(&bytes) {
         Ok(v) => v,
         Err(_) => {
             return error(
@@ -358,6 +361,20 @@ async fn ai(
             );
         }
     };
+    let mut input = input;
+    if operation.starts_with("providers-") {
+        // The session scope is derived from the authenticated token
+        // and OVERWRITES any client-supplied value: `callerContext`
+        // is a server stamp, never client input. The token itself
+        // never leaves this process; only its fingerprint travels.
+        let session = anansi_core::provider_dispatch::fingerprint(&state.token);
+        if let Some(obj) = input.as_object_mut() {
+            obj.insert(
+                "callerContext".to_string(),
+                serde_json::json!({ "session": session }),
+            );
+        }
+    }
     match tokio::task::spawn_blocking(move || state.core.ai_command(&operation, input)).await {
         Ok(Ok(value)) => Json(value).into_response(),
         Ok(Err(e)) => {

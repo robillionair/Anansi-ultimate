@@ -1,69 +1,475 @@
-//! Application integration for the M5 provider subsystem
-//! (`anansi-providers`): exposes provider configuration, authorized
-//! dispatch, streaming with poll/cancel, and the disclosure record
-//! through `Core::ai_command` operations:
+//! Application integration for the M5 provider subsystem, with the
+//! authorization boundary repaired:
 //!
-//! - `providers-catalog` — the provider catalog (no configuration).
-//! - `providers-dispatch` — one unary dispatch
-//!   (configuration → gates → HTTPS transport → response +
-//!   disclosure).
-//! - `providers-stream-start` / `providers-stream-poll` /
-//!   `providers-stream-cancel` — the streamed variant, mirroring
-//!   the ask run pattern.
+//! - **Policy comes from backend state, never from dispatch JSON.**
+//!   Configuration is installed by `providers-configure`; paid
+//!   authorization is issued by `providers-authorize`. The dispatch
+//!   and stream operations accept only a completion request, routing
+//!   choices, and (optionally) the *id* of a backend-issued permit.
+//!   Locality is **derived** from the validated endpoint at
+//!   configure time — a configuration whose declared locality
+//!   contradicts the derivation is rejected, so a cloud endpoint
+//!   cannot masquerade as Local, and model cost classes exist only
+//!   inside the trusted configuration, never in a dispatch request.
+//! - **Caller binding.** Every operation runs under a
+//!   [`CallerScope`] (session + workspace). The API layer stamps the
+//!   session from the authenticated bearer token (overwriting any
+//!   client-supplied value — see `crates/api`); in-process host
+//!   calls use the host session. Permits are bound to the issuing
+//!   session; stream runs are bound to the starting session and
+//!   workspace.
+//! - **Run capabilities.** `providers-stream-start` returns an
+//!   unpredictable 128-bit capability next to the run id. Poll and
+//!   cancel require both, compared in constant time; any mismatch —
+//!   wrong capability, wrong session, wrong workspace — is answered
+//!   `NotFound`, so run existence is not an oracle.
+//! - **Accounting survives configuration changes.** The permit set
+//!   and the quota ledger live in the per-workspace backend state,
+//!   created once and shared into every runtime built from it
+//!   (`ProviderRuntime::with_shared_accounting`). Configuring B
+//!   after A and back cannot resurrect a consumed permit or reset
+//!   usage. Budgets come from the trusted configuration and are
+//!   enforced with reservations inside the providers crate.
+//! - **Bounded streams.** At most [`MAX_RETAINED_STREAMS`] runs are
+//!   retained per workspace; runs expire after [`STREAM_TTL`]
+//!   (cancelled, then dropped) and finished runs are removed by
+//!   their terminal poll. Expired permits are swept on every
+//!   operation.
+//! - **Strict request bounds** are enforced before any state change
+//!   or network traffic (see `validate_*_bounds`); the same bounds
+//!   are published in the generated contracts
+//!   (`crates/contracts`, `packages/contracts`).
 //!
-//! The runtime is process-wide and cached by configuration
-//! fingerprint (see `with_runtime`): the quota ledger and the
-//! single-use permit set must live across calls, or a permit could
-//! authorize twice — once per call. Credentials never pass through
-//! this module: configurations carry credential *references* only,
-//! resolved inside the runtime by the native keyring resolver.
-//!
-//! Error mapping (integration note for the API owners): provider
-//! configuration problems map to `InvalidRequest`, credential
-//! problems to `Unauthorized`/`Forbidden`, and dispatch failures to
-//! `StorageUnavailable` with the provider error code preserved at
-//! the front of the message (e.g. "ProviderUnavailable: …") — the
-//! message text is the providers crate's own, already redacted.
+//! Credentials never pass through this module: configurations carry
+//! credential *references* only, resolved inside the runtime by the
+//! native keyring resolver.
 
 use crate::readiness::{CommandError, ErrorCode};
 use anansi_providers::dispatcher::StreamOutcome;
 use anansi_providers::error::{ProviderError, ProviderErrorCode};
-use anansi_providers::gates::{PaidInferencePermit, ZeroCostLock};
+use anansi_providers::gates::{PaidInferencePermit, QuotaLedger, ZeroCostLock};
 use anansi_providers::http::CancellationToken;
 use anansi_providers::routing::{DisclosureRecord, RoutingMode, RoutingRequest};
-use anansi_providers::runtime::{ProviderRuntime, RuntimeConfig};
-use anansi_providers::types::{CompletionRequest, StreamEvent};
-use serde::Deserialize;
-use serde_json::{Value, json};
-use std::collections::HashMap;
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Mutex, OnceLock};
+use anansi_providers::runtime::{LocalityConfig, ProviderRuntime, RuntimeConfig};
+use anansi_providers::types::{CompletionRequest, StreamEvent, Usage};
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use std::collections::{HashMap, HashSet};
+use std::sync::{Arc, Mutex, OnceLock};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 // ---------------------------------------------------------------------------
-// Request shapes
+// Bounds (mirrored in the generated contracts)
 
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct DispatchRequest {
-    config: RuntimeConfig,
-    request: CompletionRequest,
-    #[serde(default)]
-    mode: Option<String>,
-    #[serde(default)]
-    zero_cost_lock: bool,
-    #[serde(default)]
-    chosen: Option<(String, String)>,
-    #[serde(default)]
-    permit: Option<PaidInferencePermit>,
+pub const MAX_PROVIDERS: usize = 32;
+pub const MAX_MODELS_PER_PROVIDER: usize = 128;
+pub const MAX_BASE_URL_CHARS: usize = 2048;
+pub const MAX_MESSAGES: usize = 256;
+pub const MAX_SEGMENTS_PER_MESSAGE: usize = 64;
+pub const MAX_SEGMENT_CHARS: usize = 32_768;
+pub const MAX_TOTAL_MESSAGE_CHARS: usize = 262_144;
+pub const MAX_OUTPUT_TOKENS: u32 = 1_000_000;
+pub const MAX_PERMIT_TOKENS: u64 = 10_000_000;
+pub const MIN_PERMIT_TTL_SECONDS: u64 = 30;
+pub const MAX_PERMIT_TTL_SECONDS: u64 = 3_600;
+pub const DEFAULT_PERMIT_TTL_SECONDS: u64 = 600;
+pub const MAX_RETAINED_STREAMS: usize = 32;
+pub const STREAM_TTL: Duration = Duration::from_secs(600);
+
+// ---------------------------------------------------------------------------
+// Caller scope
+
+/// Who is calling, as established by the transport layer (the API
+/// stamps the session from the authenticated token; the workspace
+/// is derived by `Core` from its own storage, never from request
+/// JSON).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CallerScope {
+    pub session: String,
+    pub workspace: String,
 }
 
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct RunRequest {
-    run_id: String,
+/// Small stable fingerprint (FNV-1a 64) for scope labels. These
+/// labels are never secrets and never leave the process; they only
+/// need to be stable and collision-resistant enough to separate
+/// workspaces/sessions.
+pub fn fingerprint(text: &str) -> String {
+    let mut hash: u64 = 0xcbf29ce484222325;
+    for byte in text.as_bytes() {
+        hash ^= *byte as u64;
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    format!("{hash:016x}")
 }
+
+fn random_capability(prefix: &str) -> String {
+    let mut bytes = [0u8; 16];
+    getrandom::fill(&mut bytes).expect("OS randomness for capabilities");
+    let mut out = String::with_capacity(prefix.len() + 32);
+    out.push_str(prefix);
+    for b in bytes {
+        out.push_str(&format!("{b:02x}"));
+    }
+    out
+}
+
+fn constant_time_eq(a: &str, b: &str) -> bool {
+    let (a, b) = (a.as_bytes(), b.as_bytes());
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut diff = 0u8;
+    for i in 0..a.len() {
+        diff |= a[i] ^ b[i];
+    }
+    diff == 0
+}
+
+// ---------------------------------------------------------------------------
+// Contract DTOs (generated schemas live in packages/contracts)
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProviderConfigureRequest {
+    pub config: RuntimeConfig,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderConfigureResponse {
+    pub providers: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProviderAuthorizeRequest {
+    pub provider: String,
+    pub model: String,
+    #[schemars(range(min = 1, max = 10_000_000))]
+    pub max_estimated_total_tokens: u64,
+    #[serde(default)]
+    pub allow_unknown_cost: bool,
+    #[schemars(range(min = 30, max = 3_600))]
+    pub ttl_seconds: Option<u64>,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderAuthorizeResponse {
+    pub permit_id: String,
+    pub expires_at_ms: u64,
+}
+
+/// Dispatch and stream-start share one request shape. It carries
+/// **no** configuration, locality, cost or credential material:
+/// policy is resolved from backend state only.
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProviderDispatchRequest {
+    pub request: CompletionRequest,
+    pub mode: Option<String>,
+    #[serde(default)]
+    pub zero_cost_lock: bool,
+    pub chosen: Option<(String, String)>,
+    /// The id of a permit issued by `providers-authorize` to this
+    /// session. The permit itself (scope, caps, expiry) lives in
+    /// backend state; presenting an id never creates authorization.
+    pub permit_id: Option<String>,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderResponseBody {
+    pub text: String,
+    pub model: String,
+    pub finish_reason: Option<String>,
+    pub usage: Option<Usage>,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderDispatchResponse {
+    pub response: ProviderResponseBody,
+    pub disclosure: DisclosureRecord,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderStreamStartResponse {
+    pub run_id: String,
+    /// Unpredictable per-run capability; poll/cancel require it.
+    pub capability: String,
+    pub disclosure: DisclosureRecord,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProviderRunRequest {
+    pub run_id: String,
+    pub capability: String,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderStreamEvent {
+    pub kind: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub code: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub input_tokens: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output_tokens: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub finish_reason: Option<String>,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderPollResponse {
+    pub events: Vec<ProviderStreamEvent>,
+    pub done: bool,
+    pub disclosure: DisclosureRecord,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderUsageEntry {
+    pub provider: String,
+    pub requests: u64,
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderUsageResponse {
+    pub total_requests: u64,
+    pub reserved_requests: u64,
+    pub reserved_tokens: u64,
+    pub providers: Vec<ProviderUsageEntry>,
+}
+
+// ---------------------------------------------------------------------------
+// Backend state (per workspace; accounting created once, never reset)
+
+struct PermitRecord {
+    permit: PaidInferencePermit,
+    session: String,
+    expires_at: Instant,
+}
+
+struct StreamRun {
+    outcome: StreamOutcome,
+    cancel: CancellationToken,
+    capability: String,
+    session: String,
+    started: Instant,
+    done: bool,
+}
+
+#[derive(Default)]
+struct BackendState {
+    config: Option<RuntimeConfig>,
+    permits: HashMap<String, PermitRecord>,
+    used_permits: Arc<Mutex<HashSet<String>>>,
+    ledger: Arc<Mutex<QuotaLedger>>,
+    runtime: Option<(String, ProviderRuntime)>,
+    streams: HashMap<String, StreamRun>,
+    stream_seq: u64,
+}
+
+fn backends() -> &'static Mutex<HashMap<String, BackendState>> {
+    static BACKENDS: OnceLock<Mutex<HashMap<String, BackendState>>> = OnceLock::new();
+    BACKENDS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn with_backend<T>(
+    scope: &CallerScope,
+    f: impl FnOnce(&mut BackendState) -> Result<T, CommandError>,
+) -> Result<T, CommandError> {
+    let mut guard = backends()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let state = guard.entry(scope.workspace.clone()).or_default();
+    sweep(state);
+    f(state)
+}
+
+/// Expiry for permits and streams, run on every operation.
+fn sweep(state: &mut BackendState) {
+    let now = Instant::now();
+    state.permits.retain(|_, p| p.expires_at > now);
+    let expired: Vec<String> = state
+        .streams
+        .iter()
+        .filter(|(_, run)| now.duration_since(run.started) > STREAM_TTL)
+        .map(|(id, _)| id.clone())
+        .collect();
+    for id in expired {
+        if let Some(run) = state.streams.remove(&id) {
+            run.cancel.cancel();
+        }
+    }
+}
+
+fn runtime_for(
+    state: &mut BackendState,
+) -> Result<&mut ProviderRuntime, CommandError> {
+    let config = state.config.clone().ok_or_else(|| {
+        CommandError::new(
+            ErrorCode::InvalidRequest,
+            "Providers are not configured for this workspace.",
+        )
+    })?;
+    let fp = fingerprint(&serde_json::to_string(&config).unwrap_or_default());
+    let stale = state
+        .runtime
+        .as_ref()
+        .map(|(cached, _)| *cached != fp)
+        .unwrap_or(true);
+    if stale {
+        let runtime = ProviderRuntime::production(config)
+            .map_err(to_command_error)?
+            .with_shared_accounting(state.used_permits.clone(), state.ledger.clone());
+        state.runtime = Some((fp, runtime));
+    }
+    Ok(&mut state.runtime.as_mut().expect("runtime populated").1)
+}
+
+fn take_permit(
+    state: &mut BackendState,
+    scope: &CallerScope,
+    permit_id: &Option<String>,
+) -> Result<Option<PaidInferencePermit>, CommandError> {
+    let Some(id) = permit_id else {
+        return Ok(None);
+    };
+    let record = state.permits.get(id).ok_or_else(|| {
+        CommandError::new(
+            ErrorCode::Forbidden,
+            "The permit is not available to this caller.",
+        )
+    })?;
+    if record.session != scope.session || record.expires_at <= Instant::now() {
+        return Err(CommandError::new(
+            ErrorCode::Forbidden,
+            "The permit is not available to this caller.",
+        ));
+    }
+    Ok(Some(record.permit.clone()))
+}
+
+// ---------------------------------------------------------------------------
+// Bounds validation (before any state change or traffic)
+
+fn invalid(message: &str) -> CommandError {
+    CommandError::new(ErrorCode::InvalidRequest, message)
+}
+
+fn validate_config_bounds(config: &RuntimeConfig) -> Result<(), CommandError> {
+    if config.providers.len() > MAX_PROVIDERS {
+        return Err(invalid("Too many providers in configuration."));
+    }
+    for provider in &config.providers {
+        if provider.config.base_url.chars().count() > MAX_BASE_URL_CHARS {
+            return Err(invalid("Provider base URL is too long."));
+        }
+        if provider.models.len() > MAX_MODELS_PER_PROVIDER {
+            return Err(invalid("Too many models for one provider."));
+        }
+    }
+    Ok(())
+}
+
+fn validate_request_bounds(request: &CompletionRequest) -> Result<(), CommandError> {
+    if request.messages.len() > MAX_MESSAGES {
+        return Err(invalid("Too many messages in the request."));
+    }
+    let mut total_chars = 0usize;
+    for message in &request.messages {
+        if message.segments.len() > MAX_SEGMENTS_PER_MESSAGE {
+            return Err(invalid("Too many segments in one message."));
+        }
+        for segment in &message.segments {
+            let chars = segment.text.chars().count();
+            if chars > MAX_SEGMENT_CHARS {
+                return Err(invalid("A message segment is too long."));
+            }
+            total_chars += chars;
+        }
+    }
+    if total_chars > MAX_TOTAL_MESSAGE_CHARS {
+        return Err(invalid("The request is too large."));
+    }
+    if request
+        .max_output_tokens
+        .map(|max| max > MAX_OUTPUT_TOKENS)
+        .unwrap_or(false)
+    {
+        return Err(invalid("maxOutputTokens exceeds the bound."));
+    }
+    Ok(())
+}
+
+/// Derive locality from the validated endpoint and refuse a
+/// configuration whose declared locality contradicts it. This is
+/// the check that makes "cloud endpoint declared Local" impossible
+/// rather than merely discouraged.
+fn enforce_derived_locality(config: &RuntimeConfig) -> Result<(), CommandError> {
+    for provider in &config.providers {
+        let endpoint = provider.config.validate().map_err(to_command_error)?;
+        let derived = if endpoint.loopback {
+            LocalityConfig::Local
+        } else {
+            LocalityConfig::Cloud
+        };
+        if provider.locality != derived {
+            return Err(invalid(&format!(
+                "Provider {} declares locality {:?} but its endpoint is {}; locality is derived, not declared.",
+                provider.config.provider,
+                provider.locality,
+                if endpoint.loopback { "loopback (Local)" } else { "non-loopback (Cloud)" },
+            )));
+        }
+    }
+    Ok(())
+}
+
+
+/// The trusted configuration defines the model universe: a request
+/// naming a model no configured provider offers is refused before
+/// any gate or network work, in every routing mode. (In Auto modes
+/// the router picks the model from the configuration; the request's
+/// model string must never reach the wire unless the configuration
+/// sanctions it.)
+fn enforce_configured_model(
+    state: &BackendState,
+    request: &CompletionRequest,
+) -> Result<(), CommandError> {
+    let config = state.config.as_ref().ok_or_else(|| {
+        CommandError::new(
+            ErrorCode::InvalidRequest,
+            "Providers are not configured for this workspace.",
+        )
+    })?;
+    let configured = config
+        .providers
+        .iter()
+        .flat_map(|p| p.models.iter())
+        .any(|m| m.id == request.model);
+    if !configured {
+        return Err(invalid("The requested model is not configured for this workspace."));
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Shared helpers
 
 fn parse_mode(mode: &Option<String>) -> Result<RoutingMode, CommandError> {
     match mode.as_deref() {
@@ -75,14 +481,11 @@ fn parse_mode(mode: &Option<String>) -> Result<RoutingMode, CommandError> {
         Some("coding") => Ok(RoutingMode::Coding),
         Some("vision") => Ok(RoutingMode::Vision),
         Some("chooseModel") => Ok(RoutingMode::ChooseModel),
-        Some(other) => Err(CommandError::new(
-            ErrorCode::InvalidRequest,
-            &format!("Unknown routing mode: {other}"),
-        )),
+        Some(other) => Err(invalid(&format!("Unknown routing mode: {other}"))),
     }
 }
 
-fn routing_request(req: &DispatchRequest) -> Result<RoutingRequest, CommandError> {
+fn routing_request(req: &ProviderDispatchRequest) -> Result<RoutingRequest, CommandError> {
     Ok(RoutingRequest {
         mode: parse_mode(&req.mode)?,
         lock: if req.zero_cost_lock {
@@ -95,108 +498,87 @@ fn routing_request(req: &DispatchRequest) -> Result<RoutingRequest, CommandError
     })
 }
 
-// ---------------------------------------------------------------------------
-// Runtime cache: one runtime per active configuration, so the quota
-// ledger and the single-use permit set persist across operations.
-
-struct RuntimeSlot {
-    fingerprint: u64,
-    runtime: ProviderRuntime,
-}
-
-fn runtime_slot() -> &'static Mutex<Option<RuntimeSlot>> {
-    static SLOT: OnceLock<Mutex<Option<RuntimeSlot>>> = OnceLock::new();
-    SLOT.get_or_init(|| Mutex::new(None))
-}
-
-fn fingerprint(config: &RuntimeConfig) -> u64 {
-    let mut hasher = DefaultHasher::new();
-    serde_json::to_string(config)
-        .unwrap_or_default()
-        .hash(&mut hasher);
-    hasher.finish()
-}
-
-fn with_runtime<T>(
-    config: &RuntimeConfig,
-    f: impl FnOnce(&mut ProviderRuntime) -> Result<T, ProviderError>,
-) -> Result<T, CommandError> {
-    let mut guard = runtime_slot()
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    let fp = fingerprint(config);
-    let stale = guard
-        .as_ref()
-        .map(|slot| slot.fingerprint != fp)
-        .unwrap_or(true);
-    if stale {
-        let runtime = ProviderRuntime::production(config.clone()).map_err(to_command_error)?;
-        *guard = Some(RuntimeSlot {
-            fingerprint: fp,
-            runtime,
-        });
-    }
-    let slot = guard.as_mut().expect("runtime slot populated above");
-    f(&mut slot.runtime).map_err(to_command_error)
-}
-
 fn to_command_error(e: ProviderError) -> CommandError {
     let code = match e.code {
         ProviderErrorCode::InvalidConfiguration
         | ProviderErrorCode::EndpointRejected
         | ProviderErrorCode::Unsupported => ErrorCode::InvalidRequest,
         ProviderErrorCode::AuthFailed => ErrorCode::Unauthorized,
-        ProviderErrorCode::PermissionRefused => ErrorCode::Forbidden,
+        ProviderErrorCode::PermissionRefused | ProviderErrorCode::CostRefused => {
+            ErrorCode::Forbidden
+        }
         _ => ErrorCode::StorageUnavailable,
     };
     CommandError::new(code, &format!("{}: {}", e.code_name(), e.message))
 }
 
-// ---------------------------------------------------------------------------
-// Stream run registry (mirrors the ask-stream pattern).
-
-struct StreamRun {
-    outcome: StreamOutcome,
-    cancel: CancellationToken,
-    done: bool,
-}
-
-fn stream_runs() -> &'static Mutex<HashMap<String, StreamRun>> {
-    static RUNS: OnceLock<Mutex<HashMap<String, StreamRun>>> = OnceLock::new();
-    RUNS.get_or_init(|| Mutex::new(HashMap::new()))
-}
-
-static RUN_COUNTER: AtomicU64 = AtomicU64::new(1);
-
-fn event_json(event: &Result<StreamEvent, ProviderError>) -> Value {
+fn event_dto(event: &Result<StreamEvent, ProviderError>) -> ProviderStreamEvent {
     match event {
-        Ok(StreamEvent::Token(text)) => json!({ "kind": "token", "text": text }),
-        Ok(StreamEvent::Usage(u)) => json!({
-            "kind": "usage",
-            "inputTokens": u.input_tokens,
-            "outputTokens": u.output_tokens,
-        }),
-        Ok(StreamEvent::Completed { finish_reason }) => json!({
-            "kind": "completed",
-            "finishReason": finish_reason,
-        }),
-        Err(e) => json!({
-            "kind": "error",
-            "code": e.code_name(),
-            "message": e.message,
-        }),
+        Ok(StreamEvent::Token(text)) => ProviderStreamEvent {
+            kind: "token".into(),
+            text: Some(text.clone()),
+            code: None,
+            message: None,
+            input_tokens: None,
+            output_tokens: None,
+            finish_reason: None,
+        },
+        Ok(StreamEvent::Usage(u)) => ProviderStreamEvent {
+            kind: "usage".into(),
+            text: None,
+            code: None,
+            message: None,
+            input_tokens: Some(u.input_tokens),
+            output_tokens: Some(u.output_tokens),
+            finish_reason: None,
+        },
+        Ok(StreamEvent::Completed { finish_reason }) => ProviderStreamEvent {
+            kind: "completed".into(),
+            text: None,
+            code: None,
+            message: None,
+            input_tokens: None,
+            output_tokens: None,
+            finish_reason: finish_reason.clone(),
+        },
+        Err(e) => ProviderStreamEvent {
+            kind: "error".into(),
+            text: None,
+            code: Some(e.code_name().to_string()),
+            message: Some(e.message.clone()),
+            input_tokens: None,
+            output_tokens: None,
+            finish_reason: None,
+        },
     }
+}
+
+fn parse<T: serde::de::DeserializeOwned>(value: Value, what: &str) -> Result<T, CommandError> {
+    serde_json::from_value(value).map_err(|_| {
+        CommandError::new(
+            ErrorCode::InvalidRequest,
+            &format!("Use a supported {what} request."),
+        )
+    })
+}
+
+fn to_value<T: Serialize>(value: &T) -> Result<Value, CommandError> {
+    serde_json::to_value(value).map_err(|_| crate::storage::unavailable())
 }
 
 // ---------------------------------------------------------------------------
 // Operations
 
-pub fn providers_command(operation: &str, value: Value) -> Result<Value, CommandError> {
+pub fn providers_command(
+    operation: &str,
+    value: Value,
+    scope: &CallerScope,
+) -> Result<Value, CommandError> {
     match operation {
-        "providers-catalog" => Ok(json!({
+        "providers-catalog" => to_value(&serde_json::json!({
             "providers": anansi_providers::catalog::catalog()
                 .iter()
-                .map(|e| json!({
+                .map(|e| serde_json::json!({
                     "id": e.id,
                     "displayName": e.display_name,
                     "baseUrl": e.base_url,
@@ -206,127 +588,304 @@ pub fn providers_command(operation: &str, value: Value) -> Result<Value, Command
                 }))
                 .collect::<Vec<_>>(),
         })),
+        "providers-configure" => {
+            let req: ProviderConfigureRequest = parse(value, "provider configuration")?;
+            validate_config_bounds(&req.config)?;
+            enforce_derived_locality(&req.config)?;
+            let providers: Vec<String> = req
+                .config
+                .providers
+                .iter()
+                .map(|p| p.config.provider.clone())
+                .collect();
+            with_backend(scope, |state| {
+                // Validate by building the runtime now, so a bad
+                // configuration fails at configure time — with the
+                // workspace's shared accounting wired in.
+                let runtime = ProviderRuntime::production(req.config.clone())
+                    .map_err(to_command_error)?
+                    .with_shared_accounting(state.used_permits.clone(), state.ledger.clone());
+                let fp = fingerprint(&serde_json::to_string(&req.config).unwrap_or_default());
+                state.config = Some(req.config);
+                state.runtime = Some((fp, runtime));
+                Ok(())
+            })?;
+            to_value(&ProviderConfigureResponse { providers })
+        }
+        "providers-authorize" => {
+            let req: ProviderAuthorizeRequest = parse(value, "provider authorization")?;
+            if req.max_estimated_total_tokens == 0
+                || req.max_estimated_total_tokens > MAX_PERMIT_TOKENS
+            {
+                return Err(invalid("Permit token cap is out of bounds."));
+            }
+            let ttl = req.ttl_seconds.unwrap_or(DEFAULT_PERMIT_TTL_SECONDS);
+            if !(MIN_PERMIT_TTL_SECONDS..=MAX_PERMIT_TTL_SECONDS).contains(&ttl) {
+                return Err(invalid("Permit TTL is out of bounds."));
+            }
+            let permit_id = random_capability("permit-");
+            let permit = PaidInferencePermit {
+                id: permit_id.clone(),
+                provider: req.provider,
+                model: req.model,
+                max_estimated_total_tokens: req.max_estimated_total_tokens,
+                allow_unknown_cost: req.allow_unknown_cost,
+            };
+            let expires_at_ms = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map(|d| d.as_millis() as u64 + ttl * 1000)
+                .unwrap_or(0);
+            with_backend(scope, |state| {
+                state.permits.insert(
+                    permit_id.clone(),
+                    PermitRecord {
+                        permit,
+                        session: scope.session.clone(),
+                        expires_at: Instant::now() + Duration::from_secs(ttl),
+                    },
+                );
+                Ok(())
+            })?;
+            to_value(&ProviderAuthorizeResponse {
+                permit_id,
+                expires_at_ms,
+            })
+        }
         "providers-dispatch" => {
-            let req: DispatchRequest = serde_json::from_value(value).map_err(|_| {
-                CommandError::new(
-                    ErrorCode::InvalidRequest,
-                    "Use a supported provider dispatch request.",
-                )
-            })?;
+            let req: ProviderDispatchRequest = parse(value, "provider dispatch")?;
+            validate_request_bounds(&req.request)?;
             let routing = routing_request(&req)?;
-            let outcome = with_runtime(&req.config, |runtime| {
-                runtime.dispatch(
-                    &req.request,
-                    routing,
-                    req.permit.clone(),
-                    &CancellationToken::new(),
-                )
+            let response = with_backend(scope, |state| {
+                enforce_configured_model(state, &req.request)?;
+                let permit = take_permit(state, scope, &req.permit_id)?;
+                let runtime = runtime_for(state)?;
+                let outcome = runtime
+                    .dispatch(
+                        &req.request,
+                        routing,
+                        permit,
+                        &CancellationToken::new(),
+                    )
+                    .map_err(to_command_error)?;
+                Ok(ProviderDispatchResponse {
+                    response: ProviderResponseBody {
+                        text: outcome.response.text,
+                        model: outcome.response.model,
+                        finish_reason: outcome.response.finish_reason,
+                        usage: outcome.response.usage,
+                    },
+                    disclosure: outcome.disclosure,
+                })
             })?;
-            Ok(json!({
-                "response": {
-                    "text": outcome.response.text,
-                    "model": outcome.response.model,
-                    "finishReason": outcome.response.finish_reason,
-                    "usage": outcome.response.usage.map(|u| json!({
-                        "inputTokens": u.input_tokens,
-                        "outputTokens": u.output_tokens,
-                    })),
-                },
-                "disclosure": outcome.disclosure,
-            }))
+            to_value(&response)
         }
         "providers-stream-start" => {
-            let req: DispatchRequest = serde_json::from_value(value).map_err(|_| {
-                CommandError::new(
-                    ErrorCode::InvalidRequest,
-                    "Use a supported provider dispatch request.",
-                )
-            })?;
+            let req: ProviderDispatchRequest = parse(value, "provider dispatch")?;
+            validate_request_bounds(&req.request)?;
             let routing = routing_request(&req)?;
-            let cancel = CancellationToken::new();
-            let run_cancel = cancel.clone();
-            let outcome = with_runtime(&req.config, |runtime| {
-                runtime.dispatch_stream(&req.request, routing, req.permit.clone(), &cancel)
-            })?;
-            let disclosure: DisclosureRecord = outcome.disclosure.clone();
-            let run_id = format!(
-                "provider-run-{}",
-                RUN_COUNTER.fetch_add(1, Ordering::Relaxed)
-            );
-            stream_runs()
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner())
-                .insert(
+            let started = with_backend(scope, |state| {
+                enforce_configured_model(state, &req.request)?;
+                if state.streams.len() >= MAX_RETAINED_STREAMS {
+                    return Err(invalid(
+                        "Too many retained provider streams for this workspace.",
+                    ));
+                }
+                let permit = take_permit(state, scope, &req.permit_id)?;
+                let runtime = runtime_for(state)?;
+                let cancel = CancellationToken::new();
+                let outcome = runtime
+                    .dispatch_stream(&req.request, routing, permit, &cancel)
+                    .map_err(to_command_error)?;
+                state.stream_seq += 1;
+                let run_id = format!("provider-run-{}", state.stream_seq);
+                let capability = random_capability("cap-");
+                let disclosure = outcome.disclosure.clone();
+                state.streams.insert(
                     run_id.clone(),
                     StreamRun {
                         outcome,
-                        cancel: run_cancel,
+                        cancel,
+                        capability: capability.clone(),
+                        session: scope.session.clone(),
+                        started: Instant::now(),
                         done: false,
                     },
                 );
-            Ok(json!({ "runId": run_id, "disclosure": disclosure }))
+                Ok(ProviderStreamStartResponse {
+                    run_id,
+                    capability,
+                    disclosure,
+                })
+            })?;
+            to_value(&started)
         }
-        "providers-stream-poll" => {
-            let req: RunRequest = serde_json::from_value(value).map_err(|_| {
-                CommandError::new(ErrorCode::InvalidRequest, "Use a supported run request.")
-            })?;
-            let mut runs = stream_runs()
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner());
-            let run = runs.get_mut(&req.run_id).ok_or_else(|| {
-                CommandError::new(ErrorCode::NotFound, "Unknown provider stream run.")
-            })?;
-            let mut events = Vec::new();
-            if !run.done {
-                loop {
-                    match run.outcome.events.try_recv() {
-                        Ok(event) => {
-                            let terminal =
-                                matches!(event, Ok(StreamEvent::Completed { .. }) | Err(_));
-                            events.push(event_json(&event));
-                            if terminal {
+        "providers-stream-poll" | "providers-stream-cancel" => {
+            let req: ProviderRunRequest = parse(value, "provider stream run")?;
+            with_backend(scope, |state| {
+                // Binding check: right run, right session, right
+                // capability — anything else is indistinguishable
+                // from an unknown run.
+                let bound = state.streams.get(&req.run_id).map(|run| {
+                    run.session == scope.session
+                        && constant_time_eq(&run.capability, &req.capability)
+                });
+                if bound != Some(true) {
+                    return Err(CommandError::new(
+                        ErrorCode::NotFound,
+                        "Unknown provider stream run.",
+                    ));
+                }
+                if operation == "providers-stream-cancel" {
+                    let run = state.streams.get(&req.run_id).expect("checked above");
+                    run.cancel.cancel();
+                    return to_value(&serde_json::json!({ "cancelled": true }));
+                }
+                let run = state.streams.get_mut(&req.run_id).expect("checked above");
+                let mut events = Vec::new();
+                if !run.done {
+                    loop {
+                        match run.outcome.events.try_recv() {
+                            Ok(event) => {
+                                let terminal = matches!(
+                                    event,
+                                    Ok(StreamEvent::Completed { .. }) | Err(_)
+                                );
+                                events.push(event_dto(&event));
+                                if terminal {
+                                    run.done = true;
+                                    break;
+                                }
+                                if events.len() >= 256 {
+                                    break;
+                                }
+                            }
+                            Err(std::sync::mpsc::TryRecvError::Empty) => break,
+                            Err(std::sync::mpsc::TryRecvError::Disconnected) => {
                                 run.done = true;
                                 break;
                             }
-                            if events.len() >= 256 {
-                                break;
-                            }
-                        }
-                        Err(std::sync::mpsc::TryRecvError::Empty) => break,
-                        Err(std::sync::mpsc::TryRecvError::Disconnected) => {
-                            run.done = true;
-                            break;
                         }
                     }
                 }
-            }
-            let done = run.done;
-            let disclosure = run.outcome.disclosure.clone();
-            if done {
-                runs.remove(&req.run_id);
-            }
-            Ok(json!({
-                "events": events,
-                "done": done,
-                "disclosure": disclosure,
-            }))
+                let done = run.done;
+                let disclosure = run.outcome.disclosure.clone();
+                if done {
+                    state.streams.remove(&req.run_id);
+                }
+                to_value(&ProviderPollResponse {
+                    events,
+                    done,
+                    disclosure,
+                })
+            })
         }
-        "providers-stream-cancel" => {
-            let req: RunRequest = serde_json::from_value(value).map_err(|_| {
-                CommandError::new(ErrorCode::InvalidRequest, "Use a supported run request.")
-            })?;
-            let runs = stream_runs()
+        "providers-usage" => with_backend(scope, |state| {
+            let ledger = state
+                .ledger
                 .lock()
                 .unwrap_or_else(|poisoned| poisoned.into_inner());
-            let run = runs.get(&req.run_id).ok_or_else(|| {
-                CommandError::new(ErrorCode::NotFound, "Unknown provider stream run.")
-            })?;
-            run.cancel.cancel();
-            Ok(json!({ "cancelled": true }))
-        }
+            let (reserved_requests, reserved_tokens) = ledger.reserved();
+            to_value(&ProviderUsageResponse {
+                total_requests: ledger.total_requests(),
+                reserved_requests,
+                reserved_tokens,
+                providers: ledger
+                    .totals_snapshot()
+                    .into_iter()
+                    .map(|(provider, totals)| ProviderUsageEntry {
+                        provider,
+                        requests: totals.requests,
+                        input_tokens: totals.input_tokens,
+                        output_tokens: totals.output_tokens,
+                    })
+                    .collect(),
+            })
+        }),
         _ => Err(CommandError::new(
             ErrorCode::InvalidRequest,
             "Unknown provider operation.",
         )),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn disclosure() -> DisclosureRecord {
+        serde_json::from_value(serde_json::json!({
+            "provider": "ollama", "model": "llama-x", "endpointHost": "127.0.0.1",
+            "local": true, "routingMode": "auto", "routingReason": "test",
+            "messageCount": 1, "segmentCount": 1, "redactionCount": 0,
+            "estimatedInputTokens": 1, "costClass": "free", "usage": null,
+            "attempts": []
+        }))
+        .unwrap()
+    }
+
+    fn run(started: Instant, cancel: &CancellationToken) -> StreamRun {
+        let (_tx, rx) = std::sync::mpsc::channel();
+        StreamRun {
+            outcome: StreamOutcome {
+                events: rx,
+                disclosure: disclosure(),
+            },
+            cancel: cancel.clone(),
+            capability: "cap-test".into(),
+            session: "s1".into(),
+            started,
+            done: false,
+        }
+    }
+
+    #[test]
+    fn sweep_cancels_and_drops_expired_streams() {
+        let mut state = BackendState::default();
+        let cancel = CancellationToken::new();
+        state.streams.insert(
+            "old".into(),
+            run(Instant::now() - STREAM_TTL - Duration::from_secs(1), &cancel),
+        );
+        let fresh_cancel = CancellationToken::new();
+        state
+            .streams
+            .insert("fresh".into(), run(Instant::now(), &fresh_cancel));
+        sweep(&mut state);
+        assert!(!state.streams.contains_key("old"), "expired run dropped");
+        assert!(cancel.is_cancelled(), "expired run is cancelled");
+        assert!(state.streams.contains_key("fresh"));
+        assert!(!fresh_cancel.is_cancelled());
+    }
+
+    #[test]
+    fn sweep_drops_expired_permits() {
+        let mut state = BackendState::default();
+        state.permits.insert(
+            "permit-old".into(),
+            PermitRecord {
+                permit: PaidInferencePermit {
+                    id: "permit-old".into(),
+                    provider: "ollama".into(),
+                    model: "llama-x".into(),
+                    max_estimated_total_tokens: 10,
+                    allow_unknown_cost: false,
+                },
+                session: "s1".into(),
+                expires_at: Instant::now() - Duration::from_secs(1),
+            },
+        );
+        sweep(&mut state);
+        assert!(state.permits.is_empty());
+    }
+
+    #[test]
+    fn capabilities_are_unpredictable_and_compared_exactly() {
+        let a = random_capability("cap-");
+        let b = random_capability("cap-");
+        assert_ne!(a, b);
+        assert_eq!(a.len(), "cap-".len() + 32);
+        assert!(constant_time_eq(&a, &a));
+        assert!(!constant_time_eq(&a, &b));
+        assert!(!constant_time_eq(&a, "cap-short"));
     }
 }
