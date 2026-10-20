@@ -230,6 +230,35 @@ pub fn validate_loopback_endpoint(endpoint: &str) -> Result<(String, u16), Vecto
     Ok((host.to_string(), port))
 }
 
+fn dechunk_http_body(mut bytes: &[u8]) -> Result<Vec<u8>, ()> {
+    let mut output = Vec::new();
+    while let Some(end) = bytes.windows(2).position(|v| v == b"\r\n") {
+        let size_str = std::str::from_utf8(&bytes[..end])
+            .map_err(|_| ())?
+            .split(';')
+            .next()
+            .ok_or(())?
+            .trim();
+        let size = usize::from_str_radix(size_str, 16).map_err(|_| ())?;
+        bytes = &bytes[end + 2..];
+        if size == 0 {
+            break;
+        }
+        if size > 256 * 1024 {
+            return Err(());
+        }
+        if bytes.len() < size + 2 {
+            break;
+        }
+        if &bytes[size..size + 2] != b"\r\n" {
+            return Err(());
+        }
+        output.extend_from_slice(&bytes[..size]);
+        bytes = &bytes[size + 2..];
+    }
+    Ok(output)
+}
+
 pub fn generate_ollama_embedding(
     endpoint: &str,
     model: &str,
@@ -312,17 +341,35 @@ pub fn generate_ollama_embedding(
         ));
     }
 
-    let response_str = String::from_utf8_lossy(&response_bytes);
-    let mut parts = response_str.split("\r\n\r\n");
-    let header = parts.next().unwrap_or("");
-    let body = parts.next().unwrap_or("");
+    let header_end = response_bytes
+        .windows(4)
+        .position(|w| w == b"\r\n\r\n")
+        .ok_or_else(|| {
+            VectorError::DeserializationError("Malformed HTTP response: no header delimiter".into())
+        })?;
 
-    if !header.contains("200 OK") {
+    let header_bytes = &response_bytes[..header_end];
+    let header_str = String::from_utf8_lossy(header_bytes);
+    if !header_str.contains("200 OK") {
         return Err(VectorError::ServiceError(format!(
             "Ollama server returned non-200 status: {}",
-            header.lines().next().unwrap_or("Unknown error")
+            header_str.lines().next().unwrap_or("Unknown error")
         )));
     }
+
+    let raw_body = &response_bytes[header_end + 4..];
+    let is_chunked = header_str
+        .to_ascii_lowercase()
+        .contains("transfer-encoding: chunked");
+    let unchunked = if is_chunked {
+        dechunk_http_body(raw_body).map_err(|_| {
+            VectorError::DeserializationError("Failed to dechunk HTTP response".into())
+        })?
+    } else {
+        raw_body.to_vec()
+    };
+
+    let body_str = String::from_utf8_lossy(&unchunked);
 
     #[derive(Deserialize)]
     struct OllamaEmbeddingResponse {
@@ -330,7 +377,7 @@ pub fn generate_ollama_embedding(
         error: Option<String>,
     }
 
-    let parsed: OllamaEmbeddingResponse = serde_json::from_str(body).map_err(|e| {
+    let parsed: OllamaEmbeddingResponse = serde_json::from_str(&body_str).map_err(|e| {
         VectorError::DeserializationError(format!("Malformed response JSON: {}", e))
     })?;
 
@@ -350,6 +397,8 @@ pub fn ensure_embeddings_table(conn: &Connection) -> Result<(), VectorError> {
         "CREATE TABLE IF NOT EXISTS memory_embeddings (
             workspace_id TEXT NOT NULL,
             memory_id TEXT NOT NULL,
+            revision_id TEXT NOT NULL DEFAULT '',
+            content_hash TEXT NOT NULL DEFAULT '',
             chunk_index INTEGER NOT NULL DEFAULT 0,
             model TEXT NOT NULL,
             dimension INTEGER NOT NULL,
@@ -361,13 +410,46 @@ pub fn ensure_embeddings_table(conn: &Connection) -> Result<(), VectorError> {
             ON memory_embeddings(workspace_id, model);",
     )
     .map_err(|e| VectorError::StorageError(e.to_string()))?;
+
+    // Backwards compatibility for existing test/catalog tables
+    let has_rev: bool = conn
+        .query_row(
+            "SELECT COUNT(1) FROM pragma_table_info('memory_embeddings') WHERE name = 'revision_id'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap_or(false);
+    if !has_rev {
+        let _ = conn.execute(
+            "ALTER TABLE memory_embeddings ADD COLUMN revision_id TEXT NOT NULL DEFAULT ''",
+            [],
+        );
+    }
+
+    let has_hash: bool = conn
+        .query_row(
+            "SELECT COUNT(1) FROM pragma_table_info('memory_embeddings') WHERE name = 'content_hash'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap_or(false);
+    if !has_hash {
+        let _ = conn.execute(
+            "ALTER TABLE memory_embeddings ADD COLUMN content_hash TEXT NOT NULL DEFAULT ''",
+            [],
+        );
+    }
+
     Ok(())
 }
 
-pub fn store_embedding(
+#[allow(clippy::too_many_arguments)]
+pub fn store_embedding_with_revision(
     conn: &Connection,
     workspace_id: &str,
     memory_id: &str,
+    revision_id: &str,
+    content_hash: &str,
     chunk_index: usize,
     model: &str,
     embedding: &EmbeddingVector,
@@ -405,13 +487,15 @@ pub fn store_embedding(
     let now = Utc::now().to_rfc3339();
 
     conn.execute(
-        "INSERT INTO memory_embeddings (workspace_id, memory_id, chunk_index, model, dimension, embedding, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+        "INSERT INTO memory_embeddings (workspace_id, memory_id, revision_id, content_hash, chunk_index, model, dimension, embedding, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
          ON CONFLICT (workspace_id, memory_id, chunk_index, model)
-         DO UPDATE SET dimension = excluded.dimension, embedding = excluded.embedding, created_at = excluded.created_at",
+         DO UPDATE SET revision_id = excluded.revision_id, content_hash = excluded.content_hash, dimension = excluded.dimension, embedding = excluded.embedding, created_at = excluded.created_at",
         params![
             workspace_id,
             memory_id,
+            revision_id,
+            content_hash,
             chunk_index as i64,
             model,
             embedding.dimension() as i64,
@@ -422,6 +506,26 @@ pub fn store_embedding(
     .map_err(|e| VectorError::StorageError(e.to_string()))?;
 
     Ok(())
+}
+
+pub fn store_embedding(
+    conn: &Connection,
+    workspace_id: &str,
+    memory_id: &str,
+    chunk_index: usize,
+    model: &str,
+    embedding: &EmbeddingVector,
+) -> Result<(), VectorError> {
+    store_embedding_with_revision(
+        conn,
+        workspace_id,
+        memory_id,
+        "",
+        "",
+        chunk_index,
+        model,
+        embedding,
+    )
 }
 
 pub fn get_embedding(
@@ -533,6 +637,7 @@ pub fn vector_search(
          JOIN memory_revisions r ON r.workspace_id = m.workspace_id AND r.memory_id = m.id AND r.id = m.current_revision
          WHERE me.workspace_id = ?1
            AND me.model = ?2
+           AND (me.revision_id = '' OR me.revision_id = m.current_revision)
            AND json_extract(r.metadata, '$.status') != 'archived'
            AND json_extract(r.metadata, '$.privacy') != 'sealed'",
     );

@@ -743,6 +743,57 @@ impl Core {
                 let response = crate::context::compile_context(&conn, root, &req)?;
                 serde_json::to_value(response).map_err(|_| crate::storage::unavailable())
             }
+            "index-embeddings" => {
+                #[derive(serde::Deserialize)]
+                #[serde(rename_all = "camelCase")]
+                struct IndexEmbeddingsRequest {
+                    workspace_id: String,
+                    memory_id: Option<String>,
+                    model: Option<String>,
+                    endpoint: Option<String>,
+                }
+                let req: IndexEmbeddingsRequest = serde_json::from_value(value).map_err(|_| {
+                    CommandError::new(
+                        ErrorCode::InvalidRequest,
+                        "Use the supported index embeddings request.",
+                    )
+                })?;
+                let storage = self.storage()?;
+                let conn = storage
+                    .connection(false)?
+                    .ok_or_else(crate::storage::unavailable)?;
+                let root = storage.root_path();
+                let model = req
+                    .model
+                    .unwrap_or_else(|| crate::semantic::DEFAULT_EMBEDDING_MODEL.to_owned());
+                let endpoint = req.endpoint.as_deref();
+
+                let indexed_chunks = if let Some(mem_id) = &req.memory_id {
+                    crate::semantic::embed_memory(
+                        &conn,
+                        root,
+                        &req.workspace_id,
+                        mem_id,
+                        &model,
+                        endpoint,
+                    )?
+                } else {
+                    crate::semantic::embed_workspace_memories(
+                        &conn,
+                        root,
+                        &req.workspace_id,
+                        &model,
+                        endpoint,
+                    )?
+                };
+
+                serde_json::to_value(serde_json::json!({
+                    "contractVersion": 1,
+                    "indexedChunks": indexed_chunks,
+                    "model": model,
+                }))
+                .map_err(|_| crate::storage::unavailable())
+            }
             _ => Err(CommandError::new(
                 ErrorCode::InvalidRequest,
                 "Use a supported AI command.",

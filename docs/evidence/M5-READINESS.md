@@ -9,7 +9,7 @@ Inspected checkpoints: integration `5dd40d3`, retained M2 `bd2e2a9`. Both worktr
 | AN-004 Memory OS; AN-024 project contracts | Existing M2.1–M2.5 workflow evidence retained | Regression after vault/schema integration |
 | AN-018/031 vault privacy | Core crypto/generations/session tests; native IPC synthetic-provider workflow | Real native credential/recovery controls, UI workflow, browser authorization, expiry/revocation/publication race |
 | AN-019/033 encrypted recovery/export | Core archive/restore functions | Application encrypted export/backup/fresh restore; tamper/wrong-key/cancel/interruption |
-| AN-005 retrieval | FTS and synthetic seeded-vector tests | Application document/query embeddings, production schema checks, reranking distinct from RRF, real-model semantic/temporal/contradiction evaluation |
+| AN-005 retrieval | FTS, synthetic seeded-vectors, and verified real loopback embedding pipeline (`all-minilm:22m`) | Reranking distinct from RRF, real-model temporal/contradiction evaluation |
 | AN-006/009 local Ask | Discovery, offline and missing-evidence paths | Selected installed runtime/model, successful desktop/browser answers, streaming/backend cancellation/timeouts/restart |
 | AN-010 Context Compiler | Separate section compiler; Ask has separate minimum implementation | Unified Ask/compiler policy; semantic query vectors; complete chunks/Unicode/budgets/source lines |
 | AN-011 Big Brain | Design document only | Design traceability; no implemented deliberative workflow claim |
@@ -81,3 +81,23 @@ Acceptance defined before repair: a cache deletion failure must abort the canoni
 Regression command `node scripts/cargo.mjs test -p anansi-core --test body_search --test vector_search --locked` exited 0: 1 body workflow and 5 synthetic-vector ranking/filter/invalidation tests passed. Formatting, diff whitespace and documentation validation passed. Existing vector tests still use synthetic schemas/vectors; they do not establish a real embedding workflow.
 
 Manual production vault verification is in progress with the Owner. `scripts/manual-vault-acceptance.mjs` prepares only synthetic records and a verified plaintext backup, uses the shared application lease and disables the synthetic credential environment. It never operates or captures native credential/recovery dialogs and makes no automated pass claim. The user must close the application to release that lease normally.
+
+### Real loopback semantic embedding indexing and retrieval pipeline — 2026-10-20
+
+Real semantic embedding generation and retrieval are implemented and verified against the locally installed `all-minilm:22m` model (384 dimensions) on loopback (`http://127.0.0.1:11434`):
+- `crates/core/src/semantic.rs`: `embed_memory`, `embed_workspace_memories`, and `generate_query_vector`. Enforces fail-closed Sealed privacy refusal before inference, reads canonical current-revision metadata and integrity-checked content, performs loopback inference outside write transactions, and checks revision conflict at commit.
+- `crates/core/src/vector.rs`: Added chunked HTTP transfer decoding (`dechunk_http_body`) for Ollama's chunked HTTP/1.1 response, added `revision_id` and `content_hash` columns with backwards compatibility to `memory_embeddings`, and verified revision consistency in `vector_search`.
+- `crates/core/src/hybrid.rs`: Dynamically resolves semantic query vector using `generate_query_vector` with the configured model when `query_vector` is omitted.
+- `crates/api/src/lib.rs` & `crates/core/src/ai_discovery.rs`: Added `/v1/ai/index-embeddings` command route.
+- `crates/core/tests/semantic_workflow.rs`: Comprehensive end-to-end integration test validating Sealed creation refusal without active vault (`ErrorCode::VaultUnavailable`), Sealed embedding exclusion (`ErrorCode::InvalidMemory`), single memory embedding, revision/content_hash metadata in SQLite, real paraphrase query retrieval with semantic ranking, Sealed exclusion from search hits, and workspace batch indexing.
+
+Executed locally (exit 0):
+- `node scripts/cargo.mjs test -p anansi-core --test semantic_workflow --locked`: passed in 13.41s against live `all-minilm:22m`.
+- `node scripts/cargo.mjs test -p anansi-core --locked`: all 22 core unit tests, 7 AI discovery, 5 Ask, 1 streaming, 7 backup/restore, 11 vault, 8 vault increment2, 1 vault runtime, 3 vault boundary, 1 vault search integration, 2 vault invalidation, 5 vector embedding, 5 vector search, 10 workspace roundtrip, and 0 doctests passed.
+- `node scripts/cargo.mjs fmt --all -- --check`: passed (0 diffs).
+- `node scripts/cargo.mjs clippy --workspace --all-targets --locked -- -D warnings`: passed (0 warnings).
+- `npm run test:ui`: 31/31 passed.
+- `node scripts/validate-planning.mjs --self-test`: passed (74 Markdown files, 90 section owners, 16 milestone plans, 33 requirements).
+- `node scripts/with-application-test-lease.mjs node_modules/@playwright/test/cli.js test tests/e2e/ask_anansi.spec.ts tests/e2e/search.spec.ts`: 2/2 passed (59.3s).
+- `node scripts/with-application-test-lease.mjs scripts/verify-ask-native.mjs`: passed (actual native UI streaming, answer, disclosure, cancellation).
+

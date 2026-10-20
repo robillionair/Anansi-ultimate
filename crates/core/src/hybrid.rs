@@ -132,8 +132,28 @@ pub fn hybrid_search(
         }
     }
 
-    // 2. Semantic retrieval via vector_search (if query vector and model provided)
-    if let (Some(q_vec), Some(model)) = (&request.query_vector, &request.model) {
+    // 2. Semantic retrieval via vector_search
+    let query_vector = if let Some(q_vec) = &request.query_vector {
+        Some(q_vec.clone())
+    } else if let (Some(model), Some(query_str)) = (&request.model, &request.query) {
+        match crate::semantic::generate_query_vector(None, model, query_str) {
+            Ok(vec) => Some(vec),
+            Err(e) => {
+                if request.lexical_weight == 0.0 {
+                    return Err(CommandError::new(
+                        ErrorCode::StorageUnavailable,
+                        &format!("Semantic query vector generation failed: {e}"),
+                    ));
+                }
+                // When lexical weight > 0, fallback to lexical-only without claiming semantic match
+                None
+            }
+        }
+    } else {
+        None
+    };
+
+    if let (Some(q_vec), Some(model)) = (&query_vector, &request.model) {
         let vec_results = vector_search(conn, &request.workspace_id, q_vec, model, 100, None)
             .map_err(|_| crate::storage::unavailable())?;
         for (current_rank, hit) in (1usize..).zip(vec_results) {

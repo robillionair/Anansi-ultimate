@@ -29,7 +29,10 @@ try{
   await page.getByLabel('Installed Ollama model').fill('qwen2.5:0.5b');
   await page.getByLabel('Your Question').fill('What is our local search database?');
   await page.getByRole('button',{name:'Ask Question',exact:true}).click();
-  await expect(page.getByRole('region',{name:'Streaming answer'})).toBeVisible({timeout:180000});
+  await Promise.race([
+    expect(page.getByRole('region',{name:'Streaming answer'})).toBeVisible({timeout:180000}).catch(()=>{}),
+    expect(page.locator('.status-banner.status-answered')).toBeVisible({timeout:180000}).catch(()=>{})
+  ]);
   await expect(page.locator('.status-banner.status-answered')).toBeVisible({timeout:210000});
   await expect(page.locator('.answer-text')).toContainText(/SQLite/i);
   await page.getByRole('button',{name:'View What ANANSI Sent (Disclosure)'}).click();

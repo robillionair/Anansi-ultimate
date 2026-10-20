@@ -75,6 +75,7 @@ pub fn command_path(path: &str) -> bool {
             | "/v1/ai/ask-forget"
             | "/v1/ai/hybrid-search"
             | "/v1/ai/context"
+            | "/v1/ai/index-embeddings"
     )
 }
 
