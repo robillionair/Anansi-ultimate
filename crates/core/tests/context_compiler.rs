@@ -34,6 +34,7 @@ fn canonical_content_corruption_is_not_silently_dropped() {
         max_budget_chars: None,
         runtime_endpoint: None,
         model_tag: None,
+        embedding_model: None,
         kind_filter: None,
     };
     let error = compile_context(&conn, &root, &request).unwrap_err();
@@ -106,6 +107,7 @@ fn test_budget_enforcement_truncates_chunks() {
         max_budget_chars: Some(600),
         runtime_endpoint: None,
         model_tag: None,
+        embedding_model: None,
         kind_filter: None,
     };
 
@@ -165,6 +167,7 @@ fn test_chunk_deduplication() {
         max_budget_chars: Some(4000),
         runtime_endpoint: None,
         model_tag: None,
+        embedding_model: None,
         kind_filter: None,
     };
 
@@ -247,6 +250,7 @@ fn test_fail_closed_sealed_privacy_refusal() {
         max_budget_chars: Some(4000),
         runtime_endpoint: None,
         model_tag: None,
+        embedding_model: None,
         kind_filter: None,
     };
 
@@ -294,6 +298,7 @@ fn test_disclosure_manifest_completeness() {
         max_budget_chars: Some(4000),
         runtime_endpoint: Some("http://127.0.0.1:11434".to_string()),
         model_tag: Some("llama3.1:8b".to_string()),
+        embedding_model: None,
         kind_filter: None,
     };
 

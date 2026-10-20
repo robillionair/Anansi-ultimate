@@ -407,5 +407,48 @@ test('context compilation HTTP/native operations use scoped routes and validated
   }finally{if(window)Object.defineProperty(globalThis,'window',window);else Reflect.deleteProperty(globalThis,'window');}
 });
 
+test('index embeddings HTTP/native operations use scoped routes and validated DTOs',async()=>{
+  const original=globalThis.fetch;let address='';let body:Record<string,unknown>={};
+  const indexResponse={
+    contractVersion:1,
+    model:'all-minilm:22m',
+    indexedMemories:2,
+    indexedChunks:4,
+    dimension:384,
+  };
+  try{
+    globalThis.fetch=async(url,options)=>{
+      address=String(url);
+      body=JSON.parse(options!.body as string);
+      return new Response(JSON.stringify(indexResponse));
+    };
+    const client=httpClient('http://127.0.0.1:1451','a'.repeat(64));
+    const res=await client.indexEmbeddings('w'.repeat(32),{
+      model:'all-minilm:22m',
+      endpoint:'http://127.0.0.1:11434',
+    });
+    assert.equal(new URL(address).pathname,'/v1/ai/index-embeddings');
+    assert.equal(body.workspaceId,'w'.repeat(32));
+    assert.equal(body.model,'all-minilm:22m');
+    assert.equal(body.endpoint,'http://127.0.0.1:11434');
+    assert.equal(res.indexedMemories,2);
+    assert.equal(res.indexedChunks,4);
+    assert.equal(res.dimension,384);
+
+    globalThis.fetch=async()=>new Response(JSON.stringify({...indexResponse,contractVersion:99}));
+    await assert.rejects(client.indexEmbeddings('w'.repeat(32)),/incompatible/);
+  }finally{globalThis.fetch=original;}
+
+  const window=Object.getOwnPropertyDescriptor(globalThis,'window');let command='',args:unknown;
+  Object.defineProperty(globalThis,'window',{configurable:true,value:{__TAURI_INTERNALS__:{invoke:async(c:string,a:unknown)=>{command=c;args=a;return indexResponse;}}}});
+  try{
+    const nativeRes=await nativeClient().indexEmbeddings('w'.repeat(32),{model:'all-minilm:22m'});
+    assert.equal(command,'ai_command');
+    assert.deepEqual(args,{command:'index-embeddings',request:{contractVersion:1,workspaceId:'w'.repeat(32),model:'all-minilm:22m'}});
+    assert.equal(nativeRes.indexedChunks,4);
+  }finally{if(window)Object.defineProperty(globalThis,'window',window);else Reflect.deleteProperty(globalThis,'window');}
+});
+
+
 
 

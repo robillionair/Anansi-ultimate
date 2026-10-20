@@ -7,8 +7,14 @@ export function Search({ client, workspaceId }: { client: Client; workspaceId: s
   const [mode, setMode] = useState<SearchMode>('title');
   const [query, setQuery] = useState(''), [kind, setKind] = useState('');
   const [archived, setArchived] = useState(false), [expired, setExpired] = useState(false);
+  const [embeddingModel, setEmbeddingModel] = useState('all-minilm:22m');
+  const [embeddingEndpoint, setEmbeddingEndpoint] = useState('http://127.0.0.1:11434');
+  const [indexStatus, setIndexStatus] = useState('');
   const [results, setResults] = useState<MemoryMetadata[]>([]);
   const [hybridResults, setHybridResults] = useState<HybridSearchResult[]>([]);
+  const [lexicalOnly, setLexicalOnly] = useState(false);
+  const [fallbackReason, setFallbackReason] = useState('');
+  const [activeEmbeddingModel, setActiveEmbeddingModel] = useState('');
   const [current, setCurrent] = useState<MemoryDetails | null>(null);
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [searched, setSearched] = useState(false);
   const [offset, setOffset] = useState(0), [next, setNext] = useState<number | null>(null);
@@ -16,11 +22,38 @@ export function Search({ client, workspaceId }: { client: Client; workspaceId: s
   function clear() {
     setResults([]);
     setHybridResults([]);
+    setLexicalOnly(false);
+    setFallbackReason('');
+    setActiveEmbeddingModel('');
     setCurrent(null);
     setError('');
     setSearched(false);
     setOffset(0);
     setNext(null);
+  }
+
+  async function indexWorkspace() {
+    const trimmedModel = embeddingModel.trim();
+    if (!trimmedModel) {
+      setError('Enter an installed local embedding model before indexing.');
+      return;
+    }
+    setBusy(true);
+    setError('');
+    setIndexStatus('');
+    try {
+      const res = await client.indexEmbeddings(workspaceId, {
+        model: trimmedModel,
+        endpoint: embeddingEndpoint.trim() || undefined,
+      });
+      setIndexStatus(
+        `Indexed ${res.indexedChunks} chunks across ${res.indexedMemories} records with ${res.model} (${res.dimension} dimensions).`
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Unable to index workspace embeddings.');
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function search(at = 0) {
@@ -29,6 +62,9 @@ export function Search({ client, workspaceId }: { client: Client; workspaceId: s
     setCurrent(null);
     setResults([]);
     setHybridResults([]);
+    setLexicalOnly(false);
+    setFallbackReason('');
+    setActiveEmbeddingModel('');
     setSearched(false);
     setNext(null);
 
@@ -36,11 +72,17 @@ export function Search({ client, workspaceId }: { client: Client; workspaceId: s
       if (mode === 'hybrid') {
         const response = await client.hybridSearch(workspaceId, {
           query: query.trim() || undefined,
+          model: embeddingModel.trim() || undefined,
+          endpoint: embeddingEndpoint.trim() || undefined,
           kind: kind || undefined,
           includeArchived: archived,
+          includeExpired: expired,
           limit: 50,
         });
         setHybridResults(response.results);
+        setLexicalOnly(Boolean(response.lexicalOnly));
+        setFallbackReason(response.fallbackReason ?? '');
+        setActiveEmbeddingModel(response.embeddingModel ?? '');
         setSearched(true);
       } else {
         const isFullBody = mode === 'body';
@@ -87,7 +129,7 @@ export function Search({ client, workspaceId }: { client: Client; workspaceId: s
           ? 'Search record titles in this workspace. All words must match. Bodies and semantic search are not included. Nothing is sent to an AI provider.'
           : mode === 'body'
           ? 'Search titles and Markdown bodies in this workspace using keywords, exact phrases in quotes and prefix wildcards. Sealed records are excluded. Nothing is sent to an AI provider.'
-          : 'Fuses lexical FTS5 BM25 keyword matching and pure Rust vector similarity using Reciprocal Rank Fusion (RRF). Sealed records are excluded fail-closed. Nothing is sent to an AI provider.'}
+          : 'Fuses lexical FTS5 BM25 keyword matching and pure Rust vector similarity using Reciprocal Rank Fusion (RRF) with post-fusion reranking. Sealed records are excluded fail-closed. Nothing is sent to an external AI provider.'}
       </p>
 
       <div className="search-mode-selector" role="radiogroup" aria-label="Search mode">
@@ -125,6 +167,41 @@ export function Search({ client, workspaceId }: { client: Client; workspaceId: s
 
       <form onSubmit={(e) => { e.preventDefault(); void search(); }}>
         <fieldset disabled={busy}>
+          {mode === 'hybrid' && (
+            <div className="semantic-index-controls" aria-label="Embedding model configuration">
+              <label htmlFor="search-embedding-model">Embedding model</label>
+              <input
+                id="search-embedding-model"
+                value={embeddingModel}
+                onChange={(e) => { clear(); setEmbeddingModel(e.target.value); }}
+                placeholder="e.g. all-minilm:22m"
+                autoComplete="off"
+              />
+              <label htmlFor="search-embedding-endpoint">Local embedding endpoint</label>
+              <input
+                id="search-embedding-endpoint"
+                value={embeddingEndpoint}
+                onChange={(e) => { clear(); setEmbeddingEndpoint(e.target.value); }}
+                placeholder="http://127.0.0.1:11434"
+                autoComplete="off"
+              />
+              <div className="actions">
+                <button
+                  type="button"
+                  className="secondary"
+                  disabled={busy || !embeddingModel.trim()}
+                  onClick={() => void indexWorkspace()}
+                >
+                  Index workspace embeddings
+                </button>
+              </div>
+              {indexStatus && (
+                <p role="status" className="index-status">
+                  {indexStatus}
+                </p>
+              )}
+            </div>
+          )}
           <label htmlFor="search-query">{mode === 'title' ? 'Title keywords' : 'Search query'}</label>
           <input
             id="search-query"
@@ -145,12 +222,10 @@ export function Search({ client, workspaceId }: { client: Client; workspaceId: s
             <input type="checkbox" checked={archived} onChange={(e) => { clear(); setArchived(e.target.checked); }} />
             Include archived search results
           </label>
-          {mode !== 'hybrid' && (
-            <label className="check-label">
-              <input type="checkbox" checked={expired} onChange={(e) => { clear(); setExpired(e.target.checked); }} />
-              Include expired search results
-            </label>
-          )}
+          <label className="check-label">
+            <input type="checkbox" checked={expired} onChange={(e) => { clear(); setExpired(e.target.checked); }} />
+            Include expired search results
+          </label>
           <button type="submit">
             {mode === 'title' ? 'Search titles' : mode === 'body' ? 'Search knowledge' : 'Run hybrid search'}
           </button>
@@ -162,10 +237,10 @@ export function Search({ client, workspaceId }: { client: Client; workspaceId: s
           ? 'Up to eight words, 256 UTF-8 bytes. Searches are limited to 10,000 eligible records and 32 MiB of metadata; narrow the record type if needed. Sealed records remain unavailable.'
           : mode === 'body'
           ? 'Searches full Markdown bodies and titles up to 16 terms or quoted phrases, bounded to 512 UTF-8 bytes and 10,000 eligible records. Sealed records remain unavailable.'
-          : 'Reciprocal Rank Fusion fuses keyword rank and cosine vector rank. Bounded to top 100 eligible records. Sealed records remain unavailable.'}
+          : 'Reciprocal Rank Fusion fuses keyword rank and cosine vector rank, followed by temporal/lifecycle reranking. Bounded to top 100 eligible records. Sealed records remain unavailable.'}
       </p>
 
-      {busy && <p role="status">Searching or opening a saved revision…</p>}
+      {busy && <p role="status">Searching, indexing, or opening a saved revision…</p>}
       {error && <p role="alert" className="error">{error}</p>}
 
       {searched && mode !== 'hybrid' && (
@@ -209,9 +284,22 @@ export function Search({ client, workspaceId }: { client: Client; workspaceId: s
 
       {searched && mode === 'hybrid' && (
         <>
+          {lexicalOnly ? (
+            <div role="status" className="status-banner status-lexical-fallback" aria-label="Lexical fallback notice">
+              <strong>Lexical-only fallback:</strong>{' '}
+              {fallbackReason || 'Semantic vector search was not applied; showing lexical FTS5 keyword matches only.'}
+            </div>
+          ) : (
+            <div role="status" className="status-banner status-semantic-active" aria-label="Semantic retrieval status">
+              <strong>Hybrid semantic + lexical retrieval active:</strong> model{' '}
+              <code>{activeEmbeddingModel || embeddingModel}</code>
+            </div>
+          )}
           <p role="status">
             {hybridResults.length
-              ? `${hybridResults.length} hybrid fused matches found.`
+              ? lexicalOnly
+                ? `${hybridResults.length} lexical-only matches found.`
+                : `${hybridResults.length} hybrid fused matches found.`
               : 'No matching records found. Try different terms or filters.'}
           </p>
           <ul aria-label="Hybrid search results" className="hybrid-search-results">
@@ -222,9 +310,20 @@ export function Search({ client, workspaceId }: { client: Client; workspaceId: s
                 </button>
                 <p className="hybrid-meta">
                   {record.kind} · RRF Score: <strong>{record.rrfScore.toFixed(4)}</strong>
+                  {record.rerankScore !== null && record.rerankScore !== undefined
+                    ? ` · Rerank Score: ${record.rerankScore.toFixed(4)}`
+                    : ''}
                   {record.lexicalRank !== null && record.lexicalRank !== undefined ? ` · Lexical #${record.lexicalRank}` : ''}
                   {record.semanticRank !== null && record.semanticRank !== undefined ? ` · Semantic #${record.semanticRank}` : ''}
+                  {record.cosineSimilarity !== null && record.cosineSimilarity !== undefined
+                    ? ` (cos ${record.cosineSimilarity.toFixed(3)})`
+                    : ''}
                 </p>
+                {record.rerankProvenance && (
+                  <p className="rerank-provenance">
+                    Provenance: <code>{record.rerankProvenance}</code>
+                  </p>
+                )}
                 {record.sectionHeading && (
                   <p className="evidence-heading">
                     Section: <strong>{record.sectionHeading}</strong>{record.lineNumber ? ` (line ${record.lineNumber})` : ''}

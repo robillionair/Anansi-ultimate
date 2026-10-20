@@ -44,6 +44,7 @@ export interface ArtifactChunk {
 }
 export interface AskRequest {
   contractVersion: number;
+  embeddingModel?: string | null;
   maxEvidenceItems?: number | null;
   modelTag?: string | null;
   prompt: string;
@@ -175,6 +176,8 @@ export interface CompiledContext {
   contractVersion: number;
   disclosureManifest: DisclosureManifest;
   evidenceChunks: ContextChunk[];
+  fallbackReason?: string | null;
+  lexicalOnly?: boolean;
   systemPrompt: string;
   totalCharacters: number;
   totalTokens: number;
@@ -224,6 +227,7 @@ export interface ContextChunk {
   tokenEstimate: number;
 }
 export interface ContextCompilationRequest {
+  embeddingModel?: string | null;
   kindFilter?: string | null;
   maxBudgetChars?: number | null;
   modelTag?: string | null;
@@ -327,7 +331,9 @@ export interface HardwareProfile {
   vramBytes?: number | null;
 }
 export interface HybridSearchRequest {
+  endpoint?: string | null;
   includeArchived?: boolean;
+  includeExpired?: boolean;
   kind?: string | null;
   lexicalWeight?: number;
   limit?: number;
@@ -343,13 +349,19 @@ export interface EmbeddingVector {
 }
 export interface HybridSearchResponse {
   contractVersion: number;
+  embeddingModel?: string | null;
+  fallbackReason?: string | null;
+  lexicalOnly?: boolean;
   results: HybridSearchResult[];
 }
 export interface HybridSearchResult {
+  cosineSimilarity?: number | null;
   kind: string;
   lexicalRank?: number | null;
   lineNumber?: number | null;
   memoryId: string;
+  rerankProvenance?: string | null;
+  rerankScore?: number | null;
   rrfScore: number;
   sectionHeading?: string | null;
   semanticRank?: number | null;
@@ -357,15 +369,32 @@ export interface HybridSearchResult {
   title: string;
 }
 export interface HybridSearchResult {
+  cosineSimilarity?: number | null;
   kind: string;
   lexicalRank?: number | null;
   lineNumber?: number | null;
   memoryId: string;
+  rerankProvenance?: string | null;
+  rerankScore?: number | null;
   rrfScore: number;
   sectionHeading?: string | null;
   semanticRank?: number | null;
   snippet?: string | null;
   title: string;
+}
+export interface IndexEmbeddingsRequest {
+  contractVersion: number;
+  endpoint?: string | null;
+  memoryId?: string | null;
+  model?: string | null;
+  workspaceId: string;
+}
+export interface IndexEmbeddingsResponse {
+  contractVersion: number;
+  dimension: number;
+  indexedChunks: number;
+  indexedMemories: number;
+  model: string;
 }
 export type JobState = "Queued" | "Running" | "Paused" | "Completed" | "Failed" | "Cancelled";
 

@@ -8,6 +8,7 @@ export function AskAnansi({ client, workspaceId }: { client: Client; workspaceId
   const [result, setResult] = useState<AskResponse | null>(null);
   const [showManifest, setShowManifest] = useState(false);
   const [model,setModel]=useState('qwen2.5:0.5b');
+  const [embeddingModel,setEmbeddingModel]=useState('all-minilm:22m');
   const [endpoint,setEndpoint]=useState('http://127.0.0.1:11434');
   const [partial,setPartial]=useState('');
   const active=useRef<string|null>(null);
@@ -26,7 +27,11 @@ export function AskAnansi({ client, workspaceId }: { client: Client; workspaceId
     setPartial('');cancelled.current=false;
 
     try {
-      const opened=await client.startAsk(workspaceId,trimmed,{runtimeEndpoint:endpoint.trim(),modelTag:model.trim()});
+      const opened=await client.startAsk(workspaceId,trimmed,{
+        runtimeEndpoint:endpoint.trim(),
+        modelTag:model.trim(),
+        ...(embeddingModel.trim()?{embeddingModel:embeddingModel.trim()}:{}),
+      });
       active.current=opened.id;
       if(cancelled.current){await client.cancelAsk(workspaceId,opened.id);return;}
       for(;;){
@@ -60,6 +65,7 @@ export function AskAnansi({ client, workspaceId }: { client: Client; workspaceId
         <form onSubmit={handleSubmit}>
           <fieldset disabled={busy}>
             <label htmlFor="ask-model">Installed Ollama model</label><input id="ask-model" value={model} onChange={event=>setModel(event.target.value)} required autoComplete="off"/>
+            <label htmlFor="ask-embedding-model">Embedding model for semantic grounding</label><input id="ask-embedding-model" value={embeddingModel} onChange={event=>setEmbeddingModel(event.target.value)} autoComplete="off"/>
             <label htmlFor="ask-endpoint">Local inference endpoint</label><input id="ask-endpoint" value={endpoint} onChange={event=>setEndpoint(event.target.value)} required autoComplete="off"/>
             <label htmlFor="ask-prompt">Your Question</label>
             <input

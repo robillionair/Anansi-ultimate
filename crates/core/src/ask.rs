@@ -56,6 +56,8 @@ pub struct AskRequest {
     pub prompt: String,
     pub runtime_endpoint: Option<String>,
     pub model_tag: Option<String>,
+    #[serde(default)]
+    pub embedding_model: Option<String>,
     pub max_evidence_items: Option<usize>,
 }
 
@@ -370,6 +372,7 @@ impl Core {
                 max_budget_chars: Some((max_items * 800).min(4000)),
                 runtime_endpoint: request.runtime_endpoint.clone(),
                 model_tag: request.model_tag.clone(),
+                embedding_model: request.embedding_model.clone(),
                 kind_filter: None,
             },
             Some(&search_query),
@@ -377,6 +380,13 @@ impl Core {
         drop(conn);
         let citations = compiled.citations;
         let source_refs = compiled.disclosure_manifest.source_memories;
+        let routing_reason = if compiled.lexical_only {
+            "local-first offline inference (lexical-only grounding)".to_string()
+        } else if let Some(ref emb) = request.embedding_model {
+            format!("local-first offline inference (hybrid lexical + semantic grounding: {emb})")
+        } else {
+            "local-first offline inference".to_string()
+        };
 
         // 2. Truthful Insufficient Evidence Handling
         if citations.is_empty() {
@@ -528,7 +538,7 @@ impl Core {
             source_memories: source_refs,
             character_count: char_count,
             estimated_tokens: est_tokens,
-            routing_reason: "local-first offline inference".to_string(),
+            routing_reason,
             compiled_prompt,
         };
 

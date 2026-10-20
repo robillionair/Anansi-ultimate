@@ -256,6 +256,22 @@ impl VaultStore {
         // Deferred circular record/revision pointers are checked at commit.
         tx.execute_batch("PRAGMA defer_foreign_keys=ON;")
             .map_err(invalid)?;
+        for derived in ["memory_body_fts", "memory_embeddings"] {
+            let exists: bool = tx
+                .query_row(
+                    "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name=?1)",
+                    [derived],
+                    |r| r.get(0),
+                )
+                .map_err(invalid)?;
+            if exists {
+                tx.execute(
+                    &format!("DELETE FROM {derived} WHERE workspace_id=?1"),
+                    [setup.context.workspace_id()],
+                )
+                .map_err(invalid)?;
+            }
+        }
         for table in [
             "relationship_revisions",
             "relationships",

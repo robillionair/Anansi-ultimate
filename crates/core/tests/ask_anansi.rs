@@ -26,6 +26,7 @@ fn missing_workspace_is_not_reported_as_missing_evidence() {
         prompt: "Find the deployment decision".into(),
         runtime_endpoint: None,
         model_tag: None,
+        embedding_model: None,
         max_evidence_items: None,
     });
     assert!(result.is_err());
@@ -42,6 +43,7 @@ fn missing_evidence_returns_truthful_insufficient_evidence_status() {
             prompt: "What is our deployment target?".into(),
             runtime_endpoint: None,
             model_tag: None,
+            embedding_model: None,
             max_evidence_items: None,
         })
         .unwrap();
@@ -100,6 +102,7 @@ fn grounded_context_compiles_citations_and_excludes_sealed_records() {
             prompt: "What is our deployment target?".into(),
             runtime_endpoint: Some(format!("http://127.0.0.1:{}", offline_port)),
             model_tag: Some("llama3.1:8b".into()),
+            embedding_model: None,
             max_evidence_items: Some(5),
         })
         .unwrap();
@@ -182,6 +185,7 @@ fn synthetic_ollama_server_answers_grounded_question() {
             prompt: "What did we decide about search?".into(),
             runtime_endpoint: Some(format!("http://127.0.0.1:{}", port)),
             model_tag: Some("llama3.1:8b".into()),
+            embedding_model: None,
             max_evidence_items: Some(5),
         })
         .unwrap();
@@ -206,6 +210,7 @@ fn prompt_validation_enforces_bounds_and_safety() {
         prompt: "   ".into(),
         runtime_endpoint: None,
         model_tag: None,
+        embedding_model: None,
         max_evidence_items: None,
     });
     assert!(empty_res.is_err());
@@ -222,6 +227,7 @@ fn prompt_validation_enforces_bounds_and_safety() {
         prompt: big_prompt,
         runtime_endpoint: None,
         model_tag: None,
+        embedding_model: None,
         max_evidence_items: None,
     });
     assert!(big_res.is_err());
@@ -237,6 +243,7 @@ fn prompt_validation_enforces_bounds_and_safety() {
         prompt: "Valid prompt".into(),
         runtime_endpoint: Some("http://api.openai.com/v1".into()),
         model_tag: None,
+        embedding_model: None,
         max_evidence_items: None,
     });
     assert!(non_loopback_res.is_err());

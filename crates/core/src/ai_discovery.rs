@@ -720,11 +720,11 @@ impl Core {
                 let conn = storage
                     .connection(false)?
                     .ok_or_else(crate::storage::unavailable)?;
-                let results = crate::hybrid::hybrid_search(&conn, &req)?;
-                let response = crate::hybrid::HybridSearchResponse {
-                    contract_version: 1,
-                    results,
-                };
+                let response = crate::hybrid::hybrid_search_with_status(
+                    &conn,
+                    Some(storage.root_path()),
+                    &req,
+                )?;
                 serde_json::to_value(response).map_err(|_| crate::storage::unavailable())
             }
             "context" => {
@@ -744,20 +744,19 @@ impl Core {
                 serde_json::to_value(response).map_err(|_| crate::storage::unavailable())
             }
             "index-embeddings" => {
-                #[derive(serde::Deserialize)]
-                #[serde(rename_all = "camelCase")]
-                struct IndexEmbeddingsRequest {
-                    workspace_id: String,
-                    memory_id: Option<String>,
-                    model: Option<String>,
-                    endpoint: Option<String>,
+                let req: crate::semantic::IndexEmbeddingsRequest = serde_json::from_value(value)
+                    .map_err(|_| {
+                        CommandError::new(
+                            ErrorCode::InvalidRequest,
+                            "Use the supported index embeddings request.",
+                        )
+                    })?;
+                if req.contract_version != 1 {
+                    return Err(CommandError::new(
+                        ErrorCode::UnsupportedContract,
+                        "This contract version is not supported.",
+                    ));
                 }
-                let req: IndexEmbeddingsRequest = serde_json::from_value(value).map_err(|_| {
-                    CommandError::new(
-                        ErrorCode::InvalidRequest,
-                        "Use the supported index embeddings request.",
-                    )
-                })?;
                 let storage = self.storage()?;
                 let conn = storage
                     .connection(false)?
@@ -765,34 +764,43 @@ impl Core {
                 let root = storage.root_path();
                 let model = req
                     .model
-                    .unwrap_or_else(|| crate::semantic::DEFAULT_EMBEDDING_MODEL.to_owned());
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or(crate::semantic::DEFAULT_EMBEDDING_MODEL)
+                    .to_owned();
                 let endpoint = req.endpoint.as_deref();
 
-                let indexed_chunks = if let Some(mem_id) = &req.memory_id {
-                    crate::semantic::embed_memory(
-                        &conn,
-                        root,
-                        &req.workspace_id,
-                        mem_id,
-                        &model,
-                        endpoint,
-                    )?
-                } else {
-                    crate::semantic::embed_workspace_memories(
-                        &conn,
-                        root,
-                        &req.workspace_id,
-                        &model,
-                        endpoint,
-                    )?
-                };
+                let (indexed_memories, indexed_chunks, dimension) =
+                    if let Some(mem_id) = &req.memory_id {
+                        let (chunks, dim) = crate::semantic::embed_memory_with_hook(
+                            &conn,
+                            root,
+                            &req.workspace_id,
+                            mem_id,
+                            &model,
+                            endpoint,
+                            || Ok(()),
+                        )?;
+                        (usize::from(chunks > 0), chunks, dim)
+                    } else {
+                        crate::semantic::embed_workspace_memories_detailed(
+                            &conn,
+                            root,
+                            &req.workspace_id,
+                            &model,
+                            endpoint,
+                        )?
+                    };
 
-                serde_json::to_value(serde_json::json!({
-                    "contractVersion": 1,
-                    "indexedChunks": indexed_chunks,
-                    "model": model,
-                }))
-                .map_err(|_| crate::storage::unavailable())
+                let response = crate::semantic::IndexEmbeddingsResponse {
+                    contract_version: 1,
+                    indexed_memories,
+                    indexed_chunks,
+                    model,
+                    dimension,
+                };
+                serde_json::to_value(response).map_err(|_| crate::storage::unavailable())
             }
             _ => Err(CommandError::new(
                 ErrorCode::InvalidRequest,

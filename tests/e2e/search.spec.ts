@@ -48,3 +48,95 @@ test('local title search filters, exact revision reader, literal content, update
     await page.screenshot({path:'test-results/browser-title-search-reader.png',fullPage:true});
   }finally{await stop();}
 });
+
+test('real semantic UI workflow: save record -> index -> retrieve paraphrase with zero keyword overlap -> revise -> verify old embeddings invalidated -> restart and search again',async({page})=>{
+  test.setTimeout(180000);
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'anansi-semantic-search-'));
+  let child:ChildProcess|undefined,pairing:{endpoint:string,token:string},pairingFile='';
+  async function start(){
+    child=spawn(path.resolve('target/debug/anansi-api'+(process.platform==='win32'?'.exe':'')),['--port','0','--pairing-root',path.join(root,'pairing')],{windowsHide:true,env:{...process.env,ANANSI_STORAGE_ROOT:path.join(root,'storage')},stdio:['ignore','pipe','ignore']});
+    await new Promise<void>((resolve,reject)=>{let output='';const timer=setTimeout(()=>reject(Error('Search API startup timeout')),20000);child!.once('error',reject);child!.stdout!.on('data',data=>{output+=data.toString();const match=output.match(/Pairing file: (.+)\r?\n/);if(match){pairingFile=match[1].trim();pairing=JSON.parse(fs.readFileSync(pairingFile,'utf8'));clearTimeout(timer);resolve();}});});
+  }
+  async function stop(){if(child?.exitCode===null){const ended=new Promise(resolve=>child!.once('exit',resolve));child.kill();await ended;}if(pairingFile&&fs.existsSync(pairingFile)){fs.unlinkSync(pairingFile);fs.rmdirSync(path.dirname(pairingFile));}}
+  async function pair(){await page.goto('/');await page.getByLabel('Local API address').fill(pairing.endpoint);await page.getByLabel('Session token').fill(pairing.token);await page.getByRole('button',{name:'Connect to core'}).click();await expect(page.getByRole('button',{name:'Refresh workspaces'})).toBeEnabled();}
+  async function call(group:string,operation:string,input:Record<string,unknown>){const response=await fetch(pairing.endpoint+'/v1/'+group+'/'+operation,{method:'POST',headers:{Origin:'http://127.0.0.1:1420',Authorization:'Bearer '+pairing.token,'Content-Type':'application/json'},body:JSON.stringify({contractVersion:1,...input})});expect(response.ok).toBe(true);return response.json();}
+
+  try{
+    await start();
+    const workspace=(await call('workspaces','create',{name:'Semantic Paraphrase Workflow'})).workspace;
+    await call('workspaces','settings',{id:workspace.id,reducedMotion:true,onboardingComplete:true});
+
+    // 1. Pair and open workspace
+    await pair();
+    await page.getByLabel('Existing workspace').selectOption(workspace.id);
+    await page.getByRole('button',{name:'Open workspace',exact:true}).click();
+
+    // 2. Save a record through the real UI (Notes view)
+    await page.getByRole('button',{name:'Notes',exact:true}).click();
+    await page.getByLabel('Note title',{exact:true}).fill('Feline Dietary Regimen');
+    await page.getByLabel('Note text',{exact:true}).fill('# Nutrition\nDomestic cats require a carnivore diet rich in taurine and regular veterinary checkups.');
+    await page.getByRole('button',{name:'Save note',exact:true}).click();
+    await expect(page.getByRole('list',{name:'Saved notes'})).toContainText('Feline Dietary Regimen');
+
+    // 3. Navigate to Search UI and switch to Hybrid semantic mode
+    await page.getByRole('button',{name:'Search',exact:true}).click();
+    await page.getByLabel('Hybrid semantic',{exact:true}).check();
+    await expect(page.locator('#search-embedding-model')).toHaveValue('all-minilm:22m');
+
+    // Before indexing, searching a paraphrase with 0 keyword overlap ("kitty feeding schedule") shows visible lexical-only fallback banner and 0 matches
+    await page.getByLabel('Search query').fill('kitty feeding schedule');
+    await page.getByRole('button',{name:'Run hybrid search',exact:true}).click();
+    await expect(page.locator('section[aria-labelledby="search-title"]')).toHaveAttribute('aria-busy','false');
+    await expect(page.locator('.status-lexical-fallback')).toContainText('Lexical-only fallback');
+    await expect(page.getByRole('status').filter({hasText:'No matching records found.'})).toBeVisible();
+
+    // 4. Explicitly index workspace embeddings via the Search UI button
+    await page.getByRole('button',{name:'Index workspace embeddings',exact:true}).click();
+    await expect(page.locator('.index-status')).toContainText('Indexed 1', {timeout: 30000});
+
+    // 5. Retrieve via paraphrase with zero keyword overlap ("kitty feeding schedule")
+    await page.getByRole('button',{name:'Run hybrid search',exact:true}).click();
+    await expect(page.locator('section[aria-labelledby="search-title"]')).toHaveAttribute('aria-busy','false');
+    await expect(page.locator('.status-semantic-active')).toContainText('Hybrid semantic + lexical retrieval active');
+    const results=page.getByRole('list',{name:'Hybrid search results'});
+    await expect(results.getByRole('button',{name:'Feline Dietary Regimen',exact:true})).toBeVisible();
+    await expect(results).toContainText('Semantic #1');
+    await expect(results).not.toContainText('Lexical #');
+
+    // 6. Revise the record in the UI to completely different content (invalidating old embeddings)
+    await page.getByRole('button',{name:'Notes',exact:true}).click();
+    await page.getByRole('list',{name:'Saved notes'}).getByRole('button',{name:'Feline Dietary Regimen',exact:true}).click();
+    await page.getByLabel('Note title',{exact:true}).fill('Solar Panel Installation Spec');
+    await page.getByLabel('Note text',{exact:true}).fill('# Photovoltaics\nMonocrystalline rooftop arrays generate clean kilowatt hours.');
+    await page.getByRole('button',{name:'Save note',exact:true}).click();
+    await expect(page.getByRole('list',{name:'Saved notes'})).toContainText('Solar Panel Installation Spec');
+
+    // 7. Return to Search UI and verify old embeddings were invalidated (paraphrase no longer matches, lexical-only fallback banner appears)
+    await page.getByRole('button',{name:'Search',exact:true}).click();
+    await page.getByLabel('Hybrid semantic',{exact:true}).check();
+    await page.getByLabel('Search query').fill('kitty feeding schedule');
+    await page.getByRole('button',{name:'Run hybrid search',exact:true}).click();
+    await expect(page.locator('section[aria-labelledby="search-title"]')).toHaveAttribute('aria-busy','false');
+    await expect(page.locator('.status-lexical-fallback')).toContainText('Lexical-only fallback');
+    await expect(page.getByRole('status').filter({hasText:'No matching records found.'})).toBeVisible();
+
+    // 8. Re-index the revised record, restart API server, pair again, and search a solar paraphrase ("sunlight electricity generation" -> 0 keyword overlap)
+    await page.getByRole('button',{name:'Index workspace embeddings',exact:true}).click();
+    await expect(page.locator('.index-status')).toContainText('Indexed 1', {timeout: 30000});
+
+    await stop();
+    await start();
+    await pair();
+    await page.getByLabel('Existing workspace').selectOption(workspace.id);
+    await page.getByRole('button',{name:'Open workspace',exact:true}).click();
+    await page.getByRole('button',{name:'Search',exact:true}).click();
+    await page.getByLabel('Hybrid semantic',{exact:true}).check();
+    await page.getByLabel('Search query').fill('sunlight electricity generation');
+    await page.getByRole('button',{name:'Run hybrid search',exact:true}).click();
+    await expect(page.locator('section[aria-labelledby="search-title"]')).toHaveAttribute('aria-busy','false');
+    await expect(page.locator('.status-semantic-active')).toContainText('Hybrid semantic + lexical retrieval active');
+    await expect(results.getByRole('button',{name:'Solar Panel Installation Spec',exact:true})).toBeVisible();
+    await expect(results).toContainText('Semantic #1');
+  }finally{await stop();}
+});
+

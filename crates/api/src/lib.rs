@@ -325,6 +325,8 @@ async fn ai(
         Ok(Err(e)) => {
             let status = match e.code {
                 ErrorCode::NotFound => StatusCode::NOT_FOUND,
+                ErrorCode::RevisionConflict | ErrorCode::ContentIntegrity => StatusCode::CONFLICT,
+                ErrorCode::VaultUnavailable => StatusCode::FORBIDDEN,
                 ErrorCode::UnsupportedContract => StatusCode::BAD_REQUEST,
                 ErrorCode::StorageUnavailable => StatusCode::SERVICE_UNAVAILABLE,
                 _ => StatusCode::BAD_REQUEST,

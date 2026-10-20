@@ -245,6 +245,13 @@
         "minimum": 0,
         "type": "integer"
       },
+      "embeddingModel": {
+        "default": null,
+        "type": [
+          "string",
+          "null"
+        ]
+      },
       "maxEvidenceItems": {
         "format": "uint",
         "minimum": 0,
@@ -1011,6 +1018,17 @@
         },
         "type": "array"
       },
+      "fallbackReason": {
+        "default": null,
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "lexicalOnly": {
+        "default": false,
+        "type": "boolean"
+      },
       "systemPrompt": {
         "type": "string"
       },
@@ -1091,6 +1109,13 @@
   "ContextCompilationRequest": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "properties": {
+      "embeddingModel": {
+        "default": null,
+        "type": [
+          "string",
+          "null"
+        ]
+      },
       "kindFilter": {
         "type": [
           "string",
@@ -1619,7 +1644,18 @@
     },
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "properties": {
+      "endpoint": {
+        "default": null,
+        "type": [
+          "string",
+          "null"
+        ]
+      },
       "includeArchived": {
+        "default": false,
+        "type": "boolean"
+      },
+      "includeExpired": {
         "default": false,
         "type": "boolean"
       },
@@ -1686,6 +1722,14 @@
     "$defs": {
       "HybridSearchResult": {
         "properties": {
+          "cosineSimilarity": {
+            "default": null,
+            "format": "float",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
           "kind": {
             "type": "string"
           },
@@ -1707,6 +1751,21 @@
           },
           "memoryId": {
             "type": "string"
+          },
+          "rerankProvenance": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "rerankScore": {
+            "default": null,
+            "format": "float",
+            "type": [
+              "number",
+              "null"
+            ]
           },
           "rrfScore": {
             "format": "float",
@@ -1753,6 +1812,24 @@
         "minimum": 0,
         "type": "integer"
       },
+      "embeddingModel": {
+        "default": null,
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "fallbackReason": {
+        "default": null,
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "lexicalOnly": {
+        "default": false,
+        "type": "boolean"
+      },
       "results": {
         "items": {
           "$ref": "#/$defs/HybridSearchResult"
@@ -1770,6 +1847,14 @@
   "HybridSearchResult": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "properties": {
+      "cosineSimilarity": {
+        "default": null,
+        "format": "float",
+        "type": [
+          "number",
+          "null"
+        ]
+      },
       "kind": {
         "type": "string"
       },
@@ -1791,6 +1876,21 @@
       },
       "memoryId": {
         "type": "string"
+      },
+      "rerankProvenance": {
+        "default": null,
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "rerankScore": {
+        "default": null,
+        "format": "float",
+        "type": [
+          "number",
+          "null"
+        ]
       },
       "rrfScore": {
         "format": "float",
@@ -1827,6 +1927,84 @@
       "rrfScore"
     ],
     "title": "HybridSearchResult",
+    "type": "object"
+  },
+  "IndexEmbeddingsRequest": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "endpoint": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "memoryId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "model": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "workspaceId"
+    ],
+    "title": "IndexEmbeddingsRequest",
+    "type": "object"
+  },
+  "IndexEmbeddingsResponse": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "dimension": {
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "indexedChunks": {
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "indexedMemories": {
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "model": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "indexedMemories",
+      "indexedChunks",
+      "model",
+      "dimension"
+    ],
+    "title": "IndexEmbeddingsResponse",
     "type": "object"
   },
   "Job": {

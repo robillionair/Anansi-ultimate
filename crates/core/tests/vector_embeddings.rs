@@ -107,20 +107,31 @@ fn vector_serialization_deserialization_roundtrip() {
 fn sqlite_embedding_cache_roundtrip_and_cascade() {
     let conn = Connection::open_in_memory().unwrap();
 
-    // Create minimal memories table
+    // Create canonical memories and memory_revisions tables
     conn.execute_batch(
         "CREATE TABLE memories (
             workspace_id TEXT NOT NULL,
             id TEXT NOT NULL,
-            privacy TEXT NOT NULL DEFAULT 'private',
+            current_revision TEXT NOT NULL DEFAULT 'rev_1',
             PRIMARY KEY (workspace_id, id)
+        );
+        CREATE TABLE memory_revisions (
+            workspace_id TEXT NOT NULL,
+            memory_id TEXT NOT NULL,
+            id TEXT NOT NULL,
+            metadata TEXT NOT NULL
         );",
     )
     .unwrap();
 
     // Insert sample memory
     conn.execute(
-        "INSERT INTO memories (workspace_id, id, privacy) VALUES ('ws_1', 'mem_1', 'private')",
+        "INSERT INTO memories (workspace_id, id, current_revision) VALUES ('ws_1', 'mem_1', 'rev_1')",
+        [],
+    )
+    .unwrap();
+    conn.execute(
+        "INSERT INTO memory_revisions (workspace_id, memory_id, id, metadata) VALUES ('ws_1', 'mem_1', 'rev_1', '{\"privacy\":\"private\",\"status\":\"active\"}')",
         [],
     )
     .unwrap();
@@ -171,15 +182,26 @@ fn fail_closed_sealed_memory_exclusion() {
         "CREATE TABLE memories (
             workspace_id TEXT NOT NULL,
             id TEXT NOT NULL,
-            privacy TEXT NOT NULL DEFAULT 'private',
+            current_revision TEXT NOT NULL DEFAULT 'rev_1',
             PRIMARY KEY (workspace_id, id)
+        );
+        CREATE TABLE memory_revisions (
+            workspace_id TEXT NOT NULL,
+            memory_id TEXT NOT NULL,
+            id TEXT NOT NULL,
+            metadata TEXT NOT NULL
         );",
     )
     .unwrap();
 
     // Insert sealed memory
     conn.execute(
-        "INSERT INTO memories (workspace_id, id, privacy) VALUES ('ws_vault', 'mem_vault_secret', 'sealed')",
+        "INSERT INTO memories (workspace_id, id, current_revision) VALUES ('ws_vault', 'mem_vault_secret', 'rev_1')",
+        [],
+    )
+    .unwrap();
+    conn.execute(
+        "INSERT INTO memory_revisions (workspace_id, memory_id, id, metadata) VALUES ('ws_vault', 'mem_vault_secret', 'rev_1', '{\"privacy\":\"sealed\",\"status\":\"active\"}')",
         [],
     )
     .unwrap();

@@ -198,6 +198,8 @@ test('ask anansi view renders prompt input, local privacy disclosure, and submis
   assert.ok(html.includes('Ask ANANSI</h2>'));
   assert.ok(html.includes('Ask questions grounded strictly in your saved workspace memories'));
   assert.ok(html.includes('Zero telemetry, zero cloud data transfer'));
+  assert.ok(html.includes('id="ask-model"'));
+  assert.ok(html.includes('id="ask-embedding-model"'));
   assert.ok(html.includes('id="ask-prompt"'));
   assert.ok(html.includes('maxLength="500"'));
   assert.ok(html.includes('Ask Question'));

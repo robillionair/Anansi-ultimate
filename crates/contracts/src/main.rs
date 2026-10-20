@@ -76,7 +76,9 @@ fn main() {
         "HybridSearchResponse":schemars::schema_for!(anansi_core::hybrid::HybridSearchResponse),
         "ContextCompilationRequest":schemars::schema_for!(anansi_core::context::ContextCompilationRequest),
         "CompiledContext":schemars::schema_for!(anansi_core::context::CompiledContext),
-        "ContextChunk":schemars::schema_for!(anansi_core::context::ContextChunk)
+        "ContextChunk":schemars::schema_for!(anansi_core::context::ContextChunk),
+        "IndexEmbeddingsRequest":schemars::schema_for!(anansi_core::semantic::IndexEmbeddingsRequest),
+        "IndexEmbeddingsResponse":schemars::schema_for!(anansi_core::semantic::IndexEmbeddingsResponse)
     });
     println!("{}", serde_json::to_string_pretty(&schemas).unwrap());
 }

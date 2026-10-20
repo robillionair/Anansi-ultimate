@@ -456,7 +456,7 @@ pub fn store_embedding_with_revision(
 ) -> Result<(), VectorError> {
     ensure_embeddings_table(conn)?;
 
-    // Fail-closed privacy check: Verify memory is not Sealed
+    // Fail-closed privacy check: Verify memory is not Sealed using canonical revision metadata
     let privacy: Option<String> = conn
         .query_row(
             "SELECT json_extract(r.metadata, '$.privacy')
@@ -466,13 +466,6 @@ pub fn store_embedding_with_revision(
             params![workspace_id, memory_id],
             |row| row.get(0),
         )
-        .or_else(|_| {
-            conn.query_row(
-                "SELECT privacy FROM memories WHERE workspace_id = ?1 AND id = ?2",
-                params![workspace_id, memory_id],
-                |row| row.get(0),
-            )
-        })
         .optional()
         .map_err(|e| VectorError::StorageError(e.to_string()))?
         .flatten();
@@ -573,6 +566,44 @@ pub fn delete_embeddings_for_memory(
     Ok(())
 }
 
+pub fn delete_embeddings_for_workspace(
+    conn: &Connection,
+    workspace_id: &str,
+) -> Result<(), VectorError> {
+    ensure_embeddings_table(conn)?;
+    conn.execute(
+        "DELETE FROM memory_embeddings WHERE workspace_id = ?1",
+        params![workspace_id],
+    )
+    .map_err(|e| VectorError::StorageError(e.to_string()))?;
+    Ok(())
+}
+
+pub fn prune_stale_embeddings_for_workspace(
+    conn: &Connection,
+    workspace_id: &str,
+) -> Result<(), VectorError> {
+    ensure_embeddings_table(conn)?;
+    conn.execute(
+        "DELETE FROM memory_embeddings
+         WHERE workspace_id = ?1
+           AND NOT EXISTS (
+               SELECT 1 FROM memories m
+               JOIN memory_revisions r ON r.workspace_id = m.workspace_id
+                                      AND r.memory_id = m.id
+                                      AND r.id = m.current_revision
+               WHERE m.workspace_id = memory_embeddings.workspace_id
+                 AND m.id = memory_embeddings.memory_id
+                 AND (memory_embeddings.revision_id = '' OR memory_embeddings.revision_id = m.current_revision)
+                 AND json_extract(r.metadata, '$.privacy') != 'sealed'
+                 AND json_extract(r.metadata, '$.status') != 'archived'
+           )",
+        params![workspace_id],
+    )
+    .map_err(|e| VectorError::StorageError(e.to_string()))?;
+    Ok(())
+}
+
 pub fn list_embeddings_for_workspace(
     conn: &Connection,
     workspace_id: &str,
@@ -609,6 +640,7 @@ pub fn list_embeddings_for_workspace(
 }
 
 pub use delete_embeddings_for_memory as invalidate_embeddings;
+pub use delete_embeddings_for_workspace as invalidate_workspace_embeddings;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct VectorSearchResult {
@@ -630,40 +662,31 @@ pub fn vector_search(
 
     let bounded_limit = limit.clamp(1, 100);
 
-    let stmt_res = conn.prepare(
-        "SELECT me.memory_id, me.chunk_index, me.embedding
-         FROM memory_embeddings me
-         JOIN memories m ON m.workspace_id = me.workspace_id AND m.id = me.memory_id
-         JOIN memory_revisions r ON r.workspace_id = m.workspace_id AND r.memory_id = m.id AND r.id = m.current_revision
-         WHERE me.workspace_id = ?1
-           AND me.model = ?2
-           AND (me.revision_id = '' OR me.revision_id = m.current_revision)
-           AND json_extract(r.metadata, '$.status') != 'archived'
-           AND json_extract(r.metadata, '$.privacy') != 'sealed'",
-    );
-
-    let mut stmt = match stmt_res {
-        Ok(s) => s,
-        Err(_) => conn
-            .prepare(
-                "SELECT me.memory_id, me.chunk_index, me.embedding
-                 FROM memory_embeddings me
-                 JOIN memories m ON m.workspace_id = me.workspace_id AND m.id = me.memory_id
-                 WHERE me.workspace_id = ?1
-                   AND me.model = ?2
-                   AND m.archived = 0
-                   AND m.privacy != 'sealed'",
-            )
-            .map_err(|e| VectorError::StorageError(e.to_string()))?,
-    };
+    let mut stmt = conn
+        .prepare(
+            "SELECT me.memory_id, me.chunk_index, me.embedding
+             FROM memory_embeddings me
+             JOIN memories m ON m.workspace_id = me.workspace_id AND m.id = me.memory_id
+             JOIN memory_revisions r ON r.workspace_id = m.workspace_id AND r.memory_id = m.id AND r.id = m.current_revision
+             WHERE me.workspace_id = ?1
+               AND me.model = ?2
+               AND me.dimension = ?3
+               AND (me.revision_id = '' OR me.revision_id = m.current_revision)
+               AND json_extract(r.metadata, '$.status') != 'archived'
+               AND json_extract(r.metadata, '$.privacy') != 'sealed'",
+        )
+        .map_err(|e| VectorError::StorageError(e.to_string()))?;
 
     let rows = stmt
-        .query_map(params![workspace_id, model], |row| {
-            let memory_id: String = row.get(0)?;
-            let chunk_index: i64 = row.get(1)?;
-            let bytes: Vec<u8> = row.get(2)?;
-            Ok((memory_id, chunk_index as usize, bytes))
-        })
+        .query_map(
+            params![workspace_id, model, query_vector.dimension() as i64],
+            |row| {
+                let memory_id: String = row.get(0)?;
+                let chunk_index: i64 = row.get(1)?;
+                let bytes: Vec<u8> = row.get(2)?;
+                Ok((memory_id, chunk_index as usize, bytes))
+            },
+        )
         .map_err(|e| VectorError::StorageError(e.to_string()))?;
 
     let mut results = Vec::new();

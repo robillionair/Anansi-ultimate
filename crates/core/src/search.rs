@@ -243,6 +243,8 @@ impl Storage {
             .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
             .map_err(|_| unavailable())?;
         SearchBoundary::invalidate_workspace(&tx, workspace_id).map_err(|_| unavailable())?;
+        crate::vector::prune_stale_embeddings_for_workspace(&tx, workspace_id)
+            .map_err(|_| unavailable())?;
 
         let mut stmt = tx
             .prepare(

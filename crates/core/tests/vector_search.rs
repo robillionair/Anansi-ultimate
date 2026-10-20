@@ -8,13 +8,36 @@ fn setup_test_db() -> Connection {
             workspace_id TEXT NOT NULL,
             id TEXT NOT NULL,
             current_revision TEXT NOT NULL DEFAULT 'rev_1',
-            archived INTEGER NOT NULL DEFAULT 0,
-            privacy TEXT NOT NULL DEFAULT 'private',
             PRIMARY KEY (workspace_id, id)
+        );
+        CREATE TABLE memory_revisions (
+            workspace_id TEXT NOT NULL,
+            memory_id TEXT NOT NULL,
+            id TEXT NOT NULL,
+            metadata TEXT NOT NULL
         );",
     )
     .unwrap();
     conn
+}
+
+fn insert_memory(conn: &Connection, ws: &str, id: &str, archived: bool, privacy: &str) {
+    conn.execute(
+        "INSERT INTO memories (workspace_id, id, current_revision) VALUES (?1, ?2, 'rev_1')",
+        [ws, id],
+    )
+    .unwrap();
+    let status = if archived { "archived" } else { "active" };
+    let meta = serde_json::json!({
+        "privacy": privacy,
+        "status": status
+    })
+    .to_string();
+    conn.execute(
+        "INSERT INTO memory_revisions (workspace_id, memory_id, id, metadata) VALUES (?1, ?2, 'rev_1', ?3)",
+        [ws, id, &meta],
+    )
+    .unwrap();
 }
 
 #[test]
@@ -30,11 +53,7 @@ fn vector_search_ranks_by_cosine_similarity() {
         ("mem_db", "private"),
         ("mem_crypto", "private"),
     ] {
-        conn.execute(
-            "INSERT INTO memories (workspace_id, id, privacy) VALUES (?1, ?2, ?3)",
-            [ws, id, privacy],
-        )
-        .unwrap();
+        insert_memory(&conn, ws, id, false, privacy);
     }
 
     // Embeddings
@@ -73,11 +92,9 @@ fn vector_search_respects_threshold_and_limits() {
     let ws = "ws_test";
     let model = "test-model";
 
-    conn.execute(
-        "INSERT INTO memories (workspace_id, id, privacy) VALUES (?1, 'mem_1', 'private'), (?1, 'mem_2', 'private'), (?1, 'mem_3', 'private')",
-        [ws],
-    )
-    .unwrap();
+    for id in ["mem_1", "mem_2", "mem_3"] {
+        insert_memory(&conn, ws, id, false, "private");
+    }
 
     let v1 = EmbeddingVector::new(vec![1.0, 0.0]).unwrap();
     let v2 = EmbeddingVector::new(vec![0.6, 0.8]).unwrap(); // sim 0.6 with [1.0, 0.0]
@@ -114,16 +131,8 @@ fn vector_search_excludes_archived_memories() {
     let model = "test-model";
 
     // Insert 2 memories, mem_active and mem_archived
-    conn.execute(
-        "INSERT INTO memories (workspace_id, id, archived, privacy) VALUES (?1, 'mem_active', 0, 'private')",
-        [ws],
-    )
-    .unwrap();
-    conn.execute(
-        "INSERT INTO memories (workspace_id, id, archived, privacy) VALUES (?1, 'mem_archived', 1, 'private')",
-        [ws],
-    )
-    .unwrap();
+    insert_memory(&conn, ws, "mem_active", false, "private");
+    insert_memory(&conn, ws, "mem_archived", true, "private");
 
     let v_perfect = EmbeddingVector::new(vec![1.0, 0.0]).unwrap();
     let v_fallback = EmbeddingVector::new(vec![0.8, 0.2]).unwrap();
@@ -145,16 +154,8 @@ fn vector_search_excludes_sealed_memories_fail_closed() {
     let ws = "ws_test";
     let model = "test-model";
 
-    conn.execute(
-        "INSERT INTO memories (workspace_id, id, archived, privacy) VALUES (?1, 'mem_public', 0, 'private')",
-        [ws],
-    )
-    .unwrap();
-    conn.execute(
-        "INSERT INTO memories (workspace_id, id, archived, privacy) VALUES (?1, 'mem_secret', 0, 'sealed')",
-        [ws],
-    )
-    .unwrap();
+    insert_memory(&conn, ws, "mem_public", false, "private");
+    insert_memory(&conn, ws, "mem_secret", false, "sealed");
 
     anansi_core::vector::ensure_embeddings_table(&conn).unwrap();
     // Attempting direct insertion into memory_embeddings table bypasses store_embedding check for test purposes
@@ -183,11 +184,7 @@ fn cache_invalidation_clears_embeddings() {
     let ws = "ws_test";
     let model = "test-model";
 
-    conn.execute(
-        "INSERT INTO memories (workspace_id, id, privacy) VALUES (?1, 'mem_updated', 'private')",
-        [ws],
-    )
-    .unwrap();
+    insert_memory(&conn, ws, "mem_updated", false, "private");
 
     let v = EmbeddingVector::new(vec![1.0, 0.0]).unwrap();
     store_embedding(&conn, ws, "mem_updated", 0, model, &v).unwrap();

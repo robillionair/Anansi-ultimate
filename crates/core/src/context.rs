@@ -5,7 +5,7 @@
 use crate::CommandError;
 use crate::ask::{DisclosureManifest, GroundedCitation, SourceMemoryReference};
 use crate::content;
-use crate::hybrid::{HybridSearchRequest, hybrid_search};
+use crate::hybrid::{HybridSearchRequest, hybrid_search_with_status};
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -48,6 +48,10 @@ pub struct CompiledContext {
     pub system_prompt: String,
     pub total_characters: usize,
     pub total_tokens: usize,
+    #[serde(default)]
+    pub lexical_only: bool,
+    #[serde(default)]
+    pub fallback_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -58,6 +62,8 @@ pub struct ContextCompilationRequest {
     pub max_budget_chars: Option<usize>,
     pub runtime_endpoint: Option<String>,
     pub model_tag: Option<String>,
+    #[serde(default)]
+    pub embedding_model: Option<String>,
     pub kind_filter: Option<String>,
 }
 
@@ -127,21 +133,24 @@ pub(crate) fn compile_context_with_query(
         .unwrap_or(DEFAULT_MAX_BUDGET_CHARS)
         .clamp(500, MAX_ALLOWED_BUDGET_CHARS);
 
-    // 1. Retrieve candidate records via hybrid retrieval
+    // 1. Retrieve candidate records via hybrid retrieval (using embedding_model, separate from generation model_tag)
     let hybrid_req = HybridSearchRequest {
         workspace_id: req.workspace_id.clone(),
         query: Some(retrieval_query.unwrap_or(&req.user_prompt).to_owned()),
         query_vector: None,
-        model: req.model_tag.clone(),
+        model: req.embedding_model.clone(),
+        endpoint: req.runtime_endpoint.clone(),
         limit: 10,
         lexical_weight: 1.0,
         semantic_weight: 1.0,
         rrf_k: 60.0,
         kind: req.kind_filter.clone(),
         include_archived: false,
+        include_expired: false,
     };
 
-    let hits = hybrid_search(conn, &hybrid_req)?;
+    let hybrid_res = hybrid_search_with_status(conn, Some(storage_root), &hybrid_req)?;
+    let hits = hybrid_res.results;
 
     let mut evidence_chunks: Vec<ContextChunk> = Vec::new();
     let mut citations: Vec<GroundedCitation> = Vec::new();
@@ -282,6 +291,18 @@ pub(crate) fn compile_context_with_query(
     let total_chars = prompt_builder.len();
     let total_tokens = (total_chars / 4).max(1);
 
+    let routing_reason = if hybrid_res.lexical_only {
+        if let Some(ref reason) = hybrid_res.fallback_reason {
+            format!("local section-aware Context Compiler (lexical-only: {reason})")
+        } else {
+            "local section-aware Context Compiler (lexical-only)".to_string()
+        }
+    } else if let Some(ref emb_model) = hybrid_res.embedding_model {
+        format!("local section-aware Context Compiler (hybrid lexical + semantic: {emb_model})")
+    } else {
+        "local section-aware Context Compiler".to_string()
+    };
+
     let manifest = DisclosureManifest {
         runtime_kind: "localLoopback".to_string(),
         endpoint: req
@@ -295,7 +316,7 @@ pub(crate) fn compile_context_with_query(
         source_memories,
         character_count: total_chars,
         estimated_tokens: total_tokens,
-        routing_reason: "local section-aware Context Compiler".to_string(),
+        routing_reason,
         compiled_prompt: prompt_builder.clone(),
     };
 
@@ -307,5 +328,7 @@ pub(crate) fn compile_context_with_query(
         system_prompt: prompt_builder,
         total_characters: total_chars,
         total_tokens,
+        lexical_only: hybrid_res.lexical_only,
+        fallback_reason: hybrid_res.fallback_reason,
     })
 }

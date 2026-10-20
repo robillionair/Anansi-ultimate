@@ -16,6 +16,8 @@ fn malformed_queries_and_corrupt_fts_rows_fail_instead_of_disappearing() {
         rrf_k: 60.0,
         kind: None,
         include_archived: false,
+        include_expired: false,
+        endpoint: None,
     };
     assert!(hybrid_search(&conn, &request).is_err());
     request.query = Some("word".into());
@@ -32,13 +34,17 @@ fn setup_hybrid_test_db() -> Connection {
             workspace_id TEXT NOT NULL,
             id TEXT NOT NULL,
             current_revision TEXT NOT NULL DEFAULT 'rev_1',
-            title TEXT NOT NULL,
-            kind TEXT NOT NULL DEFAULT 'note',
-            archived INTEGER NOT NULL DEFAULT 0,
-            privacy TEXT NOT NULL DEFAULT 'private',
             PRIMARY KEY (workspace_id, id)
         );
-        CREATE TABLE memory_revisions(workspace_id TEXT, memory_id TEXT, id TEXT, metadata TEXT);
+        CREATE TABLE memory_revisions (
+            workspace_id TEXT NOT NULL,
+            memory_id TEXT NOT NULL,
+            id TEXT NOT NULL,
+            version INTEGER NOT NULL DEFAULT 1,
+            metadata TEXT NOT NULL,
+            body_hash TEXT NOT NULL DEFAULT '0000000000000000000000000000000000000000000000000000000000000000',
+            PRIMARY KEY (workspace_id, memory_id, id)
+        );
         CREATE VIRTUAL TABLE memory_body_fts USING fts5(
             workspace_id UNINDEXED,
             memory_id UNINDEXED,
@@ -64,13 +70,29 @@ fn seed_memory(
     privacy: &str,
 ) {
     conn.execute(
-        "INSERT INTO memories (workspace_id, id, title, kind, archived, privacy)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-        rusqlite::params![ws, id, title, kind, if archived { 1 } else { 0 }, privacy],
+        "INSERT INTO memories (workspace_id, id, current_revision)
+         VALUES (?1, ?2, 'rev_1')",
+        rusqlite::params![ws, id],
     )
     .unwrap();
 
-    conn.execute("INSERT INTO memory_revisions VALUES (?1,?2,'rev_1',?3)", rusqlite::params![ws,id,serde_json::json!({"title":title,"kind":kind,"status":if archived {"archived"} else {"proposed"},"privacy":privacy}).to_string()]).unwrap();
+    conn.execute(
+        "INSERT INTO memory_revisions (workspace_id, memory_id, id, version, metadata, body_hash)
+         VALUES (?1, ?2, 'rev_1', 1, ?3, '0000000000000000000000000000000000000000000000000000000000000000')",
+        rusqlite::params![
+            ws,
+            id,
+            serde_json::json!({
+                "title": title,
+                "kind": kind,
+                "status": if archived { "archived" } else { "active" },
+                "privacy": privacy,
+                "updatedAt": "2026-10-19T00:00:00Z"
+            })
+            .to_string()
+        ],
+    )
+    .unwrap();
 
     if privacy != "sealed" {
         conn.execute(
@@ -119,6 +141,8 @@ fn benchmark_exact_lexical_retrieval() {
         rrf_k: 60.0,
         kind: None,
         include_archived: false,
+        include_expired: false,
+        endpoint: None,
     };
 
     let results = hybrid_search(&conn, &req).unwrap();
@@ -169,6 +193,8 @@ fn benchmark_semantic_paraphrase_retrieval() {
         rrf_k: 60.0,
         kind: None,
         include_archived: false,
+        include_expired: false,
+        endpoint: None,
     };
 
     let results = hybrid_search(&conn, &req).unwrap();
@@ -239,6 +265,8 @@ fn benchmark_hybrid_synergy_ranks_highest() {
         rrf_k: 60.0,
         kind: None,
         include_archived: false,
+        include_expired: false,
+        endpoint: None,
     };
 
     let results = hybrid_search(&conn, &req).unwrap();
@@ -283,6 +311,8 @@ fn benchmark_missing_evidence_returns_empty() {
         rrf_k: 60.0,
         kind: None,
         include_archived: false,
+        include_expired: false,
+        endpoint: None,
     };
 
     let results = hybrid_search(&conn, &req).unwrap();
@@ -355,6 +385,8 @@ fn benchmark_privacy_and_boundaries() {
         rrf_k: 60.0,
         kind: None,
         include_archived: false,
+        include_expired: false,
+        endpoint: None,
     };
     let results = hybrid_search(&conn, &req).unwrap();
     assert!(results.iter().all(|r| r.memory_id != "mem_sealed"));

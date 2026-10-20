@@ -62,6 +62,7 @@ fn partial_tokens_publish_and_cancellation_closes_backend_socket() {
             prompt: "Streaming architecture".into(),
             runtime_endpoint: Some(format!("http://127.0.0.1:{port}")),
             model_tag: Some("synthetic:small".into()),
+            embedding_model: None,
             max_evidence_items: None,
         })
         .unwrap();

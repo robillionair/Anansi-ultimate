@@ -1,15 +1,15 @@
-import { validReadiness, validError, validWorkspaceDetails, validWorkspaceList, validMemoryDetails, validMemoryList, validRelationshipDetails, validRelationshipList, validJobDetails, validJobList, validArtifactChunk, validAiDiscoveryResponse, validAskResponse, validHybridSearchResponse, validCompiledContext } from './validators.mjs';
+import { validReadiness, validError, validWorkspaceDetails, validWorkspaceList, validMemoryDetails, validMemoryList, validRelationshipDetails, validRelationshipList, validJobDetails, validJobList, validArtifactChunk, validAiDiscoveryResponse, validAskResponse, validHybridSearchResponse, validCompiledContext, validIndexEmbeddingsResponse } from './validators.mjs';
 import { invoke } from '@tauri-apps/api/core';
 import { validAskRunResponse } from './validators.mjs';
 import type { AskRunResponse } from './generated';
 export type { AskRunResponse } from './generated';
 import {validSnapshotPreview,validRestoreResult,validBackupSchedule,validUploadStatus} from './validators.mjs';
-import type {SnapshotPreview,RestoreResult,BackupSchedule,AiDiscoveryResponse,HardwareProfile,DiscoveredRuntime,ModelRecommendation,RuntimeKind,RuntimeStatus,FitLevel,AskRequest,AskResponse,AskStatus,GroundedCitation,DisclosureManifest,HybridSearchRequest,HybridSearchResult,HybridSearchResponse,ContextCompilationRequest,CompiledContext,ContextChunk} from './generated';
-export type {SnapshotPreview,RestoreResult,BackupSchedule,AiDiscoveryResponse,HardwareProfile,DiscoveredRuntime,ModelRecommendation,RuntimeKind,RuntimeStatus,FitLevel,AskRequest,AskResponse,AskStatus,GroundedCitation,DisclosureManifest,HybridSearchRequest,HybridSearchResult,HybridSearchResponse,ContextCompilationRequest,CompiledContext,ContextChunk} from './generated';
+import type {SnapshotPreview,RestoreResult,BackupSchedule,AiDiscoveryResponse,HardwareProfile,DiscoveredRuntime,ModelRecommendation,RuntimeKind,RuntimeStatus,FitLevel,AskRequest,AskResponse,AskStatus,GroundedCitation,DisclosureManifest,HybridSearchRequest,HybridSearchResult,HybridSearchResponse,ContextCompilationRequest,CompiledContext,ContextChunk,IndexEmbeddingsRequest,IndexEmbeddingsResponse} from './generated';
+export type {SnapshotPreview,RestoreResult,BackupSchedule,AiDiscoveryResponse,HardwareProfile,DiscoveredRuntime,ModelRecommendation,RuntimeKind,RuntimeStatus,FitLevel,AskRequest,AskResponse,AskStatus,GroundedCitation,DisclosureManifest,HybridSearchRequest,HybridSearchResult,HybridSearchResponse,ContextCompilationRequest,CompiledContext,ContextChunk,IndexEmbeddingsRequest,IndexEmbeddingsResponse} from './generated';
 import type { Readiness, WorkspaceDetails, WorkspaceList, Intent, MemoryDraft, MemoryDetails, MemoryList, MemoryMetadata, Privacy, LifecycleChange, RelationshipDraft, RelationshipRecord, RelationshipDetails, RelationshipList, Job, JobDetails, JobList, ArtifactChunk, ExportSelection, JobAction } from './generated';
 export type { Readiness, WorkspaceDetails, WorkspaceList, Intent, MemoryDraft, MemoryDetails, MemoryList, MemoryMetadata, Privacy, LifecycleChange, RelationshipDraft, RelationshipRecord, RelationshipDetails, RelationshipList, Job, JobDetails, JobList, ArtifactChunk, ExportSelection, JobAction } from './generated';
 export interface Client {
-  startAsk(workspaceId:string,prompt:string,options?:{runtimeEndpoint?:string;modelTag?:string}):Promise<AskRunResponse>;
+  startAsk(workspaceId:string,prompt:string,options?:{runtimeEndpoint?:string;modelTag?:string;embeddingModel?:string}):Promise<AskRunResponse>;
   pollAsk(workspaceId:string,id:string):Promise<AskRunResponse>;
   cancelAsk(workspaceId:string,id:string):Promise<AskRunResponse>;
   forgetAsk(workspaceId:string,id:string):Promise<AskRunResponse>;
@@ -37,9 +37,10 @@ export interface Client {
   openWorkspace(id: string): Promise<WorkspaceDetails>;
   updateSettings(id: string, reducedMotion: boolean, preferences?: {intent?:Intent;onboardingComplete?:boolean}): Promise<WorkspaceDetails>;
   aiDiscovery(customEndpoints?: string[]): Promise<AiDiscoveryResponse>;
-  askAnansi(workspaceId: string, prompt: string, options?: { runtimeEndpoint?: string; modelTag?: string; maxEvidenceItems?: number }): Promise<AskResponse>;
-  hybridSearch(workspaceId: string, options?: { query?: string; model?: string; limit?: number; lexicalWeight?: number; semanticWeight?: number; rrfK?: number; kind?: string; includeArchived?: boolean }): Promise<HybridSearchResponse>;
-  compileContext(workspaceId: string, userPrompt: string, options?: { maxBudgetChars?: number; runtimeEndpoint?: string; modelTag?: string; kindFilter?: string }): Promise<CompiledContext>;
+  askAnansi(workspaceId: string, prompt: string, options?: { runtimeEndpoint?: string; modelTag?: string; embeddingModel?: string; maxEvidenceItems?: number }): Promise<AskResponse>;
+  hybridSearch(workspaceId: string, options?: { query?: string; model?: string; endpoint?: string; limit?: number; lexicalWeight?: number; semanticWeight?: number; rrfK?: number; kind?: string; includeArchived?: boolean; includeExpired?: boolean }): Promise<HybridSearchResponse>;
+  compileContext(workspaceId: string, userPrompt: string, options?: { maxBudgetChars?: number; runtimeEndpoint?: string; modelTag?: string; embeddingModel?: string; kindFilter?: string }): Promise<CompiledContext>;
+  indexEmbeddings(workspaceId: string, options?: { memoryId?: string; model?: string; endpoint?: string }): Promise<IndexEmbeddingsResponse>;
 }
 function decode<T extends {contractVersion:number}>(value:unknown, validate:(value:unknown)=>value is T):T {
   if(!validate(value)||value.contractVersion!==1)throw new Error('The core returned an incompatible response. Update both applications.');
@@ -120,6 +121,7 @@ function client(call:Call):Client {
     askAnansi:async(workspaceId,prompt,options={})=>decode(await call('ai/ask',{workspaceId,prompt,...options}),validAskResponse),
     hybridSearch:async(workspaceId,options={})=>decode(await call('ai/hybrid-search',{workspaceId,...options}),validHybridSearchResponse),
     compileContext:async(workspaceId,userPrompt,options={})=>decode(await call('ai/context',{workspaceId,userPrompt,...options}),validCompiledContext),
+    indexEmbeddings:async(workspaceId,options={})=>decode(await call('ai/index-embeddings',{workspaceId,...options}),validIndexEmbeddingsResponse),
   };
 }
 export function httpClient(endpoint:string,token:string):Client {
@@ -134,7 +136,7 @@ export function httpClient(endpoint:string,token:string):Client {
       : operation === 'readiness'
       ? 'readiness'
       : 'workspaces/' + operation;
-    try{response=await fetch(`${url.origin}/v1/${path}`,{method:'POST',credentials:'omit',cache:'no-store',redirect:'error',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({contractVersion:1,...request}),signal:AbortSignal.timeout(operation.startsWith('jobs/')?120000:15000)});}
+    try{response=await fetch(`${url.origin}/v1/${path}`,{method:'POST',credentials:'omit',cache:'no-store',redirect:'error',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({contractVersion:1,...request}),signal:AbortSignal.timeout(operation.startsWith('jobs/')||operation.startsWith('ai/')?120000:15000)});}
     catch{throw new Error('Local core unavailable. Start the API, then retry or pair with its new session.');}
     let value:unknown;try{value=await response.json();}catch{throw new Error('The core returned an unreadable response. Try again.');}
     if(!response.ok)throw failure(value,operation);return value;
