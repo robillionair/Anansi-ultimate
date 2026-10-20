@@ -2,9 +2,11 @@
 
 Agent: Muse (M5 implementation agent) · Date: 2026-10-21
 Branch: `muse/m5-provider-integration`, continuing from `54c27f9`
-(r6). Status: **fixed and verified on Linux; Windows verification
-pending the owner's rerun** (per owner instruction, this defect
-stays open until that rerun passes).
+(r6). Status: **CLOSED at checkpoint `7301022`** — the owner's
+independent Windows verification of r7 (2026-10-21) passed all
+119 provider tests, all 12 core integration tests including both
+previously failing cancellation tests, the API two-session
+isolation test, formatting and documentation checks.
 
 ## What the r6 Windows run showed
 
@@ -75,10 +77,12 @@ suite 12/12 with both acceptance tests 5/5 on repeat, API suite
 green, core/contracts regression baseline-identical, Clippy
 `-D warnings` and fmt clean.
 
-## Still open
+## Closure
 
-- **Windows rerun of r7** — the confirming evidence for this
-  defect. Until it passes, the defect remains recorded as open.
+- **Windows rerun of r7 passed** (owner, 2026-10-21): 119
+  provider tests, 12 core integration tests, API two-session
+  isolation, formatting and documentation checks. This defect is
+  closed at checkpoint `7301022`.
 - The configuration / credential setup / disclosure UI slice
   proceeds independently; it does not depend on this fix beyond
   the shared transport.
