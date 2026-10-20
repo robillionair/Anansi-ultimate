@@ -107,6 +107,12 @@ pub const STREAM_TTL: Duration = Duration::from_secs(600);
 pub struct CallerScope {
     pub session: String,
     pub workspace: String,
+    /// Storage root + logical workspace id, when the caller has
+    /// them (the ai_command arm always does). Used to persist the
+    /// trusted configuration transactionally with its in-memory
+    /// install; `None` for embedders without storage.
+    pub storage_root: Option<std::path::PathBuf>,
+    pub logical_workspace: Option<String>,
 }
 
 /// Small stable fingerprint (FNV-1a 64) for scope labels. These
@@ -843,6 +849,10 @@ pub fn load_config_file(
     root: &std::path::Path,
     workspace_id: &str,
 ) -> Result<Option<String>, CommandError> {
+    let dir = root.join("provider-config");
+    if dir.symlink_metadata().is_ok() {
+        crate::storage::reject_links(&dir).map_err(|_| crate::storage::unavailable())?;
+    }
     let path = config_file_path(root, workspace_id);
     if !path.exists() {
         return Ok(None);
@@ -855,24 +865,76 @@ pub fn load_config_file(
     }
 }
 
-/// Persist a configuration atomically (write + rename) with the
-/// storage layer's private-permissions discipline.
+/// Persist a configuration atomically with hardened file
+/// handling: the directory and any existing destination are
+/// link-checked, the temporary file has an unpredictable name and
+/// is created with create-new semantics (never following or
+/// truncating a pre-planted file), the payload is fsynced before
+/// an atomic rename, and the directory is synced afterwards.
+/// Callers must treat an error as "not persisted" and keep
+/// memory/disk consistent (configure persists BEFORE installing
+/// into backend state, under the backend lock).
 pub fn persist_config_file(
     root: &std::path::Path,
     workspace_id: &str,
     json: &str,
 ) -> Result<(), CommandError> {
+    let unavailable = || crate::storage::unavailable();
     let dir = root.join("provider-config");
-    std::fs::create_dir_all(&dir).map_err(|_| crate::storage::unavailable())?;
-    crate::storage::private_permissions(&dir, true, false)
-        .map_err(|_| crate::storage::unavailable())?;
+    std::fs::create_dir_all(&dir).map_err(|_| unavailable())?;
+    crate::storage::reject_links(&dir).map_err(|_| unavailable())?;
+    crate::storage::private_permissions(&dir, true, false).map_err(|_| unavailable())?;
     let path = config_file_path(root, workspace_id);
-    let tmp = dir.join(format!(".tmp-{}", fingerprint(workspace_id)));
-    std::fs::write(&tmp, json).map_err(|_| crate::storage::unavailable())?;
-    crate::storage::private_permissions(&tmp, false, false)
-        .map_err(|_| crate::storage::unavailable())?;
-    std::fs::rename(&tmp, &path).map_err(|_| crate::storage::unavailable())?;
-    Ok(())
+    if path.symlink_metadata().is_ok() {
+        // An existing destination must be a regular file we own,
+        // never a link/reparse point a rename would silently
+        // replace the target of.
+        crate::storage::reject_links(&path).map_err(|_| unavailable())?;
+    }
+    // Unique create-new temporary file (a planted file at a
+    // predictable name must never be followed).
+    let mut tmp = None;
+    for _ in 0..8 {
+        let mut bytes = [0u8; 8];
+        getrandom::fill(&mut bytes).map_err(|_| unavailable())?;
+        let candidate = dir.join(format!(".tmp-{:016x}", u64::from_le_bytes(bytes)));
+        match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&candidate)
+        {
+            Ok(file) => {
+                tmp = Some((candidate, file));
+                break;
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(_) => return Err(unavailable()),
+        }
+    }
+    let Some((tmp_path, mut file)) = tmp else {
+        return Err(unavailable());
+    };
+    let outcome = (|| -> Result<(), CommandError> {
+        use std::io::Write;
+        file.write_all(json.as_bytes()).map_err(|_| unavailable())?;
+        file.sync_all().map_err(|_| unavailable())?;
+        drop(file);
+        crate::storage::private_permissions(&tmp_path, false, false)
+            .map_err(|_| unavailable())?;
+        crate::storage::reject_links(&tmp_path).map_err(|_| unavailable())?;
+        std::fs::rename(&tmp_path, &path).map_err(|_| unavailable())?;
+        // Best-effort directory sync for durability of the rename
+        // itself (unsupported on some platforms — the rename is
+        // already atomic there).
+        if let Ok(d) = std::fs::File::open(&dir) {
+            let _ = d.sync_all();
+        }
+        Ok(())
+    })();
+    if outcome.is_err() {
+        let _ = std::fs::remove_file(&tmp_path);
+    }
+    outcome
 }
 
 // ---------------------------------------------------------------------------
@@ -917,7 +979,19 @@ pub fn providers_command(
                 let runtime = ProviderRuntime::production(req.config.clone())
                     .map_err(to_command_error)?
                     .with_shared_accounting(state.used_permits.clone(), state.ledger.clone());
-                let fp = fingerprint(&serde_json::to_string(&req.config).unwrap_or_default());
+                let serialized =
+                    serde_json::to_string(&req.config).unwrap_or_default();
+                // Persist BEFORE installing, under this same
+                // backend lock: if persistence fails, the
+                // operation fails and memory stays exactly as it
+                // was — memory and disk can never diverge, and
+                // concurrent configures serialize whole.
+                if let (Some(root), Some(wid)) =
+                    (&scope.storage_root, &scope.logical_workspace)
+                {
+                    persist_config_file(root, wid, &serialized)?;
+                }
+                let fp = fingerprint(&serialized);
                 state.config = Some(req.config);
                 state.runtime = Some((fp, Arc::new(runtime)));
                 Ok(())

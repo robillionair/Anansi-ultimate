@@ -883,17 +883,23 @@ impl Core {
                 if let Some(obj) = value.as_object_mut() {
                     obj.remove("callerContext");
                 }
-                let scope = crate::provider_dispatch::CallerScope { session, workspace };
                 // Configuration persistence: a workspace's
                 // provider setup survives restarts (permits,
                 // grants, runs and usage deliberately do not).
-                // Load it lazily before the first operation that
-                // needs it; persist it after a successful
-                // configure.
+                // Configure persists transactionally inside the
+                // operation (see provider_dispatch); after a
+                // restart the persisted config is loaded lazily
+                // before the first operation that needs it.
                 let workspace_id = value
                     .get("workspaceId")
                     .and_then(|v| v.as_str())
                     .map(str::to_string);
+                let scope = crate::provider_dispatch::CallerScope {
+                    session,
+                    workspace,
+                    storage_root: self.storage_root().ok(),
+                    logical_workspace: workspace_id.clone(),
+                };
                 if matches!(
                     operation,
                     "providers-dispatch" | "providers-stream-start" | "providers-usage"
@@ -903,15 +909,7 @@ impl Core {
                 {
                     crate::provider_dispatch::install_persisted_config(&scope, &json)?;
                 }
-                let result = crate::provider_dispatch::providers_command(operation, value, &scope);
-                if operation == "providers-configure"
-                    && result.is_ok()
-                    && let (Ok(root), Some(wid)) = (self.storage_root(), &workspace_id)
-                    && let Some(json) = crate::provider_dispatch::configured_config_json(&scope)
-                {
-                    crate::provider_dispatch::persist_config_file(&root, wid, &json)?;
-                }
-                result
+                crate::provider_dispatch::providers_command(operation, value, &scope)
             }
             _ => Err(CommandError::new(
                 ErrorCode::InvalidRequest,

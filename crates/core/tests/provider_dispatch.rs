@@ -1030,3 +1030,101 @@ fn configuration_persists_across_real_process_restarts() {
     assert!(stdout.contains("RESTART_ERR=InvalidRequest"), "{stdout}");
     assert_eq!(fake.hits.load(Ordering::SeqCst), hits_before);
 }
+
+// ---------------------------------------------------------------------------
+// Persistence hardening: failure injection
+
+#[test]
+fn persistence_failure_leaves_memory_and_disk_consistent() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().to_path_buf();
+    let core = Core::with_storage_root(root.clone());
+    let ws = create_workspace(&core, "main");
+    // Sabotage (after the storage root exists): "provider-config"
+    // is a regular FILE, so the directory can never be created
+    // and persistence must fail.
+    std::fs::write(root.join("provider-config"), b"not a directory").unwrap();
+    let fake = start_fake_ollama();
+    let err = configure(&core, &ws, ollama_config(&fake.base_url, "free")).unwrap_err();
+    assert_eq!(err.code, ErrorCode::StorageUnavailable, "{}", err.message);
+    // Memory did NOT install a configuration it could not persist:
+    // dispatch reports "not configured", never a phantom setup.
+    let err = dispatch(&core, "s1", &ws, json!({}), "hello").unwrap_err();
+    assert_eq!(err.code, ErrorCode::InvalidRequest);
+    assert!(err.message.contains("not configured"), "{}", err.message);
+    assert_eq!(fake.hits.load(Ordering::SeqCst), 0);
+}
+
+#[cfg(unix)]
+#[test]
+fn persistence_refuses_a_symlinked_destination() {
+    let (dir, core, ws) = core();
+    let fake = start_fake_ollama();
+    configure(&core, &ws, ollama_config(&fake.base_url, "free")).unwrap();
+    let root = dir.path().to_path_buf();
+    let dest = root.join("provider-config").join(format!("{ws}.json"));
+    let target = root.join("elsewhere.json");
+    std::fs::write(&target, b"SENTINEL").unwrap();
+    std::fs::remove_file(&dest).unwrap();
+    std::os::unix::fs::symlink(&target, &dest).unwrap();
+    // Reconfiguring must refuse rather than write through (or
+    // silently replace) the link, and the previous in-memory
+    // configuration must survive untouched.
+    let mut cfg2 = ollama_config(&fake.base_url, "free");
+    cfg2["budget"] = json!({ "maxRequests": 7 });
+    let err = configure(&core, &ws, cfg2).unwrap_err();
+    assert_eq!(err.code, ErrorCode::StorageUnavailable, "{}", err.message);
+    assert_eq!(std::fs::read_to_string(&target).unwrap(), "SENTINEL");
+    assert!(dest.symlink_metadata().unwrap().file_type().is_symlink());
+    // The first configuration is still the live one.
+    let out = dispatch(&core, "s1", &ws, json!({}), "still configured").unwrap();
+    assert_eq!(out["response"]["text"], "core reply");
+}
+
+#[test]
+fn concurrent_configures_serialize_and_leave_no_temp_files() {
+    let (dir, core, ws) = core();
+    let fake = start_fake_ollama();
+    let root = dir.path().to_path_buf();
+    let core_a = Core::with_storage_root(root.clone());
+    let core_b = Core::with_storage_root(root.clone());
+    fn cfg(base: &str, budget: u64) -> Value {
+        let mut c = ollama_config(base, "free");
+        c["budget"] = json!({ "maxRequests": budget });
+        c
+    }
+    let (ws_a, ws_b) = (ws.clone(), ws.clone());
+    let base_a = fake.base_url.clone();
+    let base_b = fake.base_url.clone();
+    let a = std::thread::spawn(move || {
+        for _ in 0..5 {
+            configure(&core_a, &ws_a, cfg(&base_a, 11)).unwrap();
+        }
+    });
+    let b = std::thread::spawn(move || {
+        for _ in 0..5 {
+            configure(&core_b, &ws_b, cfg(&base_b, 22)).unwrap();
+        }
+    });
+    a.join().unwrap();
+    b.join().unwrap();
+    // The persisted file is exactly one of the two configurations
+    // (persist + install are atomic under the backend lock, so
+    // the file can never be a torn mix), and dispatch works.
+    let text = std::fs::read_to_string(
+        root.join("provider-config").join(format!("{ws}.json")),
+    )
+    .unwrap();
+    let parsed: Value = serde_json::from_str(&text).unwrap();
+    let budget = parsed["budget"]["maxRequests"].as_u64().unwrap();
+    assert!(budget == 11 || budget == 22, "torn or stale config: {text}");
+    let out = dispatch(&core, "s1", &ws, json!({}), "after the race").unwrap();
+    assert_eq!(out["response"]["text"], "core reply");
+    // No temporary files are left behind, successful or not.
+    let leftovers: Vec<_> = std::fs::read_dir(root.join("provider-config"))
+        .unwrap()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_name().to_string_lossy().starts_with(".tmp-"))
+        .collect();
+    assert!(leftovers.is_empty(), "temp files leaked: {leftovers:?}");
+}
