@@ -12,6 +12,29 @@
 //! no billable retry can occur. Fallback (§17) never crosses privacy or
 //! cost boundaries: the chain itself was filtered by the router, and
 //! every gate is re-run per candidate.
+//!
+//! Retry *safety* (billable duplication): whether a failure may be
+//! retried — or fallen back from — depends on whether the request can
+//! have been executed, which `ProviderError::request_sent` records:
+//!
+//! - **Pre-send failures** (DNS, connect, TLS handshake;
+//!   `request_sent == false`): the provider never received a complete
+//!   request. Safe to retry and to fall back, for any cost class.
+//! - **Explicit rejection** (HTTP 429): the provider states it did
+//!   not execute the request. Safe to retry (bounded, honouring
+//!   Retry-After) and to fall back, for any cost class.
+//! - **Post-send ambiguous failures** (5xx, timeout awaiting the
+//!   response, connection lost after the request was written,
+//!   malformed response): the provider may have executed — and
+//!   billed — the request. For Free models, retry/fallback proceed as
+//!   before. For Paid or Unknown-cost models they are **terminal**:
+//!   no automatic retry, no fallback to another candidate (which would
+//!   just move the duplicate bill), and the error is surfaced so the
+//!   caller can decide. Unknown cost is treated as paid, per M5-D5.
+//!
+//! See `may_retry` / `may_fallback` and the retry-safety integration
+//! tests (`tests/retry_safety.rs`), which assert exact synthetic
+//! server hit counts for each rule.
 
 use crate::config::{RetryPolicy, TimeoutConfig};
 use crate::error::{ProviderError, ProviderErrorCode};
@@ -240,8 +263,10 @@ impl<'a> Dispatcher<'a> {
                 }
                 Err(e) => {
                     // Availability-class failures may fall back to the
-                    // next candidate; everything else is final.
-                    if is_fallback_eligible(&e) {
+                    // next candidate — unless the failure is ambiguous
+                    // for a billable model, where falling back could
+                    // duplicate paid inference at another provider.
+                    if may_fallback(&e, candidate.model.cost) {
                         last_error = Some(e);
                         continue;
                     }
@@ -278,7 +303,7 @@ impl<'a> Dispatcher<'a> {
                         model: candidate.model.id.clone(),
                         outcome: format!("transport error: {}", e.code_name()),
                     });
-                    if e.retryable() && attempt < self.retry.max_retries {
+                    if may_retry(&e, candidate.model.cost, attempt, self.retry.max_retries) {
                         sleep_before_retry(&self.retry, attempt, e.retry_after);
                         attempt += 1;
                         continue;
@@ -304,7 +329,7 @@ impl<'a> Dispatcher<'a> {
                         model: candidate.model.id.clone(),
                         outcome: format!("HTTP {status}: {}", e.code_name()),
                     });
-                    if e.retryable() && attempt < self.retry.max_retries {
+                    if may_retry(&e, candidate.model.cost, attempt, self.retry.max_retries) {
                         sleep_before_retry(&self.retry, attempt, e.retry_after);
                         attempt += 1;
                         continue;
@@ -372,7 +397,7 @@ impl<'a> Dispatcher<'a> {
                         model: candidate.model.id.clone(),
                         outcome: format!("stream connect failed: {}", e.code_name()),
                     });
-                    if is_fallback_eligible(&e) {
+                    if may_fallback(&e, candidate.model.cost) {
                         last_error = Some(e);
                         continue;
                     }
@@ -408,7 +433,7 @@ impl<'a> Dispatcher<'a> {
                     model: candidate.model.id.clone(),
                     outcome: format!("HTTP {status}: {}", err.code_name()),
                 });
-                if is_fallback_eligible(&err) {
+                if may_fallback(&err, candidate.model.cost) {
                     last_error = Some(err);
                     continue;
                 }
@@ -550,6 +575,61 @@ fn is_fallback_eligible(e: &ProviderError) -> bool {
     )
 }
 
+/// A failure after which the provider may already have executed the
+/// request: it was fully sent, and the failure class (5xx, timeout,
+/// post-send connection loss, malformed response) does not prove
+/// non-execution. HTTP 429 is deliberately absent — it is the
+/// provider's explicit statement that the request was not executed.
+fn is_ambiguous_after_send(e: &ProviderError) -> bool {
+    e.request_sent
+        && matches!(
+            e.code,
+            ProviderErrorCode::ProviderUnavailable
+                | ProviderErrorCode::ConnectionLost
+                | ProviderErrorCode::Timeout
+                | ProviderErrorCode::MalformedResponse
+        )
+}
+
+/// May this failure be retried against the same candidate? See the
+/// module-level retry-safety policy.
+fn may_retry(
+    e: &ProviderError,
+    cost: crate::types::CostClass,
+    attempt: u8,
+    max_retries: u8,
+) -> bool {
+    use crate::types::CostClass;
+    if attempt >= max_retries {
+        return false;
+    }
+    if !e.request_sent {
+        // Pre-send: only transport-class failures qualify, and a TLS
+        // failure is never retried blindly (it will fail identically
+        // and may indicate an attack or misconfiguration).
+        return matches!(
+            e.code,
+            ProviderErrorCode::ConnectionLost | ProviderErrorCode::Timeout
+        );
+    }
+    if e.code == ProviderErrorCode::RateLimited {
+        return true; // explicitly not executed
+    }
+    // Post-send: only free dispatches may auto-retry ambiguous
+    // failures; billable ones would risk duplicate paid inference.
+    cost == CostClass::Free && e.retryable()
+}
+
+/// May dispatch fall back to the next candidate after this failure?
+fn may_fallback(e: &ProviderError, cost: crate::types::CostClass) -> bool {
+    if !is_fallback_eligible(e) {
+        return false;
+    }
+    // Falling back after an ambiguous billable failure just moves
+    // the possible duplicate charge to another provider.
+    !(cost != crate::types::CostClass::Free && is_ambiguous_after_send(e))
+}
+
 fn cancel_check(cancel: &CancellationToken) -> Result<(), ProviderError> {
     if cancel.is_cancelled() {
         Err(ProviderError::new(
@@ -565,5 +645,75 @@ fn sleep_before_retry(policy: &RetryPolicy, attempt: u8, retry_after: Option<std
     let delay = policy.delay(attempt, retry_after);
     if !delay.is_zero() {
         std::thread::sleep(delay);
+    }
+}
+
+#[cfg(test)]
+mod policy_tests {
+    use super::*;
+    use crate::types::CostClass;
+
+    fn err(code: ProviderErrorCode) -> ProviderError {
+        ProviderError::new(code, "policy test")
+    }
+
+    #[test]
+    fn pre_send_failures_retry_and_fall_back_for_paid() {
+        let e = err(ProviderErrorCode::ConnectionLost).pre_send();
+        assert!(may_retry(&e, CostClass::Paid, 0, 2));
+        assert!(may_fallback(&e, CostClass::Paid));
+        let t = err(ProviderErrorCode::Timeout).pre_send();
+        assert!(may_retry(&t, CostClass::Unknown, 0, 2));
+    }
+
+    #[test]
+    fn tls_failures_are_never_retried() {
+        let e = err(ProviderErrorCode::TlsError).pre_send();
+        assert!(!may_retry(&e, CostClass::Free, 0, 2));
+        assert!(!may_fallback(&e, CostClass::Free));
+    }
+
+    #[test]
+    fn explicit_429_retries_for_paid() {
+        let e = err(ProviderErrorCode::RateLimited);
+        assert!(e.request_sent, "status-derived errors are post-send");
+        assert!(may_retry(&e, CostClass::Paid, 0, 2));
+        assert!(may_fallback(&e, CostClass::Paid));
+        assert!(!may_retry(&e, CostClass::Paid, 2, 2), "bound still applies");
+    }
+
+    #[test]
+    fn ambiguous_post_send_failures_are_terminal_for_billable() {
+        for code in [
+            ProviderErrorCode::ProviderUnavailable,
+            ProviderErrorCode::ConnectionLost,
+            ProviderErrorCode::Timeout,
+            ProviderErrorCode::MalformedResponse,
+        ] {
+            let e = err(code);
+            for cost in [CostClass::Paid, CostClass::Unknown] {
+                assert!(
+                    !may_retry(&e, cost, 0, 2),
+                    "{code:?} must not retry for {cost:?}"
+                );
+                assert!(
+                    !may_fallback(&e, cost),
+                    "{code:?} must not fall back for {cost:?}"
+                );
+            }
+            // Free models keep the availability behaviour.
+            assert!(
+                may_fallback(&e, CostClass::Free) || code == ProviderErrorCode::MalformedResponse
+            );
+        }
+    }
+
+    #[test]
+    fn free_post_send_availability_failures_still_retry() {
+        let e = err(ProviderErrorCode::ProviderUnavailable);
+        assert!(may_retry(&e, CostClass::Free, 0, 2));
+        assert!(may_fallback(&e, CostClass::Free));
+        let lost = err(ProviderErrorCode::ConnectionLost);
+        assert!(may_retry(&lost, CostClass::Free, 0, 2));
     }
 }
