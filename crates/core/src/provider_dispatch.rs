@@ -34,9 +34,9 @@ use anansi_providers::routing::{DisclosureRecord, RoutingMode, RoutingRequest};
 use anansi_providers::runtime::{ProviderRuntime, RuntimeConfig};
 use anansi_providers::types::{CompletionRequest, StreamEvent};
 use serde::Deserialize;
-use serde_json::{json, Value};
-use std::collections::hash_map::DefaultHasher;
+use serde_json::{Value, json};
 use std::collections::HashMap;
+use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
@@ -281,10 +281,8 @@ pub fn providers_command(operation: &str, value: Value) -> Result<Value, Command
                 loop {
                     match run.outcome.events.try_recv() {
                         Ok(event) => {
-                            let terminal = matches!(
-                                event,
-                                Ok(StreamEvent::Completed { .. }) | Err(_)
-                            );
+                            let terminal =
+                                matches!(event, Ok(StreamEvent::Completed { .. }) | Err(_));
                             events.push(event_json(&event));
                             if terminal {
                                 run.done = true;

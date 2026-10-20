@@ -82,13 +82,17 @@ fn deadline_dispatcher<'a, T: anansi_providers::http::Transport>(
     // max_retries: 0 isolates the transport deadline: a pre-send
     // Timeout is (correctly, per policy) retryable at the dispatcher
     // layer, which would multiply the elapsed time by the attempts.
-    Dispatcher::new(transport, resolver, anansi_providers::catalog::default_adapters())
-        .with_retry(anansi_providers::config::RetryPolicy {
-            max_retries: 0,
-            base_backoff_ms: 1,
-            max_retry_after_ms: 10,
-        })
-        .with_timeouts(timeouts)
+    Dispatcher::new(
+        transport,
+        resolver,
+        anansi_providers::catalog::default_adapters(),
+    )
+    .with_retry(anansi_providers::config::RetryPolicy {
+        max_retries: 0,
+        base_backoff_ms: 1,
+        max_retry_after_ms: 10,
+    })
+    .with_timeouts(timeouts)
 }
 
 #[test]
@@ -133,7 +137,10 @@ fn dribbling_tls_handshake_is_bounded_by_the_overall_deadline() {
         .unwrap_err();
     let elapsed = started.elapsed();
     assert_eq!(err.code, ProviderErrorCode::Timeout, "{err:?}");
-    assert!(!err.request_sent, "the deadline fired before any request existed");
+    assert!(
+        !err.request_sent,
+        "the deadline fired before any request existed"
+    );
     assert!(
         elapsed < Duration::from_millis(3_000),
         "handshake must be cut at the deadline, took {elapsed:?}"

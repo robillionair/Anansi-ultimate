@@ -802,8 +802,11 @@ impl Core {
                 };
                 serde_json::to_value(response).map_err(|_| crate::storage::unavailable())
             }
-            "providers-catalog" | "providers-dispatch" | "providers-stream-start"
-            | "providers-stream-poll" | "providers-stream-cancel" => {
+            "providers-catalog"
+            | "providers-dispatch"
+            | "providers-stream-start"
+            | "providers-stream-poll"
+            | "providers-stream-cancel" => {
                 crate::provider_dispatch::providers_command(operation, value)
             }
             _ => Err(CommandError::new(

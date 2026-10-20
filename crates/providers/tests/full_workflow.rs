@@ -66,10 +66,8 @@ fn complete_configuration_to_cancellation_workflow() {
     MOCK.call_once(|| {
         keyring::set_default_credential_builder(keyring::mock::default_credential_builder());
     });
-    let resolver = KeyringSecretResolver::with_service(format!(
-        "anansi-workflow-test-{}",
-        std::process::id()
-    ));
+    let resolver =
+        KeyringSecretResolver::with_service(format!("anansi-workflow-test-{}", std::process::id()));
     resolver
         .store_api_key("openai-primary", FAKE_KEY.as_bytes())
         .unwrap();
@@ -98,7 +96,10 @@ fn complete_configuration_to_cancellation_workflow() {
         }}"#,
         server.base_url
     );
-    assert!(!config_json.contains(FAKE_KEY), "configuration never carries the key");
+    assert!(
+        !config_json.contains(FAKE_KEY),
+        "configuration never carries the key"
+    );
     let config: RuntimeConfig = serde_json::from_str(&config_json).unwrap();
 
     let mut tls = anansi_providers::tls::TlsConfig::new();
@@ -127,7 +128,11 @@ fn complete_configuration_to_cancellation_workflow() {
     let d = &outcome.disclosure;
     assert_eq!(d.provider, "openai");
     assert_eq!(d.model, "gpt-x");
-    assert!(d.endpoint_host.starts_with("127.0.0.1"), "endpoint host recorded: {}", d.endpoint_host);
+    assert!(
+        d.endpoint_host.starts_with("127.0.0.1"),
+        "endpoint host recorded: {}",
+        d.endpoint_host
+    );
     assert!(!d.local);
     assert_eq!(d.cost_class, anansi_providers::types::CostClass::Paid);
     assert_eq!(d.usage.unwrap().total(), 18);
@@ -201,7 +206,12 @@ fn complete_configuration_to_cancellation_workflow() {
     permit.id = "permit-workflow-3".into();
     let cancel = CancellationToken::new();
     let stream = runtime
-        .dispatch_stream(&request("go slow"), routing(ZeroCostLock::off()), Some(permit), &cancel)
+        .dispatch_stream(
+            &request("go slow"),
+            routing(ZeroCostLock::off()),
+            Some(permit),
+            &cancel,
+        )
         .unwrap();
     let first = stream.events.recv_timeout(Duration::from_secs(5)).unwrap();
     assert!(matches!(first, Ok(StreamEvent::Token(_))), "{first:?}");
@@ -222,6 +232,9 @@ fn complete_configuration_to_cancellation_workflow() {
 
     // -- 9. Ledger accumulated the completed work --------------------
     let totals = runtime.ledger().totals_for("openai");
-    assert!(totals.requests >= 2, "ledger saw the completed dispatches: {totals:?}");
+    assert!(
+        totals.requests >= 2,
+        "ledger saw the completed dispatches: {totals:?}"
+    );
     assert!(totals.input_tokens + totals.output_tokens >= 18);
 }

@@ -134,20 +134,23 @@ fn bounded(text: &str) -> String {
 
 impl SecretResolver for KeyringSecretResolver {
     fn resolve(&self, credential: &CredentialRef) -> Result<AuthMaterial, ProviderError> {
-        let bytes = self.entry(&credential.reference)?.get_secret().map_err(|e| {
-            // Covers NoEntry as well as store failures: from the
-            // dispatcher's side both mean "no usable credential".
-            ProviderError::new(
-                ProviderErrorCode::AuthFailed,
-                format!(
-                    "no usable credential for reference {} (provider {}): {}",
-                    credential.reference,
-                    credential.provider,
-                    bounded(&e.to_string())
-                ),
-            )
-            .pre_send()
-        })?;
+        let bytes = self
+            .entry(&credential.reference)?
+            .get_secret()
+            .map_err(|e| {
+                // Covers NoEntry as well as store failures: from the
+                // dispatcher's side both mean "no usable credential".
+                ProviderError::new(
+                    ProviderErrorCode::AuthFailed,
+                    format!(
+                        "no usable credential for reference {} (provider {}): {}",
+                        credential.reference,
+                        credential.provider,
+                        bounded(&e.to_string())
+                    ),
+                )
+                .pre_send()
+            })?;
         let text = String::from_utf8(bytes).map_err(|_| {
             ProviderError::new(
                 ProviderErrorCode::AuthFailed,

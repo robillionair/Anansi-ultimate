@@ -8,7 +8,7 @@
 //! Ollama is local and keyless by design.
 
 use anansi_core::Core;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpListener;
 use std::time::{Duration, Instant};
@@ -68,7 +68,7 @@ fn start_fake_ollama() -> String {
                     let _ = stream.write_all(
                         b"HTTP/1.1 200 OK\r\nContent-Type: application/x-ndjson\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n",
                     );
-                    let mut send = |stream: &mut std::net::TcpStream, data: &str| {
+                    let send = |stream: &mut std::net::TcpStream, data: &str| {
                         let _ = stream.write_all(format!("{:x}\r\n", data.len()).as_bytes());
                         let _ = stream.write_all(data.as_bytes());
                         let _ = stream.write_all(b"\r\n");
@@ -138,9 +138,7 @@ fn provider_workflow_through_ai_command() {
     let core = Core::default();
 
     // Catalog op answers without any configuration.
-    let catalog = core
-        .ai_command("providers-catalog", json!({}))
-        .unwrap();
+    let catalog = core.ai_command("providers-catalog", json!({})).unwrap();
     let providers = catalog["providers"].as_array().unwrap();
     assert!(providers.len() >= 20, "catalog lists the provider set");
     assert!(providers.iter().any(|p| p["id"] == "ollama"));

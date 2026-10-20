@@ -293,7 +293,10 @@ fn resolve_with_deadline(
         if left.is_zero() {
             return Err(ProviderError::new(
                 ProviderErrorCode::Timeout,
-                format!("DNS resolution of {} exceeded the request deadline", ep.host),
+                format!(
+                    "DNS resolution of {} exceeded the request deadline",
+                    ep.host
+                ),
             )
             .pre_send());
         }

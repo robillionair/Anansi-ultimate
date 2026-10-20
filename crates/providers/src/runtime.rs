@@ -94,7 +94,10 @@ impl ProviderRuntime {
             if !seen.insert(provider.config.provider.clone()) {
                 return Err(ProviderError::new(
                     ProviderErrorCode::InvalidConfiguration,
-                    format!("duplicate provider in configuration: {}", provider.config.provider),
+                    format!(
+                        "duplicate provider in configuration: {}",
+                        provider.config.provider
+                    ),
                 ));
             }
             provider.config.validate().map_err(|e| {
@@ -199,7 +202,6 @@ impl ProviderRuntime {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -245,13 +247,10 @@ mod tests {
     fn duplicate_providers_are_rejected_at_configuration_time() {
         let mut c = config();
         c.providers.push(c.providers[0].clone());
-        let err = ProviderRuntime::new(
-            c,
-            RustlsTransport::new(),
-            Box::new(MapResolver(Map::new())),
-        )
-        .err()
-        .expect("duplicates must fail");
+        let err =
+            ProviderRuntime::new(c, RustlsTransport::new(), Box::new(MapResolver(Map::new())))
+                .err()
+                .expect("duplicates must fail");
         assert_eq!(err.code, ProviderErrorCode::InvalidConfiguration);
     }
 
@@ -259,13 +258,10 @@ mod tests {
     fn invalid_endpoints_are_rejected_at_configuration_time() {
         let mut c = config();
         c.providers[0].config.base_url = "http://api.example.invalid/v1".into();
-        let err = ProviderRuntime::new(
-            c,
-            RustlsTransport::new(),
-            Box::new(MapResolver(Map::new())),
-        )
-        .err()
-        .expect("plaintext cloud endpoint must fail");
+        let err =
+            ProviderRuntime::new(c, RustlsTransport::new(), Box::new(MapResolver(Map::new())))
+                .err()
+                .expect("plaintext cloud endpoint must fail");
         assert_eq!(err.code, ProviderErrorCode::InvalidConfiguration);
     }
 
