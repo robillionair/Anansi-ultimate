@@ -50,7 +50,12 @@ fn concurrent_dispatches_cannot_overrun_the_request_budget() {
             handles.push(scope.spawn(move || {
                 let mut ctx = test_ctx(ledger, RoutingMode::Auto, ZeroCostLock::off());
                 ctx.budget = budget;
-                dispatcher.execute(&regs, &test_request("gpt-x"), ctx, &CancellationToken::new())
+                dispatcher.execute(
+                    &regs,
+                    &test_request("gpt-x"),
+                    ctx,
+                    &CancellationToken::new(),
+                )
             }));
         }
         for h in handles {
@@ -65,7 +70,11 @@ fn concurrent_dispatches_cannot_overrun_the_request_budget() {
     });
     assert_eq!(ok, 2, "exactly the budgeted number may dispatch");
     assert_eq!(refused, 2);
-    assert_eq!(server.hit_count(), 2, "refused dispatches produce no traffic");
+    assert_eq!(
+        server.hit_count(),
+        2,
+        "refused dispatches produce no traffic"
+    );
 }
 
 #[test]
@@ -76,12 +85,16 @@ fn failed_dispatch_releases_its_reservation() {
     let up = SyntheticServer::start(|_req, _hit| ServerResponse::json(200, openai_success_body()));
     let transport = StdHttpTransport;
     let res = resolver();
-    let dispatcher = Dispatcher::new(&transport, &res, anansi_providers::catalog::default_adapters())
-        .with_retry(anansi_providers::config::RetryPolicy {
-            max_retries: 0,
-            base_backoff_ms: 1,
-            max_retry_after_ms: 10,
-        });
+    let dispatcher = Dispatcher::new(
+        &transport,
+        &res,
+        anansi_providers::catalog::default_adapters(),
+    )
+    .with_retry(anansi_providers::config::RetryPolicy {
+        max_retries: 0,
+        base_backoff_ms: 1,
+        max_retry_after_ms: 10,
+    });
     let ledger = Arc::new(Mutex::new(QuotaLedger::new()));
     let budget = Budget {
         max_requests: Some(1),
@@ -97,7 +110,12 @@ fn failed_dispatch_releases_its_reservation() {
         vec![model("gpt-x", "openai", CostClass::Free)],
     )];
     let err = dispatcher
-        .execute(&regs_down, &test_request("gpt-x"), ctx, &CancellationToken::new())
+        .execute(
+            &regs_down,
+            &test_request("gpt-x"),
+            ctx,
+            &CancellationToken::new(),
+        )
         .unwrap_err();
     assert_eq!(err.code, ProviderErrorCode::ProviderUnavailable);
     // The failed dispatch held the only request slot while in
@@ -113,7 +131,12 @@ fn failed_dispatch_releases_its_reservation() {
         vec![model("gpt-x", "openai", CostClass::Free)],
     )];
     let outcome = dispatcher
-        .execute(&regs_up, &test_request("gpt-x"), ctx, &CancellationToken::new())
+        .execute(
+            &regs_up,
+            &test_request("gpt-x"),
+            ctx,
+            &CancellationToken::new(),
+        )
         .unwrap();
     assert_eq!(outcome.response.text, "hello from synthetic");
     assert_eq!(ledger.lock().unwrap().reserved(), (0, 0));
@@ -163,7 +186,11 @@ fn streamed_usage_is_recorded_when_the_stream_ends() {
             let totals = guard.totals_for("ollama");
             if totals.input_tokens == 7 && totals.output_tokens == 5 {
                 assert_eq!(totals.requests, 1);
-                assert_eq!(guard.reserved(), (0, 0), "no hold may leak after the stream");
+                assert_eq!(
+                    guard.reserved(),
+                    (0, 0),
+                    "no hold may leak after the stream"
+                );
                 return;
             }
         }

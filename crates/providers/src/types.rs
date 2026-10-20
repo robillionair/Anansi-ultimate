@@ -100,7 +100,9 @@ impl ChatMessage {
 
 /// Capability flags a model can be routed on (§17: capability is one of
 /// the router's evaluation inputs).
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema,
+)]
 #[serde(rename_all = "camelCase")]
 pub struct CapabilitySet {
     pub chat: bool,
@@ -191,7 +193,9 @@ impl CompletionRequest {
     }
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema,
+)]
 #[serde(rename_all = "camelCase")]
 pub struct Usage {
     pub input_tokens: u64,

@@ -181,7 +181,8 @@ impl<'a> Dispatcher<'a> {
             request.estimated_input_tokens(),
             request.estimated_output_tokens(),
         );
-        let reservation = lock_ledger(&ctx.ledger).reserve(&ctx.budget, estimated_total, est_cost)?;
+        let reservation =
+            lock_ledger(&ctx.ledger).reserve(&ctx.budget, estimated_total, est_cost)?;
         // Endpoint validation (single point, config module).
         let endpoint = reg.config.validate()?;
         // Credentials: resolve reference → material; prime redactor.
@@ -484,7 +485,7 @@ impl<'a> Dispatcher<'a> {
             let stream_provider = candidate.provider.clone();
             std::thread::spawn(move || {
                 let mut last_usage: Option<crate::types::Usage> = None;
-                let mut track = |events: &Vec<StreamEvent>, last: &mut Option<crate::types::Usage>| {
+                let track = |events: &Vec<StreamEvent>, last: &mut Option<crate::types::Usage>| {
                     for ev in events {
                         if let StreamEvent::Usage(u) = ev {
                             *last = Some(*u);
@@ -622,7 +623,9 @@ struct PreparedDispatch {
 fn lock_ledger(
     ledger: &std::sync::Arc<std::sync::Mutex<QuotaLedger>>,
 ) -> std::sync::MutexGuard<'_, QuotaLedger> {
-    ledger.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    ledger
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 fn is_fallback_eligible(e: &ProviderError) -> bool {

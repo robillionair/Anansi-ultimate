@@ -654,7 +654,11 @@ mod reservation_tests {
         let r = ledger.reserve(&budget, 80, None).unwrap();
         ledger.begin_stream(r, "openai", None);
         assert_eq!(ledger.total_requests(), 1);
-        assert_eq!(ledger.reserved(), (0, 80), "token hold survives establishment");
+        assert_eq!(
+            ledger.reserved(),
+            (0, 80),
+            "token hold survives establishment"
+        );
         ledger.settle_stream(
             r,
             "openai",

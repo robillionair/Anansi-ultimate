@@ -9,11 +9,11 @@
 //! provider traffic (the fake servers count their hits).
 
 use anansi_core::{Core, ErrorCode};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpListener;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
 // ---------------------------------------------------------------------------
@@ -150,7 +150,11 @@ fn chat(text: &str) -> Value {
     })
 }
 
-fn configure(core: &Core, session_id: &str, config: Value) -> Result<Value, anansi_core::CommandError> {
+fn configure(
+    core: &Core,
+    session_id: &str,
+    config: Value,
+) -> Result<Value, anansi_core::CommandError> {
     core.ai_command(
         "providers-configure",
         session(session_id, json!({ "config": config })),
@@ -206,10 +210,7 @@ fn workflow_runs_on_backend_state_not_caller_json() {
         let poll = core
             .ai_command(
                 "providers-stream-poll",
-                session(
-                    "s1",
-                    json!({ "runId": run_id, "capability": capability }),
-                ),
+                session("s1", json!({ "runId": run_id, "capability": capability })),
             )
             .unwrap();
         for event in poll["events"].as_array().unwrap() {
@@ -310,7 +311,11 @@ fn cloud_endpoint_cannot_masquerade_as_local_or_free() {
     config["providers"][0]["locality"] = json!("cloud");
     let err = configure(&core, "s1", config).unwrap_err();
     assert_eq!(err.code, ErrorCode::InvalidRequest);
-    assert!(err.message.contains("locality is derived"), "{}", err.message);
+    assert!(
+        err.message.contains("locality is derived"),
+        "{}",
+        err.message
+    );
     assert_eq!(fake.hits.load(Ordering::SeqCst), 0);
 }
 
@@ -416,8 +421,16 @@ fn consumed_permit_cannot_be_replayed_across_config_changes() {
     configure(&core, "s1", ollama_config(&fake_b.base_url, "paid")).unwrap();
     configure(&core, "s1", config_a).unwrap();
     let err = dispatch(&core, "s1", json!({ "permitId": permit_id }), "replay").unwrap_err();
-    assert_eq!(err.code, ErrorCode::Forbidden, "consumed permit stays consumed");
-    assert_eq!(fake_a.hits.load(Ordering::SeqCst), 1, "replay produced no traffic");
+    assert_eq!(
+        err.code,
+        ErrorCode::Forbidden,
+        "consumed permit stays consumed"
+    );
+    assert_eq!(
+        fake_a.hits.load(Ordering::SeqCst),
+        1,
+        "replay produced no traffic"
+    );
 
     let usage = core
         .ai_command("providers-usage", session("s1", json!({})))
@@ -449,10 +462,7 @@ fn cross_session_stream_access_is_denied() {
     let poll = |session_id: &str, cap: &str| {
         core.ai_command(
             "providers-stream-poll",
-            session(
-                session_id,
-                json!({ "runId": run_id, "capability": cap }),
-            ),
+            session(session_id, json!({ "runId": run_id, "capability": cap })),
         )
     };
     // Another session with the genuine capability: NotFound.
@@ -477,7 +487,11 @@ fn cross_session_stream_access_is_denied() {
     std::thread::sleep(Duration::from_millis(200));
     let first = poll("owner", &capability).unwrap();
     assert!(
-        first["events"].as_array().unwrap().iter().any(|e| e["kind"] == "token"),
+        first["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|e| e["kind"] == "token"),
         "stream survived the intruder's cancel attempt: {first}"
     );
     core.ai_command(
@@ -519,8 +533,13 @@ fn budget_comes_from_trusted_config_and_cannot_be_raised_by_the_caller() {
     dispatch(&core, "s1", json!({}), "one").unwrap();
     // The caller cannot raise the configured budget — there is no
     // budget field in the dispatch contract at all.
-    let err = dispatch(&core, "s1", json!({ "budget": { "maxRequests": 99 } }), "two")
-        .unwrap_err();
+    let err = dispatch(
+        &core,
+        "s1",
+        json!({ "budget": { "maxRequests": 99 } }),
+        "two",
+    )
+    .unwrap_err();
     assert_eq!(err.code, ErrorCode::InvalidRequest);
     // And the configured budget itself refuses the second dispatch.
     let err = dispatch(&core, "s1", json!({}), "two").unwrap_err();

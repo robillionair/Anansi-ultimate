@@ -16,7 +16,9 @@ use crate::types::{CapabilitySet, CostClass, ModelInfo, Usage};
 use serde::{Deserialize, Serialize};
 
 /// User-facing routing modes, verbatim from MASTER_SPEC §17.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema,
+)]
 #[serde(rename_all = "camelCase")]
 pub enum RoutingMode {
     #[default]

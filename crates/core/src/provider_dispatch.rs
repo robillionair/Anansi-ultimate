@@ -317,9 +317,7 @@ fn sweep(state: &mut BackendState) {
     }
 }
 
-fn runtime_for(
-    state: &mut BackendState,
-) -> Result<&mut ProviderRuntime, CommandError> {
+fn runtime_for(state: &mut BackendState) -> Result<&mut ProviderRuntime, CommandError> {
     let config = state.config.clone().ok_or_else(|| {
         CommandError::new(
             ErrorCode::InvalidRequest,
@@ -433,13 +431,16 @@ fn enforce_derived_locality(config: &RuntimeConfig) -> Result<(), CommandError> 
                 "Provider {} declares locality {:?} but its endpoint is {}; locality is derived, not declared.",
                 provider.config.provider,
                 provider.locality,
-                if endpoint.loopback { "loopback (Local)" } else { "non-loopback (Cloud)" },
+                if endpoint.loopback {
+                    "loopback (Local)"
+                } else {
+                    "non-loopback (Cloud)"
+                },
             )));
         }
     }
     Ok(())
 }
-
 
 /// The trusted configuration defines the model universe: a request
 /// naming a model no configured provider offers is refused before
@@ -463,7 +464,9 @@ fn enforce_configured_model(
         .flat_map(|p| p.models.iter())
         .any(|m| m.id == request.model);
     if !configured {
-        return Err(invalid("The requested model is not configured for this workspace."));
+        return Err(invalid(
+            "The requested model is not configured for this workspace.",
+        ));
     }
     Ok(())
 }
@@ -660,12 +663,7 @@ pub fn providers_command(
                 let permit = take_permit(state, scope, &req.permit_id)?;
                 let runtime = runtime_for(state)?;
                 let outcome = runtime
-                    .dispatch(
-                        &req.request,
-                        routing,
-                        permit,
-                        &CancellationToken::new(),
-                    )
+                    .dispatch(&req.request, routing, permit, &CancellationToken::new())
                     .map_err(to_command_error)?;
                 Ok(ProviderDispatchResponse {
                     response: ProviderResponseBody {
@@ -746,10 +744,8 @@ pub fn providers_command(
                     loop {
                         match run.outcome.events.try_recv() {
                             Ok(event) => {
-                                let terminal = matches!(
-                                    event,
-                                    Ok(StreamEvent::Completed { .. }) | Err(_)
-                                );
+                                let terminal =
+                                    matches!(event, Ok(StreamEvent::Completed { .. }) | Err(_));
                                 events.push(event_dto(&event));
                                 if terminal {
                                     run.done = true;
@@ -844,7 +840,10 @@ mod tests {
         let cancel = CancellationToken::new();
         state.streams.insert(
             "old".into(),
-            run(Instant::now() - STREAM_TTL - Duration::from_secs(1), &cancel),
+            run(
+                Instant::now() - STREAM_TTL - Duration::from_secs(1),
+                &cancel,
+            ),
         );
         let fresh_cancel = CancellationToken::new();
         state

@@ -818,9 +818,7 @@ impl Core {
                 // fall back to the host session.
                 let workspace = self
                     .storage_root()
-                    .map(|root| {
-                        crate::provider_dispatch::fingerprint(&root.to_string_lossy())
-                    })
+                    .map(|root| crate::provider_dispatch::fingerprint(&root.to_string_lossy()))
                     .unwrap_or_else(|_| "no-workspace".to_string());
                 let session = value
                     .get("callerContext")
