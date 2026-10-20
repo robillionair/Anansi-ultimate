@@ -16,4 +16,5 @@ pub mod redact;
 pub mod routing;
 pub mod secrets;
 pub mod stream;
+pub mod tls;
 pub mod types;

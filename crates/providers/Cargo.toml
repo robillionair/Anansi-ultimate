@@ -8,6 +8,17 @@ description = "ANANSI M5 AI Matrix provider-integration package: adapters, routi
 [dependencies]
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = { version = "=1.0.154" }
+# TLS: rustls with the ring crypto provider and Mozilla root set
+# (webpki-roots). Certificate and hostname validation are rustls
+# defaults and are never disabled in this crate (no danger APIs).
+rustls = { version = "=0.23.46", default-features = false, features = ["ring", "std", "tls12"] }
+rustls-pki-types = "=1.15.1"
+webpki-roots = "=1.0.10"
 
 [dev-dependencies]
-# Tests use only std + this crate: synthetic servers are std TcpListeners.
+# Synthetic servers are std TcpListeners; the HTTPS harness terminates
+# TLS with rustls server-side and generates test-only certificates
+# with rcgen. Nothing here ships in the library.
+rustls = { version = "=0.23.46", default-features = false, features = ["ring", "std", "tls12"] }
+rustls-pemfile = "=2.2.0"
+rcgen = "=0.13.2"

@@ -5,9 +5,14 @@
 //! cancellation that shuts down the live socket (the same semantics as
 //! `ask_stream.rs`: cancelling closes the backend connection).
 //!
-//! TLS: `std` provides none. HTTPS endpoints fail closed with
-//! `TlsUnavailable` until the integrator supplies a vetted TLS
-//! implementation behind the `Transport` trait (decision M5-D3).
+//! TLS: `std` provides none, so HTTPS is served by
+//! [`RustlsTransport`] — rustls with full WebPKI certificate and
+//! hostname validation (see `crate::tls`; the M5-D3 follow-up that
+//! supersedes the original fail-closed note in the handover). The
+//! plaintext [`StdHttpTransport`] remains for loopback-only use and
+//! still fails closed with `TlsUnavailable` on HTTPS endpoints.
+//! Both transports share the bounded request/response machinery in
+//! this module; redirects are never followed by either.
 
 use crate::config::{TimeoutConfig, ValidatedEndpoint};
 use crate::error::{ProviderError, ProviderErrorCode};
@@ -15,7 +20,7 @@ use std::io::{self, Read, Write};
 use std::net::{TcpStream, ToSocketAddrs};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 #[derive(Debug)]
 struct CancelInner {
@@ -135,12 +140,101 @@ pub trait Transport {
     ) -> Result<HttpResponse, ProviderError>;
 }
 
-/// The std HTTP transport. Serves loopback and plaintext-opt-in custom
-/// endpoints; HTTPS fails closed (M5-D3).
+/// A live connection: plaintext TCP, or a rustls TLS session over
+/// TCP. Read/write timeouts live on the raw socket in both cases,
+/// and the cancellation token is registered on the raw socket, so
+/// cancelling closes TLS sessions exactly like plaintext ones.
+enum Conn {
+    Plain(TcpStream),
+    Tls(Box<rustls::StreamOwned<rustls::ClientConnection, TcpStream>>),
+}
+
+impl Conn {
+    fn set_read_timeout(&self, timeout: Option<Duration>) -> io::Result<()> {
+        match self {
+            Conn::Plain(s) => s.set_read_timeout(timeout),
+            Conn::Tls(s) => s.sock.set_read_timeout(timeout),
+        }
+    }
+}
+
+impl Read for Conn {
+    fn read(&mut self, out: &mut [u8]) -> io::Result<usize> {
+        match self {
+            Conn::Plain(s) => s.read(out),
+            Conn::Tls(s) => s.read(out),
+        }
+    }
+}
+
+impl Write for Conn {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        match self {
+            Conn::Plain(s) => s.write(buf),
+            Conn::Tls(s) => s.write(buf),
+        }
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        match self {
+            Conn::Plain(s) => s.flush(),
+            Conn::Tls(s) => s.flush(),
+        }
+    }
+}
+
+/// Resolve once and connect to the resolved address (the Host header
+/// and the TLS server name still carry the configured host). Every
+/// failure here is pre-send: no request bytes can have reached the
+/// provider, and errors are marked accordingly for retry safety.
+fn resolve_and_connect(
+    ep: &ValidatedEndpoint,
+    timeouts: &TimeoutConfig,
+    cancel: &CancellationToken,
+) -> Result<TcpStream, ProviderError> {
+    let addr = format!("{}:{}", ep.host, ep.port)
+        .to_socket_addrs()
+        .map_err(|e| {
+            ProviderError::new(
+                ProviderErrorCode::ConnectionLost,
+                format!("cannot resolve {}: {e}", ep.host),
+            )
+            .pre_send()
+        })?
+        .next()
+        .ok_or_else(|| {
+            ProviderError::new(
+                ProviderErrorCode::ConnectionLost,
+                format!("cannot resolve {}", ep.host),
+            )
+            .pre_send()
+        })?;
+    let stream = TcpStream::connect_timeout(&addr, timeouts.connect()).map_err(|e| {
+        if e.kind() == io::ErrorKind::TimedOut {
+            ProviderError::new(
+                ProviderErrorCode::Timeout,
+                format!("connect to {} timed out", ep.authority()),
+            )
+            .pre_send()
+        } else {
+            ProviderError::new(
+                ProviderErrorCode::ConnectionLost,
+                format!("connect to {} failed: {e}", ep.authority()),
+            )
+            .pre_send()
+        }
+    })?;
+    cancel.register(&stream);
+    let _ = stream.set_nodelay(true);
+    let _ = stream.set_write_timeout(Some(timeouts.idle()));
+    let _ = stream.set_read_timeout(Some(timeouts.first_byte()));
+    Ok(stream)
+}
+
+/// The plaintext-only transport: loopback and plaintext-opt-in
+/// custom endpoints. HTTPS fails closed with `TlsUnavailable`;
+/// use [`RustlsTransport`] for production dispatch.
 #[derive(Debug, Default)]
 pub struct StdHttpTransport;
-
-const MAX_HEADER_BYTES: usize = 64 * 1024;
 
 impl Transport for StdHttpTransport {
     fn execute(
@@ -155,46 +249,141 @@ impl Transport for StdHttpTransport {
             return Err(ProviderError::new(
                 ProviderErrorCode::TlsUnavailable,
                 format!(
-                    "endpoint {} is https but no TLS transport is wired in this package; dispatch fails closed (see M5-D3)",
+                    "endpoint {} is https but this transport has no TLS; use RustlsTransport (see M5-D3)",
                     ep.origin()
                 ),
-            ));
+            )
+            .pre_send());
         }
-        // Resolve once and connect to the resolved address (the Host
-        // header still names the configured host).
-        let addr = format!("{}:{}", ep.host, ep.port)
-            .to_socket_addrs()
+        let stream = resolve_and_connect(ep, timeouts, cancel)?;
+        run_over(Conn::Plain(stream), request, timeouts, cancel)
+    }
+}
+
+/// The production transport: plaintext where endpoint policy allows
+/// it, HTTPS via rustls with certificate-chain, expiry and hostname
+/// validation always on (see `crate::tls` — there is no insecure
+/// mode). Credentials are placed in headers bound to this one
+/// request by the adapters; this transport never follows redirects,
+/// so a credential can never be forwarded to a different origin.
+#[derive(Debug, Clone)]
+pub struct RustlsTransport {
+    config: std::sync::Arc<rustls::ClientConfig>,
+}
+
+impl Default for RustlsTransport {
+    fn default() -> Self {
+        Self {
+            config: crate::tls::TlsConfig::new().client_config(),
+        }
+    }
+}
+
+impl RustlsTransport {
+    /// Mozilla root set, no additions.
+    pub fn new() -> Self {
+        Self {
+            config: crate::tls::TlsConfig::new().client_config(),
+        }
+    }
+    /// Custom trust configuration (e.g. an added private-CA root).
+    /// Validation itself is never optional.
+    pub fn with_tls_config(config: crate::tls::TlsConfig) -> Self {
+        Self {
+            config: config.client_config(),
+        }
+    }
+}
+
+impl Transport for RustlsTransport {
+    fn execute(
+        &self,
+        request: &HttpRequest,
+        timeouts: &TimeoutConfig,
+        cancel: &CancellationToken,
+    ) -> Result<HttpResponse, ProviderError> {
+        cancel.check()?;
+        let ep = &request.endpoint;
+        let mut sock = resolve_and_connect(ep, timeouts, cancel)?;
+        if ep.scheme != "https" {
+            return run_over(Conn::Plain(sock), request, timeouts, cancel);
+        }
+        let server_name = crate::tls::server_name(&ep.host)?;
+        let mut tls_conn = rustls::ClientConnection::new(self.config.clone(), server_name)
             .map_err(|e| {
                 ProviderError::new(
-                    ProviderErrorCode::ConnectionLost,
-                    format!("cannot resolve {}: {e}", ep.host),
+                    ProviderErrorCode::TlsError,
+                    format!("TLS setup for {} failed: {e}", ep.authority()),
                 )
-            })?
-            .next()
-            .ok_or_else(|| {
-                ProviderError::new(
-                    ProviderErrorCode::ConnectionLost,
-                    format!("cannot resolve {}", ep.host),
-                )
+                .pre_send()
             })?;
-        let mut stream = TcpStream::connect_timeout(&addr, timeouts.connect()).map_err(|e| {
-            if e.kind() == io::ErrorKind::TimedOut {
-                ProviderError::new(
-                    ProviderErrorCode::Timeout,
-                    format!("connect to {} timed out", ep.authority()),
-                )
-            } else {
-                ProviderError::new(
-                    ProviderErrorCode::ConnectionLost,
-                    format!("connect to {} failed: {e}", ep.authority()),
-                )
+        // Drive the handshake explicitly, before any request bytes
+        // exist: certificate and hostname validation failures surface
+        // here as TlsError (pre-send), never as a half-sent request.
+        while tls_conn.is_handshaking() {
+            if cancel.is_cancelled() {
+                return Err(ProviderError::new(
+                    ProviderErrorCode::Cancelled,
+                    "request cancelled during TLS handshake",
+                ));
             }
-        })?;
-        cancel.register(&stream);
-        let _ = stream.set_nodelay(true);
-        let _ = stream.set_write_timeout(Some(timeouts.idle()));
-        let _ = stream.set_read_timeout(Some(timeouts.first_byte()));
+            tls_conn
+                .complete_io(&mut sock)
+                .map_err(|e| map_handshake_error(e, ep, cancel))?;
+        }
+        let stream = rustls::StreamOwned::new(tls_conn, sock);
+        run_over(Conn::Tls(Box::new(stream)), request, timeouts, cancel)
+    }
+}
 
+fn map_handshake_error(
+    e: io::Error,
+    ep: &ValidatedEndpoint,
+    cancel: &CancellationToken,
+) -> ProviderError {
+    if cancel.is_cancelled() {
+        return ProviderError::new(
+            ProviderErrorCode::Cancelled,
+            "request cancelled during TLS handshake",
+        );
+    }
+    match e.kind() {
+        io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock => ProviderError::new(
+            ProviderErrorCode::Timeout,
+            format!("TLS handshake with {} timed out", ep.authority()),
+        )
+        .pre_send(),
+        _ => {
+            // rustls validation failures arrive as io errors carrying
+            // the rustls error as their source; its Display names the
+            // certificate problem and contains no credential material.
+            let detail = e
+                .get_ref()
+                .map(|src| src.to_string())
+                .unwrap_or_else(|| e.to_string());
+            let detail: String = detail.chars().take(240).collect();
+            ProviderError::new(
+                ProviderErrorCode::TlsError,
+                format!("TLS handshake with {} failed: {detail}", ep.authority()),
+            )
+            .pre_send()
+        }
+    }
+}
+
+const MAX_HEADER_BYTES: usize = 64 * 1024;
+
+/// Write the request and read the response over an established
+/// connection (either kind). Shared by both transports.
+fn run_over(
+    conn: Conn,
+    request: &HttpRequest,
+    timeouts: &TimeoutConfig,
+    cancel: &CancellationToken,
+) -> Result<HttpResponse, ProviderError> {
+    let ep = &request.endpoint;
+    let mut stream = conn;
+    {
         let mut wire = Vec::with_capacity(request.body.len() + 1024);
         wire.extend_from_slice(
             format!("{} {} HTTP/1.1\r\n", request.method, request.path).as_bytes(),
@@ -317,7 +506,7 @@ fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
 /// Socket body with total-deadline and cancellation enforcement on
 /// every read.
 pub struct SocketBody {
-    stream: TcpStream,
+    stream: Conn,
     prefix: Vec<u8>,
     start: Instant,
     timeouts: TimeoutConfig,
