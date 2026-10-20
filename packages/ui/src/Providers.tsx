@@ -268,6 +268,11 @@ export function Providers({ client, workspaceId }: { client: Client; workspaceId
           await new Promise((r) => setTimeout(r, 120));
         }
         activeRun.current = null;
+        // The cancel button exits the loop via cancelWanted
+        // (possibly before the terminal Cancelled event is
+        // polled): the state machine must still land on
+        // 'cancelled', not hang in 'streaming'.
+        if (cancelWanted.current) setStreamState('cancelled');
       }
     } catch (e) {
       setStreamState('error');
@@ -302,7 +307,7 @@ export function Providers({ client, workspaceId }: { client: Client; workspaceId
           granted by the host. Secrets are never typed here — only a credential reference; the
           secret itself lives in the operating system keyring (§15).
         </p>
-        {catalogError && <p className="error" role="alert">{catalogError}</p>}
+        {catalogError && <p className="error" role="alert" aria-label="Catalog error">{catalogError}</p>}
         <ul className="provider-catalog">
           {catalog.map((entry) => (
             <li key={entry.id}>
@@ -388,7 +393,7 @@ export function Providers({ client, workspaceId }: { client: Client; workspaceId
             <label htmlFor="provider-budget-tokens">Budget — max total tokens (optional)</label>
             <input id="provider-budget-tokens" value={maxTotalTokens} onChange={(e) => setMaxTotalTokens(e.target.value)} inputMode="numeric" autoComplete="off" />
           </fieldset>
-          {configureError && <p className="error" role="alert">{configureError}</p>}
+          {configureError && <p className="error" role="alert" aria-label="Configuration error">{configureError}</p>}
           {configured && !configureError && (
             <p role="status">Configured. The setup is saved for this workspace and survives restarts.</p>
           )}
@@ -441,9 +446,9 @@ export function Providers({ client, workspaceId }: { client: Client; workspaceId
               bound to this session.
             </p>
           )}
-          {authorizeError && <p className="error" role="alert">{authorizeError}</p>}
+          {authorizeError && <p className="error" role="alert" aria-label="Authorization error">{authorizeError}</p>}
         </div>
-        {dispatchError && <p className="error" role="alert">{dispatchError}</p>}
+        {dispatchError && <p className="error" role="alert" aria-label="Dispatch error">{dispatchError}</p>}
         {streamState === 'cancelled' && <p role="status">Stream cancelled.</p>}
         {output && (
           <div className="provider-output" aria-label="Model response">

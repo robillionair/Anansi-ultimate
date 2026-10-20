@@ -156,7 +156,7 @@ test('provider workflow: rejected authorization, persisted config, dispatch, dis
     // 1. Rejected authorization: a browser session cannot
     // configure — the owner boundary is visible, not silent.
     await page.getByRole('button', { name: 'Save configuration' }).click();
-    await expect(page.getByRole('alert').first()).toContainText('Owner authorization required');
+    await expect(page.getByRole('alert', { name: 'Configuration error' })).toContainText('Owner authorization required');
 
     // 2. The owner (desktop) configuration arrives as the
     // persisted file and survives an API restart.
@@ -209,15 +209,19 @@ test('provider workflow: rejected authorization, persisted config, dispatch, dis
     // off, the missing permit refuses instead; and authorizing
     // from the browser is itself an owner operation.
     await page.locator('#dispatch-stream').uncheck();
+    // Pin the paid model: in 'auto' the router may legitimately
+    // substitute the free candidate; chooseModel makes the paid
+    // dispatch (and its refusals) deterministic.
+    await page.locator('#dispatch-mode').selectOption('chooseModel');
     await page.locator('#dispatch-model').fill('llama-paid');
     await page.locator('#dispatch-prompt').fill('Spend money');
     await page.getByRole('button', { name: 'Send', exact: true }).click();
-    await expect(page.getByRole('alert').first()).toContainText(/Zero-Cost Lock|CostRefused/);
+    await expect(page.getByRole('alert', { name: 'Dispatch error' })).toContainText(/Zero-Cost Lock|CostRefused|fails the active privacy\/cost filters/);
     await page.locator('#dispatch-lock').uncheck();
     await page.getByRole('button', { name: 'Send', exact: true }).click();
-    await expect(page.getByRole('alert').first()).toContainText(/PaidRequiresPermit|permit/i);
+    await expect(page.getByRole('alert', { name: 'Dispatch error' })).toContainText(/PaidRequiresPermit|permit/i);
     await page.getByRole('button', { name: 'Authorize paid dispatch for this model' }).click();
-    await expect(page.getByRole('alert').first()).toContainText('Owner authorization required');
+    await expect(page.getByRole('alert', { name: 'Authorization error' })).toContainText('Owner authorization required');
 
     // 6. Error recovery: provider down -> visible error; provider
     // back -> the same workflow succeeds again.
@@ -225,8 +229,9 @@ test('provider workflow: rejected authorization, persisted config, dispatch, dis
     await new Promise<void>((r) => fake.close(() => r()));
     await page.locator('#dispatch-model').fill('llama-free');
     await page.locator('#dispatch-prompt').fill('Are you there?');
+    await page.locator('#dispatch-mode').selectOption('auto');
     await page.getByRole('button', { name: 'Send', exact: true }).click();
-    await expect(page.getByRole('alert').first()).toBeVisible();
+    await expect(page.getByRole('alert', { name: 'Dispatch error' })).toBeVisible();
     await new Promise<void>((r) => fake.listen(fakePort, '127.0.0.1', r));
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.getByText('fake unary reply')).toBeVisible();

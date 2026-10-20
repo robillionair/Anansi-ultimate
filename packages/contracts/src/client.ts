@@ -62,7 +62,15 @@ export function decodeReadiness(value:unknown):Readiness {return decode(value,va
 function failure(value:unknown,operation=''):Error {
   if(validError(value)){
     if(operation.startsWith('ai/providers-')){
-      if(value.code==='FORBIDDEN')return new Error('Owner authorization required. Configure and authorize are owner operations: run them in the desktop app, or have the host grant this browser session first.');
+      if(value.code==='FORBIDDEN'){
+        // Two different refusals share the Forbidden code: the
+        // owner boundary (configure/authorize without a grant)
+        // and the dispatcher's permit gate. The permit refusal is
+        // actionable from this screen (authorize the model), so
+        // its composed detail is surfaced verbatim.
+        if(typeof value.message==='string'&&value.message.includes('PermissionRefused'))return new Error(value.message);
+        return new Error('Owner authorization required. Configure and authorize are owner operations: run them in the desktop app, or have the host grant this browser session first.');
+      }
       if(value.code==='UNAUTHORIZED')return new Error('The provider refused the stored credential. Check the credential reference in the OS keyring and the provider configuration.');
       // Provider errors carry a composed detail ("Code: message")
       // from the dispatcher — surfacing it is the point of the
