@@ -198,6 +198,11 @@ pub struct TimeoutConfig {
     pub connect_ms: u64,
     pub first_byte_ms: u64,
     pub idle_ms: u64,
+    /// ONE overall deadline per transport execution, spanning DNS
+    /// resolution, connect, the TLS handshake, the request write and
+    /// the response read (enforced in `http.rs`). The phase values
+    /// bound inactivity within a phase; `total_ms` bounds the whole,
+    /// so a peer dribbling bytes slowly is still cut off.
     pub total_ms: u64,
 }
 

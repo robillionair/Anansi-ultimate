@@ -13,6 +13,18 @@
 //! still fails closed with `TlsUnavailable` on HTTPS endpoints.
 //! Both transports share the bounded request/response machinery in
 //! this module; redirects are never followed by either.
+//!
+//! **Overall deadline:** `TimeoutConfig::total_ms` is one deadline
+//! for a whole execution — DNS resolution, connect, TLS handshake,
+//! request write and response read all share the clock that starts
+//! in `execute` (see `Deadline`). Per-phase timeouts still apply
+//! within it; the deadline is what stops a peer that dribbles bytes
+//! slowly enough to never trip a per-read timeout. DNS resolution
+//! and the TLS handshake run on worker threads so the caller can
+//! enforce that deadline (and cancellation) by closing the socket:
+//! `std`'s resolver offers no timeout or cancellation hook at all,
+//! so a resolution that outlives its wait is abandoned — the worker
+//! holds only the hostname and exits when the OS resolver returns.
 
 use crate::config::{TimeoutConfig, ValidatedEndpoint};
 use crate::error::{ProviderError, ProviderErrorCode};
@@ -131,6 +143,35 @@ impl HttpResponse {
     }
 }
 
+/// One overall deadline for a single transport execution, shared by
+/// every phase (resolution, connect, handshake, write, read). The
+/// per-phase timeouts in `TimeoutConfig` bound inactivity within a
+/// phase; this bounds the whole, so slow-drip peers cannot stretch
+/// an execution indefinitely.
+#[derive(Debug, Clone, Copy)]
+struct Deadline {
+    start: Instant,
+    total: Duration,
+}
+
+impl Deadline {
+    fn new(timeouts: &TimeoutConfig) -> Self {
+        Self {
+            start: Instant::now(),
+            total: timeouts.total(),
+        }
+    }
+    fn start(&self) -> Instant {
+        self.start
+    }
+    fn remaining(&self) -> Duration {
+        self.total.saturating_sub(self.start.elapsed())
+    }
+    fn expired(&self) -> bool {
+        self.start.elapsed() >= self.total
+    }
+}
+
 pub trait Transport {
     fn execute(
         &self,
@@ -190,25 +231,21 @@ fn resolve_and_connect(
     ep: &ValidatedEndpoint,
     timeouts: &TimeoutConfig,
     cancel: &CancellationToken,
+    deadline: &Deadline,
 ) -> Result<TcpStream, ProviderError> {
-    let addr = format!("{}:{}", ep.host, ep.port)
-        .to_socket_addrs()
-        .map_err(|e| {
-            ProviderError::new(
-                ProviderErrorCode::ConnectionLost,
-                format!("cannot resolve {}: {e}", ep.host),
-            )
-            .pre_send()
-        })?
-        .next()
-        .ok_or_else(|| {
-            ProviderError::new(
-                ProviderErrorCode::ConnectionLost,
-                format!("cannot resolve {}", ep.host),
-            )
-            .pre_send()
-        })?;
-    let stream = TcpStream::connect_timeout(&addr, timeouts.connect()).map_err(|e| {
+    let addr = resolve_with_deadline(ep, timeouts, cancel, deadline)?;
+    let connect_wait = timeouts.connect().min(deadline.remaining());
+    if connect_wait.is_zero() {
+        return Err(ProviderError::new(
+            ProviderErrorCode::Timeout,
+            format!(
+                "overall request deadline expired before connecting to {}",
+                ep.authority()
+            ),
+        )
+        .pre_send());
+    }
+    let stream = TcpStream::connect_timeout(&addr, connect_wait).map_err(|e| {
         if e.kind() == io::ErrorKind::TimedOut {
             ProviderError::new(
                 ProviderErrorCode::Timeout,
@@ -225,9 +262,69 @@ fn resolve_and_connect(
     })?;
     cancel.register(&stream);
     let _ = stream.set_nodelay(true);
-    let _ = stream.set_write_timeout(Some(timeouts.idle()));
-    let _ = stream.set_read_timeout(Some(timeouts.first_byte()));
+    let _ = stream.set_write_timeout(Some(timeouts.idle().min(deadline.remaining())));
+    let _ = stream.set_read_timeout(Some(timeouts.first_byte().min(deadline.remaining())));
     Ok(stream)
+}
+
+/// Resolve a host under the overall deadline and the cancellation
+/// token. `std::net::ToSocketAddrs` is a blocking OS call with no
+/// timeout and no cancellation hook — the documented std limitation
+/// — so it runs on a worker thread and only the *wait* is bounded:
+/// on expiry or cancellation the worker is abandoned (it owns just
+/// the hostname string; no request or credential material) and exits
+/// whenever the OS resolver returns. The dispatch itself is never
+/// held hostage by a stuck resolver.
+fn resolve_with_deadline(
+    ep: &ValidatedEndpoint,
+    timeouts: &TimeoutConfig,
+    cancel: &CancellationToken,
+    deadline: &Deadline,
+) -> Result<std::net::SocketAddr, ProviderError> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    let target = format!("{}:{}", ep.host, ep.port);
+    std::thread::spawn(move || {
+        let _ = tx.send(target.to_socket_addrs().map(|mut it| it.next()));
+    });
+    let budget = timeouts.connect().min(deadline.remaining());
+    let started = Instant::now();
+    loop {
+        let left = budget.saturating_sub(started.elapsed());
+        if left.is_zero() {
+            return Err(ProviderError::new(
+                ProviderErrorCode::Timeout,
+                format!("DNS resolution of {} exceeded the request deadline", ep.host),
+            )
+            .pre_send());
+        }
+        match rx.recv_timeout(left.min(Duration::from_millis(25))) {
+            Ok(Ok(Some(addr))) => return Ok(addr),
+            Ok(Ok(None)) => {
+                return Err(ProviderError::new(
+                    ProviderErrorCode::ConnectionLost,
+                    format!("cannot resolve {}", ep.host),
+                )
+                .pre_send());
+            }
+            Ok(Err(e)) => {
+                return Err(ProviderError::new(
+                    ProviderErrorCode::ConnectionLost,
+                    format!("cannot resolve {}: {e}", ep.host),
+                )
+                .pre_send());
+            }
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                cancel.check()?;
+            }
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                return Err(ProviderError::new(
+                    ProviderErrorCode::ConnectionLost,
+                    format!("DNS resolution of {} failed", ep.host),
+                )
+                .pre_send());
+            }
+        }
+    }
 }
 
 /// The plaintext-only transport: loopback and plaintext-opt-in
@@ -255,8 +352,9 @@ impl Transport for StdHttpTransport {
             )
             .pre_send());
         }
-        let stream = resolve_and_connect(ep, timeouts, cancel)?;
-        run_over(Conn::Plain(stream), request, timeouts, cancel)
+        let deadline = Deadline::new(timeouts);
+        let stream = resolve_and_connect(ep, timeouts, cancel, &deadline)?;
+        run_over(Conn::Plain(stream), request, timeouts, cancel, &deadline)
     }
 }
 
@@ -304,35 +402,106 @@ impl Transport for RustlsTransport {
     ) -> Result<HttpResponse, ProviderError> {
         cancel.check()?;
         let ep = &request.endpoint;
-        let mut sock = resolve_and_connect(ep, timeouts, cancel)?;
+        let deadline = Deadline::new(timeouts);
+        let sock = resolve_and_connect(ep, timeouts, cancel, &deadline)?;
         if ep.scheme != "https" {
-            return run_over(Conn::Plain(sock), request, timeouts, cancel);
+            return run_over(Conn::Plain(sock), request, timeouts, cancel, &deadline);
         }
-        let server_name = crate::tls::server_name(&ep.host)?;
-        let mut tls_conn = rustls::ClientConnection::new(self.config.clone(), server_name)
-            .map_err(|e| {
-                ProviderError::new(
-                    ProviderErrorCode::TlsError,
-                    format!("TLS setup for {} failed: {e}", ep.authority()),
-                )
-                .pre_send()
-            })?;
-        // Drive the handshake explicitly, before any request bytes
-        // exist: certificate and hostname validation failures surface
-        // here as TlsError (pre-send), never as a half-sent request.
-        while tls_conn.is_handshaking() {
-            if cancel.is_cancelled() {
-                return Err(ProviderError::new(
-                    ProviderErrorCode::Cancelled,
-                    "request cancelled during TLS handshake",
-                ));
+        let stream = tls_handshake(&self.config, ep, sock, timeouts, &deadline, cancel)?;
+        run_over(
+            Conn::Tls(Box::new(stream)),
+            request,
+            timeouts,
+            cancel,
+            &deadline,
+        )
+    }
+}
+
+/// Drive the TLS handshake on a worker thread so the overall
+/// deadline (and cancellation) bind it absolutely: per-read socket
+/// timeouts cannot stop a peer that dribbles handshake bytes one at
+/// a time — every read returns promptly, yet the flight never
+/// completes. The waiter below enforces the deadline by closing the
+/// socket, which fails the worker's I/O and ends it; validation
+/// failures the worker reports are mapped by `map_handshake_error`.
+/// Either way, no request byte is written before validation passes.
+fn tls_handshake(
+    config: &std::sync::Arc<rustls::ClientConfig>,
+    ep: &ValidatedEndpoint,
+    mut sock: TcpStream,
+    timeouts: &TimeoutConfig,
+    deadline: &Deadline,
+    cancel: &CancellationToken,
+) -> Result<rustls::StreamOwned<rustls::ClientConnection, TcpStream>, ProviderError> {
+    let server_name = crate::tls::server_name(&ep.host)?;
+    let conn = rustls::ClientConnection::new(config.clone(), server_name).map_err(|e| {
+        ProviderError::new(
+            ProviderErrorCode::TlsError,
+            format!("TLS setup for {} failed: {e}", ep.authority()),
+        )
+        .pre_send()
+    })?;
+    // Per-read inactivity bound inside the worker. The total bound is
+    // the wait loop's job.
+    let read_wait = timeouts
+        .first_byte()
+        .min(deadline.remaining())
+        .max(Duration::from_millis(1));
+    let _ = sock.set_read_timeout(Some(read_wait));
+    let force_close = sock.try_clone().map_err(|e| {
+        ProviderError::new(
+            ProviderErrorCode::ConnectionLost,
+            format!("cannot prepare TLS socket for {}: {e}", ep.authority()),
+        )
+        .pre_send()
+    })?;
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let mut conn = conn;
+        let outcome = loop {
+            if !conn.is_handshaking() {
+                break Ok(rustls::StreamOwned::new(conn, sock));
             }
-            tls_conn
-                .complete_io(&mut sock)
-                .map_err(|e| map_handshake_error(e, ep, cancel))?;
+            match conn.complete_io(&mut sock) {
+                Ok(_) => continue,
+                Err(e) => break Err(e),
+            }
+        };
+        let _ = tx.send(outcome);
+    });
+    loop {
+        if cancel.is_cancelled() {
+            let _ = force_close.shutdown(std::net::Shutdown::Both);
+            return Err(ProviderError::new(
+                ProviderErrorCode::Cancelled,
+                "request cancelled during TLS handshake",
+            ));
         }
-        let stream = rustls::StreamOwned::new(tls_conn, sock);
-        run_over(Conn::Tls(Box::new(stream)), request, timeouts, cancel)
+        let remaining = deadline.remaining();
+        if remaining.is_zero() {
+            let _ = force_close.shutdown(std::net::Shutdown::Both);
+            return Err(ProviderError::new(
+                ProviderErrorCode::Timeout,
+                format!(
+                    "TLS handshake with {} exceeded the overall request deadline",
+                    ep.authority()
+                ),
+            )
+            .pre_send());
+        }
+        match rx.recv_timeout(remaining.min(Duration::from_millis(25))) {
+            Ok(Ok(stream)) => return Ok(stream),
+            Ok(Err(e)) => return Err(map_handshake_error(e, ep, cancel)),
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => continue,
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                return Err(ProviderError::new(
+                    ProviderErrorCode::TlsError,
+                    format!("TLS handshake with {} failed unexpectedly", ep.authority()),
+                )
+                .pre_send());
+            }
+        }
     }
 }
 
@@ -380,9 +549,16 @@ fn run_over(
     request: &HttpRequest,
     timeouts: &TimeoutConfig,
     cancel: &CancellationToken,
+    deadline: &Deadline,
 ) -> Result<HttpResponse, ProviderError> {
     let ep = &request.endpoint;
     let mut stream = conn;
+    let _ = stream.set_read_timeout(Some(
+        timeouts
+            .first_byte()
+            .min(deadline.remaining())
+            .max(Duration::from_millis(1)),
+    ));
     {
         let mut wire = Vec::with_capacity(request.body.len() + 1024);
         wire.extend_from_slice(
@@ -415,7 +591,7 @@ fn run_over(
         let mut buf = [0u8; 8192];
         let header_end;
         loop {
-            if start.elapsed() > timeouts.first_byte() {
+            if start.elapsed() > timeouts.first_byte() || deadline.expired() {
                 return Err(ProviderError::new(
                     ProviderErrorCode::Timeout,
                     "timed out waiting for the provider response headers",
@@ -464,7 +640,9 @@ fn run_over(
         let socket = SocketBody {
             stream,
             prefix,
-            start,
+            // The body phase shares the execution's overall clock:
+            // `total_ms` spans connect, handshake, write and read.
+            start: deadline.start(),
             timeouts: timeouts.clamped(),
             cancel: cancel.clone(),
             first_read_done: true,
