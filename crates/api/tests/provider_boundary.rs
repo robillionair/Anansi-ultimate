@@ -298,7 +298,10 @@ async fn granted_browser_workflow_runs_through_the_host_approval_queue() {
     assert_eq!(pending.len(), 1, "{access}");
     let session_label = pending[0]["session"].as_str().unwrap().to_string();
     assert_eq!(session_label.len(), 16, "{session_label}");
-    assert!(session_label.chars().all(|c| c.is_ascii_hexdigit()), "{session_label}");
+    assert!(
+        session_label.chars().all(|c| c.is_ascii_hexdigit()),
+        "{session_label}"
+    );
 
     // The browser cannot read the queue or approve itself.
     let (status, _) = call(

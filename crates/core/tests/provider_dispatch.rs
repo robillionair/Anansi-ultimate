@@ -1112,10 +1112,8 @@ fn concurrent_configures_serialize_and_leave_no_temp_files() {
     // The persisted file is exactly one of the two configurations
     // (persist + install are atomic under the backend lock, so
     // the file can never be a torn mix), and dispatch works.
-    let text = std::fs::read_to_string(
-        root.join("provider-config").join(format!("{ws}.json")),
-    )
-    .unwrap();
+    let text =
+        std::fs::read_to_string(root.join("provider-config").join(format!("{ws}.json"))).unwrap();
     let parsed: Value = serde_json::from_str(&text).unwrap();
     let budget = parsed["budget"]["maxRequests"].as_u64().unwrap();
     assert!(budget == 11 || budget == 22, "torn or stale config: {text}");
@@ -1240,16 +1238,24 @@ fn credential_lifecycle_prompt_keyring_resolver_wire() {
     let reference = format!("openai-e2e-{}", std::process::id());
     // A browser session cannot set credentials, and the refusal
     // stores nothing (the prompt is never even reached).
-    let err = credential_op(&core, Some("browser-1"), "providers-credential-set", &ws, &reference)
-        .unwrap_err();
+    let err = credential_op(
+        &core,
+        Some("browser-1"),
+        "providers-credential-set",
+        &ws,
+        &reference,
+    )
+    .unwrap_err();
     assert_eq!(err.code, ErrorCode::Forbidden);
-    let status = credential_op(&core, None, "providers-credential-status", &ws, &reference).unwrap();
+    let status =
+        credential_op(&core, None, "providers-credential-status", &ws, &reference).unwrap();
     assert_eq!(status["present"], false);
     // The host sets it through the (test) native prompt: the key
     // moves prompt -> keyring only.
     let set = credential_op(&core, None, "providers-credential-set", &ws, &reference).unwrap();
     assert_eq!(set["stored"], true);
-    let status = credential_op(&core, None, "providers-credential-status", &ws, &reference).unwrap();
+    let status =
+        credential_op(&core, None, "providers-credential-status", &ws, &reference).unwrap();
     assert_eq!(status["present"], true);
 
     // Configure an OpenAI-shaped custom endpoint using only the
@@ -1300,9 +1306,11 @@ fn credential_lifecycle_prompt_keyring_resolver_wire() {
 
     // Removal is real: status flips and dispatch now fails closed
     // with zero additional provider traffic.
-    let removed = credential_op(&core, None, "providers-credential-remove", &ws, &reference).unwrap();
+    let removed =
+        credential_op(&core, None, "providers-credential-remove", &ws, &reference).unwrap();
     assert_eq!(removed["removed"], true);
-    let status = credential_op(&core, None, "providers-credential-status", &ws, &reference).unwrap();
+    let status =
+        credential_op(&core, None, "providers-credential-status", &ws, &reference).unwrap();
     assert_eq!(status["present"], false);
     let hits = fake.hits.load(Ordering::SeqCst);
     let err = dispatch_gpt(&core).unwrap_err();

@@ -935,9 +935,7 @@ fn shared_resolver() -> Arc<anansi_providers::keyring_resolver::KeyringSecretRes
         Arc<anansi_providers::keyring_resolver::KeyringSecretResolver>,
     > = std::sync::OnceLock::new();
     RESOLVER
-        .get_or_init(|| {
-            Arc::new(anansi_providers::keyring_resolver::KeyringSecretResolver::new())
-        })
+        .get_or_init(|| Arc::new(anansi_providers::keyring_resolver::KeyringSecretResolver::new()))
         .clone()
 }
 
@@ -1069,8 +1067,7 @@ pub fn persist_config_file(
         file.write_all(json.as_bytes()).map_err(|_| unavailable())?;
         file.sync_all().map_err(|_| unavailable())?;
         drop(file);
-        crate::storage::private_permissions(&tmp_path, false, false)
-            .map_err(|_| unavailable())?;
+        crate::storage::private_permissions(&tmp_path, false, false).map_err(|_| unavailable())?;
         crate::storage::reject_links(&tmp_path).map_err(|_| unavailable())?;
         std::fs::rename(&tmp_path, &path).map_err(|_| unavailable())?;
         // Best-effort directory sync for durability of the rename
@@ -1129,16 +1126,13 @@ pub fn providers_command(
                 let runtime = production_runtime(req.config.clone())
                     .map_err(to_command_error)?
                     .with_shared_accounting(state.used_permits.clone(), state.ledger.clone());
-                let serialized =
-                    serde_json::to_string(&req.config).unwrap_or_default();
+                let serialized = serde_json::to_string(&req.config).unwrap_or_default();
                 // Persist BEFORE installing, under this same
                 // backend lock: if persistence fails, the
                 // operation fails and memory stays exactly as it
                 // was — memory and disk can never diverge, and
                 // concurrent configures serialize whole.
-                if let (Some(root), Some(wid)) =
-                    (&scope.storage_root, &scope.logical_workspace)
-                {
+                if let (Some(root), Some(wid)) = (&scope.storage_root, &scope.logical_workspace) {
                     persist_config_file(root, wid, &serialized)?;
                 }
                 let fp = fingerprint(&serialized);
@@ -1385,10 +1379,8 @@ pub fn providers_command(
             // lock is released — a human may take minutes, and no
             // workspace state is touched by this operation at all.
             with_backend(scope, |state| require_owner_recording(state, scope))?;
-            let key = crate::provider_credentials::prompt_for_api_key(
-                &req.provider,
-                &req.reference,
-            )?;
+            let key =
+                crate::provider_credentials::prompt_for_api_key(&req.provider, &req.reference)?;
             let resolver = shared_resolver();
             resolver
                 .store_api_key(&req.reference, &key)

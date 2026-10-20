@@ -174,6 +174,17 @@ impl SecretResolver for KeyringSecretResolver {
     }
 }
 
+/// Shared-instance support: several runtimes (and the core's
+/// credential operations) can resolve through one resolver, so
+/// its per-reference entry cache — and, under the keyring mock
+/// builder, its stored data — is genuinely shared rather than
+/// scoped to whichever instance happened to be constructed.
+impl SecretResolver for std::sync::Arc<KeyringSecretResolver> {
+    fn resolve(&self, credential: &CredentialRef) -> Result<AuthMaterial, ProviderError> {
+        (**self).resolve(credential)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -239,7 +250,9 @@ mod tests {
     fn exists_reports_presence_without_the_secret() {
         let resolver = mock_resolver();
         assert!(!resolver.exists("presence-ref"));
-        resolver.store_api_key("presence-ref", b"sk-fake-presence").unwrap();
+        resolver
+            .store_api_key("presence-ref", b"sk-fake-presence")
+            .unwrap();
         assert!(resolver.exists("presence-ref"));
         resolver.delete("presence-ref").unwrap();
         assert!(!resolver.exists("presence-ref"));
@@ -260,16 +273,5 @@ mod tests {
             .resolve(&CredentialRef::new("openai", "real-ref"))
             .unwrap();
         assert!(!format!("{material:?}").contains("sk-fake-must-not-leak"));
-    }
-}
-
-/// Shared-instance support: several runtimes (and the core's
-/// credential operations) can resolve through one resolver, so
-/// its per-reference entry cache — and, under the keyring mock
-/// builder, its stored data — is genuinely shared rather than
-/// scoped to whichever instance happened to be constructed.
-impl SecretResolver for std::sync::Arc<KeyringSecretResolver> {
-    fn resolve(&self, credential: &CredentialRef) -> Result<AuthMaterial, ProviderError> {
-        (**self).resolve(credential)
     }
 }

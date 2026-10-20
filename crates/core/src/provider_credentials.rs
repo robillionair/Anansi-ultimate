@@ -28,7 +28,9 @@ fn unavailable(message: &str) -> CommandError {
 /// bounded, printable, no whitespace surprises.
 pub fn validate_reference(reference: &str) -> Result<(), CommandError> {
     if reference.is_empty() || reference.len() > 128 {
-        return Err(invalid("Use a credential reference of 1 to 128 characters."));
+        return Err(invalid(
+            "Use a credential reference of 1 to 128 characters.",
+        ));
     }
     if reference
         .chars()
@@ -53,7 +55,9 @@ pub fn prompt_for_api_key(
     // compiled out of release builds entirely.
     #[cfg(debug_assertions)]
     if let Some(value) = std::env::var_os("ANANSI_PROVIDER_TEST_CREDENTIAL") {
-        return Ok(Zeroizing::new(value.to_string_lossy().into_owned().into_bytes()));
+        return Ok(Zeroizing::new(
+            value.to_string_lossy().into_owned().into_bytes(),
+        ));
     }
     #[cfg(windows)]
     {
@@ -105,10 +109,7 @@ unsafe extern "system" {
 }
 
 #[cfg(windows)]
-fn windows_prompt(
-    provider: &str,
-    reference: &str,
-) -> Result<Zeroizing<Vec<u8>>, CommandError> {
+fn windows_prompt(provider: &str, reference: &str) -> Result<Zeroizing<Vec<u8>>, CommandError> {
     use std::ptr;
     let caption: Vec<u16> = format!("ANANSI Provider Credential — {provider}")
         .encode_utf16()
@@ -164,9 +165,8 @@ fn windows_prompt(
         .iter()
         .position(|v| *v == 0)
         .unwrap_or(password.len());
-    let secret = String::from_utf16(&password[..pass_len]).map_err(|_| {
-        unavailable("The credential prompt returned unreadable input.")
-    })?;
+    let secret = String::from_utf16(&password[..pass_len])
+        .map_err(|_| unavailable("The credential prompt returned unreadable input."))?;
     password.fill(0);
     user.fill(0);
     if secret.is_empty() {
