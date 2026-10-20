@@ -249,10 +249,21 @@ impl<'a> Dispatcher<'a> {
                 });
                 continue;
             };
+            // Wire binding: the request that reaches the provider
+            // names the SELECTED CANDIDATE's model — the same model
+            // the gates, permit, budget estimate and disclosure
+            // describe. The caller's requested model selects and
+            // constrains routing (notably in Choose Model mode); it
+            // must never ride onto the wire past a different routed
+            // candidate, or e.g. a Zero-Cost-Lock dispatch routed
+            // to a free model would transmit the requested paid
+            // model.
+            let mut bound_request = request.clone();
+            bound_request.model = candidate.model.id.clone();
             match self.execute_candidate(
                 adapter,
                 &prepared,
-                request,
+                &bound_request,
                 cancel,
                 &mut attempts,
                 candidate,
@@ -394,6 +405,12 @@ impl<'a> Dispatcher<'a> {
             let Some(adapter) = self.adapter_ref(&candidate.provider) else {
                 continue;
             };
+            // Wire binding (see execute): the streamed request also
+            // names the selected candidate's model, never the
+            // caller's requested model.
+            let mut bound_request = request.clone();
+            bound_request.model = candidate.model.id.clone();
+            let request = &bound_request;
             let http_req =
                 match adapter.build_request(&prepared.endpoint, &prepared.auth, request, true) {
                     Ok(r) => r,
