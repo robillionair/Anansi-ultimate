@@ -354,7 +354,11 @@ pub fn validated_workspace_key(
 ) -> Result<String, CommandError> {
     let key = addressed_workspace_key(root_fingerprint, workspace_id);
     let cache = VALIDATED_WORKSPACES.get_or_init(|| Mutex::new(std::collections::HashSet::new()));
-    if cache.lock().unwrap_or_else(|e| e.into_inner()).contains(&key) {
+    if cache
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .contains(&key)
+    {
         return Ok(key);
     }
     let ids = list_ids()?;
@@ -1089,7 +1093,11 @@ mod tests {
             Ok(vec!["ws-a".to_string()])
         };
         validated_workspace_key("root-x", "ws-a", list2).unwrap();
-        assert_eq!(calls.get(), 1, "cached validation must not re-read the registry");
+        assert_eq!(
+            calls.get(),
+            1,
+            "cached validation must not re-read the registry"
+        );
         // Unknown ids are refused and NOT cached (each attempt
         // re-consults the registry, so a workspace created later
         // becomes visible immediately).
