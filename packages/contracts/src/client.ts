@@ -1,8 +1,8 @@
 import { validReadiness, validError, validWorkspaceDetails, validWorkspaceList, validMemoryDetails, validMemoryList, validRelationshipDetails, validRelationshipList, validJobDetails, validJobList, validArtifactChunk, validAiDiscoveryResponse, validAskResponse, validHybridSearchResponse, validCompiledContext, validIndexEmbeddingsResponse } from './validators.mjs';
 import { invoke } from '@tauri-apps/api/core';
-import { validAskRunResponse } from './validators.mjs';
-import type { AskRunResponse } from './generated';
-export type { AskRunResponse } from './generated';
+import { validAskRunResponse, validProviderCatalogResponse, validProviderConfigureResponse, validProviderAuthorizeResponse, validProviderDispatchResponse, validProviderStreamStartResponse, validProviderPollResponse, validProviderUsageResponse } from './validators.mjs';
+import type { AskRunResponse, ProviderCatalogResponse, ProviderConfigureResponse, ProviderAuthorizeResponse, ProviderDispatchResponse, ProviderStreamStartResponse, ProviderPollResponse, ProviderUsageResponse, RuntimeConfig, CompletionRequest } from './generated';
+export type { AskRunResponse, ProviderCatalogResponse, ProviderCatalogEntry, ProviderConfigureResponse, ProviderAuthorizeResponse, ProviderDispatchResponse, ProviderStreamStartResponse, ProviderPollResponse, ProviderUsageResponse, ProviderUsageEntry, RuntimeConfig, CompletionRequest, DisclosureRecord } from './generated';
 import {validSnapshotPreview,validRestoreResult,validBackupSchedule,validUploadStatus} from './validators.mjs';
 import type {SnapshotPreview,RestoreResult,BackupSchedule,AiDiscoveryResponse,HardwareProfile,DiscoveredRuntime,ModelRecommendation,RuntimeKind,RuntimeStatus,FitLevel,AskRequest,AskResponse,AskStatus,GroundedCitation,DisclosureManifest,HybridSearchRequest,HybridSearchResult,HybridSearchResponse,ContextCompilationRequest,CompiledContext,ContextChunk,IndexEmbeddingsRequest,IndexEmbeddingsResponse} from './generated';
 export type {SnapshotPreview,RestoreResult,BackupSchedule,AiDiscoveryResponse,HardwareProfile,DiscoveredRuntime,ModelRecommendation,RuntimeKind,RuntimeStatus,FitLevel,AskRequest,AskResponse,AskStatus,GroundedCitation,DisclosureManifest,HybridSearchRequest,HybridSearchResult,HybridSearchResponse,ContextCompilationRequest,CompiledContext,ContextChunk,IndexEmbeddingsRequest,IndexEmbeddingsResponse} from './generated';
@@ -43,6 +43,16 @@ export interface Client {
   hybridSearch(workspaceId: string, options?: { query?: string; model?: string; endpoint?: string; limit?: number; lexicalWeight?: number; semanticWeight?: number; rrfK?: number; kind?: string; includeArchived?: boolean; includeExpired?: boolean }): Promise<HybridSearchResponse>;
   compileContext(workspaceId: string, userPrompt: string, options?: { maxBudgetChars?: number; runtimeEndpoint?: string; modelTag?: string; embeddingModel?: string; kindFilter?: string }): Promise<CompiledContext>;
   indexEmbeddings(workspaceId: string, options?: { memoryId?: string; model?: string; endpoint?: string }): Promise<IndexEmbeddingsResponse>;
+  providersCatalog(): Promise<ProviderCatalogResponse>;
+  providersConfigure(workspaceId: string, config: RuntimeConfig): Promise<ProviderConfigureResponse>;
+  providersAuthorize(workspaceId: string, provider: string, model: string, maxEstimatedTotalTokens: number, allowUnknownCost?: boolean): Promise<ProviderAuthorizeResponse>;
+  providersGrantSession(workspaceId: string, session: string, ttlSeconds?: number): Promise<{ granted: boolean }>;
+  providersRevokeSession(workspaceId: string, session: string): Promise<{ granted: boolean }>;
+  providersDispatch(workspaceId: string, request: CompletionRequest, options?: { mode?: string; zeroCostLock?: boolean; chosen?: [string, string]; permitId?: string }): Promise<ProviderDispatchResponse>;
+  providersStreamStart(workspaceId: string, request: CompletionRequest, options?: { mode?: string; zeroCostLock?: boolean; chosen?: [string, string]; permitId?: string }): Promise<ProviderStreamStartResponse>;
+  providersStreamPoll(workspaceId: string, runId: string, capability: string): Promise<ProviderPollResponse>;
+  providersStreamCancel(workspaceId: string, runId: string, capability: string): Promise<{ cancelled: boolean }>;
+  providersUsage(workspaceId: string): Promise<ProviderUsageResponse>;
 }
 function decode<T extends {contractVersion:number}>(value:unknown, validate:(value:unknown)=>value is T):T {
   if(!validate(value)||value.contractVersion!==1)throw new Error('The core returned an incompatible response. Update both applications.');
@@ -51,6 +61,14 @@ function decode<T extends {contractVersion:number}>(value:unknown, validate:(val
 export function decodeReadiness(value:unknown):Readiness {return decode(value,validReadiness);}
 function failure(value:unknown,operation=''):Error {
   if(validError(value)){
+    if(operation.startsWith('ai/providers-')){
+      if(value.code==='FORBIDDEN')return new Error('Owner authorization required. Configure and authorize are owner operations: run them in the desktop app, or have the host grant this browser session first.');
+      if(value.code==='UNAUTHORIZED')return new Error('The provider refused the stored credential. Check the credential reference in the OS keyring and the provider configuration.');
+      // Provider errors carry a composed detail ("Code: message")
+      // from the dispatcher — surfacing it is the point of the
+      // disclosure workflow (lock refusals, quota, attempts).
+      if(typeof value.message==='string'&&value.message)return new Error(value.message);
+    }
     if(operation.startsWith('vault/')){
       switch(value.code){
         case 'INVALID_REQUEST':return new Error(operation==='vault/setup'?'Vault setup was not acknowledged. Save the displayed recovery key, then enter that recovery key in the native prompt’s Password field. Do not repeat your vault passphrase. No sealing was authorized by this failed setup.':'The vault request is incomplete or needs a recovery acknowledgement and a verified backup. Check the selected operation and retry.');
@@ -124,6 +142,16 @@ function client(call:Call):Client {
     hybridSearch:async(workspaceId,options={})=>decode(await call('ai/hybrid-search',{workspaceId,...options}),validHybridSearchResponse),
     compileContext:async(workspaceId,userPrompt,options={})=>decode(await call('ai/context',{workspaceId,userPrompt,...options}),validCompiledContext),
     indexEmbeddings:async(workspaceId,options={})=>decode(await call('ai/index-embeddings',{workspaceId,...options}),validIndexEmbeddingsResponse),
+    providersCatalog:async()=>decode(await call('ai/providers-catalog',{}),validProviderCatalogResponse),
+    providersConfigure:async(workspaceId,config)=>decode(await call('ai/providers-configure',{workspaceId,config}),validProviderConfigureResponse),
+    providersAuthorize:async(workspaceId,provider,model,maxEstimatedTotalTokens,allowUnknownCost)=>decode(await call('ai/providers-authorize',{workspaceId,provider,model,maxEstimatedTotalTokens,allowUnknownCost}),validProviderAuthorizeResponse),
+    providersGrantSession:async(workspaceId,session,ttlSeconds)=>{const v=await call('ai/providers-grant-session',{workspaceId,session,ttlSeconds}) as {granted?:unknown};if(typeof v?.granted!=='boolean')throw new Error('The core returned an incompatible response. Update both applications.');return {granted:v.granted};},
+    providersRevokeSession:async(workspaceId,session)=>{const v=await call('ai/providers-revoke-session',{workspaceId,session}) as {granted?:unknown};if(typeof v?.granted!=='boolean')throw new Error('The core returned an incompatible response. Update both applications.');return {granted:v.granted};},
+    providersDispatch:async(workspaceId,request,options={})=>decode(await call('ai/providers-dispatch',{workspaceId,request,...options}),validProviderDispatchResponse),
+    providersStreamStart:async(workspaceId,request,options={})=>decode(await call('ai/providers-stream-start',{workspaceId,request,...options}),validProviderStreamStartResponse),
+    providersStreamPoll:async(workspaceId,runId,capability)=>decode(await call('ai/providers-stream-poll',{workspaceId,runId,capability}),validProviderPollResponse),
+    providersStreamCancel:async(workspaceId,runId,capability)=>{const v=await call('ai/providers-stream-cancel',{workspaceId,runId,capability}) as {cancelled?:unknown};if(typeof v?.cancelled!=='boolean')throw new Error('The core returned an incompatible response. Update both applications.');return {cancelled:v.cancelled};},
+    providersUsage:async(workspaceId)=>decode(await call('ai/providers-usage',{workspaceId}),validProviderUsageResponse),
     vaultCommand:async(command,request)=>await call('vault/'+command,request) as Record<string,unknown>,
   };
 }
