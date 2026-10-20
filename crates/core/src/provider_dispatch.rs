@@ -337,9 +337,72 @@ struct BackendState {
     stream_seq: u64,
 }
 
+/// Backend key for a logical workspace that has been validated
+/// against the storage registry. Validation is cached (positive
+/// results only): workspace ids are created through the domain
+/// operations and never deleted in this codebase, so a validated
+/// (root, workspace) pair stays valid for the process. Without the
+/// cache every operation would pay the registry's per-open cost —
+/// on Windows `Storage::list()` spawns `powershell.exe` twice per
+/// connection open (root + database permission verification),
+/// which made even stream polling take ~1.5 s there while Linux
+/// (a local metadata check) never noticed.
+pub fn validated_workspace_key(
+    root_fingerprint: &str,
+    workspace_id: &str,
+    list_ids: impl FnOnce() -> Result<Vec<String>, CommandError>,
+) -> Result<String, CommandError> {
+    let key = addressed_workspace_key(root_fingerprint, workspace_id);
+    let cache = VALIDATED_WORKSPACES.get_or_init(|| Mutex::new(std::collections::HashSet::new()));
+    if cache.lock().unwrap_or_else(|e| e.into_inner()).contains(&key) {
+        return Ok(key);
+    }
+    let ids = list_ids()?;
+    if !ids.iter().any(|id| id == workspace_id) {
+        return Err(CommandError::new(ErrorCode::NotFound, "Unknown workspace."));
+    }
+    cache
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .insert(key.clone());
+    Ok(key)
+}
+
+/// The backend key for a workspace id WITHOUT registry
+/// validation. Poll/cancel use this: they create nothing and
+/// authorize purely through the run record (existence in that
+/// workspace's backend + session + capability), so an invented
+/// workspace id simply finds no run — the same `NotFound` a wrong
+/// capability produces. Skipping the registry read keeps
+/// poll/cancel at mutex-plus-channel cost on every platform.
+pub fn addressed_workspace_key(root_fingerprint: &str, workspace_id: &str) -> String {
+    format!("{root_fingerprint}/{workspace_id}")
+}
+
+static VALIDATED_WORKSPACES: OnceLock<Mutex<std::collections::HashSet<String>>> = OnceLock::new();
+
 fn backends() -> &'static Mutex<HashMap<String, BackendState>> {
     static BACKENDS: OnceLock<Mutex<HashMap<String, BackendState>>> = OnceLock::new();
     BACKENDS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// Like [`with_backend`] but never creates state: used by
+/// poll/cancel, which must not conjure a backend for a workspace
+/// that was never configured (and which answer the run-binding
+/// `NotFound` when there is nothing to find).
+fn with_backend_existing<T>(
+    scope: &CallerScope,
+    f: impl FnOnce(&mut BackendState) -> Result<T, CommandError>,
+) -> Result<T, CommandError> {
+    let mut guard = backends().lock().unwrap_or_else(|e| e.into_inner());
+    let Some(state) = guard.get_mut(&scope.workspace) else {
+        return Err(CommandError::new(
+            ErrorCode::NotFound,
+            "Unknown provider stream run.",
+        ));
+    };
+    sweep(state);
+    f(state)
 }
 
 fn with_backend<T>(
@@ -819,7 +882,7 @@ pub fn providers_command(
         }
         "providers-stream-poll" | "providers-stream-cancel" => {
             let req: ProviderRunRequest = parse(value, "provider stream run")?;
-            with_backend(scope, |state| {
+            with_backend_existing(scope, |state| {
                 // Binding check: right run, right session, right
                 // capability — anything else is indistinguishable
                 // from an unknown run.
@@ -1006,6 +1069,37 @@ mod tests {
         );
         sweep(&mut state);
         assert!(state.permits.is_empty());
+    }
+
+    #[test]
+    fn workspace_validation_is_cached_for_positive_results_only() {
+        use std::cell::Cell;
+        let calls = Cell::new(0);
+        let list = || {
+            calls.set(calls.get() + 1);
+            Ok(vec!["ws-a".to_string()])
+        };
+        // First resolution consults the registry...
+        let key = validated_workspace_key("root-x", "ws-a", list).unwrap();
+        assert_eq!(key, "root-x/ws-a");
+        assert_eq!(calls.get(), 1);
+        // ...the second is served from the cache.
+        let list2 = || {
+            calls.set(calls.get() + 1);
+            Ok(vec!["ws-a".to_string()])
+        };
+        validated_workspace_key("root-x", "ws-a", list2).unwrap();
+        assert_eq!(calls.get(), 1, "cached validation must not re-read the registry");
+        // Unknown ids are refused and NOT cached (each attempt
+        // re-consults the registry, so a workspace created later
+        // becomes visible immediately).
+        let list3 = || {
+            calls.set(calls.get() + 1);
+            Ok(vec!["ws-a".to_string()])
+        };
+        let err = validated_workspace_key("root-x", "ws-nope", list3).unwrap_err();
+        assert_eq!(err.code, ErrorCode::NotFound);
+        assert_eq!(calls.get(), 2);
     }
 
     #[test]

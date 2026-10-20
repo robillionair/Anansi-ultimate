@@ -840,11 +840,36 @@ impl Core {
                                 "A workspaceId is required.",
                             )
                         })?;
-                    let known = self.storage()?.list()?.iter().any(|w| w.id == workspace_id);
-                    if !known {
-                        return Err(CommandError::new(ErrorCode::NotFound, "Unknown workspace."));
+                    if matches!(
+                        operation,
+                        "providers-stream-poll" | "providers-stream-cancel"
+                    ) {
+                        // Poll/cancel address state that a validated
+                        // stream-start created; the run record
+                        // (session + capability) is their
+                        // authorization, and skipping the registry
+                        // read keeps them responsive on platforms
+                        // where a storage open is expensive
+                        // (Windows permission verification spawns
+                        // powershell.exe per connection).
+                        crate::provider_dispatch::addressed_workspace_key(
+                            &root_fingerprint,
+                            workspace_id,
+                        )
+                    } else {
+                        crate::provider_dispatch::validated_workspace_key(
+                            &root_fingerprint,
+                            workspace_id,
+                            || {
+                                Ok(self
+                                    .storage()?
+                                    .list()?
+                                    .iter()
+                                    .map(|w| w.id.clone())
+                                    .collect())
+                            },
+                        )?
                     }
-                    format!("{root_fingerprint}/{workspace_id}")
                 };
                 let session = value
                     .get("callerContext")

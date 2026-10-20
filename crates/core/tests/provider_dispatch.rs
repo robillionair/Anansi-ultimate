@@ -26,6 +26,15 @@ use std::time::{Duration, Instant};
 struct FakeOllama {
     base_url: String,
     hits: Arc<AtomicUsize>,
+    /// Gate for "gated" streams: the server sends a few tokens,
+    /// then holds the stream open until the test releases it — a
+    /// stream that provably stays active until the test decides,
+    /// on any platform's scheduler.
+    release: Arc<std::sync::atomic::AtomicBool>,
+    /// Set while a "slow-unary" request is being processed, so
+    /// tests synchronize on the server actually being in flight
+    /// instead of sleeping a guessed duration.
+    slow_in_flight: Arc<std::sync::atomic::AtomicBool>,
 }
 
 fn start_fake_ollama() -> FakeOllama {
@@ -33,10 +42,16 @@ fn start_fake_ollama() -> FakeOllama {
     let addr = listener.local_addr().unwrap();
     let hits = Arc::new(AtomicUsize::new(0));
     let hits_thread = hits.clone();
+    let release = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let release_thread = release.clone();
+    let slow_in_flight = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let slow_thread = slow_in_flight.clone();
     std::thread::spawn(move || {
         for stream in listener.incoming() {
             let Ok(mut stream) = stream else { continue };
             let hits = hits_thread.clone();
+            let release = release_thread.clone();
+            let slow_in_flight = slow_thread.clone();
             std::thread::spawn(move || {
                 hits.fetch_add(1, Ordering::SeqCst);
                 let _ = stream.set_read_timeout(Some(Duration::from_secs(15)));
@@ -62,6 +77,7 @@ fn start_fake_ollama() -> FakeOllama {
                 let body = String::from_utf8_lossy(&body).to_string();
                 let streaming = body.contains("\"stream\":true");
                 let slow = body.contains("slow");
+                let gated = body.contains("gated");
                 if streaming {
                     let _ = stream.write_all(
                         b"HTTP/1.1 200 OK\r\nContent-Type: application/x-ndjson\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n",
@@ -79,6 +95,17 @@ fn start_fake_ollama() -> FakeOllama {
                                 "{{\"model\":\"llama-x\",\"message\":{{\"role\":\"assistant\",\"content\":\"tok{i} \"}},\"done\":false}}\n"
                             ),
                         );
+                        if gated && i == 2 {
+                            // Hold the stream open until the test
+                            // releases the gate (bounded so a dead
+                            // test cannot hang the suite).
+                            let gate_start = Instant::now();
+                            while !release.load(Ordering::SeqCst)
+                                && gate_start.elapsed() < Duration::from_secs(120)
+                            {
+                                std::thread::sleep(Duration::from_millis(5));
+                            }
+                        }
                         if slow {
                             std::thread::sleep(Duration::from_millis(60));
                         }
@@ -90,7 +117,9 @@ fn start_fake_ollama() -> FakeOllama {
                     let _ = stream.write_all(b"0\r\n\r\n");
                 } else {
                     if body.contains("slow-unary") {
+                        slow_in_flight.store(true, Ordering::SeqCst);
                         std::thread::sleep(Duration::from_millis(1500));
+                        slow_in_flight.store(false, Ordering::SeqCst);
                     }
                     let payload = "{\"model\":\"llama-x\",\"message\":{\"role\":\"assistant\",\"content\":\"core reply\"},\"done\":true,\"prompt_eval_count\":4,\"eval_count\":2}";
                     let resp = format!(
@@ -106,6 +135,8 @@ fn start_fake_ollama() -> FakeOllama {
     FakeOllama {
         base_url: format!("http://{addr}"),
         hits,
+        release,
+        slow_in_flight,
     }
 }
 
@@ -635,7 +666,7 @@ fn cross_session_stream_access_is_denied() {
             "providers-stream-start",
             stamped(
                 "owner",
-                json!({ "workspaceId": ws, "request": chat("slow stream"), "mode": "auto" }),
+                json!({ "workspaceId": ws, "request": chat("gated stream"), "mode": "auto" }),
             ),
         )
         .unwrap();
@@ -730,7 +761,7 @@ fn slow_dispatch_does_not_block_poll_cancel_or_other_workspaces() {
             "providers-stream-start",
             stamped(
                 "owner",
-                json!({ "workspaceId": ws1, "request": chat("slow stream"), "mode": "auto" }),
+                json!({ "workspaceId": ws1, "request": chat("gated stream"), "mode": "auto" }),
             ),
         )
         .unwrap();
@@ -752,8 +783,16 @@ fn slow_dispatch_does_not_block_poll_cancel_or_other_workspaces() {
             ),
         )
     });
-    std::thread::sleep(Duration::from_millis(300));
-    assert!(!slow.is_finished(), "the slow dispatch should be in flight");
+    // Synchronize on the server actually processing the slow
+    // request — not on a guessed sleep duration.
+    let wait_start = Instant::now();
+    while !fake_slow.slow_in_flight.load(Ordering::SeqCst) {
+        assert!(
+            wait_start.elapsed() < Duration::from_secs(10),
+            "slow dispatch never reached the server"
+        );
+        std::thread::sleep(Duration::from_millis(5));
+    }
 
     // While it runs: polling the stream answers promptly...
     let t = Instant::now();
@@ -809,6 +848,7 @@ fn slow_dispatch_does_not_block_poll_cancel_or_other_workspaces() {
     // The slow dispatch itself completes correctly.
     let out = slow.join().unwrap().unwrap();
     assert_eq!(out["response"]["text"], "core reply");
+    fake_slow.release.store(true, Ordering::SeqCst);
 }
 
 // ---------------------------------------------------------------------------
