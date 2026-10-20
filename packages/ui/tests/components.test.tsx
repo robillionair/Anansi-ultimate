@@ -121,13 +121,14 @@ test('navigation has a small active set, complete grouped unavailable tools and 
   assert.ok(html.includes('aria-label="Main navigation"'));
   assert.ok(html.includes('aria-current="page"'));
   assert.ok(html.includes('disabled=""'));
-  assert.equal((html.match(/<button/g) || []).length, 14);
+  assert.equal((html.match(/<button/g) || []).length, 15);
   assert.ok(!plannedGroups.some(group=>group.items.includes('Search')));
   assert.ok(!plannedGroups.some(group=>group.items.includes('Local Models')));
   assert.ok(!plannedGroups.some(group=>group.items.includes('Ask ANANSI')));
   assert.match(renderToStaticMarkup(<Navigation view="search" hasWorkspace={true} onNavigate={()=>{}}/>),/aria-current="page"[^>]*>Search<\/button>/);
   assert.match(renderToStaticMarkup(<Navigation view="models" hasWorkspace={true} onNavigate={()=>{}}/>),/aria-current="page"[^>]*>Local Models<\/button>/);
   assert.match(renderToStaticMarkup(<Navigation view="ask" hasWorkspace={true} onNavigate={()=>{}}/>),/aria-current="page"[^>]*>Ask ANANSI<\/button>/);
+  assert.match(renderToStaticMarkup(<Navigation view="providers" hasWorkspace={true} onNavigate={()=>{}}/>),/aria-current="page"[^>]*>AI Providers<\/button>/);
   for (const group of plannedGroups) for (const item of group.items) assert.ok(html.includes(item));
   assert.ok(html.includes('not available yet'));
   assert.ok(html.includes('separate consent'));
@@ -225,4 +226,40 @@ test('vault view exposes native and paired-browser controls plus encrypted backu
   assert.ok(browserHtml.includes('Create ciphertext backup'));
   assert.ok(browserHtml.includes('Restore to new sealed workspace'));
   assert.doesNotMatch(browserHtml, /type="password"/);
+});
+
+import {Providers, DisclosurePanel, deriveLocality} from '../src/Providers';
+
+test('providers screen renders the full workflow: catalog, owner-trust copy, credential reference (never a secret field), zero-cost lock, routing modes, usage',()=>{
+  const html=renderToStaticMarkup(<Providers client={{providersCatalog:async()=>({contractVersion:1,providers:[]}),providersUsage:async()=>({contractVersion:1,totalRequests:0,totalInputTokens:0,totalOutputTokens:0,totalEstimatedCostMicroUsd:0,reservedRequests:0,reservedTokens:0,reservedEstimatedCostMicroUsd:0,providers:[]})} as any} workspaceId="ws1"/>);
+  assert.match(html,/Provider catalog/);
+  assert.match(html,/Configure provider/);
+  assert.match(html,/owner operations/);
+  assert.match(html,/credential reference/i);
+  assert.match(html,/operating system keyring/);
+  // The credential input is a reference field, never a password box.
+  assert.match(html,/Credential reference \(OS keyring account\)/);
+  assert.doesNotMatch(html,/type="password"/);
+  assert.match(html,/Locality is derived from the endpoint by the backend/);
+  assert.match(html,/Zero-Cost Lock/);
+  assert.match(html,/Authorize paid dispatch for this model/);
+  assert.match(html,/Usage/);
+  for(const m of ['auto','autoFree','private','fast','deep','coding','vision','chooseModel'])assert.match(html,new RegExp(`value="${m}"`),`routing mode ${m}`);
+});
+
+test('providers locality derivation mirrors the backend rule',()=>{
+  assert.equal(deriveLocality('http://127.0.0.1:11434'),'local');
+  assert.equal(deriveLocality('http://localhost:1234'),'local');
+  assert.equal(deriveLocality('http://[::1]:8080'),'local');
+  assert.equal(deriveLocality('https://api.openai.com/v1'),'cloud');
+  assert.equal(deriveLocality('not a url'),'cloud');
+});
+
+test('disclosure panel renders exactly what ANANSI sent, including attempts and usage',()=>{
+  const html=renderToStaticMarkup(<DisclosurePanel disclosure={{provider:'ollama',model:'llama-x',endpointHost:'127.0.0.1:11434',local:true,costClass:'free',routingMode:'auto',routingReason:'only eligible candidate',messageCount:1,segmentCount:2,redactionCount:1,estimatedInputTokens:9,usage:{inputTokens:11,outputTokens:7},attempts:[{provider:'ollama',model:'llama-x',outcome:'succeeded'}]} as any}/>);
+  assert.match(html,/View what ANANSI sent/);
+  assert.match(html,/127\.0\.0\.1:11434/);
+  assert.match(html,/Redactions/);
+  assert.match(html,/11 in \/ 7 out/);
+  assert.match(html,/ollama\/llama-x: succeeded/);
 });
