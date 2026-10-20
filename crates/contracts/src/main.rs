@@ -16,9 +16,25 @@ use anansi_core::workspace::{
     CreateWorkspaceRequest, OpenWorkspaceRequest, UpdateSettingsRequest, WorkspaceDetails,
     WorkspaceList,
 };
+use anansi_core::provider_dispatch::{
+    ProviderAuthorizeRequest, ProviderAuthorizeResponse, ProviderConfigureRequest,
+    ProviderConfigureResponse, ProviderDispatchRequest, ProviderDispatchResponse,
+    ProviderPollResponse, ProviderRunRequest, ProviderStreamStartResponse,
+    ProviderUsageResponse,
+};
 use anansi_core::{CommandError, Readiness, ReadinessRequest};
 fn main() {
     let schemas = serde_json::json!({
+        "ProviderConfigureRequest":schemars::schema_for!(ProviderConfigureRequest),
+        "ProviderConfigureResponse":schemars::schema_for!(ProviderConfigureResponse),
+        "ProviderAuthorizeRequest":schemars::schema_for!(ProviderAuthorizeRequest),
+        "ProviderAuthorizeResponse":schemars::schema_for!(ProviderAuthorizeResponse),
+        "ProviderDispatchRequest":schemars::schema_for!(ProviderDispatchRequest),
+        "ProviderDispatchResponse":schemars::schema_for!(ProviderDispatchResponse),
+        "ProviderStreamStartResponse":schemars::schema_for!(ProviderStreamStartResponse),
+        "ProviderRunRequest":schemars::schema_for!(ProviderRunRequest),
+        "ProviderPollResponse":schemars::schema_for!(ProviderPollResponse),
+        "ProviderUsageResponse":schemars::schema_for!(ProviderUsageResponse),
         "UploadBegin":schemars::schema_for!(anansi_core::backup_upload::UploadBegin),
         "UploadPart":schemars::schema_for!(anansi_core::backup_upload::UploadPart),
         "UploadStatus":schemars::schema_for!(anansi_core::backup_upload::UploadStatus),

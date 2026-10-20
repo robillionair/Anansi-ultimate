@@ -32,7 +32,7 @@ use crate::secrets::SecretResolver;
 use crate::types::{CompletionRequest, ModelInfo};
 
 /// Where a provider target runs, for the configuration format.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum LocalityConfig {
     Local,
@@ -50,7 +50,7 @@ impl From<LocalityConfig> for TargetLocality {
 
 /// One configured provider: endpoint/credential configuration, its
 /// locality, and the models the user has configured for it.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct RuntimeProvider {
     pub config: ProviderConfig,
@@ -63,7 +63,7 @@ pub struct RuntimeProvider {
 /// `ProviderConfig.credential` references, resolved at dispatch time
 /// through the secret resolver (§15: configuration and secrets are
 /// separate stores).
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct RuntimeConfig {
     pub providers: Vec<RuntimeProvider>,

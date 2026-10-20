@@ -16,7 +16,7 @@ use crate::secrets::CredentialRef;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ProviderConfig {
     pub provider: String,
@@ -192,7 +192,7 @@ pub fn is_loopback_host(host: &str) -> bool {
 }
 
 /// Bounded timeouts (decision M5-D6: package policy values, clamped).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct TimeoutConfig {
     pub connect_ms: u64,
@@ -241,7 +241,7 @@ impl TimeoutConfig {
 
 /// Bounded retry policy (decision M5-D6). Retries additionally pass the
 /// cost gate: a billable retry is never automatic (§16).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct RetryPolicy {
     pub max_retries: u8,

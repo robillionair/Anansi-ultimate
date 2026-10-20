@@ -125,7 +125,7 @@ impl ZeroCostLock {
 /// (AGENTS.md / ADR-0002: paid inference requires explicit
 /// authorization). Permits are single-use: the dispatcher consumes one
 /// per dispatched candidate attempt-chain.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PaidInferencePermit {
     pub id: String,
@@ -207,7 +207,7 @@ pub fn authorize_cost(
 /// the spec; ceilings are always caller-supplied numbers, never
 /// invented allowances (§16). `FreeOnly` is the "Max Free mode" profile
 /// (§16; decision M5-D7) and is meant to be combined with the lock.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum BudgetProfile {
     FreeOnly,
@@ -217,7 +217,7 @@ pub enum BudgetProfile {
     Custom,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Budget {
     pub profile: Option<BudgetProfile>,
@@ -457,6 +457,17 @@ impl QuotaLedger {
         if let Some(c) = estimated_cost_micro_usd {
             self.total_estimated_cost_micro_usd += c;
         }
+    }
+
+    /// Per-provider totals snapshot (observability / usage ops).
+    pub fn totals_snapshot(&self) -> Vec<(String, ProviderUsageTotals)> {
+        let mut out: Vec<_> = self
+            .totals
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+        out.sort_by(|a, b| a.0.cmp(&b.0));
+        out
     }
 
     pub fn totals_for(&self, provider: &str) -> ProviderUsageTotals {

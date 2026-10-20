@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 /// `anansi-core` (`crates/core/src/privacy.rs`) plus `Restricted`, which
 /// MASTER_SPEC §19 uses without defining; see decision M5-D4 in
 /// `docs/handoffs/M5-requirements-and-acceptance.md`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum PrivacyClass {
     Public,
@@ -22,7 +22,7 @@ pub enum PrivacyClass {
 /// already replaced the sensitive content of `text`; the dispatcher
 /// refuses unredacted `Restricted` segments for cloud dispatch and never
 /// guesses at redaction itself.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Segment {
     pub text: String,
@@ -57,7 +57,7 @@ impl Segment {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum Role {
     System,
@@ -75,7 +75,7 @@ impl Role {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ChatMessage {
     pub role: Role,
@@ -100,7 +100,7 @@ impl ChatMessage {
 
 /// Capability flags a model can be routed on (§17: capability is one of
 /// the router's evaluation inputs).
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct CapabilitySet {
     pub chat: bool,
@@ -113,7 +113,7 @@ pub struct CapabilitySet {
 
 /// Cost knowledge about a model. `Unknown` is treated as paid everywhere
 /// cost is enforced (decision M5-D5).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum CostClass {
     Free,
@@ -121,7 +121,7 @@ pub enum CostClass {
     Unknown,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum SpeedTier {
     Fast,
@@ -129,7 +129,7 @@ pub enum SpeedTier {
     Deep,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ModelInfo {
     pub id: String,
@@ -144,7 +144,7 @@ pub struct ModelInfo {
     pub price_output_micro_usd_per_mtok: Option<u64>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct CompletionRequest {
     pub model: String,
@@ -191,7 +191,7 @@ impl CompletionRequest {
     }
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Usage {
     pub input_tokens: u64,

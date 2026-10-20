@@ -15,7 +15,7 @@ use std::fmt;
 
 /// A reference to a credential held by the native secret boundary.
 /// Contains no secret material; safe to persist and to log.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct CredentialRef {
     /// Provider this credential belongs to, e.g. `openai`.

@@ -3769,6 +3769,1167 @@
     "title": "OpenWorkspaceRequest",
     "type": "object"
   },
+  "ProviderAuthorizeRequest": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "allowUnknownCost": {
+        "default": false,
+        "type": "boolean"
+      },
+      "maxEstimatedTotalTokens": {
+        "format": "uint64",
+        "maximum": 10000000,
+        "minimum": 1,
+        "type": "integer"
+      },
+      "model": {
+        "type": "string"
+      },
+      "provider": {
+        "type": "string"
+      },
+      "ttlSeconds": {
+        "format": "uint64",
+        "maximum": 3600,
+        "minimum": 30,
+        "type": [
+          "integer",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "provider",
+      "model",
+      "maxEstimatedTotalTokens"
+    ],
+    "title": "ProviderAuthorizeRequest",
+    "type": "object"
+  },
+  "ProviderAuthorizeResponse": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "expiresAtMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "permitId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "permitId",
+      "expiresAtMs"
+    ],
+    "title": "ProviderAuthorizeResponse",
+    "type": "object"
+  },
+  "ProviderConfigureRequest": {
+    "$defs": {
+      "Budget": {
+        "properties": {
+          "maxEstimatedCostMicroUsd": {
+            "description": "Micro-USD ceiling, enforced only when a price is configured for\nthe model (prices are caller-supplied with provenance, M5-D5).",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "maxRequests": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "maxTotalTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "profile": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/BudgetProfile"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "BudgetProfile": {
+        "description": "Project budget profiles (§67). The named profiles are qualitative in\nthe spec; ceilings are always caller-supplied numbers, never\ninvented allowances (§16). `FreeOnly` is the \"Max Free mode\" profile\n(§16; decision M5-D7) and is meant to be combined with the lock.",
+        "enum": [
+          "freeOnly",
+          "lowCost",
+          "balanced",
+          "maximumQuality",
+          "custom"
+        ],
+        "type": "string"
+      },
+      "CapabilitySet": {
+        "description": "Capability flags a model can be routed on (§17: capability is one of\nthe router's evaluation inputs).",
+        "properties": {
+          "chat": {
+            "type": "boolean"
+          },
+          "coding": {
+            "type": "boolean"
+          },
+          "deepReasoning": {
+            "type": "boolean"
+          },
+          "embeddings": {
+            "type": "boolean"
+          },
+          "streaming": {
+            "type": "boolean"
+          },
+          "vision": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "chat",
+          "streaming",
+          "vision",
+          "coding",
+          "deepReasoning",
+          "embeddings"
+        ],
+        "type": "object"
+      },
+      "CostClass": {
+        "description": "Cost knowledge about a model. `Unknown` is treated as paid everywhere\ncost is enforced (decision M5-D5).",
+        "enum": [
+          "free",
+          "paid",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "CredentialRef": {
+        "description": "A reference to a credential held by the native secret boundary.\nContains no secret material; safe to persist and to log.",
+        "properties": {
+          "provider": {
+            "description": "Provider this credential belongs to, e.g. `openai`.",
+            "type": "string"
+          },
+          "reference": {
+            "description": "Opaque vault account/reference identifier chosen by the user at\nsetup time (MASTER_SPEC §15: the user explicitly pastes the key\ninto the OS vault; ANANSI stores only this reference).",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "reference"
+        ],
+        "type": "object"
+      },
+      "LocalityConfig": {
+        "description": "Where a provider target runs, for the configuration format.",
+        "enum": [
+          "local",
+          "cloud"
+        ],
+        "type": "string"
+      },
+      "ModelInfo": {
+        "properties": {
+          "capabilities": {
+            "$ref": "#/$defs/CapabilitySet"
+          },
+          "contextWindow": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "cost": {
+            "$ref": "#/$defs/CostClass"
+          },
+          "id": {
+            "type": "string"
+          },
+          "priceInputMicroUsdPerMtok": {
+            "description": "Caller-supplied price (micro-USD per 1M tokens) with provenance in\nconfiguration. The crate ships no price table (M5-D5).",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "priceOutputMicroUsdPerMtok": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "provider": {
+            "type": "string"
+          },
+          "speed": {
+            "$ref": "#/$defs/SpeedTier"
+          }
+        },
+        "required": [
+          "id",
+          "provider",
+          "capabilities",
+          "cost",
+          "speed"
+        ],
+        "type": "object"
+      },
+      "ProviderConfig": {
+        "properties": {
+          "allowInsecureCustom": {
+            "default": false,
+            "description": "Explicit owner opt-in for a plaintext non-loopback custom\nendpoint (e.g. an internal enterprise gateway). Never valid\ntogether with a credential.",
+            "type": "boolean"
+          },
+          "baseUrl": {
+            "description": "Base URL as entered by the user / supplied by the catalog.",
+            "type": "string"
+          },
+          "credential": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/CredentialRef"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Credential reference only; never a secret value (§15, §70)."
+          },
+          "customEndpoint": {
+            "default": false,
+            "description": "True for user-defined OpenAI-compatible / enterprise endpoints\n(§14). Custom endpoints get the same policy checks, not fewer.",
+            "type": "boolean"
+          },
+          "enabled": {
+            "default": true,
+            "type": "boolean"
+          },
+          "provider": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "baseUrl"
+        ],
+        "type": "object"
+      },
+      "RuntimeConfig": {
+        "description": "The complete provider configuration an application persists and\nhands to the runtime. Credentials are NOT part of it — only\n`ProviderConfig.credential` references, resolved at dispatch time\nthrough the secret resolver (§15: configuration and secrets are\nseparate stores).",
+        "properties": {
+          "budget": {
+            "$ref": "#/$defs/Budget",
+            "default": {
+              "maxEstimatedCostMicroUsd": null,
+              "maxRequests": null,
+              "maxTotalTokens": null,
+              "profile": null
+            },
+            "description": "The dispatch budget for this configuration (requests, tokens,\nestimated cost). Wired into every dispatch — there is no\nimplicit unlimited default once a budget is configured."
+          },
+          "providers": {
+            "items": {
+              "$ref": "#/$defs/RuntimeProvider"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "providers"
+        ],
+        "type": "object"
+      },
+      "RuntimeProvider": {
+        "description": "One configured provider: endpoint/credential configuration, its\nlocality, and the models the user has configured for it.",
+        "properties": {
+          "config": {
+            "$ref": "#/$defs/ProviderConfig"
+          },
+          "locality": {
+            "$ref": "#/$defs/LocalityConfig"
+          },
+          "models": {
+            "items": {
+              "$ref": "#/$defs/ModelInfo"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "config",
+          "locality",
+          "models"
+        ],
+        "type": "object"
+      },
+      "SpeedTier": {
+        "enum": [
+          "fast",
+          "balanced",
+          "deep"
+        ],
+        "type": "string"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "config": {
+        "$ref": "#/$defs/RuntimeConfig"
+      }
+    },
+    "required": [
+      "config"
+    ],
+    "title": "ProviderConfigureRequest",
+    "type": "object"
+  },
+  "ProviderConfigureResponse": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "providers": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "providers"
+    ],
+    "title": "ProviderConfigureResponse",
+    "type": "object"
+  },
+  "ProviderDispatchRequest": {
+    "$defs": {
+      "ChatMessage": {
+        "properties": {
+          "role": {
+            "$ref": "#/$defs/Role"
+          },
+          "segments": {
+            "items": {
+              "$ref": "#/$defs/Segment"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "role",
+          "segments"
+        ],
+        "type": "object"
+      },
+      "CompletionRequest": {
+        "properties": {
+          "explicitCloudAuthorization": {
+            "default": false,
+            "description": "Explicit user authorization to send `Private` segments to a cloud\nprovider (ADR-0002: private material requires explicit\nauthorization). Never set implicitly by routing.",
+            "type": "boolean"
+          },
+          "localOnly": {
+            "default": false,
+            "description": "The caller asserts this content must never leave the local machine\n(compiled from local-only memories). The router and gates enforce\nit; it is never silently dropped (§17).",
+            "type": "boolean"
+          },
+          "maxOutputTokens": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/$defs/ChatMessage"
+            },
+            "type": "array"
+          },
+          "model": {
+            "type": "string"
+          },
+          "temperature": {
+            "format": "float",
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "model",
+          "messages"
+        ],
+        "type": "object"
+      },
+      "PrivacyClass": {
+        "description": "Privacy classification of one content segment. Mirrors the classes in\n`anansi-core` (`crates/core/src/privacy.rs`) plus `Restricted`, which\nMASTER_SPEC §19 uses without defining; see decision M5-D4 in\n`docs/handoffs/M5-requirements-and-acceptance.md`.",
+        "enum": [
+          "public",
+          "standard",
+          "private",
+          "sealed",
+          "restricted"
+        ],
+        "type": "string"
+      },
+      "Role": {
+        "enum": [
+          "system",
+          "user",
+          "assistant"
+        ],
+        "type": "string"
+      },
+      "Segment": {
+        "description": "One classified piece of a message. `redacted` means the caller has\nalready replaced the sensitive content of `text`; the dispatcher\nrefuses unredacted `Restricted` segments for cloud dispatch and never\nguesses at redaction itself.",
+        "properties": {
+          "privacy": {
+            "$ref": "#/$defs/PrivacyClass"
+          },
+          "redacted": {
+            "default": false,
+            "type": "boolean"
+          },
+          "sourceId": {
+            "description": "Source memory/record identifier, preserved for citations (§19).",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "privacy"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "description": "Dispatch and stream-start share one request shape. It carries\n**no** configuration, locality, cost or credential material:\npolicy is resolved from backend state only.",
+    "properties": {
+      "chosen": {
+        "maxItems": 2,
+        "minItems": 2,
+        "prefixItems": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "type": [
+          "array",
+          "null"
+        ]
+      },
+      "mode": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "permitId": {
+        "description": "The id of a permit issued by `providers-authorize` to this\nsession. The permit itself (scope, caps, expiry) lives in\nbackend state; presenting an id never creates authorization.",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "request": {
+        "$ref": "#/$defs/CompletionRequest"
+      },
+      "zeroCostLock": {
+        "default": false,
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "request"
+    ],
+    "title": "ProviderDispatchRequest",
+    "type": "object"
+  },
+  "ProviderDispatchResponse": {
+    "$defs": {
+      "AttemptRecord": {
+        "properties": {
+          "model": {
+            "type": "string"
+          },
+          "outcome": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "model",
+          "outcome"
+        ],
+        "type": "object"
+      },
+      "CostClass": {
+        "description": "Cost knowledge about a model. `Unknown` is treated as paid everywhere\ncost is enforced (decision M5-D5).",
+        "enum": [
+          "free",
+          "paid",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "DisclosureRecord": {
+        "description": "\"View What ANANSI Sent\" at adapter level (§19): what was about to be\n/ was transmitted, to whom, and why. The UI rendering of this record\nis application integration; producing it is the dispatcher's job.",
+        "properties": {
+          "attempts": {
+            "items": {
+              "$ref": "#/$defs/AttemptRecord"
+            },
+            "type": "array"
+          },
+          "costClass": {
+            "$ref": "#/$defs/CostClass"
+          },
+          "endpointHost": {
+            "type": "string"
+          },
+          "estimatedInputTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "local": {
+            "type": "boolean"
+          },
+          "messageCount": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "model": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "redactionCount": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "routingMode": {
+            "$ref": "#/$defs/RoutingMode"
+          },
+          "routingReason": {
+            "type": "string"
+          },
+          "segmentCount": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "usage": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Usage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "provider",
+          "model",
+          "endpointHost",
+          "local",
+          "routingMode",
+          "routingReason",
+          "messageCount",
+          "segmentCount",
+          "redactionCount",
+          "estimatedInputTokens",
+          "costClass",
+          "attempts"
+        ],
+        "type": "object"
+      },
+      "ProviderResponseBody": {
+        "properties": {
+          "finishReason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "model": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "usage": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Usage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "text",
+          "model"
+        ],
+        "type": "object"
+      },
+      "RoutingMode": {
+        "description": "User-facing routing modes, verbatim from MASTER_SPEC §17.",
+        "enum": [
+          "auto",
+          "autoFree",
+          "private",
+          "fast",
+          "deep",
+          "coding",
+          "vision",
+          "chooseModel"
+        ],
+        "type": "string"
+      },
+      "Usage": {
+        "properties": {
+          "inputTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "outputTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "inputTokens",
+          "outputTokens"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "disclosure": {
+        "$ref": "#/$defs/DisclosureRecord"
+      },
+      "response": {
+        "$ref": "#/$defs/ProviderResponseBody"
+      }
+    },
+    "required": [
+      "response",
+      "disclosure"
+    ],
+    "title": "ProviderDispatchResponse",
+    "type": "object"
+  },
+  "ProviderPollResponse": {
+    "$defs": {
+      "AttemptRecord": {
+        "properties": {
+          "model": {
+            "type": "string"
+          },
+          "outcome": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "model",
+          "outcome"
+        ],
+        "type": "object"
+      },
+      "CostClass": {
+        "description": "Cost knowledge about a model. `Unknown` is treated as paid everywhere\ncost is enforced (decision M5-D5).",
+        "enum": [
+          "free",
+          "paid",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "DisclosureRecord": {
+        "description": "\"View What ANANSI Sent\" at adapter level (§19): what was about to be\n/ was transmitted, to whom, and why. The UI rendering of this record\nis application integration; producing it is the dispatcher's job.",
+        "properties": {
+          "attempts": {
+            "items": {
+              "$ref": "#/$defs/AttemptRecord"
+            },
+            "type": "array"
+          },
+          "costClass": {
+            "$ref": "#/$defs/CostClass"
+          },
+          "endpointHost": {
+            "type": "string"
+          },
+          "estimatedInputTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "local": {
+            "type": "boolean"
+          },
+          "messageCount": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "model": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "redactionCount": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "routingMode": {
+            "$ref": "#/$defs/RoutingMode"
+          },
+          "routingReason": {
+            "type": "string"
+          },
+          "segmentCount": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "usage": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Usage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "provider",
+          "model",
+          "endpointHost",
+          "local",
+          "routingMode",
+          "routingReason",
+          "messageCount",
+          "segmentCount",
+          "redactionCount",
+          "estimatedInputTokens",
+          "costClass",
+          "attempts"
+        ],
+        "type": "object"
+      },
+      "ProviderStreamEvent": {
+        "properties": {
+          "code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "finishReason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "inputTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "kind": {
+            "type": "string"
+          },
+          "message": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "outputTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "text": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "type": "object"
+      },
+      "RoutingMode": {
+        "description": "User-facing routing modes, verbatim from MASTER_SPEC §17.",
+        "enum": [
+          "auto",
+          "autoFree",
+          "private",
+          "fast",
+          "deep",
+          "coding",
+          "vision",
+          "chooseModel"
+        ],
+        "type": "string"
+      },
+      "Usage": {
+        "properties": {
+          "inputTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "outputTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "inputTokens",
+          "outputTokens"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "disclosure": {
+        "$ref": "#/$defs/DisclosureRecord"
+      },
+      "done": {
+        "type": "boolean"
+      },
+      "events": {
+        "items": {
+          "$ref": "#/$defs/ProviderStreamEvent"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "events",
+      "done",
+      "disclosure"
+    ],
+    "title": "ProviderPollResponse",
+    "type": "object"
+  },
+  "ProviderRunRequest": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "capability": {
+        "type": "string"
+      },
+      "runId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "runId",
+      "capability"
+    ],
+    "title": "ProviderRunRequest",
+    "type": "object"
+  },
+  "ProviderStreamStartResponse": {
+    "$defs": {
+      "AttemptRecord": {
+        "properties": {
+          "model": {
+            "type": "string"
+          },
+          "outcome": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "model",
+          "outcome"
+        ],
+        "type": "object"
+      },
+      "CostClass": {
+        "description": "Cost knowledge about a model. `Unknown` is treated as paid everywhere\ncost is enforced (decision M5-D5).",
+        "enum": [
+          "free",
+          "paid",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "DisclosureRecord": {
+        "description": "\"View What ANANSI Sent\" at adapter level (§19): what was about to be\n/ was transmitted, to whom, and why. The UI rendering of this record\nis application integration; producing it is the dispatcher's job.",
+        "properties": {
+          "attempts": {
+            "items": {
+              "$ref": "#/$defs/AttemptRecord"
+            },
+            "type": "array"
+          },
+          "costClass": {
+            "$ref": "#/$defs/CostClass"
+          },
+          "endpointHost": {
+            "type": "string"
+          },
+          "estimatedInputTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "local": {
+            "type": "boolean"
+          },
+          "messageCount": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "model": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "redactionCount": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "routingMode": {
+            "$ref": "#/$defs/RoutingMode"
+          },
+          "routingReason": {
+            "type": "string"
+          },
+          "segmentCount": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "usage": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Usage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "provider",
+          "model",
+          "endpointHost",
+          "local",
+          "routingMode",
+          "routingReason",
+          "messageCount",
+          "segmentCount",
+          "redactionCount",
+          "estimatedInputTokens",
+          "costClass",
+          "attempts"
+        ],
+        "type": "object"
+      },
+      "RoutingMode": {
+        "description": "User-facing routing modes, verbatim from MASTER_SPEC §17.",
+        "enum": [
+          "auto",
+          "autoFree",
+          "private",
+          "fast",
+          "deep",
+          "coding",
+          "vision",
+          "chooseModel"
+        ],
+        "type": "string"
+      },
+      "Usage": {
+        "properties": {
+          "inputTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "outputTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "inputTokens",
+          "outputTokens"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "capability": {
+        "description": "Unpredictable per-run capability; poll/cancel require it.",
+        "type": "string"
+      },
+      "disclosure": {
+        "$ref": "#/$defs/DisclosureRecord"
+      },
+      "runId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "runId",
+      "capability",
+      "disclosure"
+    ],
+    "title": "ProviderStreamStartResponse",
+    "type": "object"
+  },
+  "ProviderUsageResponse": {
+    "$defs": {
+      "ProviderUsageEntry": {
+        "properties": {
+          "inputTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "outputTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "requests": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "provider",
+          "requests",
+          "inputTokens",
+          "outputTokens"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "providers": {
+        "items": {
+          "$ref": "#/$defs/ProviderUsageEntry"
+        },
+        "type": "array"
+      },
+      "reservedRequests": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "reservedTokens": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "totalRequests": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "totalRequests",
+      "reservedRequests",
+      "reservedTokens",
+      "providers"
+    ],
+    "title": "ProviderUsageResponse",
+    "type": "object"
+  },
   "ReadArtifactRequest": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,

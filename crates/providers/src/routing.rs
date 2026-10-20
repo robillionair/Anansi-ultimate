@@ -16,7 +16,7 @@ use crate::types::{CapabilitySet, CostClass, ModelInfo, Usage};
 use serde::{Deserialize, Serialize};
 
 /// User-facing routing modes, verbatim from MASTER_SPEC §17.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum RoutingMode {
     #[default]
@@ -210,7 +210,7 @@ impl Router {
 /// "View What ANANSI Sent" at adapter level (§19): what was about to be
 /// / was transmitted, to whom, and why. The UI rendering of this record
 /// is application integration; producing it is the dispatcher's job.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct DisclosureRecord {
     pub provider: String,
@@ -228,7 +228,7 @@ pub struct DisclosureRecord {
     pub attempts: Vec<AttemptRecord>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct AttemptRecord {
     pub provider: String,
