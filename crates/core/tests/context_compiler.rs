@@ -16,6 +16,22 @@ fn setup_test_workspace(name: &str) -> (tempfile::TempDir, Core, std::path::Path
 }
 
 #[test]
+fn unicode_sections_do_not_panic_at_byte_budget_boundaries() {
+    for text in ["世".repeat(500), "🕸".repeat(500), "é".repeat(800)] {
+        let chunks = chunk_markdown_sections("memory", "Unicode", "note", &text);
+        assert!(chunks.len() > 1);
+        assert!(chunks.iter().all(|chunk| chunk.content.len() <= 1_000));
+        assert_eq!(
+            chunks
+                .iter()
+                .map(|chunk| chunk.content.as_str())
+                .collect::<String>(),
+            text
+        );
+    }
+}
+
+#[test]
 fn test_chunk_markdown_sections_preserves_headings_and_lines() {
     let body =
         "# Section 1\nLine 2 text\nLine 3 text\n\n## Section 2\nLine 6 details\nLine 7 details";
@@ -24,12 +40,12 @@ fn test_chunk_markdown_sections_preserves_headings_and_lines() {
     assert_eq!(chunks.len(), 2);
     assert_eq!(chunks[0].chunk_index, 0);
     assert_eq!(chunks[0].section_heading.as_deref(), Some("# Section 1"));
-    assert_eq!(chunks[0].line_number, Some(1));
+    assert_eq!(chunks[0].line_number, Some(2));
     assert!(chunks[0].content.contains("Line 2 text"));
 
     assert_eq!(chunks[1].chunk_index, 1);
     assert_eq!(chunks[1].section_heading.as_deref(), Some("## Section 2"));
-    assert_eq!(chunks[1].line_number, Some(5));
+    assert_eq!(chunks[1].line_number, Some(6));
     assert!(chunks[1].content.contains("Line 6 details"));
 }
 

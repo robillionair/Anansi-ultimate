@@ -1,5 +1,9 @@
 # ANANSI Ultimate — Recovery Guide
 
+## Current resume authority — 2026-10-20
+
+Resume M2–M4 reconciliation in `C:/Users/robin/Documents/ChatGPT/Anansi ultimate`, branch `codex/m2-m3-integration`. Preserve the separate M2 checkout at `bd2e2a9`. [Ownership and acceptance](handoffs/M2-M4-integration-owner.md) supersede older isolation/stop instructions below within the Owner's new task scope. Read actual HEAD/status before resuming. Do not downgrade schema, reset user data or infer production acceptance from synthetic providers. [Readiness](evidence/M5-READINESS.md) tracks unfinished work. Audit monitoring is paused; CI/protected publication remain deferred. No M5 code until readiness requirements pass.
+
 ## Owner amendment — M2.7-Core isolation (2026-10-19)
 
 Increment 2 recovery: use only the isolated `codex/m2-7-vault-core` worktree, [active plan](../plans/M2-vault-security.md) and [evidence](evidence/M2-7-increment2.md). Schema 9 is opt-in through the new core API, never automatic in the live application. Preserve the entire closed root, matching M2.5 source backup and all generation/staging files before diagnosis. Never downgrade user_version, unlink lock files, steal a lease by PID/age, reset or purge originals. OS process death releases admission locks; durable generation and epoch come from SQLite. Before commit the previous state remains authoritative; after commit the newly committed state is authoritative even when a post-commit callback fails. Inspect actual active generation and integrity before retrying. An incomplete new stage is not authority and is never automatically executed. Explicit rollback requires authentication of the selected retained generation and is a new epoch-advancing transaction. Independent old backup keys remain usable for those old copies.

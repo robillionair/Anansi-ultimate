@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
-  "activeMilestone": "M4",
-  "activeTask": "M4.5",
+  "activeMilestone": "M2",
+  "activeTask": "M2.7",
   "plan": "plans/PHASE-004-semantic-intelligence.md",
-  "implementationStatus": "M4.5 cross-edition UI and integrated acceptance verified; Milestone 4 (Semantic Intelligence) 100% complete.",
+  "implementationStatus": "M2–M4 application integration and local acceptance incomplete; historical full-certification claims superseded by M5-READINESS assessment.",
   "lastVerifiedCommit": "83818457e87f466c633bed5b8b06d6baf36023db",
   "evidence": [
     "docs/evidence/M0.md",
@@ -40,8 +40,8 @@
       "detail": "Explicit Owner exception authorizes engineering only. Independent audit remains open for post-M3/pre-production/commercialization certification; exact pinned primitives and G2-G4 retained."
     }
   ],
-  "nextTask": "M5.1",
-  "nextTaskScope": "Milestone 5 (AI Matrix & External Integrations) phase planning.",
+  "nextTask": "M2.7",
+  "nextTaskScope": "Complete production native vault, browser authorization, encrypted application recovery, then remaining M3/M4 workflows before M5.",
   "productImplementation": "M1 and M2.1-M2.5 verified subsets: memory/lifecycle/entities, immutable relationship history, durable exports, coherent workspace/application catalog backups, opt-in schedules, owned saved-file import, verified fresh restore, M2.7 native desktop encrypted vault integration, M3 (Search & Local Models), and M4 (Semantic Intelligence: local vector embeddings, vector search, hybrid RRF retrieval, multi-chunk Context Compiler, cross-edition UI).",
-  "milestoneComplete": true
+  "milestoneComplete": false
 }

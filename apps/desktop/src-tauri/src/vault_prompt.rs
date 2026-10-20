@@ -7,9 +7,12 @@ use anansi_core::vault::{
 };
 use std::ptr;
 use windows_sys::Win32::Security::Credentials::{
-    CREDUI_INFOW, CREDUIWIN_GENERIC, CredUIPromptForCredentialsW,
+    CREDUI_FLAGS_ALWAYS_SHOW_UI, CREDUI_FLAGS_DO_NOT_PERSIST, CREDUI_FLAGS_GENERIC_CREDENTIALS,
+    CREDUI_INFOW, CredUIPromptForCredentialsW,
 };
-use windows_sys::Win32::UI::WindowsAndMessaging::{MB_ICONINFORMATION, MB_OK, MessageBoxW};
+use windows_sys::Win32::UI::WindowsAndMessaging::{
+    IDYES, MB_DEFBUTTON2, MB_ICONINFORMATION, MB_YESNO, MessageBoxW,
+};
 use zeroize::Zeroizing;
 
 pub struct WindowsCredentialProvider {
@@ -32,8 +35,8 @@ impl WindowsCredentialProvider {
             .chain(std::iter::once(0))
             .collect();
         let message: Vec<u16> = format!("ANANSI {purpose}. Credentials stay in the native prompt and are never sent to the web UI.").encode_utf16().chain(std::iter::once(0)).collect();
-        let mut user = vec![0u16; 512];
-        let mut password = vec![0u16; 1024];
+        let mut user = Zeroizing::new(vec![0u16; 512]);
+        let mut password = Zeroizing::new(vec![0u16; 1024]);
         let mut save = 0i32;
         let info = CREDUI_INFOW {
             cbSize: std::mem::size_of::<CREDUI_INFOW>() as u32,
@@ -53,7 +56,9 @@ impl WindowsCredentialProvider {
                 password.as_mut_ptr(),
                 password.len() as u32,
                 &mut save,
-                CREDUIWIN_GENERIC,
+                CREDUI_FLAGS_GENERIC_CREDENTIALS
+                    | CREDUI_FLAGS_DO_NOT_PERSIST
+                    | CREDUI_FLAGS_ALWAYS_SHOW_UI,
             )
         };
         if result != 0 {
@@ -79,7 +84,7 @@ impl WindowsCredentialProvider {
 
 impl NativeCredentialProvider for WindowsCredentialProvider {
     fn passphrase(&mut self, purpose: CredentialPurpose) -> Result<Zeroizing<Vec<u8>>> {
-        #[cfg(feature = "vault-test-provider")]
+        #[cfg(all(debug_assertions, feature = "vault-test-provider"))]
         if std::env::var_os("ANANSI_VAULT_TEST_PROVIDER").as_deref()
             == Some(std::ffi::OsStr::new("1"))
         {
@@ -94,10 +99,26 @@ impl NativeCredentialProvider for WindowsCredentialProvider {
             CredentialPurpose::Rotation => "key rotation",
             CredentialPurpose::Restore => "restore",
         };
-        Ok(self.prompt(label)?.1)
+        let secret = self.prompt(label)?.1;
+        if secret.is_empty() {
+            return Err(VaultError::CredentialUnavailable);
+        }
+        if purpose == CredentialPurpose::Setup {
+            let confirmation = self.prompt("confirm the new vault passphrase")?.1;
+            let different = secret.len() != confirmation.len()
+                || secret
+                    .iter()
+                    .zip(confirmation.iter())
+                    .fold(0u8, |acc, (a, b)| acc | (a ^ b))
+                    != 0;
+            if different {
+                return Err(VaultError::AuthenticationFailed);
+            }
+        }
+        Ok(secret)
     }
     fn recovery_key(&mut self, display: &RecoveryDisplay) -> Result<Zeroizing<[u8; 32]>> {
-        #[cfg(feature = "vault-test-provider")]
+        #[cfg(all(debug_assertions, feature = "vault-test-provider"))]
         if std::env::var_os("ANANSI_VAULT_TEST_PROVIDER").as_deref()
             == Some(std::ffi::OsStr::new("1"))
         {
@@ -107,20 +128,26 @@ impl NativeCredentialProvider for WindowsCredentialProvider {
             .encode_utf16()
             .chain(std::iter::once(0))
             .collect();
-        let body: Vec<u16> = format!(
-            "Save this recovery key outside ANANSI, then enter it in the next native prompt:\n\n{}",
+        let message = Zeroizing::new(format!(
+            "Save this recovery key outside ANANSI:\n\n{}\n\nHave you saved a separate copy? Choose Yes to acknowledge and retype it in the next native prompt. No cancels setup.",
             display.text.as_str()
-        )
-        .encode_utf16()
-        .chain(std::iter::once(0))
-        .collect();
-        unsafe {
+        ));
+        let body = Zeroizing::new(
+            message
+                .encode_utf16()
+                .chain(std::iter::once(0))
+                .collect::<Vec<u16>>(),
+        );
+        let acknowledged = unsafe {
             MessageBoxW(
                 ptr::null_mut(),
                 body.as_ptr(),
                 caption.as_ptr(),
-                MB_OK | MB_ICONINFORMATION,
-            );
+                MB_YESNO | MB_DEFBUTTON2 | MB_ICONINFORMATION,
+            )
+        };
+        if acknowledged != IDYES {
+            return Err(VaultError::AcknowledgementRequired);
         }
         self.target.push_str(" — recovery acknowledgement");
         let (typed, _) = self

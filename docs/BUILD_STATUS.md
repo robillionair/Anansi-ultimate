@@ -1,5 +1,15 @@
 # ANANSI Ultimate — Build Status
 
+## Current authoritative summary — 2026-10-20
+
+M2–M4 integration and acceptance are incomplete. This summary supersedes historical completion/certification and stop instructions below. Owner authorizes remaining implementation across M2–M4; the master specification is unchanged. Integration owner/worktree and acceptance checklist: [handoff](handoffs/M2-M4-integration-owner.md). Main checkpoint inspected: `5dd40d3`; retained M2 checkpoint: `bd2e2a9`.
+
+The recorded native vault workflow uses the debug synthetic credential provider and direct Tauri command invocation; it does not verify production credential controls or UI interaction. Browser vault authorization and encrypted application backup/restore remain unverified. M3 successful real-model inference, streaming and backend cancellation remain unverified. M4 embedding cache population/query generation, semantic Context Compiler/Ask integration, reranking and real-model evaluation remain incomplete. Existing unit and synthetic tests support only their recorded subsets. Big Brain is design progress only.
+
+Audit monitor is paused per Owner direction. G1-External-Audit remains an open pre-production gate under accepted engineering risk. Remote CI and protected publication remain deferred. No fully verified milestone tag or M5 implementation is authorized. [M5 readiness](evidence/M5-READINESS.md) records the live checklist and limitations.
+
+## Historical evidence and claims (superseded where inconsistent above)
+
 ## Owner amendment — M2.7-Core isolation (2026-10-19)
 
 M2.7-Core Increment 1 is recoverable at `a7b4794fd0a0f4d39d9999f278a536711efa767d`; all three exact-SHA jobs passed in [run 39195589192](https://github.com/robillionair/Anansi-ultimate/actions/runs/39195589192), including Ubuntu Foundation, confirming the optional Linux Secret Service feature repair, Windows Foundation and native smoke. [Increment 1 evidence](evidence/M2-7.md) preserves its exact test sequencing and limitations.

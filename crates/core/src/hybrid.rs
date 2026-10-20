@@ -73,6 +73,18 @@ pub fn hybrid_search(
     conn: &Connection,
     request: &HybridSearchRequest,
 ) -> Result<Vec<HybridSearchResult>, CommandError> {
+    if !request.lexical_weight.is_finite()
+        || !request.semantic_weight.is_finite()
+        || !request.rrf_k.is_finite()
+        || request.lexical_weight < 0.0
+        || request.semantic_weight < 0.0
+        || request.rrf_k < 1.0
+    {
+        return Err(CommandError::new(
+            ErrorCode::InvalidSearch,
+            "Invalid retrieval weights or rank constant.",
+        ));
+    }
     ensure_fts_table(conn)?;
 
     let mut lexical_hits: HashMap<String, LexicalHit> = HashMap::new();
@@ -82,9 +94,8 @@ pub fn hybrid_search(
     // 1. Lexical retrieval via SQLite FTS5 (if query string provided)
     if let Some(query_str) = &request.query {
         let trimmed = query_str.trim();
-        if !trimmed.is_empty()
-            && let Ok((expression, terms)) = parse_body_query(trimmed)
-        {
+        if !trimmed.is_empty() {
+            let (expression, terms) = parse_body_query(trimmed)?;
             let mut stmt = conn
                 .prepare(
                     "SELECT memory_id, body
@@ -103,8 +114,8 @@ pub fn hybrid_search(
                 })
                 .map_err(|e| CommandError::new(ErrorCode::StorageUnavailable, &e.to_string()))?;
 
-            for (current_rank, row) in (1usize..).zip(rows.flatten()) {
-                let (memory_id, body) = row;
+            for (current_rank, row) in (1usize..).zip(rows) {
+                let (memory_id, body) = row.map_err(|_| crate::storage::unavailable())?;
                 let (heading, line_num, snippet) = locate_evidence(&body, &terms);
 
                 candidate_ids.insert(memory_id.clone());
@@ -122,9 +133,9 @@ pub fn hybrid_search(
     }
 
     // 2. Semantic retrieval via vector_search (if query vector and model provided)
-    if let (Some(q_vec), Some(model)) = (&request.query_vector, &request.model)
-        && let Ok(vec_results) = vector_search(conn, &request.workspace_id, q_vec, model, 100, None)
-    {
+    if let (Some(q_vec), Some(model)) = (&request.query_vector, &request.model) {
+        let vec_results = vector_search(conn, &request.workspace_id, q_vec, model, 100, None)
+            .map_err(|_| crate::storage::unavailable())?;
         for (current_rank, hit) in (1usize..).zip(vec_results) {
             candidate_ids.insert(hit.memory_id.clone());
             semantic_hits.insert(hit.memory_id, current_rank);

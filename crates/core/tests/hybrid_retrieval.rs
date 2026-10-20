@@ -2,6 +2,29 @@ use anansi_core::hybrid::{HybridSearchRequest, hybrid_search};
 use anansi_core::vector::{EmbeddingVector, store_embedding};
 use rusqlite::Connection;
 
+#[test]
+fn malformed_queries_and_corrupt_fts_rows_fail_instead_of_disappearing() {
+    let conn = setup_hybrid_test_db();
+    let mut request = HybridSearchRequest {
+        workspace_id: "ws".into(),
+        query: Some("word ".repeat(17)),
+        query_vector: None,
+        model: None,
+        limit: 10,
+        lexical_weight: 1.0,
+        semantic_weight: 1.0,
+        rrf_k: 60.0,
+        kind: None,
+        include_archived: false,
+    };
+    assert!(hybrid_search(&conn, &request).is_err());
+    request.query = Some("word".into());
+    conn.execute("INSERT INTO memory_body_fts(workspace_id,memory_id,title,body) VALUES ('ws','broken','word',NULL)", []).unwrap();
+    assert!(hybrid_search(&conn, &request).is_err());
+    request.lexical_weight = f32::NAN;
+    assert!(hybrid_search(&conn, &request).is_err());
+}
+
 fn setup_hybrid_test_db() -> Connection {
     let conn = Connection::open_in_memory().unwrap();
     conn.execute_batch(

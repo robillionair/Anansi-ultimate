@@ -17,6 +17,14 @@ pub const DEFAULT_MAX_BUDGET_CHARS: usize = 4_000;
 pub const MAX_ALLOWED_BUDGET_CHARS: usize = 32_000;
 pub const MAX_CHUNK_CHARS: usize = 1_000;
 
+fn utf8_prefix(text: &str, max_bytes: usize) -> &str {
+    let mut end = max_bytes.min(text.len());
+    while !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    &text[..end]
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ContextChunk {
@@ -59,73 +67,45 @@ pub fn chunk_markdown_sections(
     kind: &str,
     body: &str,
 ) -> Vec<ContextChunk> {
-    let mut chunks = Vec::new();
-    let lines: Vec<&str> = body.lines().collect();
-    if lines.is_empty() {
-        return chunks;
-    }
-
-    let mut current_heading: Option<String> = None;
-    let mut current_section_lines: Vec<&str> = Vec::new();
-    let mut section_start_line = 1u32;
-    let mut chunk_idx = 0usize;
-
-    for (idx, &line) in lines.iter().enumerate() {
-        let line_num = (idx + 1) as u32;
-        let trimmed = line.trim();
-
-        if trimmed.starts_with('#') {
-            if !current_section_lines.is_empty() {
-                let section_text = current_section_lines.join("\n").trim().to_string();
-                if !section_text.is_empty() {
-                    let chars = section_text.len();
-                    chunks.push(ContextChunk {
-                        memory_id: memory_id.to_string(),
-                        chunk_index: chunk_idx,
-                        title: title.to_string(),
-                        kind: kind.to_string(),
-                        section_heading: current_heading.clone(),
-                        line_number: Some(section_start_line),
-                        content: if chars > MAX_CHUNK_CHARS {
-                            section_text[..MAX_CHUNK_CHARS].to_string()
-                        } else {
-                            section_text
-                        },
-                        token_estimate: (chars / 4).max(1),
-                    });
-                    chunk_idx += 1;
-                }
-                current_section_lines.clear();
+    // Preserve every section byte beyond the first bounded chunk. Source line
+    // offsets follow consumed newlines; splits inside a line retain that line.
+    let mut complete = Vec::new();
+    let mut heading: Option<String> = None;
+    let mut section = String::new();
+    let mut start_line = 1u32;
+    let append =
+        |text: &str, heading: &Option<String>, line: u32, output: &mut Vec<ContextChunk>| {
+            let mut rest = text.trim_end_matches('\n');
+            let mut source_line = line;
+            while !rest.is_empty() {
+                let piece = utf8_prefix(rest, MAX_CHUNK_CHARS);
+                output.push(ContextChunk {
+                    memory_id: memory_id.into(),
+                    chunk_index: output.len(),
+                    title: title.into(),
+                    kind: kind.into(),
+                    section_heading: heading.clone(),
+                    line_number: Some(source_line),
+                    content: piece.into(),
+                    token_estimate: piece.len().div_ceil(4).max(1),
+                });
+                source_line += piece.bytes().filter(|byte| *byte == b'\n').count() as u32;
+                rest = &rest[piece.len()..];
             }
-            current_heading = Some(trimmed.to_string());
-            section_start_line = line_num;
+        };
+    for (index, line) in body.lines().enumerate() {
+        if line.trim_start().starts_with('#') {
+            append(&section, &heading, start_line, &mut complete);
+            section.clear();
+            heading = Some(line.trim().into());
+            start_line = index as u32 + 2;
         } else {
-            current_section_lines.push(line);
+            section.push_str(line);
+            section.push('\n');
         }
     }
-
-    if !current_section_lines.is_empty() {
-        let section_text = current_section_lines.join("\n").trim().to_string();
-        if !section_text.is_empty() {
-            let chars = section_text.len();
-            chunks.push(ContextChunk {
-                memory_id: memory_id.to_string(),
-                chunk_index: chunk_idx,
-                title: title.to_string(),
-                kind: kind.to_string(),
-                section_heading: current_heading,
-                line_number: Some(section_start_line),
-                content: if chars > MAX_CHUNK_CHARS {
-                    section_text[..MAX_CHUNK_CHARS].to_string()
-                } else {
-                    section_text
-                },
-                token_estimate: (chars / 4).max(1),
-            });
-        }
-    }
-
-    chunks
+    append(&section, &heading, start_line, &mut complete);
+    complete
 }
 
 pub fn compile_context(
@@ -206,21 +186,15 @@ pub fn compile_context(
             |r| r.get::<_, String>(0),
         );
 
-        let body_hash = match rev_row {
-            Ok(h) => h,
-            Err(_) => continue,
-        };
+        let body_hash = rev_row.map_err(|_| crate::storage::unavailable())?;
 
-        let body = match content::read(
+        let body = content::read(
             storage_root,
             &req.workspace_id,
             &hit.memory_id,
             &revision_id,
             &body_hash,
-        ) {
-            Ok(b) => b,
-            Err(_) => continue,
-        };
+        )?;
 
         if !seen_memory_ids.contains(&hit.memory_id) {
             seen_memory_ids.insert(hit.memory_id.clone());
@@ -257,7 +231,7 @@ pub fn compile_context(
                 }
                 // Truncate cleanly to remaining budget
                 let cutoff = remaining.saturating_sub(3);
-                sec.content = format!("{}...", &sec.content[..cutoff]);
+                sec.content = format!("{}...", utf8_prefix(&sec.content, cutoff));
             }
 
             let actual_len = sec.content.len();
@@ -273,7 +247,7 @@ pub fn compile_context(
                 section_heading: sec.section_heading.clone(),
                 line_number: sec.line_number,
                 snippet: if sec.content.len() > 200 {
-                    format!("{}...", &sec.content[..200])
+                    format!("{}...", utf8_prefix(&sec.content, 200))
                 } else {
                     sec.content.clone()
                 },

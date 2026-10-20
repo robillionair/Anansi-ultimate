@@ -1,5 +1,9 @@
 # ANANSI Ultimate — Requirements Matrix
 
+## Current acceptance correction — 2026-10-20
+
+M2–M4 remain **in progress**. AN-005 and AN-010 verified labels in the historical table below are superseded: application embedding population/query generation, semantic context/Ask integration, reranking, production privacy/error behavior and real-model acceptance are incomplete. AN-006/009 retain offline/discovery subsets only; AN-011 is design-only. AN-018/019/031/033 require real native/browser vault and encrypted recovery workflows. [M5 readiness](evidence/M5-READINESS.md) and [ownership checklist](handoffs/M2-M4-integration-owner.md) control current acceptance. Historical evidence is preserved, never expanded into unexecuted tests. All master requirement owners remain represented; audit monitor paused, external audit pending, CI/publication deferred.
+
 ## Owner amendment — M2.7-Core isolation and M2/M3 integration (2026-10-19)
 
 M2.7-Core initial parser/keys/session/policy/native-store/shadow-preparation subset is implemented and tested in isolation; [Increment 1 evidence](evidence/M2-7.md) records its scope. [Increment 2 evidence](evidence/M2-7-increment2.md) tracks explicit schema-9 encrypted history/graph generations, cross-process admission and epochs, full DEK rotation, recovery acknowledgement and encrypted export/fresh restore. M2.7 native application integration adds verified Windows desktop adapter workflow: [evidence](evidence/M2-7-native-application.md). AN-018/019/031/033 gain core and native desktop coverage; they remain in progress for complete browser authorization and certified M2.8 release.
