@@ -138,12 +138,22 @@ Executed locally on `codex/m2-m3-integration` at `b6d472c` (all exited 0):
   - `tests/e2e/vault.spec.ts`: 1/1 passed.
   - `tests/e2e/ask_anansi.spec.ts` (with `ANANSI_REAL_MODEL=1`): 1/1 passed.
 
-### Exact remaining gates before M5 implementation / release certification
+### Remaining local development prerequisite
 
 1. **Manual Production Win32 Credential & Recovery Dialog Check (Owner-in-the-loop)**:
    - Because computer-use rules forbid automating OS authentication prompts, a human operator must run `node scripts/with-application-test-lease.mjs scripts/manual-vault-acceptance.mjs` (which launches the desktop app without `ANANSI_VAULT_TEST_PROVIDER` against a synthetic workspace and verified backup) and confirm real Win32 `CredUIPromptForCredentialsW` and `MessageBoxW` dialogs for setup, seal, unlock, wrong-passphrase refusal, prompt cancellation, and recovery unlock.
-2. **Pre-Production External Cryptographic Audit (`G1-External-Audit`)**:
+   - The Owner reported an unsuccessful recovery acknowledgement after repeating the original login credentials; the UI displayed an obsolete future-vault message. Prompt and error repairs are committed at `1d03b99` and retained in the later native-provider integration. No successful human retry, sealing, restart or recovery result has been reported. The manual prerequisite remains open. No credentials or recovery keys are recorded here.
+
+The first bounded M5 implementation task is not yet prepared or started. Reassess after this local prerequisite passes and reconcile the current provider/authentication/Zero-Cost-Lock plan. Deferred production audit and publication checks below are separate from this local development prerequisite.
+
+### Deferred production and publication gates
+
+1. **Pre-Production External Cryptographic Audit (`G1-External-Audit`)**:
    - Remains an open pre-production/commercialization gate under explicit [Owner engineering risk acceptance](../approvals/M2-6-owner-risk-acceptance.md); never counted as passed by local tests.
-3. **Remote CI & Protected-Branch Publication**:
+2. **Remote CI & Protected-Branch Publication**:
    - Deferred by Owner capacity policy; local verification does not substitute for remote CI or protected `master` publication.
+
+### Source publication checkpoint — 2026-10-20
+
+Inspected clean implementation/documentation HEAD `5b7a87b3433e1023daa9f1aa9caedf4d9181f8a0`, three commits ahead of the fetched integration branch, with no remote-only commits. Fresh local checks exited 0: documentation validation, seven planning negative fixtures, TypeScript typecheck, all 33 UI/contract tests and diff whitespace validation. Earlier Rust/application results above are retained evidence, not reruns performed for this push. The Owner requested one source publication to `codex/m2-m3-integration`; its documentation checkpoint uses `[skip ci]` to avoid consuming unavailable Actions capacity. This does not certify required checks, publish protected master, or close the audit/manual gates. Exact pushed identity is verified separately against the remote after the push.
 
