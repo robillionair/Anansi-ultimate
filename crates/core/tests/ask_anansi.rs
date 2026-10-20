@@ -18,6 +18,20 @@ fn setup_test_workspace(name: &str) -> (tempfile::TempDir, Core, String) {
 }
 
 #[test]
+fn missing_workspace_is_not_reported_as_missing_evidence() {
+    let (_temp, core, _ws) = setup_test_workspace("Ask Failure Boundary");
+    let result = core.ask_anansi(AskRequest {
+        contract_version: 1,
+        workspace_id: "ffffffffffffffffffffffffffffffff".into(),
+        prompt: "Find the deployment decision".into(),
+        runtime_endpoint: None,
+        model_tag: None,
+        max_evidence_items: None,
+    });
+    assert!(result.is_err());
+}
+
+#[test]
 fn missing_evidence_returns_truthful_insufficient_evidence_status() {
     let (_temp, core, ws) = setup_test_workspace("Empty Workspace");
 

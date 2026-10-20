@@ -157,35 +157,23 @@ pub fn hybrid_search(
             |row| row.get::<_, String>(0),
         );
 
-        let (title, kind, is_archived, privacy) = if let Ok(json_str) = meta_res {
-            if let Ok(val) = serde_json::from_str::<serde_json::Value>(&json_str) {
-                let title = val["title"].as_str().unwrap_or("").to_string();
-                let kind = val["kind"].as_str().unwrap_or("note").to_string();
-                let is_archived = val["status"].as_str() == Some("archived");
-                let privacy = val["privacy"].as_str().unwrap_or("standard").to_string();
-                (title, kind, is_archived, privacy)
-            } else {
-                continue;
-            }
-        } else {
-            let fallback = conn.query_row(
-                "SELECT title, kind, archived, privacy
-                 FROM memories
-                 WHERE workspace_id = ?1 AND id = ?2",
-                params![request.workspace_id, memory_id],
-                |row| {
-                    let title: String = row.get(0)?;
-                    let kind: String = row.get(1)?;
-                    let archived: i64 = row.get(2)?;
-                    let privacy: String = row.get(3)?;
-                    Ok((title, kind, archived != 0, privacy))
-                },
-            );
-            match fallback {
-                Ok(data) => data,
-                Err(_) => continue,
-            }
+        let json_str = meta_res.map_err(|_| crate::storage::unavailable())?;
+        let val: serde_json::Value =
+            serde_json::from_str(&json_str).map_err(|_| crate::storage::unavailable())?;
+        let field = |key: &str| {
+            val[key]
+                .as_str()
+                .map(str::to_owned)
+                .ok_or_else(crate::storage::unavailable)
         };
+        let title = field("title")?;
+        let kind = field("kind")?;
+        let status = field("status")?;
+        let privacy = field("privacy")?;
+        if !["private", "standard", "public", "sealed"].contains(&privacy.as_str()) {
+            return Err(crate::storage::unavailable());
+        }
+        let is_archived = status == "archived";
 
         // Fail-closed Sealed memory exclusion
         if privacy.eq_ignore_ascii_case("sealed") {

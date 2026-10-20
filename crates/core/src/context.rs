@@ -157,24 +157,7 @@ pub fn compile_context(
             },
         );
 
-        let (revision_id, privacy_str) = match row_res {
-            Ok(data) => data,
-            Err(_) => {
-                let fallback = conn.query_row(
-                    "SELECT current_revision, privacy FROM memories WHERE workspace_id = ?1 AND id = ?2",
-                    rusqlite::params![req.workspace_id, hit.memory_id],
-                    |r| {
-                        let rev: String = r.get(0)?;
-                        let priv_str: String = r.get(1)?;
-                        Ok((rev, priv_str))
-                    },
-                );
-                match fallback {
-                    Ok(data) => data,
-                    Err(_) => continue,
-                }
-            }
-        };
+        let (revision_id, privacy_str) = row_res.map_err(|_| crate::storage::unavailable())?;
 
         if privacy_str.eq_ignore_ascii_case("sealed") {
             continue; // Fail-closed Sealed memory exclusion

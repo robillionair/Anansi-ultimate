@@ -301,9 +301,16 @@ pub fn generate_ollama_embedding(
         .map_err(|e| VectorError::Offline(format!("Failed to send embedding request: {}", e)))?;
 
     let mut response_bytes = Vec::new();
-    stream
+    // Bound allocation before parsing even if a local server is malformed.
+    (&mut stream)
+        .take(256 * 1024 + 1)
         .read_to_end(&mut response_bytes)
         .map_err(|e| VectorError::Offline(format!("Failed to read embedding response: {}", e)))?;
+    if response_bytes.len() > 256 * 1024 {
+        return Err(VectorError::ServiceError(
+            "Embedding response exceeds its limit".into(),
+        ));
+    }
 
     let response_str = String::from_utf8_lossy(&response_bytes);
     let mut parts = response_str.split("\r\n\r\n");

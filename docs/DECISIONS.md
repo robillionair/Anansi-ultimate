@@ -1,5 +1,9 @@
 # ANANSI Ultimate — Architecture Decisions
 
+## Current integration authority — 2026-10-20
+
+The Owner authorizes completing M2–M4 in the main integration checkout. [Ownership](handoffs/M2-M4-integration-owner.md) supersedes historical isolation limits within this task. [Readiness](evidence/M5-READINESS.md) supersedes premature M3/M4 full-completion claims. Ask must consume the shared Context Compiler; canonical metadata/content errors must propagate rather than silently becoming missing evidence or guessed privacy. Native credential input uses flags belonging to `CredUIPromptForCredentialsW`, explicitly generic/non-persistent/always-visible. Synthetic credentials are debug-only and never establish production native-control acceptance. No cryptographic primitive or Owner audit exception is changed.
+
 ## ADR-0030: Big Brain deliberative reasoning architecture and multi-chunk Context Compiler
 
 - **Authority:** User instruction to continue Milestone 4; Master Spec §8, §11, §13, §19, §66–67, §71, §74, §77–78; Requirements Matrix AN-006, AN-010, AN-011; `docs/designs/BIG_BRAIN_SPEC.md`.

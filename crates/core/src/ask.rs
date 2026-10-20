@@ -1,5 +1,4 @@
 use crate::ai_discovery::{RuntimeKind, RuntimeStatus, probe_runtime};
-use crate::memory::MemoryListRequest;
 use crate::{CommandError, Core, ErrorCode};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -225,80 +224,31 @@ impl Core {
         };
 
         let storage = self.storage()?;
-        let search_result = storage.body_search(MemoryListRequest {
-            contract_version: 1,
-            workspace_id: request.workspace_id.clone(),
-            id: None,
-            kind: None,
-            query: Some(search_query),
-            full_body: true,
-            offset: 0,
-            limit: Some(max_items as u32),
-            include_archived: false,
-            include_expired: false,
-        });
-
-        let candidate_memories = match search_result {
-            Ok(list) => list.memories,
-            Err(_) => Vec::new(),
-        };
-
-        // Filter duplicates and collect citations bounded by context budget (max 4,000 chars)
-        let mut citations = Vec::new();
-        let mut source_refs = Vec::new();
-        let mut evidence_text = String::new();
-        let max_context_chars = 4000usize;
-
-        for meta in candidate_memories {
-            if !crate::vault::policy::SearchBoundary::may_index(meta.privacy) {
-                continue;
-            }
-
-            if meta.duplicate_of.is_some() {
-                continue;
-            }
-
-            let index = citations.len() + 1;
-            let citation_title = meta.title.clone();
-            let citation_kind = meta.kind.clone();
-            let heading = meta.section_heading.clone();
-            let line = meta.line_number;
-            let snippet = meta.snippet.clone().unwrap_or_default();
-
-            let item_text = format!(
-                "[{}] Title: {} (Kind: {})\nSection: {}\nSnippet: {}\n\n",
-                index,
-                citation_title,
-                citation_kind,
-                heading.as_deref().unwrap_or("General"),
-                snippet
-            );
-
-            if evidence_text.len() + item_text.len() > max_context_chars && !citations.is_empty() {
-                break;
-            }
-
-            evidence_text.push_str(&item_text);
-            source_refs.push(SourceMemoryReference {
-                id: meta.id.clone(),
-                title: citation_title.clone(),
-                kind: citation_kind.clone(),
-            });
-
-            citations.push(GroundedCitation {
-                index,
-                memory_id: meta.id,
-                title: citation_title,
-                kind: citation_kind,
-                section_heading: heading,
-                line_number: line,
-                snippet,
-            });
-
-            if citations.len() >= max_items {
-                break;
-            }
-        }
+        self.workspace_command(
+            "open",
+            serde_json::json!({"contractVersion":1,"id":request.workspace_id}),
+        )?;
+        // Use the same compiler as the explicit context application command.
+        // Rebuild/integrity checks run before reading derived retrieval data.
+        storage.rebuild_search_index(&request.workspace_id)?;
+        let conn = storage
+            .connection(false)?
+            .ok_or_else(crate::storage::unavailable)?;
+        let compiled = crate::context::compile_context(
+            &conn,
+            storage.root_path(),
+            &crate::context::ContextCompilationRequest {
+                workspace_id: request.workspace_id.clone(),
+                user_prompt: search_query,
+                max_budget_chars: Some((max_items * 800).min(4000)),
+                runtime_endpoint: request.runtime_endpoint.clone(),
+                model_tag: request.model_tag.clone(),
+                kind_filter: None,
+            },
+        )?;
+        drop(conn);
+        let citations = compiled.citations;
+        let source_refs = compiled.disclosure_manifest.source_memories;
 
         // 2. Truthful Insufficient Evidence Handling
         if citations.is_empty() {
@@ -325,14 +275,8 @@ impl Core {
 
         // 3. Grounding System Prompt Construction
         let compiled_prompt = format!(
-            "You are ANANSI, a personal, privacy-first memory assistant. Answer the user's question using ONLY the following verified workspace memory citations.\n\
-             For every fact or claim you state, you MUST cite the corresponding citation number in square brackets, e.g. [1], [2].\n\
-             If the citations do not provide enough information to answer truthfully, state that clearly without guessing or hallucinating.\n\n\
-             === CITATIONS ===\n\
-             {}\
-             === END CITATIONS ===\n\n\
-             User Question: {}",
-            evidence_text, trimmed_prompt
+            "{}\nOriginal user question: {}",
+            compiled.system_prompt, trimmed_prompt
         );
 
         let char_count = compiled_prompt.len();

@@ -16,6 +16,31 @@ fn setup_test_workspace(name: &str) -> (tempfile::TempDir, Core, std::path::Path
 }
 
 #[test]
+fn canonical_content_corruption_is_not_silently_dropped() {
+    let (_temp, core, root, ws) = setup_test_workspace("Context Integrity");
+    let memory = core.memory_command("create", json!({"contractVersion":1,"workspaceId":ws,"kind":"note","draft":{"title":"Integrity evidence","body":"Verified integrity evidence", "privacy":"private"}})).unwrap();
+    let id = memory["memory"]["id"].as_str().unwrap();
+    let revision = memory["memory"]["revisionId"].as_str().unwrap();
+    let body = root
+        .join("content")
+        .join(&ws)
+        .join(id)
+        .join(format!("{revision}.md"));
+    std::fs::write(body, "Tampered synthetic data").unwrap();
+    let conn = rusqlite::Connection::open(root.join("workspaces.sqlite3")).unwrap();
+    let request = ContextCompilationRequest {
+        workspace_id: ws,
+        user_prompt: "Integrity".into(),
+        max_budget_chars: None,
+        runtime_endpoint: None,
+        model_tag: None,
+        kind_filter: None,
+    };
+    let error = compile_context(&conn, &root, &request).unwrap_err();
+    assert_eq!(error.code, anansi_core::ErrorCode::ContentIntegrity);
+}
+
+#[test]
 fn unicode_sections_do_not_panic_at_byte_budget_boundaries() {
     for text in ["世".repeat(500), "🕸".repeat(500), "é".repeat(800)] {
         let chunks = chunk_markdown_sections("memory", "Unicode", "note", &text);

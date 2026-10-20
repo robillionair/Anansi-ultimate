@@ -38,6 +38,7 @@ fn setup_hybrid_test_db() -> Connection {
             privacy TEXT NOT NULL DEFAULT 'private',
             PRIMARY KEY (workspace_id, id)
         );
+        CREATE TABLE memory_revisions(workspace_id TEXT, memory_id TEXT, id TEXT, metadata TEXT);
         CREATE VIRTUAL TABLE memory_body_fts USING fts5(
             workspace_id UNINDEXED,
             memory_id UNINDEXED,
@@ -68,6 +69,8 @@ fn seed_memory(
         rusqlite::params![ws, id, title, kind, if archived { 1 } else { 0 }, privacy],
     )
     .unwrap();
+
+    conn.execute("INSERT INTO memory_revisions VALUES (?1,?2,'rev_1',?3)", rusqlite::params![ws,id,serde_json::json!({"title":title,"kind":kind,"status":if archived {"archived"} else {"proposed"},"privacy":privacy}).to_string()]).unwrap();
 
     if privacy != "sealed" {
         conn.execute(
