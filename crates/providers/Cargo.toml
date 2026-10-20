@@ -1,0 +1,18 @@
+[package]
+name = "anansi-providers"
+version = "0.1.0"
+edition = "2024"
+license = "UNLICENSED"
+description = "ANANSI M5 AI Matrix provider-integration package: adapters, routing, quotas, Zero-Cost Lock. Standalone until the integrator registers it in the root workspace (see docs/handoffs/M5-to-integrator.md)."
+
+# Standalone workspace marker: keeps this package buildable and testable
+# without touching the shared root Cargo.toml. The separate integration
+# commit removes this table and adds the crate to the root workspace.
+[workspace]
+
+[dependencies]
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = { version = "=1.0.154" }
+
+[dev-dependencies]
+# Tests use only std + this crate: synthetic servers are std TcpListeners.
