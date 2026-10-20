@@ -92,20 +92,23 @@ node scripts/validate-docs.mjs
    integrator's remaining step is to dispatch with `RustlsTransport`;
    OS-native root stores, if ever wanted, are an owner decision
    noted in the addendum.
-2. **Secret resolver.** Implement `SecretResolver` over the existing
-   keyring boundary (`crates/core/src/vault/credential_store.rs`, service
-   naming for provider credentials is an owner decision). Until then,
-   credentialed dispatch refuses before network via
-   `UnavailableResolver`. Provider setup UI follows §15: official
-   API-key page, user pastes key into the OS vault, only the
+2. **Secret resolver — DONE after this handover was written.** See
+   [M5-integration-addendum.md](M5-integration-addendum.md):
+   `KeyringSecretResolver` implements the boundary over the OS
+   credential store under service `com.robillionair.anansi.providers`
+   (one entry per credential reference), including the store/delete
+   write path for the §15 setup flow. The setup UI still follows §15:
+   official API-key page, user pastes key into the OS vault, only the
    `CredentialRef` is stored in settings.
-3. **Dispatch surface.** Add `Core::ai_command` operations (e.g.
-   `providers-list`, `providers-dispatch`, `providers-stream-*`)
-   mirroring the existing ask operations allow-list in
-   `crates/api/src/lib.rs`, with generated contracts in
-   `packages/contracts`. Carry the request's privacy classification
-   from the Context Compiler output — the dispatcher consumes
-   segment classes, it does not classify.
+3. **Dispatch surface — DONE after this handover was written.** See
+   the same addendum: `providers-catalog`, `providers-dispatch` and
+   `providers-stream-start/-poll/-cancel` on `Core::ai_command`, the
+   matching `crates/api` routes, and `ProviderRuntime` in the crate.
+   Still open here: generated contracts in `packages/contracts` for
+   the new operations (the operations currently validate their JSON
+   in core), and carrying privacy classification in from the Context
+   Compiler — the dispatcher consumes segment classes, it does not
+   classify.
 4. **UI.** The Navigation placeholders ("AI Matrix / Integrations")
    already exist. Render `DisclosureRecord` for "View What ANANSI
    Sent"; surface `QuotaReport::Unavailable` honestly instead of
