@@ -669,6 +669,7 @@ export interface OpenWorkspaceRequest {
 }
 export interface ProviderAuthorizeRequest {
   allowUnknownCost?: boolean;
+  contractVersion?: number;
   maxEstimatedTotalTokens: number;
   model: string;
   provider: string;
@@ -676,10 +677,12 @@ export interface ProviderAuthorizeRequest {
   workspaceId: string;
 }
 export interface ProviderAuthorizeResponse {
+  contractVersion: number;
   expiresAtMs: number;
   permitId: string;
 }
 export interface ProviderCatalogResponse {
+  contractVersion: number;
   providers: ProviderCatalogEntry[];
 }
 export interface ProviderCatalogEntry {
@@ -718,6 +721,7 @@ export type SpeedTier = "fast" | "balanced" | "deep";
 
 export interface ProviderConfigureRequest {
   config: RuntimeConfig;
+  contractVersion?: number;
   /**
    * Logical workspace (validated by `Core` against the storage
    * registry before this DTO is ever parsed).
@@ -825,6 +829,7 @@ export interface CapabilitySet {
   vision: boolean;
 }
 export interface ProviderConfigureResponse {
+  contractVersion: number;
   providers: string[];
 }
 export type Role = "system" | "user" | "assistant";
@@ -847,6 +852,7 @@ export interface ProviderDispatchRequest {
    * @maxItems 2
    */
   chosen?: [unknown, unknown] | null;
+  contractVersion?: number;
   mode?: string | null;
   /**
    * The id of a permit issued by `providers-authorize` to this
@@ -905,6 +911,7 @@ export interface Segment {
 export type RoutingMode = "auto" | "autoFree" | "private" | "fast" | "deep" | "coding" | "vision" | "chooseModel";
 
 export interface ProviderDispatchResponse {
+  contractVersion: number;
   disclosure: DisclosureRecord;
   response: ProviderResponseBody;
 }
@@ -944,6 +951,7 @@ export interface ProviderResponseBody {
   usage?: Usage | null;
 }
 export interface ProviderGrantRequest {
+  contractVersion?: number;
   /**
    * The session label to grant (for API sessions, the token
    * fingerprint the API stamps — the host knows it from the
@@ -962,6 +970,7 @@ export interface ProviderGrantRequest {
  */
 
 export interface ProviderPollResponse {
+  contractVersion: number;
   disclosure: DisclosureRecord;
   done: boolean;
   events: ProviderStreamEvent[];
@@ -1006,6 +1015,7 @@ export interface ProviderStreamEvent {
 }
 export interface ProviderRunRequest {
   capability: string;
+  contractVersion?: number;
   runId: string;
   workspaceId: string;
 }
@@ -1022,6 +1032,7 @@ export interface ProviderStreamStartResponse {
    * Unpredictable per-run capability; poll/cancel require it.
    */
   capability: string;
+  contractVersion: number;
   disclosure: DisclosureRecord;
   runId: string;
 }
@@ -1055,6 +1066,7 @@ export interface Usage {
   outputTokens: number;
 }
 export interface ProviderUsageResponse {
+  contractVersion: number;
   providers: ProviderUsageEntry[];
   reservedRequests: number;
   reservedTokens: number;
@@ -1067,6 +1079,7 @@ export interface ProviderUsageEntry {
   requests: number;
 }
 export interface ProviderWorkspaceRequest {
+  contractVersion?: number;
   workspaceId: string;
 }
 export interface ReadArtifactRequest {

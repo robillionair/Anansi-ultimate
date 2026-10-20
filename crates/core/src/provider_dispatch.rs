@@ -173,12 +173,15 @@ pub struct ProviderCatalogEntry {
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ProviderCatalogResponse {
+    pub contract_version: u8,
     pub providers: Vec<ProviderCatalogEntry>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ProviderConfigureRequest {
+    #[serde(default = "default_contract_version")]
+    pub contract_version: u8,
     /// Logical workspace (validated by `Core` against the storage
     /// registry before this DTO is ever parsed).
     pub workspace_id: String,
@@ -188,12 +191,15 @@ pub struct ProviderConfigureRequest {
 #[derive(Debug, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ProviderConfigureResponse {
+    pub contract_version: u8,
     pub providers: Vec<String>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ProviderAuthorizeRequest {
+    #[serde(default = "default_contract_version")]
+    pub contract_version: u8,
     pub workspace_id: String,
     pub provider: String,
     pub model: String,
@@ -208,6 +214,7 @@ pub struct ProviderAuthorizeRequest {
 #[derive(Debug, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ProviderAuthorizeResponse {
+    pub contract_version: u8,
     pub permit_id: String,
     pub expires_at_ms: u64,
 }
@@ -218,6 +225,8 @@ pub struct ProviderAuthorizeResponse {
 #[derive(Debug, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ProviderDispatchRequest {
+    #[serde(default = "default_contract_version")]
+    pub contract_version: u8,
     pub workspace_id: String,
     pub request: CompletionRequest,
     pub mode: Option<String>,
@@ -242,6 +251,7 @@ pub struct ProviderResponseBody {
 #[derive(Debug, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ProviderDispatchResponse {
+    pub contract_version: u8,
     pub response: ProviderResponseBody,
     pub disclosure: DisclosureRecord,
 }
@@ -249,6 +259,7 @@ pub struct ProviderDispatchResponse {
 #[derive(Debug, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ProviderStreamStartResponse {
+    pub contract_version: u8,
     pub run_id: String,
     /// Unpredictable per-run capability; poll/cancel require it.
     pub capability: String,
@@ -258,6 +269,8 @@ pub struct ProviderStreamStartResponse {
 #[derive(Debug, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ProviderRunRequest {
+    #[serde(default = "default_contract_version")]
+    pub contract_version: u8,
     pub workspace_id: String,
     pub run_id: String,
     pub capability: String,
@@ -266,12 +279,16 @@ pub struct ProviderRunRequest {
 #[derive(Debug, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ProviderWorkspaceRequest {
+    #[serde(default = "default_contract_version")]
+    pub contract_version: u8,
     pub workspace_id: String,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ProviderGrantRequest {
+    #[serde(default = "default_contract_version")]
+    pub contract_version: u8,
     pub workspace_id: String,
     /// The session label to grant (for API sessions, the token
     /// fingerprint the API stamps — the host knows it from the
@@ -302,6 +319,7 @@ pub struct ProviderStreamEvent {
 #[derive(Debug, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ProviderPollResponse {
+    pub contract_version: u8,
     pub events: Vec<ProviderStreamEvent>,
     pub done: bool,
     pub disclosure: DisclosureRecord,
@@ -319,6 +337,7 @@ pub struct ProviderUsageEntry {
 #[derive(Debug, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ProviderUsageResponse {
+    pub contract_version: u8,
     pub total_requests: u64,
     pub reserved_requests: u64,
     pub reserved_tokens: u64,
@@ -719,6 +738,20 @@ fn event_dto(event: &Result<StreamEvent, ProviderError>) -> ProviderStreamEvent 
     }
 }
 
+fn default_contract_version() -> u8 {
+    1
+}
+
+fn require_contract_v1(version: u8) -> Result<(), CommandError> {
+    if version != 1 {
+        return Err(CommandError::new(
+            ErrorCode::UnsupportedContract,
+            "Use a supported contract version.",
+        ));
+    }
+    Ok(())
+}
+
 fn parse<T: serde::de::DeserializeOwned>(value: Value, what: &str) -> Result<T, CommandError> {
     serde_json::from_value(value).map_err(|_| {
         CommandError::new(
@@ -855,6 +888,7 @@ pub fn providers_command(
 ) -> Result<Value, CommandError> {
     match operation {
         "providers-catalog" => to_value(&ProviderCatalogResponse {
+            contract_version: 1,
             providers: anansi_providers::catalog::catalog()
                 .iter()
                 .map(|e| ProviderCatalogEntry {
@@ -869,6 +903,7 @@ pub fn providers_command(
         }),
         "providers-configure" => {
             let req: ProviderConfigureRequest = parse(value, "provider configuration")?;
+            require_contract_v1(req.contract_version)?;
             validate_config_bounds(&req.config)?;
             enforce_derived_locality(&req.config)?;
             let providers: Vec<String> = req
@@ -890,10 +925,14 @@ pub fn providers_command(
                 state.runtime = Some((fp, Arc::new(runtime)));
                 Ok(())
             })?;
-            to_value(&ProviderConfigureResponse { providers })
+            to_value(&ProviderConfigureResponse {
+                contract_version: 1,
+                providers,
+            })
         }
         "providers-authorize" => {
             let req: ProviderAuthorizeRequest = parse(value, "provider authorization")?;
+            require_contract_v1(req.contract_version)?;
             if req.max_estimated_total_tokens == 0
                 || req.max_estimated_total_tokens > MAX_PERMIT_TOKENS
             {
@@ -928,12 +967,14 @@ pub fn providers_command(
                 Ok(())
             })?;
             to_value(&ProviderAuthorizeResponse {
+            contract_version: 1,
                 permit_id,
                 expires_at_ms,
             })
         }
         "providers-dispatch" => {
             let req: ProviderDispatchRequest = parse(value, "provider dispatch")?;
+            require_contract_v1(req.contract_version)?;
             validate_request_bounds(&req.request)?;
             let routing = routing_request(&req)?;
             // Phase 1 (locked): resolve policy — model universe,
@@ -954,6 +995,7 @@ pub fn providers_command(
                 .dispatch(&req.request, routing, permit, &CancellationToken::new())
                 .map_err(to_command_error)?;
             to_value(&ProviderDispatchResponse {
+            contract_version: 1,
                 response: ProviderResponseBody {
                     text: outcome.response.text,
                     model: outcome.response.model,
@@ -965,6 +1007,7 @@ pub fn providers_command(
         }
         "providers-stream-start" => {
             let req: ProviderDispatchRequest = parse(value, "provider dispatch")?;
+            require_contract_v1(req.contract_version)?;
             validate_request_bounds(&req.request)?;
             let routing = routing_request(&req)?;
             // Locked phase: policy resolution (model, cap
@@ -1011,6 +1054,7 @@ pub fn providers_command(
                     },
                 );
                 Ok(ProviderStreamStartResponse {
+            contract_version: 1,
                     run_id,
                     capability,
                     disclosure,
@@ -1020,6 +1064,7 @@ pub fn providers_command(
         }
         "providers-stream-poll" | "providers-stream-cancel" => {
             let req: ProviderRunRequest = parse(value, "provider stream run")?;
+            require_contract_v1(req.contract_version)?;
             with_backend_existing(scope, |state| {
                 // Binding check: right run, right session, right
                 // capability — anything else is indistinguishable
@@ -1070,6 +1115,7 @@ pub fn providers_command(
                     state.streams.remove(&req.run_id);
                 }
                 to_value(&ProviderPollResponse {
+            contract_version: 1,
                     events,
                     done,
                     disclosure,
@@ -1086,6 +1132,7 @@ pub fn providers_command(
                 ));
             }
             let req: ProviderGrantRequest = parse(value, "provider grant")?;
+            require_contract_v1(req.contract_version)?;
             let granting = operation == "providers-grant-session";
             with_backend(scope, |state| {
                 if granting {
@@ -1105,7 +1152,8 @@ pub fn providers_command(
             to_value(&serde_json::json!({ "granted": granting }))
         }
         "providers-usage" => {
-            let _req: ProviderWorkspaceRequest = parse(value, "provider usage")?;
+            let req: ProviderWorkspaceRequest = parse(value, "provider usage")?;
+            require_contract_v1(req.contract_version)?;
             with_backend(scope, |state| {
                 let ledger = state
                     .ledger
@@ -1113,6 +1161,7 @@ pub fn providers_command(
                     .unwrap_or_else(|poisoned| poisoned.into_inner());
                 let (reserved_requests, reserved_tokens) = ledger.reserved();
                 to_value(&ProviderUsageResponse {
+            contract_version: 1,
                     total_requests: ledger.total_requests(),
                     reserved_requests,
                     reserved_tokens,

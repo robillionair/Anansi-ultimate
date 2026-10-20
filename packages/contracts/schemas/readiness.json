@@ -3777,6 +3777,13 @@
         "default": false,
         "type": "boolean"
       },
+      "contractVersion": {
+        "default": 1,
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
       "maxEstimatedTotalTokens": {
         "format": "uint64",
         "maximum": 10000000,
@@ -3814,6 +3821,12 @@
   "ProviderAuthorizeResponse": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
       "expiresAtMs": {
         "format": "uint64",
         "minimum": 0,
@@ -3824,6 +3837,7 @@
       }
     },
     "required": [
+      "contractVersion",
       "permitId",
       "expiresAtMs"
     ],
@@ -3874,6 +3888,12 @@
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
     "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
       "providers": {
         "items": {
           "$ref": "#/$defs/ProviderCatalogEntry"
@@ -3882,6 +3902,7 @@
       }
     },
     "required": [
+      "contractVersion",
       "providers"
     ],
     "title": "ProviderCatalogResponse",
@@ -4163,6 +4184,13 @@
       "config": {
         "$ref": "#/$defs/RuntimeConfig"
       },
+      "contractVersion": {
+        "default": 1,
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
       "workspaceId": {
         "description": "Logical workspace (validated by `Core` against the storage\nregistry before this DTO is ever parsed).",
         "type": "string"
@@ -4178,6 +4206,12 @@
   "ProviderConfigureResponse": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
       "providers": {
         "items": {
           "type": "string"
@@ -4186,6 +4220,7 @@
       }
     },
     "required": [
+      "contractVersion",
       "providers"
     ],
     "title": "ProviderConfigureResponse",
@@ -4320,6 +4355,13 @@
           "array",
           "null"
         ]
+      },
+      "contractVersion": {
+        "default": 1,
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
       },
       "mode": {
         "type": [
@@ -4526,6 +4568,12 @@
     },
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
       "disclosure": {
         "$ref": "#/$defs/DisclosureRecord"
       },
@@ -4534,6 +4582,7 @@
       }
     },
     "required": [
+      "contractVersion",
       "response",
       "disclosure"
     ],
@@ -4544,6 +4593,13 @@
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
     "properties": {
+      "contractVersion": {
+        "default": 1,
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
       "session": {
         "description": "The session label to grant (for API sessions, the token\nfingerprint the API stamps — the host knows it from the\npairing record; the label is not a secret).",
         "type": "string"
@@ -4762,6 +4818,12 @@
     },
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
       "disclosure": {
         "$ref": "#/$defs/DisclosureRecord"
       },
@@ -4776,6 +4838,7 @@
       }
     },
     "required": [
+      "contractVersion",
       "events",
       "done",
       "disclosure"
@@ -4789,6 +4852,13 @@
     "properties": {
       "capability": {
         "type": "string"
+      },
+      "contractVersion": {
+        "default": 1,
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
       },
       "runId": {
         "type": "string"
@@ -4952,6 +5022,12 @@
         "description": "Unpredictable per-run capability; poll/cancel require it.",
         "type": "string"
       },
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
       "disclosure": {
         "$ref": "#/$defs/DisclosureRecord"
       },
@@ -4960,6 +5036,7 @@
       }
     },
     "required": [
+      "contractVersion",
       "runId",
       "capability",
       "disclosure"
@@ -5001,6 +5078,12 @@
     },
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
       "providers": {
         "items": {
           "$ref": "#/$defs/ProviderUsageEntry"
@@ -5024,6 +5107,7 @@
       }
     },
     "required": [
+      "contractVersion",
       "totalRequests",
       "reservedRequests",
       "reservedTokens",
@@ -5036,6 +5120,13 @@
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
     "properties": {
+      "contractVersion": {
+        "default": 1,
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
       "workspaceId": {
         "type": "string"
       }
