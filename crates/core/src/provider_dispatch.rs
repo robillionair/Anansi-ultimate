@@ -892,9 +892,10 @@ pub fn providers_command(
                     if !(MIN_PERMIT_TTL_SECONDS..=MAX_PERMIT_TTL_SECONDS).contains(&ttl) {
                         return Err(invalid("Grant TTL is out of bounds."));
                     }
-                    state
-                        .grants
-                        .insert(req.session.clone(), Instant::now() + Duration::from_secs(ttl));
+                    state.grants.insert(
+                        req.session.clone(),
+                        Instant::now() + Duration::from_secs(ttl),
+                    );
                 } else {
                     state.grants.remove(&req.session);
                 }
@@ -905,26 +906,26 @@ pub fn providers_command(
         "providers-usage" => {
             let _req: ProviderWorkspaceRequest = parse(value, "provider usage")?;
             with_backend(scope, |state| {
-            let ledger = state
-                .ledger
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner());
-            let (reserved_requests, reserved_tokens) = ledger.reserved();
-            to_value(&ProviderUsageResponse {
-                total_requests: ledger.total_requests(),
-                reserved_requests,
-                reserved_tokens,
-                providers: ledger
-                    .totals_snapshot()
-                    .into_iter()
-                    .map(|(provider, totals)| ProviderUsageEntry {
-                        provider,
-                        requests: totals.requests,
-                        input_tokens: totals.input_tokens,
-                        output_tokens: totals.output_tokens,
-                    })
-                    .collect(),
-            })
+                let ledger = state
+                    .ledger
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
+                let (reserved_requests, reserved_tokens) = ledger.reserved();
+                to_value(&ProviderUsageResponse {
+                    total_requests: ledger.total_requests(),
+                    reserved_requests,
+                    reserved_tokens,
+                    providers: ledger
+                        .totals_snapshot()
+                        .into_iter()
+                        .map(|(provider, totals)| ProviderUsageEntry {
+                            provider,
+                            requests: totals.requests,
+                            input_tokens: totals.input_tokens,
+                            output_tokens: totals.output_tokens,
+                        })
+                        .collect(),
+                })
             })
         }
         _ => Err(CommandError::new(

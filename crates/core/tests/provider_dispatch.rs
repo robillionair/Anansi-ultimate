@@ -11,11 +11,11 @@
 //! is isolated per logical workspace, not merely per root.
 
 use anansi_core::{CommandError, Core, ErrorCode};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpListener;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
 // ---------------------------------------------------------------------------
@@ -114,10 +114,7 @@ fn start_fake_ollama() -> FakeOllama {
 
 fn create_workspace(core: &Core, name: &str) -> String {
     let details = core
-        .workspace_command(
-            "create",
-            json!({ "contractVersion": 1, "name": name }),
-        )
+        .workspace_command("create", json!({ "contractVersion": 1, "name": name }))
         .unwrap();
     details["workspace"]["id"].as_str().unwrap().to_string()
 }
@@ -337,7 +334,11 @@ fn cloud_endpoint_cannot_masquerade_as_local_or_free() {
     config["providers"][0]["locality"] = json!("cloud");
     let err = configure(&core, &ws, config).unwrap_err();
     assert_eq!(err.code, ErrorCode::InvalidRequest);
-    assert!(err.message.contains("locality is derived"), "{}", err.message);
+    assert!(
+        err.message.contains("locality is derived"),
+        "{}",
+        err.message
+    );
     assert_eq!(fake.hits.load(Ordering::SeqCst), 0);
 }
 
@@ -475,10 +476,7 @@ fn configure_and_authorize_require_owner_authorization() {
     let err = core
         .ai_command(
             "providers-configure",
-            stamped(
-                "browser-1",
-                json!({ "workspaceId": ws, "config": config }),
-            ),
+            stamped("browser-1", json!({ "workspaceId": ws, "config": config })),
         )
         .unwrap_err();
     assert_eq!(err.code, ErrorCode::Forbidden);
@@ -652,9 +650,14 @@ fn cross_session_stream_access_is_denied() {
             ),
         )
     };
-    assert_eq!(poll("intruder", &capability).unwrap_err().code, ErrorCode::NotFound);
     assert_eq!(
-        poll("owner", "cap-00000000000000000000000000000000").unwrap_err().code,
+        poll("intruder", &capability).unwrap_err().code,
+        ErrorCode::NotFound
+    );
+    assert_eq!(
+        poll("owner", "cap-00000000000000000000000000000000")
+            .unwrap_err()
+            .code,
         ErrorCode::NotFound
     );
     let err = core
@@ -671,7 +674,11 @@ fn cross_session_stream_access_is_denied() {
     std::thread::sleep(Duration::from_millis(200));
     let first = poll("owner", &capability).unwrap();
     assert!(
-        first["events"].as_array().unwrap().iter().any(|e| e["kind"] == "token"),
+        first["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|e| e["kind"] == "token"),
         "stream survived the intruder's cancel attempt: {first}"
     );
     core.ai_command(
@@ -698,7 +705,10 @@ fn cross_session_stream_access_is_denied() {
         std::thread::sleep(Duration::from_millis(20));
     }
     assert!(saw_cancelled);
-    assert_eq!(poll("owner", &capability).unwrap_err().code, ErrorCode::NotFound);
+    assert_eq!(
+        poll("owner", &capability).unwrap_err().code,
+        ErrorCode::NotFound
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -752,7 +762,11 @@ fn slow_dispatch_does_not_block_poll_cancel_or_other_workspaces() {
         .unwrap();
     let poll_elapsed = t.elapsed();
     assert!(
-        poll["events"].as_array().unwrap().iter().any(|e| e["kind"] == "token"),
+        poll["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|e| e["kind"] == "token"),
         "poll during slow dispatch returns stream events: {poll}"
     );
     assert!(
@@ -808,8 +822,14 @@ fn budget_comes_from_trusted_config_and_cannot_be_raised_by_the_caller() {
     config["budget"] = json!({ "maxRequests": 1 });
     configure(&core, &ws, config).unwrap();
     dispatch(&core, "s1", &ws, json!({}), "one").unwrap();
-    let err = dispatch(&core, "s1", &ws, json!({ "budget": { "maxRequests": 99 } }), "two")
-        .unwrap_err();
+    let err = dispatch(
+        &core,
+        "s1",
+        &ws,
+        json!({ "budget": { "maxRequests": 99 } }),
+        "two",
+    )
+    .unwrap_err();
     assert_eq!(err.code, ErrorCode::InvalidRequest);
     let err = dispatch(&core, "s1", &ws, json!({}), "two").unwrap_err();
     assert_eq!(err.code, ErrorCode::StorageUnavailable);

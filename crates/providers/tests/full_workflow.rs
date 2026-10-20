@@ -104,7 +104,7 @@ fn complete_configuration_to_cancellation_workflow() {
 
     let mut tls = anansi_providers::tls::TlsConfig::new();
     tls.add_root_pem(ca.cert_pem.as_bytes()).unwrap();
-    let mut runtime = ProviderRuntime::new(
+    let runtime = ProviderRuntime::new(
         config,
         RustlsTransport::with_tls_config(tls),
         Box::new(resolver),

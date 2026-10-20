@@ -26,9 +26,8 @@ fn paid_cloud() -> (
     SyntheticServer,
     anansi_providers::routing::ProviderRegistration,
 ) {
-    let server = SyntheticServer::start(|_req, _hit| {
-        ServerResponse::json(200, openai_success_body())
-    });
+    let server =
+        SyntheticServer::start(|_req, _hit| ServerResponse::json(200, openai_success_body()));
     let reg = registration(
         "openai",
         format!("{}/v1", server.base_url),
@@ -43,7 +42,10 @@ fn paid_cloud() -> (
 fn zero_cost_lock_dispatch_transmits_the_free_candidate_not_the_requested_paid_model() {
     let (paid_server, paid_reg) = paid_cloud();
     let free_server = SyntheticServer::start(|_req, _hit| {
-        ServerResponse::json(200, "{\"model\":\"llama-free\",\"message\":{\"role\":\"assistant\",\"content\":\"hello from synthetic\"},\"done\":true,\"prompt_eval_count\":12,\"eval_count\":6}")
+        ServerResponse::json(
+            200,
+            "{\"model\":\"llama-free\",\"message\":{\"role\":\"assistant\",\"content\":\"hello from synthetic\"},\"done\":true,\"prompt_eval_count\":12,\"eval_count\":6}",
+        )
     });
     let free_reg = registration(
         "ollama",
@@ -69,7 +71,11 @@ fn zero_cost_lock_dispatch_transmits_the_free_candidate_not_the_requested_paid_m
     assert_eq!(outcome.response.text, "hello from synthetic");
     assert_eq!(outcome.disclosure.provider, "ollama");
     assert_eq!(outcome.disclosure.model, "llama-free");
-    assert_eq!(paid_server.hit_count(), 0, "paid candidate refused pre-network");
+    assert_eq!(
+        paid_server.hit_count(),
+        0,
+        "paid candidate refused pre-network"
+    );
     let recorded = free_server.recorded();
     assert_eq!(recorded.len(), 1);
     assert!(
@@ -87,9 +93,8 @@ fn zero_cost_lock_dispatch_transmits_the_free_candidate_not_the_requested_paid_m
 #[test]
 fn fallback_transmits_each_candidates_own_model() {
     let (paid_server, paid_reg) = paid_cloud();
-    let down = SyntheticServer::start(|_req, _hit| {
-        ServerResponse::json(503, "{\"error\":\"down\"}")
-    });
+    let down =
+        SyntheticServer::start(|_req, _hit| ServerResponse::json(503, "{\"error\":\"down\"}"));
     let up = SyntheticServer::start(|_req, _hit| ServerResponse::json(200, openai_success_body()));
     let down_reg = registration(
         "ollama",
@@ -107,12 +112,16 @@ fn fallback_transmits_each_candidates_own_model() {
     );
     let transport = StdHttpTransport;
     let res = resolver();
-    let dispatcher = Dispatcher::new(&transport, &res, anansi_providers::catalog::default_adapters())
-        .with_retry(anansi_providers::config::RetryPolicy {
-            max_retries: 0,
-            base_backoff_ms: 1,
-            max_retry_after_ms: 10,
-        });
+    let dispatcher = Dispatcher::new(
+        &transport,
+        &res,
+        anansi_providers::catalog::default_adapters(),
+    )
+    .with_retry(anansi_providers::config::RetryPolicy {
+        max_retries: 0,
+        base_backoff_ms: 1,
+        max_retry_after_ms: 10,
+    });
     let mut ctx = test_ctx(ledger(), RoutingMode::Auto, ZeroCostLock::off());
     ctx.routing.preferred_providers = vec!["ollama".into(), "lmstudio".into()];
     let outcome = dispatcher
@@ -192,7 +201,8 @@ fn streaming_transmits_the_routed_candidates_model() {
 fn choose_model_still_dispatches_exactly_the_chosen_model() {
     // Control: where the caller legitimately chooses, wire,
     // disclosure and gates all agree on the chosen model.
-    let server = SyntheticServer::start(|_req, _hit| ServerResponse::json(200, openai_success_body()));
+    let server =
+        SyntheticServer::start(|_req, _hit| ServerResponse::json(200, openai_success_body()));
     let reg = registration(
         "openai",
         format!("{}/v1", server.base_url),
@@ -207,13 +217,21 @@ fn choose_model_still_dispatches_exactly_the_chosen_model() {
     ctx.routing.chosen = Some(("openai".into(), "gpt-paid".into()));
     ctx.permit = Some(test_permit("openai", "gpt-paid"));
     let outcome = dispatcher
-        .execute(&[reg], &test_request("gpt-paid"), ctx, &CancellationToken::new())
+        .execute(
+            &[reg],
+            &test_request("gpt-paid"),
+            ctx,
+            &CancellationToken::new(),
+        )
         .unwrap();
     assert_eq!(outcome.disclosure.model, "gpt-paid");
     let recorded = server.recorded();
     assert!(recorded[0].body.contains("\"model\":\"gpt-paid\""));
     let expected_auth = format!("Bearer {FAKE_KEY}");
-    assert_eq!(recorded[0].header("authorization"), Some(expected_auth.as_str()));
+    assert_eq!(
+        recorded[0].header("authorization"),
+        Some(expected_auth.as_str())
+    );
 }
 
 #[test]
@@ -222,8 +240,10 @@ fn permit_mismatch_refuses_that_candidate_and_the_chain_uses_the_authorized_one(
     // anthropic candidate (refused before network), and the chain
     // proceeds to the candidate the permit actually covers — which
     // then serves with its own model on the wire.
-    let server_a = SyntheticServer::start(|_req, _hit| ServerResponse::json(200, openai_success_body()));
-    let server_b = SyntheticServer::start(|_req, _hit| ServerResponse::json(200, openai_success_body()));
+    let server_a =
+        SyntheticServer::start(|_req, _hit| ServerResponse::json(200, openai_success_body()));
+    let server_b =
+        SyntheticServer::start(|_req, _hit| ServerResponse::json(200, openai_success_body()));
     let reg_a = registration(
         "openai",
         format!("{}/v1", server_a.base_url),
@@ -245,9 +265,18 @@ fn permit_mismatch_refuses_that_candidate_and_the_chain_uses_the_authorized_one(
     ctx.routing.preferred_providers = vec!["anthropic".into()];
     ctx.permit = Some(test_permit("openai", "gpt-a"));
     let outcome = dispatcher
-        .execute(&[reg_a, reg_b], &test_request("gpt-a"), ctx, &CancellationToken::new())
+        .execute(
+            &[reg_a, reg_b],
+            &test_request("gpt-a"),
+            ctx,
+            &CancellationToken::new(),
+        )
         .unwrap();
-    assert_eq!(server_b.hit_count(), 0, "unauthorized candidate: no traffic");
+    assert_eq!(
+        server_b.hit_count(),
+        0,
+        "unauthorized candidate: no traffic"
+    );
     assert_eq!(outcome.disclosure.provider, "openai");
     assert_eq!(outcome.disclosure.model, "gpt-a");
     assert!(

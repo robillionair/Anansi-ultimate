@@ -842,10 +842,7 @@ impl Core {
                         })?;
                     let known = self.storage()?.list()?.iter().any(|w| w.id == workspace_id);
                     if !known {
-                        return Err(CommandError::new(
-                            ErrorCode::NotFound,
-                            "Unknown workspace.",
-                        ));
+                        return Err(CommandError::new(ErrorCode::NotFound, "Unknown workspace."));
                     }
                     format!("{root_fingerprint}/{workspace_id}")
                 };
