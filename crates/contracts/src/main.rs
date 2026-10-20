@@ -66,6 +66,8 @@ fn main() {
         "DiscoveredRuntime":schemars::schema_for!(anansi_core::ai_discovery::DiscoveredRuntime),
         "ModelRecommendation":schemars::schema_for!(anansi_core::ai_discovery::ModelRecommendation),
         "AskRequest":schemars::schema_for!(anansi_core::ask::AskRequest),
+        "AskRunRequest":schemars::schema_for!(anansi_core::ask_stream::AskRunRequest),
+        "AskRunResponse":schemars::schema_for!(anansi_core::ask_stream::AskRunResponse),
         "AskResponse":schemars::schema_for!(anansi_core::ask::AskResponse),
         "GroundedCitation":schemars::schema_for!(anansi_core::ask::GroundedCitation),
         "DisclosureManifest":schemars::schema_for!(anansi_core::ask::DisclosureManifest),

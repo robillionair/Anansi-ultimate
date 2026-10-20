@@ -1,11 +1,18 @@
 import { validReadiness, validError, validWorkspaceDetails, validWorkspaceList, validMemoryDetails, validMemoryList, validRelationshipDetails, validRelationshipList, validJobDetails, validJobList, validArtifactChunk, validAiDiscoveryResponse, validAskResponse, validHybridSearchResponse, validCompiledContext } from './validators.mjs';
 import { invoke } from '@tauri-apps/api/core';
+import { validAskRunResponse } from './validators.mjs';
+import type { AskRunResponse } from './generated';
+export type { AskRunResponse } from './generated';
 import {validSnapshotPreview,validRestoreResult,validBackupSchedule,validUploadStatus} from './validators.mjs';
 import type {SnapshotPreview,RestoreResult,BackupSchedule,AiDiscoveryResponse,HardwareProfile,DiscoveredRuntime,ModelRecommendation,RuntimeKind,RuntimeStatus,FitLevel,AskRequest,AskResponse,AskStatus,GroundedCitation,DisclosureManifest,HybridSearchRequest,HybridSearchResult,HybridSearchResponse,ContextCompilationRequest,CompiledContext,ContextChunk} from './generated';
 export type {SnapshotPreview,RestoreResult,BackupSchedule,AiDiscoveryResponse,HardwareProfile,DiscoveredRuntime,ModelRecommendation,RuntimeKind,RuntimeStatus,FitLevel,AskRequest,AskResponse,AskStatus,GroundedCitation,DisclosureManifest,HybridSearchRequest,HybridSearchResult,HybridSearchResponse,ContextCompilationRequest,CompiledContext,ContextChunk} from './generated';
 import type { Readiness, WorkspaceDetails, WorkspaceList, Intent, MemoryDraft, MemoryDetails, MemoryList, MemoryMetadata, Privacy, LifecycleChange, RelationshipDraft, RelationshipRecord, RelationshipDetails, RelationshipList, Job, JobDetails, JobList, ArtifactChunk, ExportSelection, JobAction } from './generated';
 export type { Readiness, WorkspaceDetails, WorkspaceList, Intent, MemoryDraft, MemoryDetails, MemoryList, MemoryMetadata, Privacy, LifecycleChange, RelationshipDraft, RelationshipRecord, RelationshipDetails, RelationshipList, Job, JobDetails, JobList, ArtifactChunk, ExportSelection, JobAction } from './generated';
 export interface Client {
+  startAsk(workspaceId:string,prompt:string,options?:{runtimeEndpoint?:string;modelTag?:string}):Promise<AskRunResponse>;
+  pollAsk(workspaceId:string,id:string):Promise<AskRunResponse>;
+  cancelAsk(workspaceId:string,id:string):Promise<AskRunResponse>;
+  forgetAsk(workspaceId:string,id:string):Promise<AskRunResponse>;
   importBackup(workspaceId:string,bytes:Uint8Array,plaintextConsent:boolean):Promise<Job>;
   enqueueBackup(workspaceId:string,application:boolean,plaintextConsent:boolean):Promise<JobDetails>;
   previewBackup(workspaceId:string,jobId:string,artifactId:string):Promise<SnapshotPreview>;
@@ -67,6 +74,10 @@ function failure(value:unknown,operation=''):Error {
 type Call=(operation:string,request:Record<string,unknown>)=>Promise<unknown>;
 function client(call:Call):Client {
   return {
+    startAsk:async(workspaceId,prompt,options={})=>decode(await call('ai/ask-start',{workspaceId,prompt,...options}),validAskRunResponse),
+    pollAsk:async(workspaceId,id)=>decode(await call('ai/ask-poll',{workspaceId,id}),validAskRunResponse),
+    cancelAsk:async(workspaceId,id)=>decode(await call('ai/ask-cancel',{workspaceId,id}),validAskRunResponse),
+    forgetAsk:async(workspaceId,id)=>decode(await call('ai/ask-forget',{workspaceId,id}),validAskRunResponse),
     importBackup:async(workspaceId,bytes,plaintextConsent)=>{
       if(bytes.length>256*1024*1024||bytes.length<1024)throw Error('Choose a backup up to 256 MiB.');
       const sha256=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',Uint8Array.from(bytes)))).map(b=>b.toString(16).padStart(2,'0')).join('');

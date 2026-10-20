@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-local-ai"
+description = "Allow the local main window to request bounded loopback AI discovery, retrieval and generation. No remote window or filesystem/process capability."
+commands.allow = ["ai_command"]

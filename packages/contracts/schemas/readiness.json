@@ -438,6 +438,274 @@
     "title": "AskResponse",
     "type": "object"
   },
+  "AskRunRequest": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "id": {
+        "type": "string"
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "workspaceId",
+      "id"
+    ],
+    "title": "AskRunRequest",
+    "type": "object"
+  },
+  "AskRunResponse": {
+    "$defs": {
+      "AskResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "answer": {
+            "type": "string"
+          },
+          "citations": {
+            "items": {
+              "$ref": "#/$defs/GroundedCitation"
+            },
+            "type": "array"
+          },
+          "contractVersion": {
+            "format": "uint8",
+            "maximum": 255,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "manifest": {
+            "$ref": "#/$defs/DisclosureManifest"
+          },
+          "status": {
+            "$ref": "#/$defs/AskStatus"
+          }
+        },
+        "required": [
+          "contractVersion",
+          "status",
+          "answer",
+          "citations",
+          "manifest"
+        ],
+        "type": "object"
+      },
+      "AskStatus": {
+        "enum": [
+          "answered",
+          "insufficientEvidence",
+          "offline",
+          "error"
+        ],
+        "type": "string"
+      },
+      "CommandError": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "$ref": "#/$defs/ErrorCode"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "type": "object"
+      },
+      "DisclosureManifest": {
+        "additionalProperties": false,
+        "properties": {
+          "characterCount": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "compiledPrompt": {
+            "type": "string"
+          },
+          "endpoint": {
+            "type": "string"
+          },
+          "estimatedTokens": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "modelTag": {
+            "type": "string"
+          },
+          "routingReason": {
+            "type": "string"
+          },
+          "runtimeKind": {
+            "type": "string"
+          },
+          "sourceMemories": {
+            "items": {
+              "$ref": "#/$defs/SourceMemoryReference"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "runtimeKind",
+          "endpoint",
+          "modelTag",
+          "sourceMemories",
+          "characterCount",
+          "estimatedTokens",
+          "routingReason",
+          "compiledPrompt"
+        ],
+        "type": "object"
+      },
+      "ErrorCode": {
+        "enum": [
+          "INVALID_REQUEST",
+          "UNSUPPORTED_CONTRACT",
+          "UNAUTHORIZED",
+          "FORBIDDEN",
+          "NOT_FOUND",
+          "INVALID_WORKSPACE",
+          "WORKSPACE_EXISTS",
+          "WORKSPACE_NOT_FOUND",
+          "STORAGE_UNAVAILABLE",
+          "UNSUPPORTED_SCHEMA",
+          "CORRUPT_STORAGE",
+          "INVALID_MEMORY",
+          "INVALID_SEARCH",
+          "MEMORY_NOT_FOUND",
+          "REVISION_CONFLICT",
+          "CONTENT_INTEGRITY",
+          "VAULT_UNAVAILABLE"
+        ],
+        "type": "string"
+      },
+      "GroundedCitation": {
+        "additionalProperties": false,
+        "properties": {
+          "index": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "lineNumber": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "memoryId": {
+            "type": "string"
+          },
+          "sectionHeading": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "snippet": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "index",
+          "memoryId",
+          "title",
+          "kind",
+          "snippet"
+        ],
+        "type": "object"
+      },
+      "SourceMemoryReference": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "kind"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "error": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/CommandError"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "id": {
+        "type": "string"
+      },
+      "partialAnswer": {
+        "type": "string"
+      },
+      "response": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/AskResponse"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "state": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "id",
+      "state",
+      "partialAnswer"
+    ],
+    "title": "AskRunResponse",
+    "type": "object"
+  },
   "BackupRequest": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,

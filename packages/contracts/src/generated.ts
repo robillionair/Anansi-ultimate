@@ -83,20 +83,10 @@ export interface SourceMemoryReference {
   kind: string;
   title: string;
 }
-export interface BackupRequest {
-  application: boolean;
+export interface AskRunRequest {
   contractVersion: number;
-  plaintextConsent: boolean;
+  id: string;
   workspaceId: string;
-}
-export interface BackupSchedule {
-  contractVersion: number;
-  destination: string;
-  enabled: boolean;
-  intervalSeconds: number;
-  missedRuns: number;
-  nextDue?: number | null;
-  retention: string;
 }
 export type ErrorCode =
   | "INVALID_REQUEST"
@@ -116,6 +106,65 @@ export type ErrorCode =
   | "REVISION_CONFLICT"
   | "CONTENT_INTEGRITY"
   | "VAULT_UNAVAILABLE";
+
+export interface AskRunResponse {
+  contractVersion: number;
+  error?: CommandError | null;
+  id: string;
+  partialAnswer: string;
+  response?: AskResponse | null;
+  state: string;
+}
+export interface CommandError {
+  code: ErrorCode;
+  message: string;
+}
+export interface AskResponse {
+  answer: string;
+  citations: GroundedCitation[];
+  contractVersion: number;
+  manifest: DisclosureManifest;
+  status: AskStatus;
+}
+export interface GroundedCitation {
+  index: number;
+  kind: string;
+  lineNumber?: number | null;
+  memoryId: string;
+  sectionHeading?: string | null;
+  snippet: string;
+  title: string;
+}
+export interface DisclosureManifest {
+  characterCount: number;
+  compiledPrompt: string;
+  endpoint: string;
+  estimatedTokens: number;
+  modelTag: string;
+  routingReason: string;
+  runtimeKind: string;
+  sourceMemories: SourceMemoryReference[];
+}
+export interface SourceMemoryReference {
+  id: string;
+  kind: string;
+  title: string;
+}
+export interface BackupRequest {
+  application: boolean;
+  contractVersion: number;
+  plaintextConsent: boolean;
+  workspaceId: string;
+}
+export interface BackupSchedule {
+  contractVersion: number;
+  destination: string;
+  enabled: boolean;
+  intervalSeconds: number;
+  missedRuns: number;
+  nextDue?: number | null;
+  retention: string;
+}
 
 export interface CommandError {
   code: ErrorCode;

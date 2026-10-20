@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Client, AskResponse, GroundedCitation } from '@anansi/contracts';
 
 export function AskAnansi({ client, workspaceId }: { client: Client; workspaceId: string }) {
@@ -7,6 +7,12 @@ export function AskAnansi({ client, workspaceId }: { client: Client; workspaceId
   const [error, setError] = useState('');
   const [result, setResult] = useState<AskResponse | null>(null);
   const [showManifest, setShowManifest] = useState(false);
+  const [model,setModel]=useState('qwen2.5:0.5b');
+  const [endpoint,setEndpoint]=useState('http://127.0.0.1:11434');
+  const [partial,setPartial]=useState('');
+  const active=useRef<string|null>(null);
+  const cancelled=useRef(false);
+  useEffect(()=>()=>{cancelled.current=true;const id=active.current;if(id)void client.forgetAsk(workspaceId,id).catch(()=>{});},[client,workspaceId]);
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -17,13 +23,26 @@ export function AskAnansi({ client, workspaceId }: { client: Client; workspaceId
     setError('');
     setResult(null);
     setShowManifest(false);
+    setPartial('');cancelled.current=false;
 
     try {
-      const res = await client.askAnansi(workspaceId, trimmed);
-      setResult(res);
+      const opened=await client.startAsk(workspaceId,trimmed,{runtimeEndpoint:endpoint.trim(),modelTag:model.trim()});
+      active.current=opened.id;
+      if(cancelled.current){await client.cancelAsk(workspaceId,opened.id);return;}
+      for(;;){
+        const run=await client.pollAsk(workspaceId,opened.id);
+        if(cancelled.current||run.state==='cancelled')break;
+        setPartial(run.partialAnswer);
+        if(run.state==='completed'){
+          if(run.error)throw Error(run.error.message);
+          setResult(run.response??null);break;
+        }
+        await new Promise(resolve=>setTimeout(resolve,50));
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to complete Ask ANANSI query.');
     } finally {
+      const id=active.current;active.current=null;if(id)await client.forgetAsk(workspaceId,id).catch(()=>{});
       setBusy(false);
     }
   }
@@ -40,6 +59,8 @@ export function AskAnansi({ client, workspaceId }: { client: Client; workspaceId
 
         <form onSubmit={handleSubmit}>
           <fieldset disabled={busy}>
+            <label htmlFor="ask-model">Installed Ollama model</label><input id="ask-model" value={model} onChange={event=>setModel(event.target.value)} required autoComplete="off"/>
+            <label htmlFor="ask-endpoint">Local inference endpoint</label><input id="ask-endpoint" value={endpoint} onChange={event=>setEndpoint(event.target.value)} required autoComplete="off"/>
             <label htmlFor="ask-prompt">Your Question</label>
             <input
               id="ask-prompt"
@@ -58,6 +79,8 @@ export function AskAnansi({ client, workspaceId }: { client: Client; workspaceId
             </div>
           </fieldset>
         </form>
+        {busy&&<button type="button" onClick={()=>{cancelled.current=true;setPartial('');setError('Cancelling local generation…');const id=active.current;if(id)void client.cancelAsk(workspaceId,id).catch(error=>setError(error.message));}}>Cancel generation</button>}
+        {busy&&partial&&<section aria-label="Streaming answer"><h3>Generating answer</h3><p>{partial}</p></section>}
 
         {busy && <p role="status" className="loading-state">Compiling context from workspace and querying local AI…</p>}
         {error && <p role="alert" className="error">{error}</p>}
@@ -73,7 +96,7 @@ export function AskAnansi({ client, workspaceId }: { client: Client; workspaceId
                 <span className="status-desc">Local AI runtime is offline. Grounded context compiled below.</span>
               )}
               {result.status === 'answered' && (
-                <span className="status-desc">Answered using verified workspace citations.</span>
+                <span className="status-desc">Generated from workspace evidence. Check the cited sources; citations do not guarantee correctness.</span>
               )}
             </div>
 

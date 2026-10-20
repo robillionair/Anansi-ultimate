@@ -15,3 +15,7 @@ All M2–M4 shared adapters, UI, vault, retrieval, storage, contracts and status
 5. M2.8/regression and readiness: preserve memory/lifecycle/relationships/jobs/backups; record exact commits, command results and actual UI observations in `docs/evidence/M5-READINESS.md`. Deferred CI/publication and independent audit never count as passed.
 
 Native/browser tests require one exclusive shared lease outside both checkouts, with owner/PID/time; do not steal another process's lease. Isolate artifacts and synthetic catalogs. The audit monitor is paused per Owner direction.
+
+## Ask streaming interface increment
+
+Shared files changed: core Ask/context/readiness/dispatch, API route allowlist, contract schema/generated validators/client, shared Ask UI, desktop main-window capability and new AI permission. New operations are `ai/ask-start`, `ai/ask-poll`, `ai/ask-cancel`, `ai/ask-forget`; run capabilities are random, workspace-bound, process-local, limited to four retained runs and never persisted. Native adapter uses its existing blocking command transport. No vault session/key type is added to these DTOs. Other agents must retain this contract when proposing changes. Real browser and desktop small-model acceptance and exact limitations are recorded in M5 readiness evidence. Owner subsequently authorized the recorded Ollama/model installation, superseding the initial no-download boundary for those models only.

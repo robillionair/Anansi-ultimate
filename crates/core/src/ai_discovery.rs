@@ -671,6 +671,23 @@ impl Core {
         value: serde_json::Value,
     ) -> Result<serde_json::Value, CommandError> {
         match operation {
+            "ask-start" => {
+                let request = serde_json::from_value(value).map_err(|_| {
+                    CommandError::new(ErrorCode::InvalidRequest, "Use a supported Ask request.")
+                })?;
+                serde_json::to_value(self.start_ask(request)?)
+                    .map_err(|_| crate::storage::unavailable())
+            }
+            "ask-poll" | "ask-cancel" | "ask-forget" => {
+                let request = serde_json::from_value(value).map_err(|_| {
+                    CommandError::new(
+                        ErrorCode::InvalidRequest,
+                        "Use a supported Ask run request.",
+                    )
+                })?;
+                serde_json::to_value(self.control_ask(operation, request)?)
+                    .map_err(|_| crate::storage::unavailable())
+            }
             "discovery" => {
                 let req: AiDiscoveryRequest = serde_json::from_value(value).map_err(|_| {
                     CommandError::new(

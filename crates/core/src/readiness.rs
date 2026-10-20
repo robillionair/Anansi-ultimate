@@ -60,12 +60,14 @@ impl CommandError {
 
 #[derive(Clone)]
 pub struct Core {
+    pub(crate) ask_runs: crate::ask_stream::Runs,
     started: Instant,
     workspace_storage: Result<crate::storage::Storage, CommandError>,
 }
 impl Default for Core {
     fn default() -> Self {
         Self {
+            ask_runs: Default::default(),
             started: Instant::now(),
             workspace_storage: Err(crate::storage::unavailable()),
         }
@@ -74,6 +76,7 @@ impl Default for Core {
 impl Core {
     pub fn with_storage_root(root: std::path::PathBuf) -> Self {
         Self {
+            ask_runs: Default::default(),
             started: Instant::now(),
             workspace_storage: crate::storage::Storage::new(root),
         }

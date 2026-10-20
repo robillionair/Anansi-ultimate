@@ -113,6 +113,15 @@ pub fn compile_context(
     storage_root: &Path,
     req: &ContextCompilationRequest,
 ) -> Result<CompiledContext, CommandError> {
+    compile_context_with_query(conn, storage_root, req, None)
+}
+
+pub(crate) fn compile_context_with_query(
+    conn: &Connection,
+    storage_root: &Path,
+    req: &ContextCompilationRequest,
+    retrieval_query: Option<&str>,
+) -> Result<CompiledContext, CommandError> {
     let budget = req
         .max_budget_chars
         .unwrap_or(DEFAULT_MAX_BUDGET_CHARS)
@@ -121,7 +130,7 @@ pub fn compile_context(
     // 1. Retrieve candidate records via hybrid retrieval
     let hybrid_req = HybridSearchRequest {
         workspace_id: req.workspace_id.clone(),
-        query: Some(req.user_prompt.clone()),
+        query: Some(retrieval_query.unwrap_or(&req.user_prompt).to_owned()),
         query_vector: None,
         model: req.model_tag.clone(),
         limit: 10,

@@ -53,3 +53,21 @@ Executed locally (exit 0 unless noted):
 - Documentation validation: passed, 74 Markdown documents, 90 source section owners, 16 milestone plans and 33 requirements. Master unchanged.
 
 Initial negative-test input used nine words, which is within the implemented 16-term body-query limit; corrected to 17 terms. Initial combined test execution overlapped recompilation and hit Windows executable sharing error; serialized reruns above passed. No full workspace suite or new native UI acceptance is claimed.
+
+### Real local Ask application acceptance — 2026-10-20
+
+This later evidence supersedes the local Ask pending entries above only for the exercised cases. Shared Ask now uses the Context Compiler with the original question separate from extracted retrieval terms. Process-local bounded runs expose partial tokens through scoped start/poll/cancel/forget contracts; cancellation closes the backend socket. Ollama NDJSON and OpenAI-compatible SSE parsing support bounded chunked HTTP responses. The UI selects the installed model and endpoint explicitly and stores neither in browser persistence. Tauri main-window AI permission was missing and is now explicitly declared; remote windows receive no permission.
+
+Executed, exit 0:
+
+- `node scripts/cargo.mjs test -p anansi-core --test ask_streaming --locked`: 1 passed; actual socket closure, partial tokens, cross-workspace denial and forgotten capability denial using a deterministic synthetic server.
+- Streaming protocol unit tests: 2 passed; existing Ask tests: 5 passed. These cover parser boundaries and synthetic transport, not model quality.
+- `node scripts/cargo.mjs clippy -p anansi-core -p anansi-api -p anansi-desktop --all-targets --locked -- -D warnings`: passed.
+- `node node_modules/typescript/bin/tsc --noEmit`: passed; UI/contracts: 30 passed; contract generation drift check passed (existing uint/float schema-format warnings).
+- With `ANANSI_REAL_MODEL=1`, `node scripts/with-application-test-lease.mjs node_modules/@playwright/test/cli.js test tests/e2e/ask_anansi.spec.ts`: 1 passed, 36.4 seconds. Real browser/API, installed `qwen2.5:0.5b`, visible streamed answer, SQLite answer/citations/disclosure and cancellation, plus missing-evidence/offline cases.
+- `node scripts/build-desktop-test.mjs`: passed. `node scripts/with-application-test-lease.mjs scripts/verify-ask-native.mjs`: passed against actual Tauri/WebView2 UI, visible streaming, SQLite answer, selected-model disclosure and cancellation. Synthetic catalog retained at `C:/Users/robin/AppData/Local/Temp/anansi-ask-native-VIw2Hi`; screenshot is an ignored test artifact.
+- Documentation validation passed: 74 Markdown files, 90 section owners, 16 milestone plans, 33 requirements; master unchanged.
+
+Observed failures and repairs: first real browser answer echoed a duplicated question; removed the duplicate from the shared compiler prompt. Next real answer was correct but partial output was missed at 300 ms polling; 50 ms polling passed the unchanged streaming assertion. First desktop attempt raced page startup; added bounded readiness wait. Next desktop attempt exposed missing AI IPC permission; direct invocation confirmed `ai_command not allowed`, then scoped permission repair passed. That failed test was ended by closing its own test page after diagnosis; it is not counted as a pass.
+
+Limitations: no full regression suite, restart/timeout acceptance, production vault credential interaction, browser vault authorization, encrypted application restore or real semantic cache workflow is claimed here. Cancellation means the application closes its inference connection; the deterministic test proves socket closure, not internal Ollama scheduler cancellation. Model answers can still be incorrect; UI explicitly asks users to check citations. Remote CI/publication and external audit remain pending.

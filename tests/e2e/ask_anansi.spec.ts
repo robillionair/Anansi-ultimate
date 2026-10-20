@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 test('integrated ask anansi workflow: grounded citations, missing evidence, offline resilience, and disclosure manifest', async ({ page }) => {
-  test.setTimeout(180000);
+  test.setTimeout(process.env.ANANSI_REAL_MODEL==='1'?600000:180000);
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'anansi-ask-e2e-'));
   let child: ChildProcess | undefined;
   let pairing: { endpoint: string; token: string };
@@ -112,6 +112,11 @@ test('integrated ask anansi workflow: grounded citations, missing evidence, offl
     await expect(page.locator('.answer-text')).toContainText("couldn't find any relevant memories");
 
     // 3. Offline / Unavailable Local Server query
+    const unavailable=http.createServer();
+    await new Promise<void>(resolve=>unavailable.listen(0,'127.0.0.1',resolve));
+    const unavailablePort=(unavailable.address() as import('node:net').AddressInfo).port;
+    await new Promise<void>(resolve=>unavailable.close(()=>resolve()));
+    await page.getByLabel('Local inference endpoint').fill(`http://127.0.0.1:${unavailablePort}`);
     await page.getByLabel('Your Question').fill('What did we decide about local search?');
     await page.getByRole('button', { name: 'Ask Question' }).click();
     await expect(page.locator('.status-banner.status-offline')).toBeVisible();
@@ -125,6 +130,23 @@ test('integrated ask anansi workflow: grounded citations, missing evidence, offl
     await expect(page.locator('.compiled-prompt-text')).toContainText('Architecture Plan');
 
     expect(external).toBe(0);
+    if(process.env.ANANSI_REAL_MODEL==='1'){
+      await page.getByLabel('Local inference endpoint').fill('http://127.0.0.1:11434');
+      await page.getByLabel('Installed Ollama model').fill('qwen2.5:0.5b');
+      await page.getByLabel('Your Question').fill('What did we decide about local search?');
+      await page.getByRole('button',{name:'Ask Question',exact:true}).click();
+      await expect(page.getByRole('region',{name:'Streaming answer'})).toBeVisible({timeout:180000});
+      await expect(page.locator('.status-banner.status-answered')).toBeVisible({timeout:210000});
+      await expect(page.locator('.answer-text')).toContainText(/SQLite/i);
+      await expect(page.locator('.citation-title')).toContainText('Project Aurora Storage Architecture');
+      await page.getByRole('button',{name:'View What ANANSI Sent (Disclosure)'}).click();
+      await expect(page.locator('.manifest-metrics')).toContainText('qwen2.5:0.5b');
+      await page.getByRole('button',{name:'Ask Question',exact:true}).click();
+      await expect(page.getByRole('button',{name:'Cancel generation'})).toBeVisible();
+      await page.getByRole('button',{name:'Cancel generation'}).click();
+      await expect(page.getByRole('button',{name:'Ask Question',exact:true})).toBeEnabled({timeout:30000});
+      await expect(page.locator('.status-banner.status-answered')).toHaveCount(0);
+    }
     await page.screenshot({ path: 'test-results/browser-ask-anansi-integration.png', fullPage: true });
   } finally {
     await stop();
