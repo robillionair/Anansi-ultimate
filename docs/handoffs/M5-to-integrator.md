@@ -84,12 +84,14 @@ node scripts/validate-docs.mjs
 
 ## Integration order for the owner
 
-1. **TLS transport (blocking for all cloud dispatch).** Std has no TLS;
-   `StdHttpTransport` serves loopback and fails closed with
-   `TlsUnavailable` for HTTPS (decision M5-D3 in the requirement map).
-   Wire a vetted TLS stack behind `http::Transport` (the trait is the
-   seam) — or dispatch cloud providers through an approved local
-   gateway — before enabling any cloud registration.
+1. **TLS transport — DONE after this handover was written.** See
+   [M5-transport-addendum.md](M5-transport-addendum.md): production
+   HTTPS (`RustlsTransport`, rustls + Mozilla roots, validation
+   always on, no insecure mode) and billable-safe retry semantics
+   landed on this branch with synthetic-HTTPS evidence. The
+   integrator's remaining step is to dispatch with `RustlsTransport`;
+   OS-native root stores, if ever wanted, are an owner decision
+   noted in the addendum.
 2. **Secret resolver.** Implement `SecretResolver` over the existing
    keyring boundary (`crates/core/src/vault/credential_store.rs`, service
    naming for provider credentials is an owner decision). Until then,
