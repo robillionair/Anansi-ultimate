@@ -9,6 +9,7 @@ edition.workspace = true
 linux-secret-service = ["keyring/sync-secret-service", "keyring/crypto-rust"]
 
 [dependencies]
+anansi-providers = { path = "../providers" }
 serde.workspace = true
 serde_json.workspace = true
 schemars.workspace = true

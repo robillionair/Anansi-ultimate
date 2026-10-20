@@ -20,6 +20,7 @@ pub mod restore;
 pub mod search;
 pub mod semantic;
 pub mod settings;
+pub mod provider_dispatch;
 pub mod snapshots;
 pub mod storage;
 pub mod vault;

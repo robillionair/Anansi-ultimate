@@ -71,7 +71,7 @@ pub struct RuntimeConfig {
 
 pub struct ProviderRuntime {
     transport: RustlsTransport,
-    resolver: Box<dyn SecretResolver>,
+    resolver: Box<dyn SecretResolver + Send + Sync>,
     registrations: Vec<ProviderRegistration>,
     used_permits: Arc<Mutex<HashSet<String>>>,
     ledger: QuotaLedger,
@@ -86,7 +86,7 @@ impl ProviderRuntime {
     pub fn new(
         config: RuntimeConfig,
         transport: RustlsTransport,
-        resolver: Box<dyn SecretResolver>,
+        resolver: Box<dyn SecretResolver + Send + Sync>,
     ) -> Result<Self, ProviderError> {
         let mut seen = HashSet::new();
         let mut registrations = Vec::with_capacity(config.providers.len());
