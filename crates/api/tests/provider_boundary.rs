@@ -253,3 +253,107 @@ async fn second_authenticated_session_cannot_touch_the_first_sessions_runs() {
     .await;
     assert_eq!(status, StatusCode::OK);
 }
+
+// ---------------------------------------------------------------------------
+// The actual granted-browser workflow, over real HTTP: a browser
+// session's refused configure attempt lands in the host's
+// approval queue; the host (in-process, the desktop side)
+// approves it there; the browser then configures successfully;
+// revocation closes it again. No step lets the browser approve
+// itself.
+
+#[tokio::test]
+async fn granted_browser_workflow_runs_through_the_host_approval_queue() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().to_path_buf();
+    let token_a = "a".repeat(64);
+    let api = state(&root, &token_a);
+    // The desktop host on the same storage root.
+    let host = Core::with_storage_root(root.clone());
+    let ws_details = host
+        .workspace_command(
+            "create",
+            json!({ "contractVersion": 1, "name": "browser-grant" }),
+        )
+        .unwrap();
+    let ws = ws_details["workspace"]["id"].as_str().unwrap().to_string();
+    let base = start_fake_ollama();
+
+    // 1. The browser's configure attempt is refused...
+    let (status, _) = call(
+        &api,
+        &token_a,
+        "providers-configure",
+        json!({ "contractVersion": 1, "workspaceId": ws, "config": ollama_config(&base) }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+
+    // 2. ...and queued for the host, which reads the queue and
+    // learns the session's stamped identity from it.
+    let access = host
+        .ai_command("providers-session-access", json!({ "workspaceId": ws }))
+        .unwrap();
+    let pending = access["pending"].as_array().unwrap();
+    assert_eq!(pending.len(), 1, "{access}");
+    let session_label = pending[0]["session"].as_str().unwrap().to_string();
+    assert_eq!(session_label.len(), 16, "{session_label}");
+    assert!(session_label.chars().all(|c| c.is_ascii_hexdigit()), "{session_label}");
+
+    // The browser cannot read the queue or approve itself.
+    let (status, _) = call(
+        &api,
+        &token_a,
+        "providers-session-access",
+        json!({ "contractVersion": 1, "workspaceId": ws }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    let (status, _) = call(
+        &api,
+        &token_a,
+        "providers-grant-session",
+        json!({
+            "contractVersion": 1, "workspaceId": ws,
+            "session": session_label, "ttlSeconds": 600
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+
+    // 3. The host approves from the queue: the pending entry
+    // clears, the grant is listed, and the browser's retry works.
+    host.ai_command(
+        "providers-grant-session",
+        json!({ "workspaceId": ws, "session": session_label, "ttlSeconds": 600 }),
+    )
+    .unwrap();
+    let access = host
+        .ai_command("providers-session-access", json!({ "workspaceId": ws }))
+        .unwrap();
+    assert!(access["pending"].as_array().unwrap().is_empty(), "{access}");
+    assert_eq!(access["grants"][0]["session"], session_label);
+    let (status, _) = call(
+        &api,
+        &token_a,
+        "providers-configure",
+        json!({ "contractVersion": 1, "workspaceId": ws, "config": ollama_config(&base) }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    // 4. Revocation closes it again immediately.
+    host.ai_command(
+        "providers-revoke-session",
+        json!({ "workspaceId": ws, "session": session_label }),
+    )
+    .unwrap();
+    let (status, _) = call(
+        &api,
+        &token_a,
+        "providers-configure",
+        json!({ "contractVersion": 1, "workspaceId": ws, "config": ollama_config(&base) }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+}
