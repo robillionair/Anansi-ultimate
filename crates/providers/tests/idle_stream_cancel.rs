@@ -21,9 +21,7 @@ use anansi_providers::config::TimeoutConfig;
 use anansi_providers::dispatcher::Dispatcher;
 use anansi_providers::error::ProviderErrorCode;
 use anansi_providers::gates::{QuotaLedger, TargetLocality, ZeroCostLock};
-use anansi_providers::http::{
-    CancellationToken, HttpRequest, Transport,
-};
+use anansi_providers::http::{CancellationToken, HttpRequest, Transport};
 use anansi_providers::routing::RoutingMode;
 use anansi_providers::types::StreamEvent;
 use common::*;
@@ -90,10 +88,7 @@ fn start_gated_server(ca: &TestCa) -> GatedTlsServer {
                         Ok(n) => n,
                     };
                     raw.extend_from_slice(&buf[..n]);
-                    if let Some(pos) = raw
-                        .windows(4)
-                        .position(|w| w == b"\r\n\r\n")
-                    {
+                    if let Some(pos) = raw.windows(4).position(|w| w == b"\r\n\r\n") {
                         header_end = pos + 4;
                         let text = String::from_utf8_lossy(&raw[..header_end]).to_string();
                         for line in text.lines() {
@@ -124,8 +119,7 @@ fn start_gated_server(ca: &TestCa) -> GatedTlsServer {
                 // ...then silence, holding the connection open
                 // until the test releases the gate (bounded).
                 let start = Instant::now();
-                while !release.load(Ordering::SeqCst)
-                    && start.elapsed() < Duration::from_secs(120)
+                while !release.load(Ordering::SeqCst) && start.elapsed() < Duration::from_secs(120)
                 {
                     std::thread::sleep(Duration::from_millis(10));
                 }
@@ -212,14 +206,22 @@ fn dispatcher_stream_cancellation_settles_the_reservation_and_closes_the_worker(
     let server = start_gated_server(&ca);
     let transport = tls_transport(&ca);
     let res = resolver();
-    let dispatcher = Dispatcher::new(&transport, &res, anansi_providers::catalog::default_adapters())
-        .with_timeouts(long_timeouts());
+    let dispatcher = Dispatcher::new(
+        &transport,
+        &res,
+        anansi_providers::catalog::default_adapters(),
+    )
+    .with_timeouts(long_timeouts());
     let reg = registration(
         "ollama",
         server.base_url.clone(),
         TargetLocality::Local,
         false,
-        vec![model("llama-x", "ollama", anansi_providers::types::CostClass::Free)],
+        vec![model(
+            "llama-x",
+            "ollama",
+            anansi_providers::types::CostClass::Free,
+        )],
     );
     let ledger = Arc::new(Mutex::new(QuotaLedger::new()));
     let ctx = test_ctx(ledger.clone(), RoutingMode::Auto, ZeroCostLock::off());
@@ -233,12 +235,19 @@ fn dispatcher_stream_cancellation_settles_the_reservation_and_closes_the_worker(
         .recv_timeout(Duration::from_secs(5))
         .unwrap()
         .unwrap();
-    assert!(matches!(first, StreamEvent::Token(ref t) if t.contains("tok0")), "{first:?}");
+    assert!(
+        matches!(first, StreamEvent::Token(ref t) if t.contains("tok0")),
+        "{first:?}"
+    );
     // While the stream is open and idle, the request is already
     // accounted and the token reservation is still held.
     {
         let l = ledger.lock().unwrap();
-        assert_eq!(l.reserved().0, 0, "request hold moves into totals at establishment");
+        assert_eq!(
+            l.reserved().0,
+            0,
+            "request hold moves into totals at establishment"
+        );
         assert!(l.reserved().1 > 0, "the token hold is held while streaming");
         assert_eq!(l.totals_for("ollama").requests, 1);
     }
@@ -261,7 +270,10 @@ fn dispatcher_stream_cancellation_settles_the_reservation_and_closes_the_worker(
             Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
             Err(e) => panic!("channel error: {e}"),
         }
-        assert!(t.elapsed() < Duration::from_secs(10), "worker did not exit promptly");
+        assert!(
+            t.elapsed() < Duration::from_secs(10),
+            "worker did not exit promptly"
+        );
     }
     server.release.store(true, Ordering::SeqCst);
     assert!(saw_cancelled, "the terminal error must be Cancelled");
