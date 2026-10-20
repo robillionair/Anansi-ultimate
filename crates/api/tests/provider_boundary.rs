@@ -139,14 +139,44 @@ async fn second_authenticated_session_cannot_touch_the_first_sessions_runs() {
     let fake = start_fake_ollama();
     let a = state(dir.path(), "token-session-a");
     let b = state(dir.path(), "token-session-b");
+    // A real logical workspace in the shared storage root, created
+    // through the existing domain operation.
+    let created = a
+        .core
+        .workspace_command("create", json!({ "contractVersion": 1, "name": "shared" }))
+        .unwrap();
+    let ws = created["workspace"]["id"].as_str().unwrap().to_string();
 
-    // Session A configures the shared workspace backend and starts
-    // a slow stream.
+    // Before any owner authorization, session A's configure over
+    // HTTP is refused: an authenticated browser session cannot set
+    // provider policy on its own authority.
+    let (status, body) = call(
+        &a,
+        "token-session-a",
+        "providers-configure",
+        json!({ "workspaceId": ws, "config": ollama_config(&fake) }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "body: {body}");
+
+    // The host (this in-process call — the desktop transport)
+    // grants session A owner authorization for this workspace.
+    // The session label is the API's token fingerprint.
+    let session_label = anansi_core::provider_dispatch::fingerprint("token-session-a");
+    a.core
+        .ai_command(
+            "providers-grant-session",
+            json!({ "workspaceId": ws, "session": session_label, "ttlSeconds": 600 }),
+        )
+        .unwrap();
+
+    // Now A configures the shared workspace backend and starts a
+    // slow stream.
     let (status, _) = call(
         &a,
         "token-session-a",
         "providers-configure",
-        json!({ "config": ollama_config(&fake) }),
+        json!({ "workspaceId": ws, "config": ollama_config(&fake) }),
     )
     .await;
     assert_eq!(status, StatusCode::OK);
@@ -154,7 +184,7 @@ async fn second_authenticated_session_cannot_touch_the_first_sessions_runs() {
         &a,
         "token-session-a",
         "providers-stream-start",
-        json!({ "request": chat(), "mode": "auto" }),
+        json!({ "workspaceId": ws, "request": chat(), "mode": "auto" }),
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{started}");
@@ -167,7 +197,7 @@ async fn second_authenticated_session_cannot_touch_the_first_sessions_runs() {
         &b,
         "token-session-b",
         "providers-stream-poll",
-        json!({ "runId": run_id, "capability": capability }),
+        json!({ "workspaceId": ws, "runId": run_id, "capability": capability }),
     )
     .await;
     assert_eq!(status, StatusCode::NOT_FOUND);
@@ -175,7 +205,7 @@ async fn second_authenticated_session_cannot_touch_the_first_sessions_runs() {
         &b,
         "token-session-b",
         "providers-stream-cancel",
-        json!({ "runId": run_id, "capability": capability }),
+        json!({ "workspaceId": ws, "runId": run_id, "capability": capability }),
     )
     .await;
     assert_eq!(status, StatusCode::NOT_FOUND);
@@ -187,7 +217,7 @@ async fn second_authenticated_session_cannot_touch_the_first_sessions_runs() {
         "token-session-b",
         "providers-stream-poll",
         json!({
-            "runId": run_id, "capability": capability,
+            "workspaceId": ws, "runId": run_id, "capability": capability,
             "callerContext": { "session": "host-session" }
         }),
     )
@@ -203,7 +233,7 @@ async fn second_authenticated_session_cannot_touch_the_first_sessions_runs() {
         .header("Origin", "http://127.0.0.1:1420")
         .header("Content-Type", "application/json")
         .body(Body::from(
-            json!({ "runId": run_id, "capability": capability }).to_string(),
+            json!({ "workspaceId": ws, "runId": run_id, "capability": capability }).to_string(),
         ))
         .unwrap();
     let response = app.oneshot(req).await.unwrap();
@@ -216,7 +246,7 @@ async fn second_authenticated_session_cannot_touch_the_first_sessions_runs() {
         "token-session-a",
         "providers-stream-cancel",
         json!({
-            "runId": run_id, "capability": capability,
+            "workspaceId": ws, "runId": run_id, "capability": capability,
             "callerContext": { "session": "forged" }
         }),
     )

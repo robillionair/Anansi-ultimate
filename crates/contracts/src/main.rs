@@ -11,7 +11,8 @@ use anansi_core::memory::{
 use anansi_core::provider_dispatch::{
     ProviderAuthorizeRequest, ProviderAuthorizeResponse, ProviderConfigureRequest,
     ProviderConfigureResponse, ProviderDispatchRequest, ProviderDispatchResponse,
-    ProviderPollResponse, ProviderRunRequest, ProviderStreamStartResponse, ProviderUsageResponse,
+    ProviderGrantRequest, ProviderPollResponse, ProviderRunRequest, ProviderStreamStartResponse,
+    ProviderUsageResponse, ProviderWorkspaceRequest,
 };
 use anansi_core::relationships::{
     CreateRelationshipRequest, DeleteRelationshipRequest, ListRelationshipsRequest,
@@ -34,6 +35,8 @@ fn main() {
         "ProviderRunRequest":schemars::schema_for!(ProviderRunRequest),
         "ProviderPollResponse":schemars::schema_for!(ProviderPollResponse),
         "ProviderUsageResponse":schemars::schema_for!(ProviderUsageResponse),
+        "ProviderGrantRequest":schemars::schema_for!(ProviderGrantRequest),
+        "ProviderWorkspaceRequest":schemars::schema_for!(ProviderWorkspaceRequest),
         "UploadBegin":schemars::schema_for!(anansi_core::backup_upload::UploadBegin),
         "UploadPart":schemars::schema_for!(anansi_core::backup_upload::UploadPart),
         "UploadStatus":schemars::schema_for!(anansi_core::backup_upload::UploadStatus),

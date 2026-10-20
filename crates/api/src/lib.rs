@@ -104,6 +104,8 @@ pub fn command_path(path: &str) -> bool {
             | "/v1/ai/providers-stream-poll"
             | "/v1/ai/providers-stream-cancel"
             | "/v1/ai/providers-usage"
+            | "/v1/ai/providers-grant-session"
+            | "/v1/ai/providers-revoke-session"
             | "/v1/ai/hybrid-search"
             | "/v1/ai/context"
             | "/v1/ai/index-embeddings"
@@ -151,7 +153,8 @@ async fn job(
                 ErrorCode::NotFound | ErrorCode::WorkspaceNotFound => StatusCode::NOT_FOUND,
                 ErrorCode::RevisionConflict | ErrorCode::ContentIntegrity => StatusCode::CONFLICT,
                 ErrorCode::StorageUnavailable => StatusCode::SERVICE_UNAVAILABLE,
-                ErrorCode::VaultUnavailable => StatusCode::FORBIDDEN,
+                ErrorCode::VaultUnavailable | ErrorCode::Forbidden => StatusCode::FORBIDDEN,
+                ErrorCode::Unauthorized => StatusCode::UNAUTHORIZED,
                 _ => StatusCode::BAD_REQUEST,
             };
             (status, Json(e)).into_response()
@@ -381,7 +384,8 @@ async fn ai(
             let status = match e.code {
                 ErrorCode::NotFound => StatusCode::NOT_FOUND,
                 ErrorCode::RevisionConflict | ErrorCode::ContentIntegrity => StatusCode::CONFLICT,
-                ErrorCode::VaultUnavailable => StatusCode::FORBIDDEN,
+                ErrorCode::VaultUnavailable | ErrorCode::Forbidden => StatusCode::FORBIDDEN,
+                ErrorCode::Unauthorized => StatusCode::UNAUTHORIZED,
                 ErrorCode::UnsupportedContract => StatusCode::BAD_REQUEST,
                 ErrorCode::StorageUnavailable => StatusCode::SERVICE_UNAVAILABLE,
                 _ => StatusCode::BAD_REQUEST,

@@ -809,17 +809,46 @@ impl Core {
             | "providers-stream-start"
             | "providers-stream-poll"
             | "providers-stream-cancel"
-            | "providers-usage" => {
-                // The workspace scope is derived from this Core's
-                // own storage, never from request JSON. The session
-                // scope arrives only via `callerContext`, which the
-                // API layer stamps from the authenticated token
-                // (overwriting client input); in-process host calls
-                // fall back to the host session.
-                let workspace = self
+            | "providers-usage"
+            | "providers-grant-session"
+            | "providers-revoke-session" => {
+                // The session scope arrives only via
+                // `callerContext`, which the API layer stamps from
+                // the authenticated token (overwriting client
+                // input); in-process host calls fall back to the
+                // host session.
+                let root_fingerprint = self
                     .storage_root()
                     .map(|root| crate::provider_dispatch::fingerprint(&root.to_string_lossy()))
                     .unwrap_or_else(|_| "no-workspace".to_string());
+                // Provider state is scoped to a LOGICAL workspace,
+                // validated through the existing storage registry
+                // (several workspaces share one storage root; the
+                // root alone does not isolate them). The catalog
+                // needs no workspace; every other provider
+                // operation names one and an unknown id is refused
+                // before any provider state is touched.
+                let workspace = if operation == "providers-catalog" {
+                    root_fingerprint.clone()
+                } else {
+                    let workspace_id = value
+                        .get("workspaceId")
+                        .and_then(|v| v.as_str())
+                        .ok_or_else(|| {
+                            CommandError::new(
+                                ErrorCode::InvalidRequest,
+                                "A workspaceId is required.",
+                            )
+                        })?;
+                    let known = self.storage()?.list()?.iter().any(|w| w.id == workspace_id);
+                    if !known {
+                        return Err(CommandError::new(
+                            ErrorCode::NotFound,
+                            "Unknown workspace.",
+                        ));
+                    }
+                    format!("{root_fingerprint}/{workspace_id}")
+                };
                 let session = value
                     .get("callerContext")
                     .and_then(|c| c.get("session"))

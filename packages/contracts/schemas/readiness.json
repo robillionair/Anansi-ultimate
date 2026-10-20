@@ -3797,9 +3797,13 @@
           "integer",
           "null"
         ]
+      },
+      "workspaceId": {
+        "type": "string"
       }
     },
     "required": [
+      "workspaceId",
       "provider",
       "model",
       "maxEstimatedTotalTokens"
@@ -4101,9 +4105,14 @@
     "properties": {
       "config": {
         "$ref": "#/$defs/RuntimeConfig"
+      },
+      "workspaceId": {
+        "description": "Logical workspace (validated by `Core` against the storage\nregistry before this DTO is ever parsed).",
+        "type": "string"
       }
     },
     "required": [
+      "workspaceId",
       "config"
     ],
     "title": "ProviderConfigureRequest",
@@ -4271,12 +4280,16 @@
       "request": {
         "$ref": "#/$defs/CompletionRequest"
       },
+      "workspaceId": {
+        "type": "string"
+      },
       "zeroCostLock": {
         "default": false,
         "type": "boolean"
       }
     },
     "required": [
+      "workspaceId",
       "request"
     ],
     "title": "ProviderDispatchRequest",
@@ -4468,6 +4481,34 @@
       "disclosure"
     ],
     "title": "ProviderDispatchResponse",
+    "type": "object"
+  },
+  "ProviderGrantRequest": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "session": {
+        "description": "The session label to grant (for API sessions, the token\nfingerprint the API stamps — the host knows it from the\npairing record; the label is not a secret).",
+        "type": "string"
+      },
+      "ttlSeconds": {
+        "format": "uint64",
+        "maximum": 3600,
+        "minimum": 30,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "workspaceId",
+      "session"
+    ],
+    "title": "ProviderGrantRequest",
     "type": "object"
   },
   "ProviderPollResponse": {
@@ -4694,9 +4735,13 @@
       },
       "runId": {
         "type": "string"
+      },
+      "workspaceId": {
+        "type": "string"
       }
     },
     "required": [
+      "workspaceId",
       "runId",
       "capability"
     ],
@@ -4928,6 +4973,20 @@
       "providers"
     ],
     "title": "ProviderUsageResponse",
+    "type": "object"
+  },
+  "ProviderWorkspaceRequest": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "workspaceId"
+    ],
+    "title": "ProviderWorkspaceRequest",
     "type": "object"
   },
   "ReadArtifactRequest": {

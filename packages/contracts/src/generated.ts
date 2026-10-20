@@ -673,6 +673,7 @@ export interface ProviderAuthorizeRequest {
   model: string;
   provider: string;
   ttlSeconds?: number | null;
+  workspaceId: string;
 }
 export interface ProviderAuthorizeResponse {
   expiresAtMs: number;
@@ -698,6 +699,11 @@ export type SpeedTier = "fast" | "balanced" | "deep";
 
 export interface ProviderConfigureRequest {
   config: RuntimeConfig;
+  /**
+   * Logical workspace (validated by `Core` against the storage
+   * registry before this DTO is ever parsed).
+   */
+  workspaceId: string;
 }
 /**
  * The complete provider configuration an application persists and
@@ -830,6 +836,7 @@ export interface ProviderDispatchRequest {
    */
   permitId?: string | null;
   request: CompletionRequest;
+  workspaceId: string;
   zeroCostLock?: boolean;
 }
 export interface CompletionRequest {
@@ -917,6 +924,16 @@ export interface ProviderResponseBody {
   text: string;
   usage?: Usage | null;
 }
+export interface ProviderGrantRequest {
+  /**
+   * The session label to grant (for API sessions, the token
+   * fingerprint the API stamps — the host knows it from the
+   * pairing record; the label is not a secret).
+   */
+  session: string;
+  ttlSeconds?: number | null;
+  workspaceId: string;
+}
 /**
  * Cost knowledge about a model. `Unknown` is treated as paid everywhere
  * cost is enforced (decision M5-D5).
@@ -971,6 +988,7 @@ export interface ProviderStreamEvent {
 export interface ProviderRunRequest {
   capability: string;
   runId: string;
+  workspaceId: string;
 }
 /**
  * Cost knowledge about a model. `Unknown` is treated as paid everywhere
@@ -1028,6 +1046,9 @@ export interface ProviderUsageEntry {
   outputTokens: number;
   provider: string;
   requests: number;
+}
+export interface ProviderWorkspaceRequest {
+  workspaceId: string;
 }
 export interface ReadArtifactRequest {
   artifactId: string;

@@ -18,6 +18,25 @@
 //!   calls use the host session. Permits are bound to the issuing
 //!   session; stream runs are bound to the starting session and
 //!   workspace.
+//! - **Logical workspace scoping.** The workspace in the scope is
+//!   a logical workspace id, validated by `Core` through the
+//!   existing storage registry — several workspaces share one
+//!   storage root, and provider state (configuration, permits,
+//!   grants, accounting, runs) is isolated per workspace, not per
+//!   root.
+//! - **Owner authorization.** `providers-configure` and
+//!   `providers-authorize` additionally require the owner: the
+//!   host session (the desktop process — the vault's Desktop
+//!   transport), or an API session holding a live grant from
+//!   `providers-grant-session` (host-only, revocable, expiring).
+//!   Moving policy into a separate endpoint would establish
+//!   nothing on its own; the check is on who calls.
+//! - **Lock discipline.** The backend mutex is held only for
+//!   state surgery. Authorization decisions (model universe,
+//!   permit, runtime resolution, stream-cap pre-check) are taken
+//!   atomically under the lock; the network dispatch itself runs
+//!   unlocked on an `Arc<ProviderRuntime>`, so poll/cancel and
+//!   other workspaces progress during a slow request.
 //! - **Run capabilities.** `providers-stream-start` returns an
 //!   unpredictable 128-bit capability next to the run id. Poll and
 //!   cancel require both, compared in constant time; any mismatch —
@@ -103,6 +122,13 @@ pub fn fingerprint(text: &str) -> String {
     format!("{hash:016x}")
 }
 
+/// Session label for in-process host calls (the desktop app —
+/// the owner's own process, the Desktop transport in vault terms).
+/// API requests always carry a stamped fingerprint instead, and
+/// the stamp cannot be removed or forged by a browser client
+/// because the API layer inserts it unconditionally.
+pub const HOST_SESSION: &str = "host-session";
+
 fn random_capability(prefix: &str) -> String {
     let mut bytes = [0u8; 16];
     getrandom::fill(&mut bytes).expect("OS randomness for capabilities");
@@ -132,6 +158,9 @@ fn constant_time_eq(a: &str, b: &str) -> bool {
 #[derive(Debug, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ProviderConfigureRequest {
+    /// Logical workspace (validated by `Core` against the storage
+    /// registry before this DTO is ever parsed).
+    pub workspace_id: String,
     pub config: RuntimeConfig,
 }
 
@@ -144,6 +173,7 @@ pub struct ProviderConfigureResponse {
 #[derive(Debug, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ProviderAuthorizeRequest {
+    pub workspace_id: String,
     pub provider: String,
     pub model: String,
     #[schemars(range(min = 1, max = 10_000_000))]
@@ -167,6 +197,7 @@ pub struct ProviderAuthorizeResponse {
 #[derive(Debug, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ProviderDispatchRequest {
+    pub workspace_id: String,
     pub request: CompletionRequest,
     pub mode: Option<String>,
     #[serde(default)]
@@ -206,8 +237,27 @@ pub struct ProviderStreamStartResponse {
 #[derive(Debug, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ProviderRunRequest {
+    pub workspace_id: String,
     pub run_id: String,
     pub capability: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProviderWorkspaceRequest {
+    pub workspace_id: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProviderGrantRequest {
+    pub workspace_id: String,
+    /// The session label to grant (for API sessions, the token
+    /// fingerprint the API stamps — the host knows it from the
+    /// pairing record; the label is not a secret).
+    pub session: String,
+    #[schemars(range(min = 30, max = 3_600))]
+    pub ttl_seconds: Option<u64>,
 }
 
 #[derive(Debug, Serialize, JsonSchema)]
@@ -275,10 +325,14 @@ struct StreamRun {
 #[derive(Default)]
 struct BackendState {
     config: Option<RuntimeConfig>,
+    /// Owner-authorization grants: session label -> expiry. Only
+    /// the host can create or revoke these; they are what lets a
+    /// browser (API) session configure providers or issue permits.
+    grants: HashMap<String, Instant>,
     permits: HashMap<String, PermitRecord>,
     used_permits: Arc<Mutex<HashSet<String>>>,
     ledger: Arc<Mutex<QuotaLedger>>,
-    runtime: Option<(String, ProviderRuntime)>,
+    runtime: Option<(String, Arc<ProviderRuntime>)>,
     streams: HashMap<String, StreamRun>,
     stream_seq: u64,
 }
@@ -304,6 +358,7 @@ fn with_backend<T>(
 fn sweep(state: &mut BackendState) {
     let now = Instant::now();
     state.permits.retain(|_, p| p.expires_at > now);
+    state.grants.retain(|_, expiry| *expiry > now);
     let expired: Vec<String> = state
         .streams
         .iter()
@@ -317,7 +372,7 @@ fn sweep(state: &mut BackendState) {
     }
 }
 
-fn runtime_for(state: &mut BackendState) -> Result<&mut ProviderRuntime, CommandError> {
+fn runtime_for(state: &mut BackendState) -> Result<Arc<ProviderRuntime>, CommandError> {
     let config = state.config.clone().ok_or_else(|| {
         CommandError::new(
             ErrorCode::InvalidRequest,
@@ -334,9 +389,29 @@ fn runtime_for(state: &mut BackendState) -> Result<&mut ProviderRuntime, Command
         let runtime = ProviderRuntime::production(config)
             .map_err(to_command_error)?
             .with_shared_accounting(state.used_permits.clone(), state.ledger.clone());
-        state.runtime = Some((fp, runtime));
+        state.runtime = Some((fp, Arc::new(runtime)));
     }
-    Ok(&mut state.runtime.as_mut().expect("runtime populated").1)
+    Ok(state.runtime.as_ref().expect("runtime populated").1.clone())
+}
+
+/// Owner authorization for the policy-setting operations
+/// (configure / authorize). Mirrors the vault's Desktop/Browser
+/// transport split: the host process is the owner; an API session
+/// must hold a live host-issued grant. An endpoint move alone —
+/// caller JSON arriving at `providers-configure` instead of
+/// `providers-dispatch` — establishes nothing, so the check is on
+/// WHO calls, not WHERE the policy sits.
+fn require_owner(state: &BackendState, scope: &CallerScope) -> Result<(), CommandError> {
+    if scope.session == HOST_SESSION {
+        return Ok(());
+    }
+    match state.grants.get(&scope.session) {
+        Some(expiry) if *expiry > Instant::now() => Ok(()),
+        _ => Err(CommandError::new(
+            ErrorCode::Forbidden,
+            "This operation requires owner authorization (host or host-granted session).",
+        )),
+    }
 }
 
 fn take_permit(
@@ -602,6 +677,7 @@ pub fn providers_command(
                 .map(|p| p.config.provider.clone())
                 .collect();
             with_backend(scope, |state| {
+                require_owner(state, scope)?;
                 // Validate by building the runtime now, so a bad
                 // configuration fails at configure time — with the
                 // workspace's shared accounting wired in.
@@ -610,7 +686,7 @@ pub fn providers_command(
                     .with_shared_accounting(state.used_permits.clone(), state.ledger.clone());
                 let fp = fingerprint(&serde_json::to_string(&req.config).unwrap_or_default());
                 state.config = Some(req.config);
-                state.runtime = Some((fp, runtime));
+                state.runtime = Some((fp, Arc::new(runtime)));
                 Ok(())
             })?;
             to_value(&ProviderConfigureResponse { providers })
@@ -626,6 +702,7 @@ pub fn providers_command(
             if !(MIN_PERMIT_TTL_SECONDS..=MAX_PERMIT_TTL_SECONDS).contains(&ttl) {
                 return Err(invalid("Permit TTL is out of bounds."));
             }
+            with_backend(scope, |state| require_owner(state, scope))?;
             let permit_id = random_capability("permit-");
             let permit = PaidInferencePermit {
                 id: permit_id.clone(),
@@ -658,30 +735,44 @@ pub fn providers_command(
             let req: ProviderDispatchRequest = parse(value, "provider dispatch")?;
             validate_request_bounds(&req.request)?;
             let routing = routing_request(&req)?;
-            let response = with_backend(scope, |state| {
+            // Phase 1 (locked): resolve policy — model universe,
+            // permit, runtime. Phase 2 (UNLOCKED): the network
+            // dispatch itself. The backend mutex is never held
+            // across a network call, so poll/cancel and other
+            // workspaces progress during a slow request; the
+            // authorization decisions were taken atomically in
+            // phase 1 and the accounting lives behind its own
+            // locks inside the runtime.
+            let (permit, runtime) = with_backend(scope, |state| {
                 enforce_configured_model(state, &req.request)?;
                 let permit = take_permit(state, scope, &req.permit_id)?;
                 let runtime = runtime_for(state)?;
-                let outcome = runtime
-                    .dispatch(&req.request, routing, permit, &CancellationToken::new())
-                    .map_err(to_command_error)?;
-                Ok(ProviderDispatchResponse {
-                    response: ProviderResponseBody {
-                        text: outcome.response.text,
-                        model: outcome.response.model,
-                        finish_reason: outcome.response.finish_reason,
-                        usage: outcome.response.usage,
-                    },
-                    disclosure: outcome.disclosure,
-                })
+                Ok((permit, runtime))
             })?;
-            to_value(&response)
+            let outcome = runtime
+                .dispatch(&req.request, routing, permit, &CancellationToken::new())
+                .map_err(to_command_error)?;
+            to_value(&ProviderDispatchResponse {
+                response: ProviderResponseBody {
+                    text: outcome.response.text,
+                    model: outcome.response.model,
+                    finish_reason: outcome.response.finish_reason,
+                    usage: outcome.response.usage,
+                },
+                disclosure: outcome.disclosure,
+            })
         }
         "providers-stream-start" => {
             let req: ProviderDispatchRequest = parse(value, "provider dispatch")?;
             validate_request_bounds(&req.request)?;
             let routing = routing_request(&req)?;
-            let started = with_backend(scope, |state| {
+            // Locked phase: policy resolution (model, cap
+            // pre-check, permit, runtime). Unlocked: stream
+            // establishment (a network call). Locked again: run
+            // registration — if the retained cap filled meanwhile,
+            // the just-established stream is cancelled and the
+            // start refused rather than exceeding the bound.
+            let (permit, runtime) = with_backend(scope, |state| {
                 enforce_configured_model(state, &req.request)?;
                 if state.streams.len() >= MAX_RETAINED_STREAMS {
                     return Err(invalid(
@@ -690,19 +781,28 @@ pub fn providers_command(
                 }
                 let permit = take_permit(state, scope, &req.permit_id)?;
                 let runtime = runtime_for(state)?;
-                let cancel = CancellationToken::new();
-                let outcome = runtime
-                    .dispatch_stream(&req.request, routing, permit, &cancel)
-                    .map_err(to_command_error)?;
+                Ok((permit, runtime))
+            })?;
+            let cancel = CancellationToken::new();
+            let outcome = runtime
+                .dispatch_stream(&req.request, routing, permit, &cancel)
+                .map_err(to_command_error)?;
+            let disclosure = outcome.disclosure.clone();
+            let capability = random_capability("cap-");
+            let started = with_backend(scope, |state| {
+                if state.streams.len() >= MAX_RETAINED_STREAMS {
+                    cancel.cancel();
+                    return Err(invalid(
+                        "Too many retained provider streams for this workspace.",
+                    ));
+                }
                 state.stream_seq += 1;
                 let run_id = format!("provider-run-{}", state.stream_seq);
-                let capability = random_capability("cap-");
-                let disclosure = outcome.disclosure.clone();
                 state.streams.insert(
                     run_id.clone(),
                     StreamRun {
                         outcome,
-                        cancel,
+                        cancel: cancel.clone(),
                         capability: capability.clone(),
                         session: scope.session.clone(),
                         started: Instant::now(),
@@ -775,7 +875,36 @@ pub fn providers_command(
                 })
             })
         }
-        "providers-usage" => with_backend(scope, |state| {
+        "providers-grant-session" | "providers-revoke-session" => {
+            // Host-only: an API session can never grant itself
+            // owner authorization.
+            if scope.session != HOST_SESSION {
+                return Err(CommandError::new(
+                    ErrorCode::Forbidden,
+                    "Only the host can manage owner-authorization grants.",
+                ));
+            }
+            let req: ProviderGrantRequest = parse(value, "provider grant")?;
+            let granting = operation == "providers-grant-session";
+            with_backend(scope, |state| {
+                if granting {
+                    let ttl = req.ttl_seconds.unwrap_or(DEFAULT_PERMIT_TTL_SECONDS);
+                    if !(MIN_PERMIT_TTL_SECONDS..=MAX_PERMIT_TTL_SECONDS).contains(&ttl) {
+                        return Err(invalid("Grant TTL is out of bounds."));
+                    }
+                    state
+                        .grants
+                        .insert(req.session.clone(), Instant::now() + Duration::from_secs(ttl));
+                } else {
+                    state.grants.remove(&req.session);
+                }
+                Ok(())
+            })?;
+            to_value(&serde_json::json!({ "granted": granting }))
+        }
+        "providers-usage" => {
+            let _req: ProviderWorkspaceRequest = parse(value, "provider usage")?;
+            with_backend(scope, |state| {
             let ledger = state
                 .ledger
                 .lock()
@@ -796,7 +925,8 @@ pub fn providers_command(
                     })
                     .collect(),
             })
-        }),
+            })
+        }
         _ => Err(CommandError::new(
             ErrorCode::InvalidRequest,
             "Unknown provider operation.",
