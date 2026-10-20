@@ -601,7 +601,43 @@ fn run_over(
                 ));
             }
             cancel.check()?;
-            let n = stream.read(&mut buf).map_err(map_io_error)?;
+            // Slice the header wait like the body reads: never
+            // block longer than one quantum, so cancellation is
+            // re-checked promptly even when `shutdown()` does not
+            // interrupt a blocked `recv` (Windows). A slice expiry
+            // is not an error — the loop head produces the real
+            // timeout once the first-byte/total deadlines fire.
+            let wait = READ_POLL_QUANTUM
+                .min(timeouts.first_byte().saturating_sub(start.elapsed()))
+                .min(deadline.remaining())
+                .max(Duration::from_millis(1));
+            let _ = stream.set_read_timeout(Some(wait));
+            let n = match stream.read(&mut buf) {
+                Ok(n) => n,
+                Err(e)
+                    if matches!(
+                        e.kind(),
+                        io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock
+                    ) =>
+                {
+                    continue;
+                }
+                Err(e) => {
+                    if cancel.is_cancelled() {
+                        return Err(ProviderError::new(
+                            ProviderErrorCode::Cancelled,
+                            "provider request cancelled",
+                        ));
+                    }
+                    return Err(map_io_error(e));
+                }
+            };
+            if n == 0 && cancel.is_cancelled() {
+                return Err(ProviderError::new(
+                    ProviderErrorCode::Cancelled,
+                    "provider request cancelled",
+                ));
+            }
             if n == 0 {
                 return Err(ProviderError::new(
                     ProviderErrorCode::ConnectionLost,
@@ -649,6 +685,7 @@ fn run_over(
             timeouts: timeouts.clamped(),
             cancel: cancel.clone(),
             first_read_done: true,
+            last_data: Instant::now(),
         };
         let body = make_body_reader(&headers, socket)?;
         Ok(HttpResponse {
@@ -693,7 +730,20 @@ pub struct SocketBody {
     timeouts: TimeoutConfig,
     cancel: CancellationToken,
     first_read_done: bool,
+    /// When bytes last arrived; the idle deadline is measured
+    /// from here (initialized when the body phase begins).
+    last_data: Instant,
 }
+
+/// Upper bound for one blocking socket read inside
+/// [`SocketBody`]: cancellation and both deadlines are re-checked
+/// at least this often, so a read blocked on a silent peer wakes
+/// promptly on cancel on EVERY platform — including those where
+/// `shutdown()` from another thread does not interrupt a blocked
+/// `recv` (Windows). The token's socket shutdown remains as an
+/// accelerator where the platform supports it; correctness never
+/// depends on it.
+const READ_POLL_QUANTUM: Duration = Duration::from_millis(100);
 
 impl Read for SocketBody {
     fn read(&mut self, out: &mut [u8]) -> io::Result<usize> {
@@ -703,24 +753,67 @@ impl Read for SocketBody {
             self.prefix.drain(..n);
             return Ok(n);
         }
-        if self.cancel.is_cancelled() {
-            return Err(io::Error::new(io::ErrorKind::Interrupted, "cancelled"));
-        }
-        let elapsed = self.start.elapsed();
-        let total = self.timeouts.total();
-        if elapsed >= total {
-            return Err(io::Error::new(
-                io::ErrorKind::TimedOut,
-                "total request deadline exceeded",
-            ));
-        }
-        let remaining = total - elapsed;
-        let wait = self.timeouts.idle().min(remaining);
-        let _ = self.stream.set_read_timeout(Some(wait));
-        self.first_read_done = true;
-        match self.stream.read(out) {
-            Ok(n) => Ok(n),
-            Err(e) => Err(e),
+        loop {
+            if self.cancel.is_cancelled() {
+                return Err(io::Error::new(io::ErrorKind::Interrupted, "cancelled"));
+            }
+            let now = Instant::now();
+            let elapsed_total = now.duration_since(self.start);
+            if elapsed_total >= self.timeouts.total() {
+                return Err(io::Error::new(
+                    io::ErrorKind::TimedOut,
+                    "total request deadline exceeded",
+                ));
+            }
+            let idle_for = now.duration_since(self.last_data);
+            if idle_for >= self.timeouts.idle() {
+                return Err(io::Error::new(
+                    io::ErrorKind::TimedOut,
+                    "provider response idle timeout",
+                ));
+            }
+            let wait = READ_POLL_QUANTUM
+                .min(self.timeouts.total() - elapsed_total)
+                .min(self.timeouts.idle() - idle_for)
+                .max(Duration::from_millis(1));
+            let _ = self.stream.set_read_timeout(Some(wait));
+            self.first_read_done = true;
+            match self.stream.read(out) {
+                Ok(0) if self.cancel.is_cancelled() => {
+                    // The token's shutdown closed the socket under
+                    // the read: that EOF is the cancellation, not
+                    // the peer's.
+                    return Err(io::Error::new(io::ErrorKind::Interrupted, "cancelled"));
+                }
+                Ok(n) => {
+                    if n > 0 {
+                        self.last_data = Instant::now();
+                    }
+                    return Ok(n);
+                }
+                Err(e)
+                    if matches!(
+                        e.kind(),
+                        io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock
+                    ) =>
+                {
+                    // A wake-up slice expired: not an error yet —
+                    // loop and re-check cancel and both deadlines,
+                    // which produce the real error when they fire.
+                    continue;
+                }
+                Err(e) => {
+                    // A read failure that coincides with
+                    // cancellation IS the cancellation (the token's
+                    // shutdown can surface as a TLS abrupt-close
+                    // error instead of an interruption, and it must
+                    // not be misreported as ConnectionLost).
+                    if self.cancel.is_cancelled() {
+                        return Err(io::Error::new(io::ErrorKind::Interrupted, "cancelled"));
+                    }
+                    return Err(e);
+                }
+            }
         }
     }
 }
