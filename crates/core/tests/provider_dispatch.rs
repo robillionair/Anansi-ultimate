@@ -15,6 +15,7 @@ use serde_json::{Value, json};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpListener;
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
@@ -1127,4 +1128,240 @@ fn concurrent_configures_serialize_and_leave_no_temp_files() {
         .filter(|e| e.file_name().to_string_lossy().starts_with(".tmp-"))
         .collect();
     assert!(leftovers.is_empty(), "temp files leaked: {leftovers:?}");
+}
+
+// ---------------------------------------------------------------------------
+// Credential lifecycle: native prompt -> keyring -> resolver -> wire
+
+fn credential_env_once() {
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| {
+        keyring::set_default_credential_builder(keyring::mock::default_credential_builder());
+        // SAFETY: set once, inside Once::call_once, before any
+        // credential prompt can read it; the value is constant
+        // for the whole test process.
+        unsafe {
+            std::env::set_var("ANANSI_PROVIDER_TEST_CREDENTIAL", "sk-fake-test-credential");
+        }
+    });
+}
+
+struct FakeOpenAi {
+    base_url: String,
+    hits: Arc<AtomicUsize>,
+    authorization: Arc<Mutex<Vec<String>>>,
+}
+
+fn start_fake_openai() -> FakeOpenAi {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let hits = Arc::new(AtomicUsize::new(0));
+    let authorization = Arc::new(Mutex::new(Vec::new()));
+    let hits_thread = hits.clone();
+    let auth_thread = authorization.clone();
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else { continue };
+            let hits = hits_thread.clone();
+            let authorization = auth_thread.clone();
+            std::thread::spawn(move || {
+                let mut raw = Vec::new();
+                let mut buf = [0u8; 4096];
+                let mut content_length = 0usize;
+                let header_end;
+                loop {
+                    let n = stream.read(&mut buf).unwrap_or(0);
+                    if n == 0 {
+                        return;
+                    }
+                    raw.extend_from_slice(&buf[..n]);
+                    if let Some(pos) = raw.windows(4).position(|w| w == b"\r\n\r\n") {
+                        header_end = pos + 4;
+                        let text = String::from_utf8_lossy(&raw[..header_end]).to_string();
+                        for line in text.lines() {
+                            if let Some((k, v)) = line.split_once(':') {
+                                let key = k.trim().to_ascii_lowercase();
+                                if key == "content-length" {
+                                    content_length = v.trim().parse().unwrap_or(0);
+                                }
+                                if key == "authorization" {
+                                    authorization.lock().unwrap().push(v.trim().to_string());
+                                }
+                            }
+                        }
+                        break;
+                    }
+                }
+                while raw.len() - header_end < content_length {
+                    let n = stream.read(&mut buf).unwrap_or(0);
+                    if n == 0 {
+                        break;
+                    }
+                    raw.extend_from_slice(&buf[..n]);
+                }
+                hits.fetch_add(1, Ordering::SeqCst);
+                let body = "{\"id\":\"x\",\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"authed reply\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":4,\"completion_tokens\":2}}";
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    body.len(),
+                    body
+                );
+                let _ = stream.write_all(response.as_bytes());
+            });
+        }
+    });
+    FakeOpenAi {
+        base_url: format!("http://127.0.0.1:{port}"),
+        hits,
+        authorization,
+    }
+}
+
+fn credential_op(
+    core: &Core,
+    session: Option<&str>,
+    op: &str,
+    ws: &str,
+    reference: &str,
+) -> Result<Value, CommandError> {
+    let mut body = json!({
+        "workspaceId": ws, "provider": "openai", "reference": reference
+    });
+    if let Some(s) = session {
+        body["callerContext"] = json!({ "session": s });
+    }
+    core.ai_command(op, body)
+}
+
+#[test]
+fn credential_lifecycle_prompt_keyring_resolver_wire() {
+    credential_env_once();
+    let (_dir, core, ws) = core();
+    let reference = format!("openai-e2e-{}", std::process::id());
+    // A browser session cannot set credentials, and the refusal
+    // stores nothing (the prompt is never even reached).
+    let err = credential_op(&core, Some("browser-1"), "providers-credential-set", &ws, &reference)
+        .unwrap_err();
+    assert_eq!(err.code, ErrorCode::Forbidden);
+    let status = credential_op(&core, None, "providers-credential-status", &ws, &reference).unwrap();
+    assert_eq!(status["present"], false);
+    // The host sets it through the (test) native prompt: the key
+    // moves prompt -> keyring only.
+    let set = credential_op(&core, None, "providers-credential-set", &ws, &reference).unwrap();
+    assert_eq!(set["stored"], true);
+    let status = credential_op(&core, None, "providers-credential-status", &ws, &reference).unwrap();
+    assert_eq!(status["present"], true);
+
+    // Configure an OpenAI-shaped custom endpoint using only the
+    // reference; dispatch must resolve the key from the keyring
+    // and put it on the wire.
+    let fake = start_fake_openai();
+    let config = json!({
+        "providers": [{
+            "config": {
+                "provider": "openai", "baseUrl": fake.base_url,
+                "credential": { "provider": "openai", "reference": reference },
+                "enabled": true, "customEndpoint": true
+            },
+            "locality": "local",
+            "models": [{
+                "id": "gpt-x", "provider": "openai",
+                "capabilities": { "chat": true, "streaming": true, "vision": false, "coding": true, "deepReasoning": false, "embeddings": false },
+                "contextWindow": 8192, "cost": "free", "speed": "balanced"
+            }]
+        }]
+    });
+    configure(&core, &ws, config).unwrap();
+    let dispatch_gpt = |core: &Core| {
+        core.ai_command(
+            "providers-dispatch",
+            stamped(
+                "browser-1",
+                json!({
+                    "workspaceId": ws, "mode": "auto",
+                    "request": {
+                        "model": "gpt-x",
+                        "messages": [{
+                            "role": "user",
+                            "segments": [{ "text": "hello", "privacy": "standard" }]
+                        }]
+                    }
+                }),
+            ),
+        )
+    };
+    let out = dispatch_gpt(&core).unwrap();
+    assert_eq!(out["response"]["text"], "authed reply");
+    assert_eq!(
+        fake.authorization.lock().unwrap().as_slice(),
+        ["Bearer sk-fake-test-credential"],
+        "the key from the native prompt reached the wire via the keyring resolver"
+    );
+
+    // Removal is real: status flips and dispatch now fails closed
+    // with zero additional provider traffic.
+    let removed = credential_op(&core, None, "providers-credential-remove", &ws, &reference).unwrap();
+    assert_eq!(removed["removed"], true);
+    let status = credential_op(&core, None, "providers-credential-status", &ws, &reference).unwrap();
+    assert_eq!(status["present"], false);
+    let hits = fake.hits.load(Ordering::SeqCst);
+    let err = dispatch_gpt(&core).unwrap_err();
+    assert_eq!(err.code, ErrorCode::Unauthorized, "{}", err.message);
+    assert_eq!(fake.hits.load(Ordering::SeqCst), hits);
+}
+
+// ---------------------------------------------------------------------------
+// Session access: the host approval queue
+
+fn session_access(core: &Core, session: Option<&str>, ws: &str) -> Result<Value, CommandError> {
+    let mut body = json!({ "workspaceId": ws });
+    if let Some(s) = session {
+        body["callerContext"] = json!({ "session": s });
+    }
+    core.ai_command("providers-session-access", body)
+}
+
+#[test]
+fn refused_browser_attempts_queue_for_host_approval() {
+    let (_dir, core, ws) = core();
+    let fake = start_fake_ollama();
+    let cfg = ollama_config(&fake.base_url, "free");
+    // Two refused attempts by the same browser session...
+    for _ in 0..2 {
+        let mut body = json!({ "workspaceId": ws, "config": cfg });
+        body["callerContext"] = json!({ "session": "sess-hopeful" });
+        let err = core.ai_command("providers-configure", body).unwrap_err();
+        assert_eq!(err.code, ErrorCode::Forbidden);
+    }
+    // ...are visible to the host, aggregated with an attempt count.
+    let access = session_access(&core, None, &ws).unwrap();
+    let pending = access["pending"].as_array().unwrap();
+    assert_eq!(pending.len(), 1, "{access}");
+    assert_eq!(pending[0]["session"], "sess-hopeful");
+    assert_eq!(pending[0]["attempts"], 2);
+    // The queue itself is host-only.
+    let err = session_access(&core, Some("sess-hopeful"), &ws).unwrap_err();
+    assert_eq!(err.code, ErrorCode::Forbidden);
+    // Granting clears the queue entry and opens the door.
+    core.ai_command(
+        "providers-grant-session",
+        json!({ "workspaceId": ws, "session": "sess-hopeful", "ttlSeconds": 600 }),
+    )
+    .unwrap();
+    let access = session_access(&core, None, &ws).unwrap();
+    assert!(access["pending"].as_array().unwrap().is_empty(), "{access}");
+    assert_eq!(access["grants"][0]["session"], "sess-hopeful");
+    let mut body = json!({ "workspaceId": ws, "config": cfg });
+    body["callerContext"] = json!({ "session": "sess-hopeful" });
+    core.ai_command("providers-configure", body).unwrap();
+    // Revocation closes it again.
+    core.ai_command(
+        "providers-revoke-session",
+        json!({ "workspaceId": ws, "session": "sess-hopeful" }),
+    )
+    .unwrap();
+    let mut body = json!({ "workspaceId": ws, "config": ollama_config(&fake.base_url, "free") });
+    body["callerContext"] = json!({ "session": "sess-hopeful" });
+    let err = core.ai_command("providers-configure", body).unwrap_err();
+    assert_eq!(err.code, ErrorCode::Forbidden);
 }

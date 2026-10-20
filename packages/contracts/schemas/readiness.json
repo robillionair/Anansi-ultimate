@@ -4226,6 +4226,96 @@
     "title": "ProviderConfigureResponse",
     "type": "object"
   },
+  "ProviderCredentialRemoveResponse": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "removed": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "removed"
+    ],
+    "title": "ProviderCredentialRemoveResponse",
+    "type": "object"
+  },
+  "ProviderCredentialRequest": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "contractVersion": {
+        "default": 1,
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "provider": {
+        "type": "string"
+      },
+      "reference": {
+        "description": "The keyring account label. A reference, never a secret:\nthe secret itself only ever moves between the native\nprompt and the OS credential store.",
+        "type": "string"
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "workspaceId",
+      "provider",
+      "reference"
+    ],
+    "title": "ProviderCredentialRequest",
+    "type": "object"
+  },
+  "ProviderCredentialSetResponse": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "stored": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "stored"
+    ],
+    "title": "ProviderCredentialSetResponse",
+    "type": "object"
+  },
+  "ProviderCredentialStatusResponse": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "present": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "present"
+    ],
+    "title": "ProviderCredentialStatusResponse",
+    "type": "object"
+  },
   "ProviderDispatchRequest": {
     "$defs": {
       "ChatMessage": {
@@ -4873,6 +4963,84 @@
       "capability"
     ],
     "title": "ProviderRunRequest",
+    "type": "object"
+  },
+  "ProviderSessionAccessResponse": {
+    "$defs": {
+      "ProviderGrantInfo": {
+        "properties": {
+          "expiresAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "session": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "session",
+          "expiresAtMs"
+        ],
+        "type": "object"
+      },
+      "ProviderPendingAccess": {
+        "properties": {
+          "attempts": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "firstSeenMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "lastSeenMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "session": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "session",
+          "firstSeenMs",
+          "lastSeenMs",
+          "attempts"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "grants": {
+        "items": {
+          "$ref": "#/$defs/ProviderGrantInfo"
+        },
+        "type": "array"
+      },
+      "pending": {
+        "items": {
+          "$ref": "#/$defs/ProviderPendingAccess"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "pending",
+      "grants"
+    ],
+    "title": "ProviderSessionAccessResponse",
     "type": "object"
   },
   "ProviderStreamStartResponse": {

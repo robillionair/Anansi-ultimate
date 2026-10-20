@@ -304,6 +304,64 @@ pub struct ProviderGrantRequest {
     pub ttl_seconds: Option<u64>,
 }
 
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProviderCredentialRequest {
+    #[serde(default = "default_contract_version")]
+    pub contract_version: u8,
+    pub workspace_id: String,
+    pub provider: String,
+    /// The keyring account label. A reference, never a secret:
+    /// the secret itself only ever moves between the native
+    /// prompt and the OS credential store.
+    pub reference: String,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderCredentialSetResponse {
+    pub contract_version: u8,
+    pub stored: bool,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderCredentialRemoveResponse {
+    pub contract_version: u8,
+    pub removed: bool,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderCredentialStatusResponse {
+    pub contract_version: u8,
+    pub present: bool,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderPendingAccess {
+    pub session: String,
+    pub first_seen_ms: u64,
+    pub last_seen_ms: u64,
+    pub attempts: u32,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderGrantInfo {
+    pub session: String,
+    pub expires_at_ms: u64,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderSessionAccessResponse {
+    pub contract_version: u8,
+    pub pending: Vec<ProviderPendingAccess>,
+    pub grants: Vec<ProviderGrantInfo>,
+}
+
 #[derive(Debug, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ProviderStreamEvent {
@@ -368,8 +426,20 @@ struct StreamRun {
     done: bool,
 }
 
+/// A browser session that attempted an owner operation and was
+/// refused: the host's approval queue. Bounded and swept (see
+/// `record_pending_access`).
+#[derive(Debug, Clone)]
+struct PendingAccess {
+    session: String,
+    first_seen_ms: u64,
+    last_seen_ms: u64,
+    attempts: u32,
+}
+
 #[derive(Default)]
 struct BackendState {
+    pending_access: Vec<PendingAccess>,
     config: Option<RuntimeConfig>,
     /// Owner-authorization grants: session label -> expiry. Only
     /// the host can create or revoke these; they are what lets a
@@ -514,6 +584,54 @@ fn runtime_for(state: &mut BackendState) -> Result<Arc<ProviderRuntime>, Command
 /// caller JSON arriving at `providers-configure` instead of
 /// `providers-dispatch` — establishes nothing, so the check is on
 /// WHO calls, not WHERE the policy sits.
+const PENDING_ACCESS_CAP: usize = 16;
+const PENDING_ACCESS_TTL_MS: u64 = 24 * 60 * 60 * 1000;
+
+/// Record (or refresh) a refused browser session in the host's
+/// approval queue. Host attempts are never queued (the host needs
+/// no approval), and the queue is bounded with stale entries
+/// swept — it is a signal for the owner, not an audit log.
+fn record_pending_access(state: &mut BackendState, session: &str) {
+    if session == HOST_SESSION {
+        return;
+    }
+    let now = now_ms();
+    state
+        .pending_access
+        .retain(|p| now.saturating_sub(p.last_seen_ms) <= PENDING_ACCESS_TTL_MS);
+    if let Some(entry) = state
+        .pending_access
+        .iter_mut()
+        .find(|p| p.session == session)
+    {
+        entry.last_seen_ms = now;
+        entry.attempts = entry.attempts.saturating_add(1);
+        return;
+    }
+    if state.pending_access.len() >= PENDING_ACCESS_CAP {
+        state.pending_access.remove(0);
+    }
+    state.pending_access.push(PendingAccess {
+        session: session.to_string(),
+        first_seen_ms: now,
+        last_seen_ms: now,
+        attempts: 1,
+    });
+}
+
+/// `require_owner`, additionally recording refused browser
+/// attempts in the approval queue.
+fn require_owner_recording(
+    state: &mut BackendState,
+    scope: &CallerScope,
+) -> Result<(), CommandError> {
+    let result = require_owner(state, scope);
+    if result.is_err() {
+        record_pending_access(state, &scope.session);
+    }
+    result
+}
+
 fn require_owner(state: &BackendState, scope: &CallerScope) -> Result<(), CommandError> {
     if scope.session == HOST_SESSION {
         return Ok(());
@@ -744,6 +862,13 @@ fn event_dto(event: &Result<StreamEvent, ProviderError>) -> ProviderStreamEvent 
     }
 }
 
+fn now_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
 fn default_contract_version() -> u8 {
     1
 }
@@ -801,6 +926,31 @@ fn config_file_path(root: &std::path::Path, workspace_id: &str) -> std::path::Pa
     root.join("provider-config").join(format!("{safe}.json"))
 }
 
+/// The process-wide keyring resolver, shared by every runtime
+/// this process builds and by the credential operations: one
+/// entry cache, and (under the keyring mock builder in tests)
+/// one visible store.
+fn shared_resolver() -> Arc<anansi_providers::keyring_resolver::KeyringSecretResolver> {
+    static RESOLVER: std::sync::OnceLock<
+        Arc<anansi_providers::keyring_resolver::KeyringSecretResolver>,
+    > = std::sync::OnceLock::new();
+    RESOLVER
+        .get_or_init(|| {
+            Arc::new(anansi_providers::keyring_resolver::KeyringSecretResolver::new())
+        })
+        .clone()
+}
+
+fn production_runtime(
+    config: RuntimeConfig,
+) -> Result<ProviderRuntime, anansi_providers::error::ProviderError> {
+    ProviderRuntime::new(
+        config,
+        anansi_providers::http::RustlsTransport::new(),
+        Box::new(shared_resolver()),
+    )
+}
+
 /// Whether this workspace currently has a configuration installed
 /// in the in-memory backend.
 pub fn has_config(scope: &CallerScope) -> bool {
@@ -834,7 +984,7 @@ pub fn install_persisted_config(scope: &CallerScope, json: &str) -> Result<bool,
         if state.config.is_some() {
             return Ok(false);
         }
-        let runtime = ProviderRuntime::production(config.clone())
+        let runtime = production_runtime(config.clone())
             .map_err(to_command_error)?
             .with_shared_accounting(state.used_permits.clone(), state.ledger.clone());
         let fp = fingerprint(&serde_json::to_string(&config).unwrap_or_default());
@@ -972,11 +1122,11 @@ pub fn providers_command(
                 .map(|p| p.config.provider.clone())
                 .collect();
             with_backend(scope, |state| {
-                require_owner(state, scope)?;
+                require_owner_recording(state, scope)?;
                 // Validate by building the runtime now, so a bad
                 // configuration fails at configure time — with the
                 // workspace's shared accounting wired in.
-                let runtime = ProviderRuntime::production(req.config.clone())
+                let runtime = production_runtime(req.config.clone())
                     .map_err(to_command_error)?
                     .with_shared_accounting(state.used_permits.clone(), state.ledger.clone());
                 let serialized =
@@ -1013,7 +1163,7 @@ pub fn providers_command(
             if !(MIN_PERMIT_TTL_SECONDS..=MAX_PERMIT_TTL_SECONDS).contains(&ttl) {
                 return Err(invalid("Permit TTL is out of bounds."));
             }
-            with_backend(scope, |state| require_owner(state, scope))?;
+            with_backend(scope, |state| require_owner_recording(state, scope))?;
             let permit_id = random_capability("permit-");
             let permit = PaidInferencePermit {
                 id: permit_id.clone(),
@@ -1215,12 +1365,94 @@ pub fn providers_command(
                         req.session.clone(),
                         Instant::now() + Duration::from_secs(ttl),
                     );
+                    state.pending_access.retain(|p| p.session != req.session);
                 } else {
                     state.grants.remove(&req.session);
                 }
                 Ok(())
             })?;
             to_value(&serde_json::json!({ "granted": granting }))
+        }
+        "providers-credential-set" => {
+            let req: ProviderCredentialRequest = parse(value, "provider credential")?;
+            require_contract_v1(req.contract_version)?;
+            crate::provider_credentials::validate_reference(&req.reference)?;
+            if req.provider.is_empty() || req.provider.len() > 64 {
+                return Err(invalid("Name the provider for this credential."));
+            }
+            // Owner authorization first (recorded for the host's
+            // approval queue); the prompt runs AFTER the backend
+            // lock is released — a human may take minutes, and no
+            // workspace state is touched by this operation at all.
+            with_backend(scope, |state| require_owner_recording(state, scope))?;
+            let key = crate::provider_credentials::prompt_for_api_key(
+                &req.provider,
+                &req.reference,
+            )?;
+            let resolver = shared_resolver();
+            resolver
+                .store_api_key(&req.reference, &key)
+                .map_err(to_command_error)?;
+            to_value(&ProviderCredentialSetResponse {
+                contract_version: 1,
+                stored: true,
+            })
+        }
+        "providers-credential-remove" => {
+            let req: ProviderCredentialRequest = parse(value, "provider credential")?;
+            require_contract_v1(req.contract_version)?;
+            crate::provider_credentials::validate_reference(&req.reference)?;
+            with_backend(scope, |state| require_owner_recording(state, scope))?;
+            let resolver = shared_resolver();
+            resolver.delete(&req.reference).map_err(to_command_error)?;
+            to_value(&ProviderCredentialRemoveResponse {
+                contract_version: 1,
+                removed: true,
+            })
+        }
+        "providers-credential-status" => {
+            let req: ProviderCredentialRequest = parse(value, "provider credential")?;
+            require_contract_v1(req.contract_version)?;
+            crate::provider_credentials::validate_reference(&req.reference)?;
+            with_backend(scope, |state| require_owner(state, scope))?;
+            let resolver = shared_resolver();
+            to_value(&ProviderCredentialStatusResponse {
+                contract_version: 1,
+                present: resolver.exists(&req.reference),
+            })
+        }
+        "providers-session-access" => {
+            let req: ProviderWorkspaceRequest = parse(value, "provider session access")?;
+            require_contract_v1(req.contract_version)?;
+            with_backend(scope, |state| {
+                require_owner(state, scope)?;
+                let now = now_ms();
+                let now_instant = Instant::now();
+                Ok(ProviderSessionAccessResponse {
+                    contract_version: 1,
+                    pending: state
+                        .pending_access
+                        .iter()
+                        .map(|p| ProviderPendingAccess {
+                            session: p.session.clone(),
+                            first_seen_ms: p.first_seen_ms,
+                            last_seen_ms: p.last_seen_ms,
+                            attempts: p.attempts,
+                        })
+                        .collect(),
+                    grants: state
+                        .grants
+                        .iter()
+                        .filter(|(_, expiry)| **expiry > now_instant)
+                        .map(|(session, expiry)| ProviderGrantInfo {
+                            session: session.clone(),
+                            expires_at_ms: now
+                                + expiry.duration_since(now_instant).as_millis() as u64,
+                        })
+                        .collect(),
+                })
+            })
+            .and_then(|resp| to_value(&resp))
         }
         "providers-usage" => {
             let req: ProviderWorkspaceRequest = parse(value, "provider usage")?;

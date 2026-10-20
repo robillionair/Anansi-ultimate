@@ -832,6 +832,29 @@ export interface ProviderConfigureResponse {
   contractVersion: number;
   providers: string[];
 }
+export interface ProviderCredentialRemoveResponse {
+  contractVersion: number;
+  removed: boolean;
+}
+export interface ProviderCredentialRequest {
+  contractVersion?: number;
+  provider: string;
+  /**
+   * The keyring account label. A reference, never a secret:
+   * the secret itself only ever moves between the native
+   * prompt and the OS credential store.
+   */
+  reference: string;
+  workspaceId: string;
+}
+export interface ProviderCredentialSetResponse {
+  contractVersion: number;
+  stored: boolean;
+}
+export interface ProviderCredentialStatusResponse {
+  contractVersion: number;
+  present: boolean;
+}
 export type Role = "system" | "user" | "assistant";
 /**
  * Privacy classification of one content segment. Mirrors the classes in
@@ -1018,6 +1041,21 @@ export interface ProviderRunRequest {
   contractVersion?: number;
   runId: string;
   workspaceId: string;
+}
+export interface ProviderSessionAccessResponse {
+  contractVersion: number;
+  grants: ProviderGrantInfo[];
+  pending: ProviderPendingAccess[];
+}
+export interface ProviderGrantInfo {
+  expiresAtMs: number;
+  session: string;
+}
+export interface ProviderPendingAccess {
+  attempts: number;
+  firstSeenMs: number;
+  lastSeenMs: number;
+  session: string;
 }
 /**
  * Cost knowledge about a model. `Unknown` is treated as paid everywhere

@@ -10,9 +10,11 @@ use anansi_core::memory::{
 };
 use anansi_core::provider_dispatch::{
     ProviderAuthorizeRequest, ProviderAuthorizeResponse, ProviderCatalogResponse,
-    ProviderConfigureRequest, ProviderConfigureResponse, ProviderDispatchRequest,
-    ProviderDispatchResponse, ProviderGrantRequest, ProviderPollResponse, ProviderRunRequest,
-    ProviderStreamStartResponse, ProviderUsageResponse, ProviderWorkspaceRequest,
+    ProviderConfigureRequest, ProviderConfigureResponse, ProviderCredentialRemoveResponse,
+    ProviderCredentialRequest, ProviderCredentialSetResponse, ProviderCredentialStatusResponse,
+    ProviderDispatchRequest, ProviderDispatchResponse, ProviderGrantRequest, ProviderPollResponse,
+    ProviderRunRequest, ProviderSessionAccessResponse, ProviderStreamStartResponse,
+    ProviderUsageResponse, ProviderWorkspaceRequest,
 };
 use anansi_core::relationships::{
     CreateRelationshipRequest, DeleteRelationshipRequest, ListRelationshipsRequest,
@@ -37,6 +39,11 @@ fn main() {
         "ProviderUsageResponse":schemars::schema_for!(ProviderUsageResponse),
         "ProviderGrantRequest":schemars::schema_for!(ProviderGrantRequest),
         "ProviderCatalogResponse":schemars::schema_for!(ProviderCatalogResponse),
+        "ProviderCredentialRequest":schemars::schema_for!(ProviderCredentialRequest),
+        "ProviderCredentialSetResponse":schemars::schema_for!(ProviderCredentialSetResponse),
+        "ProviderCredentialRemoveResponse":schemars::schema_for!(ProviderCredentialRemoveResponse),
+        "ProviderCredentialStatusResponse":schemars::schema_for!(ProviderCredentialStatusResponse),
+        "ProviderSessionAccessResponse":schemars::schema_for!(ProviderSessionAccessResponse),
         "ProviderWorkspaceRequest":schemars::schema_for!(ProviderWorkspaceRequest),
         "UploadBegin":schemars::schema_for!(anansi_core::backup_upload::UploadBegin),
         "UploadPart":schemars::schema_for!(anansi_core::backup_upload::UploadPart),

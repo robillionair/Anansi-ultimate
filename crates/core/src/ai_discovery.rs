@@ -811,7 +811,11 @@ impl Core {
             | "providers-stream-cancel"
             | "providers-usage"
             | "providers-grant-session"
-            | "providers-revoke-session" => {
+            | "providers-revoke-session"
+            | "providers-credential-set"
+            | "providers-credential-remove"
+            | "providers-credential-status"
+            | "providers-session-access" => {
                 // The session scope arrives only via
                 // `callerContext`, which the API layer stamps from
                 // the authenticated token (overwriting client
