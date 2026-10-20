@@ -22,3 +22,4 @@ webpki-roots = "=1.0.10"
 rustls = { version = "=0.23.46", default-features = false, features = ["ring", "std", "tls12"] }
 rustls-pemfile = "=2.2.0"
 rcgen = "=0.13.2"
+time = "=0.3.47"

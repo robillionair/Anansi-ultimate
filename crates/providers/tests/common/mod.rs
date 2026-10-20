@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! Synthetic provider server + test rig. The server is a std
 //! `TcpListener` on loopback with an ephemeral port; handlers are
 //! scripted per test and can dribble chunked bodies, delay, redirect,
@@ -8,7 +9,6 @@ use anansi_providers::catalog;
 use anansi_providers::config::ProviderConfig;
 use anansi_providers::dispatcher::Dispatcher;
 use anansi_providers::gates::TargetLocality;
-use anansi_providers::http::StdHttpTransport;
 use anansi_providers::routing::ProviderRegistration;
 use anansi_providers::secrets::{CredentialRef, InMemoryResolver};
 use anansi_providers::types::{CapabilitySet, CostClass, ModelInfo, SpeedTier};
@@ -140,7 +140,7 @@ impl SyntheticServer {
     }
 }
 
-fn read_request(stream: &mut std::net::TcpStream) -> Option<RecordedRequest> {
+fn read_request(stream: &mut impl Read) -> Option<RecordedRequest> {
     let mut raw: Vec<u8> = Vec::new();
     let mut buf = [0u8; 4096];
     let header_end = loop {
@@ -190,7 +190,7 @@ fn read_request(stream: &mut std::net::TcpStream) -> Option<RecordedRequest> {
     })
 }
 
-fn write_response(stream: &mut std::net::TcpStream, resp: &ServerResponse) {
+fn write_response(stream: &mut impl Write, resp: &ServerResponse) {
     let reason = match resp.status {
         200 => "OK",
         400 => "Bad Request",
@@ -295,8 +295,8 @@ pub fn resolver() -> InMemoryResolver {
     r
 }
 
-pub fn dispatcher<'a>(
-    transport: &'a StdHttpTransport,
+pub fn dispatcher<'a, T: anansi_providers::http::Transport>(
+    transport: &'a T,
     resolver: &'a InMemoryResolver,
 ) -> Dispatcher<'a> {
     Dispatcher::new(transport, resolver, catalog::default_adapters())
@@ -315,4 +315,243 @@ pub fn dispatcher<'a>(
 
 pub fn openai_success_body() -> &'static str {
     r#"{"model":"gpt-x","choices":[{"message":{"role":"assistant","content":"hello from synthetic"},"finish_reason":"stop"}],"usage":{"prompt_tokens":12,"completion_tokens":6}}"#
+}
+
+// ---------------------------------------------------------------------------
+// Synthetic HTTPS: test-only CA (rcgen) + rustls-terminating server.
+// Certificates exist only inside the test process; keys are generated
+// per run and never touch disk. The client side uses the crate's real
+// RustlsTransport with the test CA added as an extra root — validation
+// itself is never disabled anywhere in this harness.
+
+use rcgen::{
+    BasicConstraints, CertificateParams, DistinguishedName, DnType, IsCa, KeyPair, KeyUsagePurpose,
+    SanType,
+};
+use std::io::BufReader;
+
+/// A throwaway certificate authority for synthetic HTTPS tests.
+pub struct TestCa {
+    cert: rcgen::Certificate,
+    key: KeyPair,
+    pub cert_pem: String,
+}
+
+impl TestCa {
+    pub fn new() -> Self {
+        let key = KeyPair::generate().unwrap();
+        let mut params = CertificateParams::default();
+        params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
+        let mut dn = DistinguishedName::new();
+        dn.push(DnType::CommonName, "ANANSI Synthetic Test CA");
+        params.distinguished_name = dn;
+        params.key_usages = vec![
+            KeyUsagePurpose::KeyCertSign,
+            KeyUsagePurpose::CrlSign,
+            KeyUsagePurpose::DigitalSignature,
+        ];
+        let cert = params.self_signed(&key).unwrap();
+        let cert_pem = cert.pem();
+        Self {
+            cert,
+            key,
+            cert_pem,
+        }
+    }
+
+    fn issue(&self, sans: Vec<SanType>, expired: bool) -> (String, String) {
+        let key = KeyPair::generate().unwrap();
+        let mut params = CertificateParams::default();
+        params.subject_alt_names = sans;
+        params.key_usages = vec![
+            KeyUsagePurpose::DigitalSignature,
+            KeyUsagePurpose::KeyEncipherment,
+        ];
+        params.extended_key_usages = vec![rcgen::ExtendedKeyUsagePurpose::ServerAuth];
+        if expired {
+            params.not_before = time::OffsetDateTime::now_utc() - time::Duration::days(3);
+            params.not_after = time::OffsetDateTime::now_utc() - time::Duration::days(1);
+        }
+        let cert = params.signed_by(&key, &self.cert, &self.key).unwrap();
+        (cert.pem(), key.serialize_pem())
+    }
+
+    /// Server cert valid for 127.0.0.1 and localhost.
+    pub fn valid_server(&self) -> (String, String) {
+        self.issue(
+            vec![
+                SanType::IpAddress(std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST)),
+                SanType::DnsName("localhost".try_into().unwrap()),
+            ],
+            false,
+        )
+    }
+
+    /// Server cert for a *different* host, from the trusted CA:
+    /// chain-valid but hostname-invalid for 127.0.0.1.
+    pub fn wrong_host_server(&self) -> (String, String) {
+        self.issue(
+            vec![SanType::DnsName("other.invalid".try_into().unwrap())],
+            false,
+        )
+    }
+
+    /// Server cert with correct SANs but an expired validity window.
+    pub fn expired_server(&self) -> (String, String) {
+        self.issue(
+            vec![SanType::IpAddress(std::net::IpAddr::V4(
+                std::net::Ipv4Addr::LOCALHOST,
+            ))],
+            true,
+        )
+    }
+}
+
+/// A self-signed server certificate no test CA vouches for.
+pub fn self_signed_server() -> (String, String) {
+    let key = KeyPair::generate().unwrap();
+    let mut params = CertificateParams::default();
+    params.subject_alt_names = vec![SanType::IpAddress(std::net::IpAddr::V4(
+        std::net::Ipv4Addr::LOCALHOST,
+    ))];
+    params.extended_key_usages = vec![rcgen::ExtendedKeyUsagePurpose::ServerAuth];
+    let cert = params.self_signed(&key).unwrap();
+    (cert.pem(), key.serialize_pem())
+}
+
+fn server_config(cert_pem: &str, key_pem: &str) -> std::sync::Arc<rustls::ServerConfig> {
+    let certs: Vec<rustls::pki_types::CertificateDer<'static>> =
+        rustls_pemfile::certs(&mut BufReader::new(cert_pem.as_bytes()))
+            .collect::<Result<_, _>>()
+            .unwrap();
+    let key = rustls_pemfile::private_key(&mut BufReader::new(key_pem.as_bytes()))
+        .unwrap()
+        .unwrap();
+    let provider = std::sync::Arc::new(rustls::crypto::ring::default_provider());
+    let config = rustls::ServerConfig::builder_with_provider(provider)
+        .with_safe_default_protocol_versions()
+        .unwrap()
+        .with_no_client_auth()
+        .with_single_cert(certs, key)
+        .unwrap();
+    std::sync::Arc::new(config)
+}
+
+/// A synthetic provider server speaking HTTPS via rustls, with the
+/// same scripting/hit-counting contract as [`SyntheticServer`]. A
+/// connection whose TLS handshake fails is dropped before any
+/// request is read, so it never increments the hit counter.
+pub struct TlsSyntheticServer {
+    pub base_url: String,
+    pub hits: Arc<AtomicUsize>,
+    pub requests: Arc<Mutex<Vec<RecordedRequest>>>,
+}
+
+impl TlsSyntheticServer {
+    pub fn start(
+        cert_pem: &str,
+        key_pem: &str,
+        handler: impl Fn(&RecordedRequest, usize) -> ServerResponse + Send + Sync + 'static,
+    ) -> Self {
+        let config = server_config(cert_pem, key_pem);
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let hits = Arc::new(AtomicUsize::new(0));
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let handler: Handler = Arc::new(handler);
+        let hits_thread = hits.clone();
+        let requests_thread = requests.clone();
+        std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                let Ok(stream) = stream else { continue };
+                let config = config.clone();
+                let hits = hits_thread.clone();
+                let requests = requests_thread.clone();
+                let handler = handler.clone();
+                std::thread::spawn(move || {
+                    let _ = stream.set_read_timeout(Some(Duration::from_secs(10)));
+                    let _ = stream.set_write_timeout(Some(Duration::from_secs(10)));
+                    let conn = match rustls::ServerConnection::new(config) {
+                        Ok(c) => c,
+                        Err(_) => return,
+                    };
+                    let mut tls = rustls::StreamOwned::new(conn, stream);
+                    // read_request drives the handshake on first read;
+                    // a rejected handshake yields no request at all.
+                    let Some(req) = read_request(&mut tls) else {
+                        return;
+                    };
+                    let hit = hits.fetch_add(1, Ordering::SeqCst);
+                    requests.lock().unwrap().push(req.clone());
+                    let resp = handler(&req, hit);
+                    if resp.drop {
+                        return;
+                    }
+                    if !resp.delay_before.is_zero() {
+                        std::thread::sleep(resp.delay_before);
+                    }
+                    write_response(&mut tls, &resp);
+                });
+            }
+        });
+        Self {
+            base_url: format!("https://127.0.0.1:{port}"),
+            hits,
+            requests,
+        }
+    }
+
+    pub fn hit_count(&self) -> usize {
+        self.hits.load(Ordering::SeqCst)
+    }
+    pub fn recorded(&self) -> Vec<RecordedRequest> {
+        self.requests.lock().unwrap().clone()
+    }
+}
+
+/// The crate's production transport, trusting the Mozilla roots plus
+/// the synthetic test CA. Validation is fully on.
+pub fn tls_transport(ca: &TestCa) -> anansi_providers::http::RustlsTransport {
+    let mut config = anansi_providers::tls::TlsConfig::new();
+    config.add_root_pem(ca.cert_pem.as_bytes()).unwrap();
+    anansi_providers::http::RustlsTransport::with_tls_config(config)
+}
+
+// ---------------------------------------------------------------- dispatch helpers
+
+use anansi_providers::dispatcher::DispatchContext;
+use anansi_providers::gates::{Budget, PaidInferencePermit, QuotaLedger, ZeroCostLock};
+use anansi_providers::routing::RoutingRequest;
+use anansi_providers::types::{ChatMessage, CompletionRequest, Role};
+
+pub fn test_request(model: &str) -> CompletionRequest {
+    CompletionRequest::new(model, vec![ChatMessage::new(Role::User, "Say hello")])
+}
+
+pub fn test_permit(provider: &str, model: &str) -> PaidInferencePermit {
+    PaidInferencePermit {
+        id: format!("permit-{provider}-{model}"),
+        provider: provider.to_string(),
+        model: model.to_string(),
+        max_estimated_total_tokens: 100_000,
+        allow_unknown_cost: false,
+    }
+}
+
+pub fn test_ctx<'a>(
+    ledger: &'a mut QuotaLedger,
+    mode: anansi_providers::routing::RoutingMode,
+    lock: ZeroCostLock,
+) -> DispatchContext<'a> {
+    DispatchContext {
+        routing: RoutingRequest {
+            mode,
+            lock,
+            ..Default::default()
+        },
+        lock,
+        budget: Budget::default(),
+        ledger,
+        permit: None,
+    }
 }
