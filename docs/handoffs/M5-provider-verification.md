@@ -53,9 +53,16 @@ cloud provider.
   current docs use the header form (the older `?key=` query form is
   legacy; this crate's endpoint policy forbids secrets in URLs, so the
   header form is the only one implemented).
-- Streaming: `:streamGenerateContent`; the adapter requests the SSE
-  form (`?alt=sse`) documented for server-sent events, and decodes the
-  same per-event JSON shape as `generateContent`.
+- Streaming: `:streamGenerateContent` returns Server-Sent Events per
+  the official API reference; the adapter requests the SSE form via
+  `?alt=sse`. Verification nuance: `alt=sse` was confirmed on official
+  pages for the Interactions streaming endpoint and in an official
+  Apigee example for `streamGenerateContent`, but was not directly
+  confirmed on an opened ai.google.dev reference page for
+  `streamGenerateContent` itself — **partially verified**; the
+  decoder is in any case proven against the SSE shape by the
+  synthetic-server suite, and this is the first thing to re-check at
+  real-provider integration.
 - Body: `contents[]` with `role` `user`/`model` and `parts[].text`;
   system text goes in `systemInstruction`; usage returns as
   `usageMetadata.promptTokenCount` / `candidatesTokenCount`;
@@ -129,6 +136,31 @@ API surfaces; all are API-key.
   embeds the account id
   (`https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1`),
   so it is configured as a custom endpoint. Catalog: `CatalogOnly`.
+
+## Addendum from the full verification pass (2026-10-20)
+
+A second, deeper pass over the official pages adds these nuances; none
+changes an adapter behaviour or a catalog status:
+
+- **Anthropic** also documents `Authorization: Bearer <token>` as an
+  auth option, and its `POST /v1/oauth/token` endpoint is a **Workload
+  Identity Federation** token exchange (machine/workload identity),
+  not a user OAuth flow — reinforcing the conclusion below. Anthropic
+  also documents a 529 `overloaded_error` (mapped by this crate's 5xx
+  rule) and spend-cap 429s that may carry **no** `retry-after` (the
+  retry policy already falls back to bounded exponential backoff).
+- **Azure** additionally has a newer Foundry "v1" surface
+  (`{endpoint}/openai/v1/chat/completions`, `api-version` optional).
+  The adapter targets the classic GA data-plane surface (2024-10-21)
+  recorded above; the v1 surface is a future integration option.
+- **Cancellation** is the weakest-documented area across all
+  providers: only Gemini documents a cancellation signal at all
+  (HTTP 499 on client disconnect, on an Interactions-scoped page).
+  Everywhere else, client disconnect is an assumption — which is why
+  this crate defines cancellation as *closing the client socket* and
+  proves exactly that against synthetic servers, claiming nothing
+  about provider-side scheduler cancellation (the same honesty
+  boundary M5-READINESS records for the existing Ask path).
 
 ## OAuth conclusion (§15)
 
