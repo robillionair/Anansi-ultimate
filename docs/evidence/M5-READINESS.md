@@ -27,6 +27,14 @@ First dependency-safe M5 task: detailed provider/authentication/Zero-Cost-Lock c
 
 ## Verified repair checkpoint and follow-up
 
+### Owner-selected small models — 2026-10-20
+
+Owner explicitly approved installing Ollama if needed and downloading `qwen2.5:0.5b` for generation and `all-minilm:22m` for embeddings. Windows Package Manager installed Ollama 0.40.5 from its official GitHub release and verified the installer hash; exit 0. Runtime responds at `http://127.0.0.1:11434`. No cloud model, sign-in, payment or real user memory was used.
+
+Both CLI pulls exited 0 and verified model digests. Local `/api/tags` reports generation size 397,821,319 bytes, digest `a8b0c51577010a279d933d14c2a8ab4b268079d44c5c8830c0a93900f1827c67`; embedding size 45,960,996 bytes, digest `1b226e2802dbb772b5fc32a58f103ca1804ef7501331012de126ab22f67475ef`. The runtime installer itself was approximately 1.58 GB, separate from model sizes.
+
+Direct local API smoke requests completed successfully with `keep_alive:0` to unload after each call. Generation used 2,048 context, 64 maximum output tokens and temperature 0 with a synthetic fact. It returned 31 tokens, `done:true`, server total duration 45.664 seconds. The answer repeated the fact but added an unsupported geographic interpretation of local-first: this is an observed quality failure, not a correctness pass. `/api/embeddings` returned 384 dimensions for synthetic text. These are real-runtime API checks, not ANANSI desktop/browser inference acceptance. The previous runtime-unavailable observation above is historical and this specific resource blocker is now resolved. ANANSI's current 30-second inference timeout and nonstreaming requests require further implementation/verification on this machine.
+
 `bedba8c` records ownership, authoritative status corrections, production Win32 prompt flags/guarded cleanup/debug-only synthetic bypass, complete UTF-8-safe section chunking and hybrid failure propagation. No production prompt interaction is claimed. Computer-use guidance forbids automating authentication dialogs, so production native credential interaction needs manual verification; synthetic provider coverage is retained separately.
 
 Follow-up implementation routes Ask through the shared section Context Compiler, propagates canonical integrity failures, rejects missing workspaces, removes hybrid/context guessed-schema metadata fallbacks, and caps embedding response allocation at 256 KiB. Source commit follows the final checks.
