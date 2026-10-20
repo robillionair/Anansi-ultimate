@@ -111,6 +111,15 @@ impl<'a> Dispatcher<'a> {
         }
     }
 
+    /// Share the single-use permit set with other dispatchers.
+    /// `ProviderRuntime` builds a dispatcher per call but holds the
+    /// set across calls, so one permit can never authorize two
+    /// dispatches through the runtime.
+    pub fn with_used_permits(mut self, used: Arc<Mutex<HashSet<String>>>) -> Self {
+        self.used_permits = used;
+        self
+    }
+
     pub fn with_timeouts(mut self, timeouts: TimeoutConfig) -> Self {
         self.timeouts = timeouts.clamped();
         self

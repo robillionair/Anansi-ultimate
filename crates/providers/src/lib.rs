@@ -15,6 +15,7 @@ pub mod keyring_resolver;
 pub mod providers;
 pub mod redact;
 pub mod routing;
+pub mod runtime;
 pub mod secrets;
 pub mod stream;
 pub mod tls;

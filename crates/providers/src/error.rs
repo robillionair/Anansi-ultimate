@@ -34,6 +34,7 @@ pub enum ProviderErrorCode {
     /// wrong-host, or a protocol error — before any request bytes
     /// were sent. The message never contains credential material.
     TlsError,
+    InvalidConfiguration,
     Cancelled,
     /// 5xx or otherwise unavailable provider.
     ProviderUnavailable,
@@ -114,6 +115,7 @@ impl ProviderError {
             ProviderErrorCode::EndpointRejected => "EndpointRejected",
             ProviderErrorCode::TlsUnavailable => "TlsUnavailable",
             ProviderErrorCode::TlsError => "TlsError",
+            ProviderErrorCode::InvalidConfiguration => "InvalidConfiguration",
             ProviderErrorCode::Cancelled => "Cancelled",
             ProviderErrorCode::ProviderUnavailable => "ProviderUnavailable",
             ProviderErrorCode::Unsupported => "Unsupported",
