@@ -13,6 +13,7 @@ import {Backups} from '../src/Backups';
 import {Search} from '../src/Search';
 import {LocalModels} from '../src/LocalModels';
 import {AskAnansi} from '../src/AskAnansi';
+import {Vault} from '../src/Vault';
 
 test('search states its title-only scope, limits and explicit local submission',()=>{
   const html=renderToStaticMarkup(<Search client={{} as any} workspaceId={'a'.repeat(32)}/>);
@@ -203,4 +204,25 @@ test('ask anansi view renders prompt input, local privacy disclosure, and submis
   assert.ok(html.includes('id="ask-prompt"'));
   assert.ok(html.includes('maxLength="500"'));
   assert.ok(html.includes('Ask Question'));
+});
+
+test('vault view exposes native and paired-browser controls plus encrypted backup/export/restore without password inputs', () => {
+  const desktopHtml = renderToStaticMarkup(<Vault workspaceId={'a'.repeat(32)} client={mockClient} native={true} />);
+  assert.ok(desktopHtml.includes('Set up vault'));
+  assert.ok(desktopHtml.includes('Seal using a verified plaintext backup'));
+  assert.ok(desktopHtml.includes('Encrypted vault backup, export, and fresh restore'));
+  assert.ok(desktopHtml.includes('Create ciphertext backup'));
+  assert.ok(desktopHtml.includes('Create encrypted export'));
+  assert.ok(desktopHtml.includes('Restore to new sealed workspace'));
+  assert.doesNotMatch(desktopHtml, /type="password"/);
+
+  const browserHtml = renderToStaticMarkup(<Vault workspaceId={'a'.repeat(32)} client={mockClient} native={false} />);
+  assert.ok(!browserHtml.includes('Set up vault'));
+  assert.ok(browserHtml.includes('Paired browser requests name this origin and workspace'));
+  assert.ok(browserHtml.includes('Unlock'));
+  assert.ok(browserHtml.includes('Lock'));
+  assert.ok(browserHtml.includes('Verify authorized read'));
+  assert.ok(browserHtml.includes('Create ciphertext backup'));
+  assert.ok(browserHtml.includes('Restore to new sealed workspace'));
+  assert.doesNotMatch(browserHtml, /type="password"/);
 });

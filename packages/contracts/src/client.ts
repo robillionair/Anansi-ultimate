@@ -8,7 +8,9 @@ import type {SnapshotPreview,RestoreResult,BackupSchedule,AiDiscoveryResponse,Ha
 export type {SnapshotPreview,RestoreResult,BackupSchedule,AiDiscoveryResponse,HardwareProfile,DiscoveredRuntime,ModelRecommendation,RuntimeKind,RuntimeStatus,FitLevel,AskRequest,AskResponse,AskStatus,GroundedCitation,DisclosureManifest,HybridSearchRequest,HybridSearchResult,HybridSearchResponse,ContextCompilationRequest,CompiledContext,ContextChunk,IndexEmbeddingsRequest,IndexEmbeddingsResponse} from './generated';
 import type { Readiness, WorkspaceDetails, WorkspaceList, Intent, MemoryDraft, MemoryDetails, MemoryList, MemoryMetadata, Privacy, LifecycleChange, RelationshipDraft, RelationshipRecord, RelationshipDetails, RelationshipList, Job, JobDetails, JobList, ArtifactChunk, ExportSelection, JobAction } from './generated';
 export type { Readiness, WorkspaceDetails, WorkspaceList, Intent, MemoryDraft, MemoryDetails, MemoryList, MemoryMetadata, Privacy, LifecycleChange, RelationshipDraft, RelationshipRecord, RelationshipDetails, RelationshipList, Job, JobDetails, JobList, ArtifactChunk, ExportSelection, JobAction } from './generated';
+export type VaultCommandName = 'setup'|'seal'|'unlock'|'read'|'lock'|'rotate'|'backup'|'export'|'preview'|'restore';
 export interface Client {
+  vaultCommand?:(command:VaultCommandName,request:Record<string,unknown>)=>Promise<Record<string,unknown>>;
   startAsk(workspaceId:string,prompt:string,options?:{runtimeEndpoint?:string;modelTag?:string;embeddingModel?:string}):Promise<AskRunResponse>;
   pollAsk(workspaceId:string,id:string):Promise<AskRunResponse>;
   cancelAsk(workspaceId:string,id:string):Promise<AskRunResponse>;
@@ -122,6 +124,7 @@ function client(call:Call):Client {
     hybridSearch:async(workspaceId,options={})=>decode(await call('ai/hybrid-search',{workspaceId,...options}),validHybridSearchResponse),
     compileContext:async(workspaceId,userPrompt,options={})=>decode(await call('ai/context',{workspaceId,userPrompt,...options}),validCompiledContext),
     indexEmbeddings:async(workspaceId,options={})=>decode(await call('ai/index-embeddings',{workspaceId,...options}),validIndexEmbeddingsResponse),
+    vaultCommand:async(command,request)=>await call('vault/'+command,request) as Record<string,unknown>,
   };
 }
 export function httpClient(endpoint:string,token:string):Client {
@@ -131,12 +134,12 @@ export function httpClient(endpoint:string,token:string):Client {
   if(!/^[a-f0-9]{64}$/.test(token))throw new Error('Enter the 64-character token from the current private pairing file.');
   return client(async(operation,request)=>{
     let response:Response;
-    const path = operation.startsWith('jobs/') || operation.startsWith('memories/') || operation.startsWith('relationships/') || operation.startsWith('ai/')
+    const path = operation.startsWith('jobs/') || operation.startsWith('memories/') || operation.startsWith('relationships/') || operation.startsWith('ai/') || operation.startsWith('vault/')
       ? operation
       : operation === 'readiness'
       ? 'readiness'
       : 'workspaces/' + operation;
-    try{response=await fetch(`${url.origin}/v1/${path}`,{method:'POST',credentials:'omit',cache:'no-store',redirect:'error',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({contractVersion:1,...request}),signal:AbortSignal.timeout(operation.startsWith('jobs/')||operation.startsWith('ai/')?120000:15000)});}
+    try{response=await fetch(`${url.origin}/v1/${path}`,{method:'POST',credentials:'omit',cache:'no-store',redirect:'error',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({contractVersion:1,...request}),signal:AbortSignal.timeout(operation.startsWith('jobs/')||operation.startsWith('ai/')||operation.startsWith('vault/')?120000:15000)});}
     catch{throw new Error('Local core unavailable. Start the API, then retry or pair with its new session.');}
     let value:unknown;try{value=await response.json();}catch{throw new Error('The core returned an unreadable response. Try again.');}
     if(!response.ok)throw failure(value,operation);return value;
@@ -149,6 +152,7 @@ export function nativeClient():Client {
       if(operation.startsWith('memories/'))return await invoke('memory_command',{command:operation.slice(9),request:{contractVersion:1,...request}});
       if(operation.startsWith('relationships/'))return await invoke('relationship_command',{command:operation.slice(14),request:{contractVersion:1,...request}});
       if(operation.startsWith('ai/'))return await invoke('ai_command',{command:operation.slice(3),request:{contractVersion:1,...request}});
+      if(operation.startsWith('vault/'))return await invoke('vault_command',{command:operation.slice(6),request:{contractVersion:1,...request}});
       if(operation==='readiness')return await invoke('get_readiness',{request:{contractVersion:1}});
       return await invoke('workspace_command',{command:operation,request:{contractVersion:1,...request}});
     }
@@ -160,6 +164,6 @@ export async function saveNativeExport(workspaceId:string,jobId:string,artifactI
   try {const saved=await invoke('save_export',{request:{contractVersion:1,workspaceId,jobId,artifactId,offset:0}});if(typeof saved!=='boolean')throw Error();return saved;}catch(error){throw failure(error);}
 }
 
-export async function nativeVaultCommand(command:'setup'|'seal'|'unlock'|'read'|'lock',request:Record<string,unknown>):Promise<unknown>{
+export async function nativeVaultCommand(command:VaultCommandName,request:Record<string,unknown>):Promise<unknown>{
   try{return await invoke('vault_command',{command,request:{contractVersion:1,...request}});}catch(error){throw failure(error,'vault/'+command);}
 }

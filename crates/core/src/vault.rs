@@ -9,12 +9,14 @@ pub(crate) mod io;
 pub(crate) mod json;
 pub mod keys;
 pub mod migration;
+pub mod native_prompt;
 pub mod payload;
 pub mod policy;
 pub mod recovery;
 pub mod runtime;
 pub mod service;
 pub mod session;
+pub use zeroize::Zeroizing;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VaultError {

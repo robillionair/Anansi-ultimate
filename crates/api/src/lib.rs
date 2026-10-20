@@ -1,6 +1,9 @@
 pub mod auth;
 pub mod pairing;
-use anansi_core::{CommandError, Core, ErrorCode};
+use anansi_core::{
+    CommandError, Core, ErrorCode,
+    vault::{service::AdapterVaultState, session::Transport},
+};
 use axum::{
     Json, Router,
     body::Body,
@@ -10,7 +13,16 @@ use axum::{
     response::{IntoResponse, Response},
     routing::post,
 };
-use std::sync::Arc;
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex, OnceLock},
+};
+
+static VAULT_STATES: OnceLock<Mutex<HashMap<(usize, String), AdapterVaultState>>> = OnceLock::new();
+
+fn vault_registry() -> &'static Mutex<HashMap<(usize, String), AdapterVaultState>> {
+    VAULT_STATES.get_or_init(|| Mutex::new(HashMap::new()))
+}
 
 pub struct ApiState {
     pub core: Core,
@@ -18,6 +30,16 @@ pub struct ApiState {
     pub host: String,
     pub origin: String,
 }
+
+impl Drop for ApiState {
+    fn drop(&mut self) {
+        if let Ok(mut guard) = vault_registry().lock() {
+            let ptr = self as *const Self as usize;
+            guard.remove(&(ptr, self.token.clone()));
+        }
+    }
+}
+
 pub fn router(state: Arc<ApiState>) -> Router {
     Router::new()
         .route("/v1/readiness", post(readiness))
@@ -26,6 +48,7 @@ pub fn router(state: Arc<ApiState>) -> Router {
         .route("/v1/relationships/{operation}", post(relationship))
         .route("/v1/jobs/{operation}", post(job))
         .route("/v1/ai/{operation}", post(ai))
+        .route("/v1/vault/{operation}", post(vault))
         .fallback(|| async {
             error(
                 StatusCode::NOT_FOUND,
@@ -76,6 +99,16 @@ pub fn command_path(path: &str) -> bool {
             | "/v1/ai/hybrid-search"
             | "/v1/ai/context"
             | "/v1/ai/index-embeddings"
+            | "/v1/vault/setup"
+            | "/v1/vault/seal"
+            | "/v1/vault/unlock"
+            | "/v1/vault/read"
+            | "/v1/vault/lock"
+            | "/v1/vault/rotate"
+            | "/v1/vault/backup"
+            | "/v1/vault/export"
+            | "/v1/vault/preview"
+            | "/v1/vault/restore"
     )
 }
 
@@ -328,6 +361,80 @@ async fn ai(
                 ErrorCode::RevisionConflict | ErrorCode::ContentIntegrity => StatusCode::CONFLICT,
                 ErrorCode::VaultUnavailable => StatusCode::FORBIDDEN,
                 ErrorCode::UnsupportedContract => StatusCode::BAD_REQUEST,
+                ErrorCode::StorageUnavailable => StatusCode::SERVICE_UNAVAILABLE,
+                _ => StatusCode::BAD_REQUEST,
+            };
+            (status, Json(e)).into_response()
+        }
+        Err(_) => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(anansi_core::storage::unavailable()),
+        )
+            .into_response(),
+    }
+}
+
+fn adapter_vault_state(state: &Arc<ApiState>) -> Result<AdapterVaultState, CommandError> {
+    let key = (Arc::as_ptr(state) as usize, state.token.clone());
+    let mut guard = vault_registry()
+        .lock()
+        .map_err(|_| anansi_core::storage::unavailable())?;
+    if let Some(existing) = guard.get(&key) {
+        return Ok(existing.clone());
+    }
+    let root = state.core.storage_root()?;
+    let created = AdapterVaultState::for_storage_root(root)?;
+    guard.insert(key, created.clone());
+    Ok(created)
+}
+
+async fn vault(
+    Path(operation): Path<String>,
+    State(state): State<Arc<ApiState>>,
+    request: Request<Body>,
+) -> Response {
+    let bytes = match axum::body::to_bytes(request.into_body(), 4 * 1024).await {
+        Ok(v) => v,
+        Err(_) => {
+            return error(
+                StatusCode::BAD_REQUEST,
+                ErrorCode::InvalidRequest,
+                "Vault request exceeds its limit.",
+            );
+        }
+    };
+    let input = match serde_json::from_slice(&bytes) {
+        Ok(v) => v,
+        Err(_) => {
+            return error(
+                StatusCode::BAD_REQUEST,
+                ErrorCode::InvalidRequest,
+                "Use the supported vault request.",
+            );
+        }
+    };
+    match tokio::task::spawn_blocking(move || {
+        let vault_state = adapter_vault_state(&state)?;
+        let caller_id = format!("browser:{}", state.origin);
+        vault_state.execute(
+            Transport::Browser,
+            &caller_id,
+            Some(&state.origin),
+            &operation,
+            input,
+        )
+    })
+    .await
+    {
+        Ok(Ok(value)) => Json(value).into_response(),
+        Ok(Err(e)) => {
+            let status = match e.code {
+                ErrorCode::NotFound | ErrorCode::WorkspaceNotFound => StatusCode::NOT_FOUND,
+                ErrorCode::Unauthorized => StatusCode::UNAUTHORIZED,
+                ErrorCode::Forbidden | ErrorCode::VaultUnavailable => StatusCode::FORBIDDEN,
+                ErrorCode::RevisionConflict
+                | ErrorCode::ContentIntegrity
+                | ErrorCode::UnsupportedSchema => StatusCode::CONFLICT,
                 ErrorCode::StorageUnavailable => StatusCode::SERVICE_UNAVAILABLE,
                 _ => StatusCode::BAD_REQUEST,
             };
