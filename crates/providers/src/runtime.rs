@@ -179,7 +179,7 @@ impl ProviderRuntime {
 
     /// One authorized unary dispatch, with disclosure.
     pub fn dispatch(
-        &mut self,
+        &self,
         request: &CompletionRequest,
         routing: RoutingRequest,
         permit: Option<PaidInferencePermit>,
@@ -205,7 +205,7 @@ impl ProviderRuntime {
     /// a `Cancelled` event, and the disclosure record is available
     /// immediately (it describes what was authorized and attempted).
     pub fn dispatch_stream(
-        &mut self,
+        &self,
         request: &CompletionRequest,
         routing: RoutingRequest,
         permit: Option<PaidInferencePermit>,
