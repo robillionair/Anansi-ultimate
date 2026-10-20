@@ -48,6 +48,14 @@ function decode<T extends {contractVersion:number}>(value:unknown, validate:(val
 export function decodeReadiness(value:unknown):Readiness {return decode(value,validReadiness);}
 function failure(value:unknown,operation=''):Error {
   if(validError(value)){
+    if(operation.startsWith('vault/')){
+      switch(value.code){
+        case 'INVALID_REQUEST':return new Error(operation==='vault/setup'?'Vault setup was not acknowledged. Save the displayed recovery key, then enter that recovery key in the native prompt’s Password field. Do not repeat your vault passphrase. No sealing was authorized by this failed setup.':'The vault request is incomplete or needs a recovery acknowledgement and a verified backup. Check the selected operation and retry.');
+        case 'UNAUTHORIZED':return new Error('The vault is locked or the vault passphrase was rejected. Unlock through the native prompt and retry.');
+        case 'VAULT_UNAVAILABLE':return new Error('The native vault operation was cancelled, unavailable or could not finish. Retry through the native controls. No plaintext fallback was used.');
+        case 'FORBIDDEN':return new Error('This vault request does not match the workspace or application process.');
+      }
+    }
     if(operation.startsWith('jobs/')&&value.code==='REVISION_CONFLICT')return new Error('This job changed or its lease expired. Refresh jobs and try again.');
     switch(value.code){
       case 'NOT_FOUND': return new Error('The requested item was not found in this workspace. Try again after refreshing.');
@@ -57,7 +65,7 @@ function failure(value:unknown,operation=''):Error {
       case 'MEMORY_NOT_FOUND': return new Error('Memory not found in this workspace. Refresh the list.');
       case 'REVISION_CONFLICT': return new Error('This memory changed. Your draft was kept. Reopen the latest revision before saving again.');
       case 'CONTENT_INTEGRITY': return new Error('Memory content failed integrity verification. Preserve the storage root and restore a verified copy.');
-      case 'VAULT_UNAVAILABLE': return new Error('Sealed memories require the future encrypted vault. No plaintext fallback was used.');
+      case 'VAULT_UNAVAILABLE': return new Error('This operation cannot access Sealed memories. Use the authorized vault workflow. No plaintext fallback was used.');
       case 'UNAUTHORIZED': return new Error('Pairing was rejected. Enter the current session token.');
       case 'FORBIDDEN': return new Error('This browser address is not allowed. Open http://127.0.0.1:1420.');
       case 'UNSUPPORTED_CONTRACT': return new Error('The core uses a different contract version. Update both applications.');

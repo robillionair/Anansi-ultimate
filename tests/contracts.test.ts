@@ -1,7 +1,20 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { decodeReadiness, httpClient, nativeClient } from '../packages/contracts/src/client.ts';
+import { decodeReadiness, httpClient, nativeClient, nativeVaultCommand } from '../packages/contracts/src/client.ts';
 const actual={applicationName:'ANANSI Ultimate',applicationVersion:'0.1.0',apiVersion:null,contractVersion:1,coreVersion:'0.1.0',operatingSystem:'windows',uptimeMs:5};
+
+test('native vault errors explain recovery without leaking backend text or claiming a future vault',async()=>{
+  const previous=Object.getOwnPropertyDescriptor(globalThis,'window');
+  let code='INVALID_REQUEST';
+  Object.defineProperty(globalThis,'window',{configurable:true,value:{__TAURI_INTERNALS__:{invoke:async()=>{throw {code,message:'sensitive native detail'};}}}});
+  try{
+    await assert.rejects(nativeVaultCommand('setup',{workspaceId:'a'.repeat(32)}),error=>error instanceof Error&&error.message.includes('recovery key')&&error.message.includes('Password field')&&!error.message.includes('sensitive native detail'));
+    code='VAULT_UNAVAILABLE';
+    await assert.rejects(nativeVaultCommand('setup',{workspaceId:'a'.repeat(32)}),error=>error instanceof Error&&error.message.includes('cancelled')&&!error.message.includes('future encrypted vault'));
+    code='UNAUTHORIZED';
+    await assert.rejects(nativeVaultCommand('read',{workspaceId:'a'.repeat(32)}),/vault is locked/);
+  }finally{if(previous)Object.defineProperty(globalThis,'window',previous);else Reflect.deleteProperty(globalThis,'window');}
+});
 
 test('title query remains scoped command data and search errors are sanitized',async()=>{
   const original=globalThis.fetch;let body:Record<string,unknown>={},url='';
@@ -40,7 +53,7 @@ test('memory HTTP/native operations use scoped commands, validated DTOs and sani
     globalThis.fetch=async(url,options)=>{address=String(url);body=JSON.parse(options!.body as string);return new Response(JSON.stringify({contractVersion:1,memories:[],nextOffset:null}));};
     const client=httpClient('http://127.0.0.1:1451','a'.repeat(64));await client.listMemories('a'.repeat(32),{offset:50});assert.equal(new URL(address).pathname,'/v1/memories/list');assert.equal(body.workspaceId,'a'.repeat(32));assert.equal(body.offset,50);assert.ok(!('path' in body));
     globalThis.fetch=async()=>new Response(JSON.stringify({contractVersion:1,memory:{id:'fake'},body:'text'}));await assert.rejects(client.readMemory('a'.repeat(32),'b'.repeat(32)),/incompatible/);
-    for(const [code,message] of [['REVISION_CONFLICT','draft was kept'],['VAULT_UNAVAILABLE','future encrypted vault'],['CONTENT_INTEGRITY','integrity verification']]){globalThis.fetch=async()=>new Response(JSON.stringify({code,message:'private path must not appear'}),{status:409});await assert.rejects(client.createMemory('a'.repeat(32),{title:'X',body:'text'}),new RegExp(message));}
+    for(const [code,message] of [['REVISION_CONFLICT','draft was kept'],['VAULT_UNAVAILABLE','authorized vault workflow'],['CONTENT_INTEGRITY','integrity verification']]){globalThis.fetch=async()=>new Response(JSON.stringify({code,message:'private path must not appear'}),{status:409});await assert.rejects(client.createMemory('a'.repeat(32),{title:'X',body:'text'}),new RegExp(message));}
   }finally{globalThis.fetch=original;}
   const window=Object.getOwnPropertyDescriptor(globalThis,'window');let command='',args:unknown;
   Object.defineProperty(globalThis,'window',{configurable:true,value:{__TAURI_INTERNALS__:{invoke:async(c:string,a:unknown)=>{command=c;args=a;return {contractVersion:1,memories:[],nextOffset:null};}}}});

@@ -28,14 +28,22 @@ impl WindowsCredentialProvider {
         }
     }
 
-    fn prompt(&mut self, purpose: &str) -> Result<PromptFields> {
+    fn prompt(&mut self, purpose: &str, recovery: bool) -> Result<PromptFields> {
         let target: Vec<u16> = self
             .target
             .encode_utf16()
             .chain(std::iter::once(0))
             .collect();
-        let message: Vec<u16> = format!("ANANSI {purpose}. Credentials stay in the native prompt and are never sent to the web UI.").encode_utf16().chain(std::iter::once(0)).collect();
+        let message: Vec<u16> = prompt_instructions(purpose, recovery)
+            .encode_utf16()
+            .chain(std::iter::once(0))
+            .collect();
         let mut user = Zeroizing::new(vec![0u16; 512]);
+        // The generic Win32 control has two fields. ANANSI has no account
+        // username here; prefill its unused field to avoid implying OS login.
+        for (slot, value) in user.iter_mut().zip("ANANSI vault".encode_utf16()) {
+            *slot = value;
+        }
         let mut password = Zeroizing::new(vec![0u16; 1024]);
         let mut save = 0i32;
         let info = CREDUI_INFOW {
@@ -99,12 +107,12 @@ impl NativeCredentialProvider for WindowsCredentialProvider {
             CredentialPurpose::Rotation => "key rotation",
             CredentialPurpose::Restore => "restore",
         };
-        let secret = self.prompt(label)?.1;
+        let secret = self.prompt(label, false)?.1;
         if secret.is_empty() {
             return Err(VaultError::CredentialUnavailable);
         }
         if purpose == CredentialPurpose::Setup {
-            let confirmation = self.prompt("confirm the new vault passphrase")?.1;
+            let confirmation = self.prompt("confirm the new vault passphrase", false)?.1;
             let different = secret.len() != confirmation.len()
                 || secret
                     .iter()
@@ -129,7 +137,7 @@ impl NativeCredentialProvider for WindowsCredentialProvider {
             .chain(std::iter::once(0))
             .collect();
         let message = Zeroizing::new(format!(
-            "Save this recovery key outside ANANSI:\n\n{}\n\nHave you saved a separate copy? Choose Yes to acknowledge and retype it in the next native prompt. No cancels setup.",
+            "Save this recovery key outside ANANSI:\n\n{}\n\nHave you saved a separate copy? Choose Yes, then enter THIS RECOVERY KEY in the next prompt's PASSWORD field. Do NOT repeat your vault passphrase. Leave the prefilled username unchanged. No cancels setup.",
             display.text.as_str()
         ));
         let body = Zeroizing::new(
@@ -150,11 +158,46 @@ impl NativeCredentialProvider for WindowsCredentialProvider {
             return Err(VaultError::AcknowledgementRequired);
         }
         self.target.push_str(" — recovery acknowledgement");
-        let (typed, _) = self
-            .prompt("recovery acknowledgement: enter the displayed recovery key as the username")?;
-        let text = Zeroizing::new(
-            String::from_utf8(typed.to_vec()).map_err(|_| VaultError::AcknowledgementRequired)?,
+        parse_recovery_input(self.prompt("RECOVERY KEY acknowledgement", true)?)
+    }
+}
+
+fn parse_recovery_input((_, typed): PromptFields) -> Result<Zeroizing<[u8; 32]>> {
+    let text = std::str::from_utf8(&typed).map_err(|_| VaultError::AcknowledgementRequired)?;
+    anansi_core::vault::recovery::parse(text).map_err(|_| VaultError::AcknowledgementRequired)
+}
+
+fn prompt_instructions(purpose: &str, recovery: bool) -> String {
+    if recovery {
+        "RECOVERY KEY CHECK — not a login. Leave the prefilled username unchanged. In Password, enter the recovery key you just saved, including its groups if shown. Do NOT enter your vault passphrase or Windows password. Cancel abandons setup.".to_owned()
+    } else {
+        format!(
+            "ANANSI {purpose}. Leave the prefilled username unchanged. In Password, enter your ANANSI vault passphrase, NOT your Windows password. Credentials stay in this native control and never enter the web UI."
+        )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn recovery_uses_password_field_and_refuses_repeated_login_credentials() {
+        let key = [42; 32];
+        let text = anansi_core::vault::recovery::format(&key);
+        let accepted = parse_recovery_input((
+            Zeroizing::new(b"ANANSI vault".to_vec()),
+            Zeroizing::new(text.as_bytes().to_vec()),
+        ))
+        .unwrap();
+        assert_eq!(*accepted, key);
+        assert_eq!(
+            parse_recovery_input((
+                Zeroizing::new(text.as_bytes().to_vec()),
+                Zeroizing::new(b"original vault passphrase".to_vec())
+            ))
+            .unwrap_err(),
+            VaultError::AcknowledgementRequired
         );
-        anansi_core::vault::recovery::parse(text.as_str())
     }
 }
