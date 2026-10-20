@@ -1,5 +1,20 @@
 # M4 — Semantic intelligence
 
+## Current integration repair acceptance — 2026-10-20
+
+Historical completion statements below are superseded by the current build status and M5 readiness evidence. The Owner authorized completing the missing application pipeline, not certifying seeded vectors as real semantic retrieval. The installed and explicitly approved embedding model is `all-minilm:22m` (384 dimensions); generation uses `qwen2.5:0.5b`. No further download or paid inference is implied.
+
+Before application semantic completion, implement and verify these acceptance conditions in order:
+
+1. Propagate transactional invalidation failures. A failed vector deletion must roll back canonical revision and FTS changes; a successful retry removes stale vectors. Real-schema deterministic abort coverage is required.
+2. Populate derived embeddings only following explicit application submission. Read canonical current-revision metadata and integrity-checked content; exclude Sealed before reading or transmitting content. Bound each batch and chunk. Bind entries to workspace, memory, revision, content/chunk hash, model identity and dimension. Do not use guessed-schema fallbacks as production compatibility. Never hold a SQLite write transaction across model inference. Recheck revision/privacy at commit; concurrent changes invalidate the prepared entry instead of publishing stale data.
+3. Generate query embeddings using the same explicitly selected model identity/dimension. Wire actual vectors into Search and the shared Context Compiler/Ask; absence or failure must report an explicit lexical-only fallback or fail the selected semantic request, never label lexical results semantic. Preserve lexical operation without a model.
+4. Apply current metadata, validity, archive, workspace and privacy filters before results/citations publish. Invalidate on edits, lifecycle changes, sealing and restore. Rebuild must not resurrect stale or Sealed vectors. Derived cache formats must not renumber the schema-9 vault barrier or downgrade existing catalogs. Document exact derived-cache compatibility before implementation.
+5. Keep reranking distinct from RRF fusion and expose truthful provenance. Validate paraphrase, conflicting facts, time-sensitive facts and absent evidence with real generated document/query embeddings. Record fixture contents, scores, expected results and failures; model quality is measured, not assumed from successful HTTP responses.
+6. Exercise both application editions under the shared lease. Verify actual cache population, retrieval, citations, offline behavior, revision invalidation, restart, sealing and restore boundaries. Seeded-vector unit results remain a separate evidence category.
+
+Affected owners: `vector.rs`, new semantic orchestration module, core dispatch/search/context/Ask and lifecycle hooks, scoped API/desktop transports, contracts, shared Search/Ask UI and evidence/tests. Shared interface changes belong in the integration handoff before coding. Protect the ongoing human-operated native credential test; no synthetic-provider pass may replace that result.
+
 Status: user authorized starting Milestone 4 on 2026-10-19 following verified M3 completion. M4.1 below is the approved initial implementation increment. Pure Rust, local-first execution, fail-closed Sealed privacy, and the G1 audit gate remain unchanged.
 
 Authority: [master specification](../docs/MASTER_SPEC.md), sections 11, 19, 77–78, 82; [canonical roadmap](../docs/ROADMAP.md).
