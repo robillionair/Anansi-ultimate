@@ -5,6 +5,11 @@ edition = "2024"
 license = "UNLICENSED"
 description = "ANANSI M5 AI Matrix provider-integration package: adapters, routing, quotas, Zero-Cost Lock. Developed standalone on the M5 branch; registered in the root workspace by the M5 integration commit (see docs/handoffs/M5-to-integrator.md)."
 
+[features]
+# Explicit platform integration, mirroring anansi-core: without this
+# feature Linux native-store operations fail closed, never mock.
+linux-secret-service = ["keyring/sync-secret-service", "keyring/crypto-rust"]
+
 [dependencies]
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = { version = "=1.0.154" }
@@ -14,6 +19,15 @@ serde_json = { version = "=1.0.154" }
 rustls = { version = "=0.23.46", default-features = false, features = ["ring", "std", "tls12"] }
 rustls-pki-types = "=1.15.1"
 webpki-roots = "=1.0.10"
+
+[target.'cfg(windows)'.dependencies]
+keyring = { version = "=3.6.3", default-features = false, features = ["windows-native"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { version = "=3.6.3", default-features = false, features = ["apple-native"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "=3.6.3", default-features = false }
 
 [dev-dependencies]
 # Synthetic servers are std TcpListeners; the HTTPS harness terminates

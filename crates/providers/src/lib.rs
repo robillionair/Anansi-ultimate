@@ -11,6 +11,7 @@ pub mod dispatcher;
 pub mod error;
 pub mod gates;
 pub mod http;
+pub mod keyring_resolver;
 pub mod providers;
 pub mod redact;
 pub mod routing;
