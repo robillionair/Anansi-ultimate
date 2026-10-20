@@ -679,6 +679,25 @@ export interface ProviderAuthorizeResponse {
   expiresAtMs: number;
   permitId: string;
 }
+export interface ProviderCatalogResponse {
+  providers: ProviderCatalogEntry[];
+}
+export interface ProviderCatalogEntry {
+  baseUrl?: string | null;
+  displayName: string;
+  docsUrl?: string | null;
+  id: string;
+  /**
+   * "Local" or "Cloud" (the catalog's declared locality; a
+   * configuration's locality is always re-derived from the
+   * endpoint at configure time).
+   */
+  locality: string;
+  /**
+   * "Ready", "CatalogOnly" or "Deferred".
+   */
+  status: string;
+}
 /**
  * Project budget profiles (§67). The named profiles are qualitative in
  * the spec; ceilings are always caller-supplied numbers, never

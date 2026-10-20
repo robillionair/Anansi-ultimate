@@ -884,7 +884,37 @@ impl Core {
                     obj.remove("callerContext");
                 }
                 let scope = crate::provider_dispatch::CallerScope { session, workspace };
-                crate::provider_dispatch::providers_command(operation, value, &scope)
+                // Configuration persistence: a workspace's
+                // provider setup survives restarts (permits,
+                // grants, runs and usage deliberately do not).
+                // Load it lazily before the first operation that
+                // needs it; persist it after a successful
+                // configure.
+                let workspace_id = value
+                    .get("workspaceId")
+                    .and_then(|v| v.as_str())
+                    .map(str::to_string);
+                if matches!(
+                    operation,
+                    "providers-dispatch" | "providers-stream-start" | "providers-usage"
+                ) && !crate::provider_dispatch::has_config(&scope)
+                    && let (Ok(root), Some(wid)) = (self.storage_root(), &workspace_id)
+                    && let Some(json) =
+                        crate::provider_dispatch::load_config_file(&root, wid)?
+                {
+                    crate::provider_dispatch::install_persisted_config(&scope, &json)?;
+                }
+                let result =
+                    crate::provider_dispatch::providers_command(operation, value, &scope);
+                if operation == "providers-configure"
+                    && result.is_ok()
+                    && let (Ok(root), Some(wid)) = (self.storage_root(), &workspace_id)
+                    && let Some(json) =
+                        crate::provider_dispatch::configured_config_json(&scope)
+                {
+                    crate::provider_dispatch::persist_config_file(&root, wid, &json)?;
+                }
+                result
             }
             _ => Err(CommandError::new(
                 ErrorCode::InvalidRequest,

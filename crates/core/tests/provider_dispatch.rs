@@ -908,3 +908,124 @@ fn catalog_answers_without_configuration() {
     let err = dispatch(&core, "s1", &ws, json!({}), "hello").unwrap_err();
     assert_eq!(err.code, ErrorCode::InvalidRequest);
 }
+
+// ---------------------------------------------------------------------------
+// Restart behavior: configuration persists; session state does not.
+// The backend registry is process-global, so a "restart" inside
+// one process proves nothing — these tests re-execute this test
+// binary in child processes (one per phase) against a fake server
+// that lives in the parent and counts hits across the boundary.
+
+fn restart_child_phase() -> Option<(String, std::path::PathBuf)> {
+    let phase = std::env::var("ANANSI_PROVIDER_RESTART_PHASE").ok()?;
+    let root = std::path::PathBuf::from(std::env::var("ANANSI_PROVIDER_RESTART_ROOT").ok()?);
+    Some((phase, root))
+}
+
+#[test]
+fn configuration_persists_across_real_process_restarts() {
+    if let Some((phase, root)) = restart_child_phase() {
+        let core = Core::with_storage_root(root.clone());
+        match phase.as_str() {
+            "setup" => {
+                let ws = create_workspace(&core, "main");
+                let base = std::env::var("ANANSI_PROVIDER_RESTART_URL").unwrap();
+                configure(&core, &ws, ollama_config(&base, "free")).unwrap();
+                println!("RESTART_WS={ws}");
+            }
+            "serve" => {
+                let ws = std::env::var("ANANSI_PROVIDER_RESTART_WS").unwrap();
+                // No configure call: dispatch must work from the
+                // persisted configuration alone.
+                let out = dispatch(&core, "s1", &ws, json!({}), "after restart");
+                match out {
+                    Ok(v) => println!(
+                        "RESTART_OK={}",
+                        v["response"]["text"].as_str().unwrap_or_default()
+                    ),
+                    Err(e) => println!("RESTART_ERR={:?}", e.code),
+                }
+            }
+            _ => panic!("unknown phase"),
+        }
+        return;
+    }
+
+    // Parent: orchestrate real child processes.
+    let exe = std::env::current_exe().unwrap();
+    let run_phase = |root: &std::path::Path, phase: &str, extra: &[(&str, String)]| -> String {
+        let mut cmd = std::process::Command::new(&exe);
+        cmd.args([
+            "configuration_persists_across_real_process_restarts",
+            "--exact",
+            "--nocapture",
+        ])
+        .env("ANANSI_PROVIDER_RESTART_PHASE", phase)
+        .env("ANANSI_PROVIDER_RESTART_ROOT", root);
+        for (k, v) in extra {
+            cmd.env(k, v);
+        }
+        let out = cmd.output().unwrap();
+        assert!(
+            out.status.success(),
+            "child phase {phase} failed: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        String::from_utf8_lossy(&out.stdout).to_string()
+    };
+
+    // Happy path: setup in one process, serve in another.
+    let dir = tempfile::tempdir().unwrap();
+    let fake = start_fake_ollama();
+    let stdout = run_phase(
+        dir.path(),
+        "setup",
+        &[("ANANSI_PROVIDER_RESTART_URL", fake.base_url.clone())],
+    );
+    let ws = stdout
+        .lines()
+        .find_map(|l| l.strip_prefix("RESTART_WS="))
+        .expect("child printed the workspace id")
+        .trim()
+        .to_string();
+    let persisted = std::fs::read_to_string(
+        dir.path().join("provider-config").join(format!("{ws}.json")),
+    )
+    .expect("configuration persisted next to the storage root");
+    assert!(persisted.contains("llama-x"));
+    assert!(!persisted.contains("sk-"), "no secret material persisted");
+    let stdout = run_phase(
+        dir.path(),
+        "serve",
+        &[("ANANSI_PROVIDER_RESTART_WS", ws.clone())],
+    );
+    assert!(stdout.contains("RESTART_OK=core reply"), "{stdout}");
+    assert_eq!(fake.hits.load(Ordering::SeqCst), 1);
+
+    // Tamper path: flipping the persisted locality (the configure
+    // masquerade) must make the loading process refuse, with zero
+    // provider traffic.
+    let dir2 = tempfile::tempdir().unwrap();
+    let stdout = run_phase(
+        dir2.path(),
+        "setup",
+        &[("ANANSI_PROVIDER_RESTART_URL", fake.base_url.clone())],
+    );
+    let ws2 = stdout
+        .lines()
+        .find_map(|l| l.strip_prefix("RESTART_WS="))
+        .unwrap()
+        .trim()
+        .to_string();
+    let path = dir2.path().join("provider-config").join(format!("{ws2}.json"));
+    let text = std::fs::read_to_string(&path).unwrap();
+    std::fs::write(&path, text.replace("\"local\"", "\"cloud\"")).unwrap();
+    let hits_before = fake.hits.load(Ordering::SeqCst);
+    let stdout = run_phase(
+        dir2.path(),
+        "serve",
+        &[("ANANSI_PROVIDER_RESTART_WS", ws2)],
+    );
+    assert!(stdout.contains("RESTART_ERR=InvalidRequest"), "{stdout}");
+    assert_eq!(fake.hits.load(Ordering::SeqCst), hits_before);
+}

@@ -3830,6 +3830,63 @@
     "title": "ProviderAuthorizeResponse",
     "type": "object"
   },
+  "ProviderCatalogResponse": {
+    "$defs": {
+      "ProviderCatalogEntry": {
+        "additionalProperties": false,
+        "properties": {
+          "baseUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "docsUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "locality": {
+            "description": "\"Local\" or \"Cloud\" (the catalog's declared locality; a\nconfiguration's locality is always re-derived from the\nendpoint at configure time).",
+            "type": "string"
+          },
+          "status": {
+            "description": "\"Ready\", \"CatalogOnly\" or \"Deferred\".",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "displayName",
+          "locality",
+          "status"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "providers": {
+        "items": {
+          "$ref": "#/$defs/ProviderCatalogEntry"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "providers"
+    ],
+    "title": "ProviderCatalogResponse",
+    "type": "object"
+  },
   "ProviderConfigureRequest": {
     "$defs": {
       "Budget": {
