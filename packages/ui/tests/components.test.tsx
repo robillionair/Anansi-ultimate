@@ -231,7 +231,7 @@ test('vault view exposes native and paired-browser controls plus encrypted backu
 import {Providers, DisclosurePanel, deriveLocality} from '../src/Providers';
 
 test('providers screen renders the full workflow: catalog, owner-trust copy, credential reference (never a secret field), zero-cost lock, routing modes, usage',()=>{
-  const html=renderToStaticMarkup(<Providers client={{providersCatalog:async()=>({contractVersion:1,providers:[]}),providersUsage:async()=>({contractVersion:1,totalRequests:0,totalInputTokens:0,totalOutputTokens:0,totalEstimatedCostMicroUsd:0,reservedRequests:0,reservedTokens:0,reservedEstimatedCostMicroUsd:0,providers:[]})} as any} workspaceId="ws1"/>);
+  const html=renderToStaticMarkup(<Providers client={{providersCatalog:async()=>({contractVersion:1,providers:[]}),providersUsage:async()=>({contractVersion:1,totalRequests:0,totalInputTokens:0,totalOutputTokens:0,totalEstimatedCostMicroUsd:0,reservedRequests:0,reservedTokens:0,reservedEstimatedCostMicroUsd:0,providers:[]}),providersSessionAccess:async()=>({contractVersion:1,pending:[],grants:[]})} as any} workspaceId="ws1"/>);
   assert.match(html,/Provider catalog/);
   assert.match(html,/Configure provider/);
   assert.match(html,/owner operations/);
@@ -244,6 +244,11 @@ test('providers screen renders the full workflow: catalog, owner-trust copy, cre
   assert.match(html,/Zero-Cost Lock/);
   assert.match(html,/Authorize paid dispatch for this model/);
   assert.match(html,/Usage/);
+  assert.match(html,/Credential setup/);
+  assert.match(html,/Set credential \(native prompt\)/);
+  assert.match(html,/trusted native prompt/);
+  assert.match(html,/Browser session access/);
+  assert.match(html,/cannot approve itself/);
   for(const m of ['auto','autoFree','private','fast','deep','coding','vision','chooseModel'])assert.match(html,new RegExp(`value="${m}"`),`routing mode ${m}`);
 });
 

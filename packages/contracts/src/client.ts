@@ -1,8 +1,8 @@
 import { validReadiness, validError, validWorkspaceDetails, validWorkspaceList, validMemoryDetails, validMemoryList, validRelationshipDetails, validRelationshipList, validJobDetails, validJobList, validArtifactChunk, validAiDiscoveryResponse, validAskResponse, validHybridSearchResponse, validCompiledContext, validIndexEmbeddingsResponse } from './validators.mjs';
 import { invoke } from '@tauri-apps/api/core';
-import { validAskRunResponse, validProviderCatalogResponse, validProviderConfigureResponse, validProviderAuthorizeResponse, validProviderDispatchResponse, validProviderStreamStartResponse, validProviderPollResponse, validProviderUsageResponse } from './validators.mjs';
-import type { AskRunResponse, ProviderCatalogResponse, ProviderConfigureResponse, ProviderAuthorizeResponse, ProviderDispatchResponse, ProviderStreamStartResponse, ProviderPollResponse, ProviderUsageResponse, RuntimeConfig, CompletionRequest } from './generated';
-export type { AskRunResponse, ProviderCatalogResponse, ProviderCatalogEntry, ProviderConfigureResponse, ProviderAuthorizeResponse, ProviderDispatchResponse, ProviderStreamStartResponse, ProviderPollResponse, ProviderUsageResponse, ProviderUsageEntry, RuntimeConfig, CompletionRequest, DisclosureRecord } from './generated';
+import { validAskRunResponse, validProviderCatalogResponse, validProviderConfigureResponse, validProviderAuthorizeResponse, validProviderDispatchResponse, validProviderStreamStartResponse, validProviderPollResponse, validProviderUsageResponse, validProviderCredentialSetResponse, validProviderCredentialRemoveResponse, validProviderCredentialStatusResponse, validProviderSessionAccessResponse } from './validators.mjs';
+import type { AskRunResponse, ProviderCatalogResponse, ProviderConfigureResponse, ProviderAuthorizeResponse, ProviderDispatchResponse, ProviderStreamStartResponse, ProviderPollResponse, ProviderUsageResponse, RuntimeConfig, CompletionRequest, ProviderCredentialSetResponse, ProviderCredentialRemoveResponse, ProviderCredentialStatusResponse, ProviderSessionAccessResponse } from './generated';
+export type { AskRunResponse, ProviderCatalogResponse, ProviderCatalogEntry, ProviderConfigureResponse, ProviderAuthorizeResponse, ProviderDispatchResponse, ProviderStreamStartResponse, ProviderPollResponse, ProviderUsageResponse, ProviderUsageEntry, RuntimeConfig, CompletionRequest, DisclosureRecord, ProviderCredentialSetResponse, ProviderCredentialRemoveResponse, ProviderCredentialStatusResponse, ProviderSessionAccessResponse, ProviderPendingAccess, ProviderGrantInfo } from './generated';
 import {validSnapshotPreview,validRestoreResult,validBackupSchedule,validUploadStatus} from './validators.mjs';
 import type {SnapshotPreview,RestoreResult,BackupSchedule,AiDiscoveryResponse,HardwareProfile,DiscoveredRuntime,ModelRecommendation,RuntimeKind,RuntimeStatus,FitLevel,AskRequest,AskResponse,AskStatus,GroundedCitation,DisclosureManifest,HybridSearchRequest,HybridSearchResult,HybridSearchResponse,ContextCompilationRequest,CompiledContext,ContextChunk,IndexEmbeddingsRequest,IndexEmbeddingsResponse} from './generated';
 export type {SnapshotPreview,RestoreResult,BackupSchedule,AiDiscoveryResponse,HardwareProfile,DiscoveredRuntime,ModelRecommendation,RuntimeKind,RuntimeStatus,FitLevel,AskRequest,AskResponse,AskStatus,GroundedCitation,DisclosureManifest,HybridSearchRequest,HybridSearchResult,HybridSearchResponse,ContextCompilationRequest,CompiledContext,ContextChunk,IndexEmbeddingsRequest,IndexEmbeddingsResponse} from './generated';
@@ -53,6 +53,10 @@ export interface Client {
   providersStreamPoll(workspaceId: string, runId: string, capability: string): Promise<ProviderPollResponse>;
   providersStreamCancel(workspaceId: string, runId: string, capability: string): Promise<{ cancelled: boolean }>;
   providersUsage(workspaceId: string): Promise<ProviderUsageResponse>;
+  providersCredentialSet(workspaceId: string, provider: string, reference: string): Promise<ProviderCredentialSetResponse>;
+  providersCredentialRemove(workspaceId: string, provider: string, reference: string): Promise<ProviderCredentialRemoveResponse>;
+  providersCredentialStatus(workspaceId: string, provider: string, reference: string): Promise<ProviderCredentialStatusResponse>;
+  providersSessionAccess(workspaceId: string): Promise<ProviderSessionAccessResponse>;
 }
 function decode<T extends {contractVersion:number}>(value:unknown, validate:(value:unknown)=>value is T):T {
   if(!validate(value)||value.contractVersion!==1)throw new Error('The core returned an incompatible response. Update both applications.');
@@ -160,6 +164,10 @@ function client(call:Call):Client {
     providersStreamPoll:async(workspaceId,runId,capability)=>decode(await call('ai/providers-stream-poll',{workspaceId,runId,capability}),validProviderPollResponse),
     providersStreamCancel:async(workspaceId,runId,capability)=>{const v=await call('ai/providers-stream-cancel',{workspaceId,runId,capability}) as {cancelled?:unknown};if(typeof v?.cancelled!=='boolean')throw new Error('The core returned an incompatible response. Update both applications.');return {cancelled:v.cancelled};},
     providersUsage:async(workspaceId)=>decode(await call('ai/providers-usage',{workspaceId}),validProviderUsageResponse),
+    providersCredentialSet:async(workspaceId,provider,reference)=>decode(await call('ai/providers-credential-set',{workspaceId,provider,reference}),validProviderCredentialSetResponse),
+    providersCredentialRemove:async(workspaceId,provider,reference)=>decode(await call('ai/providers-credential-remove',{workspaceId,provider,reference}),validProviderCredentialRemoveResponse),
+    providersCredentialStatus:async(workspaceId,provider,reference)=>decode(await call('ai/providers-credential-status',{workspaceId,provider,reference}),validProviderCredentialStatusResponse),
+    providersSessionAccess:async(workspaceId)=>decode(await call('ai/providers-session-access',{workspaceId}),validProviderSessionAccessResponse),
     vaultCommand:async(command,request)=>await call('vault/'+command,request) as Record<string,unknown>,
   };
 }

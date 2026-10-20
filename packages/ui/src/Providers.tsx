@@ -85,14 +85,30 @@ export function Providers({ client, workspaceId }: { client: Client; workspaceId
   const [streaming, setStreaming] = useState(true);
   const [prompt, setPrompt] = useState('');
   const [output, setOutput] = useState('');
-  const [streamState, setStreamState] = useState<'idle' | 'streaming' | 'done' | 'cancelled' | 'error'>('idle');
+  const [streamState, setStreamState] = useState<'idle' | 'streaming' | 'cancelling' | 'done' | 'cancelled' | 'error'>('idle');
+  const [streamNotice, setStreamNotice] = useState('');
+  const [runRetained, setRunRetained] = useState(false);
   const [disclosure, setDisclosure] = useState<DisclosureRecord | null>(null);
   const [dispatchError, setDispatchError] = useState('');
   const activeRun = useRef<{ runId: string; capability: string } | null>(null);
-  const cancelWanted = useRef(false);
+  // Set when the backend's terminal event for the active run was
+  // an error; decides the final state once `done` confirms the
+  // run has actually ended.
+  const terminalError = useRef<string | null>(null);
 
   // Usage
   const [usage, setUsage] = useState<ProviderUsageResponse | null>(null);
+
+  // Credential setup (native prompt + keyring, host-side)
+  const [credPresent, setCredPresent] = useState<boolean | null>(null);
+  const [credMessage, setCredMessage] = useState('');
+  const [credError, setCredError] = useState('');
+  const [credBusy, setCredBusy] = useState(false);
+
+  // Browser-session access (host approval queue)
+  const [access, setAccess] = useState<import('@anansi/contracts').ProviderSessionAccessResponse | null>(null);
+  const [accessNote, setAccessNote] = useState('');
+  const [accessBusy, setAccessBusy] = useState(false);
 
   useEffect(() => {
     let live = true;
@@ -105,10 +121,25 @@ export function Providers({ client, workspaceId }: { client: Client; workspaceId
         if (live) setCatalogError(e instanceof Error ? e.message : 'Catalog unavailable.');
       });
     void refreshUsage();
+    void refreshAccess();
     return () => {
       live = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [client, workspaceId]);
+
+  // Leaving the screen (navigation, workspace switch) must not
+  // leak a live run: ask the backend to cancel it. Best effort —
+  // the run also expires server-side — but the capability is
+  // never carried into another view.
+  useEffect(() => {
+    return () => {
+      const run = activeRun.current;
+      if (run) {
+        activeRun.current = null;
+        void client.providersStreamCancel(workspaceId, run.runId, run.capability).catch(() => {});
+      }
+    };
   }, [client, workspaceId]);
 
   async function refreshUsage() {
@@ -116,6 +147,85 @@ export function Providers({ client, workspaceId }: { client: Client; workspaceId
       setUsage(await client.providersUsage(workspaceId));
     } catch {
       setUsage(null);
+    }
+  }
+
+  async function refreshCredStatus() {
+    if (!credentialRef.trim()) {
+      setCredPresent(null);
+      return;
+    }
+    try {
+      const status = await client.providersCredentialStatus(workspaceId, providerId, credentialRef.trim());
+      setCredPresent(status.present);
+    } catch {
+      setCredPresent(null);
+    }
+  }
+
+  async function handleCredentialSet() {
+    setCredBusy(true);
+    setCredError('');
+    setCredMessage('');
+    try {
+      await client.providersCredentialSet(workspaceId, providerId, credentialRef.trim());
+      setCredPresent(true);
+      setCredMessage('Stored in the OS credential store under this reference.');
+    } catch (e) {
+      setCredError(e instanceof Error ? e.message : 'Credential setup failed.');
+    } finally {
+      setCredBusy(false);
+    }
+  }
+
+  async function handleCredentialRemove() {
+    setCredBusy(true);
+    setCredError('');
+    setCredMessage('');
+    try {
+      await client.providersCredentialRemove(workspaceId, providerId, credentialRef.trim());
+      setCredPresent(false);
+      setCredMessage('Credential removed from the OS credential store.');
+    } catch (e) {
+      setCredError(e instanceof Error ? e.message : 'Credential removal failed.');
+    } finally {
+      setCredBusy(false);
+    }
+  }
+
+  async function refreshAccess() {
+    try {
+      setAccess(await client.providersSessionAccess(workspaceId));
+      setAccessNote('');
+    } catch (e) {
+      setAccess(null);
+      setAccessNote(
+        e instanceof Error ? e.message : 'Session access is managed by the host.',
+      );
+    }
+  }
+
+  async function handleApproveSession(session: string) {
+    setAccessBusy(true);
+    try {
+      await client.providersGrantSession(workspaceId, session, 1800);
+      await refreshAccess();
+    } catch (e) {
+      setAccessNote(e instanceof Error ? e.message : 'Approval failed.');
+    } finally {
+      setAccessBusy(false);
+    }
+  }
+
+  async function handleRevokeSession(session: string) {
+    setAccessBusy(true);
+    try {
+      await client.providersRevokeSession(workspaceId, session);
+      await refreshAccess();
+    } catch (e) {
+      setAccessNote(e instanceof Error ? e.message : 'Revocation failed.');
+    } finally {
+      setAccessBusy(false);
     }
   }
 
@@ -238,41 +348,10 @@ export function Providers({ client, workspaceId }: { client: Client; workspaceId
       } else {
         const started = await client.providersStreamStart(workspaceId, buildRequest(), dispatchOptions());
         activeRun.current = { runId: started.runId, capability: started.capability };
-        cancelWanted.current = false;
+        terminalError.current = null;
         setDisclosure(started.disclosure);
         setStreamState('streaming');
-        let text = '';
-        for (;;) {
-          if (cancelWanted.current) break;
-          const poll = await client.providersStreamPoll(workspaceId, started.runId, started.capability);
-          for (const ev of poll.events) {
-            if (ev.kind === 'token' && ev.text) {
-              text += ev.text;
-              setOutput(text);
-            } else if (ev.kind === 'error') {
-              setDisclosure(poll.disclosure);
-              setStreamState(ev.code === 'Cancelled' ? 'cancelled' : 'error');
-              if (ev.code !== 'Cancelled') {
-                setDispatchError(`${ev.code ?? 'Error'}: ${ev.message ?? 'The stream failed.'}`);
-              }
-              activeRun.current = null;
-              await refreshUsage();
-              return;
-            }
-          }
-          setDisclosure(poll.disclosure);
-          if (poll.done) {
-            setStreamState('done');
-            break;
-          }
-          await new Promise((r) => setTimeout(r, 120));
-        }
-        activeRun.current = null;
-        // The cancel button exits the loop via cancelWanted
-        // (possibly before the terminal Cancelled event is
-        // polled): the state machine must still land on
-        // 'cancelled', not hang in 'streaming'.
-        if (cancelWanted.current) setStreamState('cancelled');
+        await watchRun(started.runId, started.capability, '');
       }
     } catch (e) {
       setStreamState('error');
@@ -282,16 +361,93 @@ export function Providers({ client, workspaceId }: { client: Client; workspaceId
     }
   }
 
+  /**
+   * Poll the active run until the BACKEND confirms it has ended
+   * (`done`). Cancellation is never declared locally: clicking
+   * Cancel only moves to 'cancelling'; the terminal state comes
+   * from the run's own terminal event. Transient poll failures
+   * are retried with a visible notice; if watching ultimately
+   * fails, the capability is retained and the user can resume —
+   * the run is never abandoned silently.
+   */
+  async function watchRun(runId: string, capability: string, initialText: string) {
+    let text = initialText;
+    let failures = 0;
+    for (;;) {
+      let poll;
+      try {
+        poll = await client.providersStreamPoll(workspaceId, runId, capability);
+        failures = 0;
+        setStreamNotice('');
+      } catch (e) {
+        failures += 1;
+        if (failures > 5) {
+          setRunRetained(true);
+          setStreamState('error');
+          setDispatchError(
+            'Lost contact while watching the stream: ' +
+              (e instanceof Error ? e.message : 'unknown error') +
+              ' The run may still be active on the backend — resume watching or cancel it.',
+          );
+          return;
+        }
+        setStreamNotice('Connection interrupted; still watching the run…');
+        await new Promise((r) => setTimeout(r, 400));
+        continue;
+      }
+      for (const ev of poll.events) {
+        if (ev.kind === 'token' && ev.text) {
+          text += ev.text;
+          setOutput(text);
+        } else if (ev.kind === 'error') {
+          terminalError.current = ev.code ?? 'Error';
+          if (ev.code !== 'Cancelled') {
+            setDispatchError(`${ev.code ?? 'Error'}: ${ev.message ?? 'The stream failed.'}`);
+          }
+        }
+      }
+      setDisclosure(poll.disclosure);
+      if (poll.done) {
+        const terminal = terminalError.current;
+        activeRun.current = null;
+        setRunRetained(false);
+        terminalError.current = null;
+        setStreamState(terminal === 'Cancelled' ? 'cancelled' : terminal ? 'error' : 'done');
+        await refreshUsage();
+        return;
+      }
+      await new Promise((r) => setTimeout(r, 120));
+    }
+  }
+
   async function handleCancel() {
     const run = activeRun.current;
-    if (!run) return;
-    cancelWanted.current = true;
+    if (!run || streamState !== 'streaming') return;
+    // Enter 'cancelling' — NOT 'cancelled'. The terminal state
+    // arrives only when the watch loop sees the backend confirm
+    // the run ended.
+    setStreamState('cancelling');
     try {
       await client.providersStreamCancel(workspaceId, run.runId, run.capability);
-    } catch {
-      // The stream may already be finished; the poll loop will
-      // surface the terminal state.
+    } catch (e) {
+      // The cancellation could not be delivered: say so, keep
+      // the capability, keep polling (the watch loop is still
+      // running), and let the user retry.
+      setDispatchError(
+        'Cancellation could not be delivered: ' +
+          (e instanceof Error ? e.message : 'unknown error') +
+          ' The stream is still being watched; try Cancel again.',
+      );
+      setStreamState('streaming');
     }
+  }
+
+  async function handleResumeWatch() {
+    const run = activeRun.current;
+    if (!run) return;
+    setDispatchError('');
+    setStreamState('streaming');
+    await watchRun(run.runId, run.capability, output);
   }
 
   const locality = deriveLocality(baseUrl);
@@ -401,10 +557,38 @@ export function Providers({ client, workspaceId }: { client: Client; workspaceId
         </form>
       </section>
 
+      <section className="card" aria-labelledby="providers-credential-title">
+        <h2 id="providers-credential-title">Credential setup</h2>
+        <p>
+          Approved setup for <strong>{providerId}</strong> under the reference{' '}
+          <strong>{credentialRef.trim() || '(set a reference in the configure form)'}</strong>.
+          Setting a credential opens the trusted native prompt on this computer: the key moves
+          from the prompt into the operating system credential store and is never typed into, or
+          sent through, this page. In a paired browser this is an owner operation and is refused —
+          set credentials in the desktop app.
+        </p>
+        <div className="actions">
+          <button type="button" disabled={credBusy || !credentialRef.trim()} onClick={() => void handleCredentialSet()}>
+            Set credential (native prompt)
+          </button>
+          <button type="button" className="secondary" disabled={credBusy || !credentialRef.trim()} onClick={() => void handleCredentialRemove()}>
+            Remove credential
+          </button>
+          <button type="button" className="secondary" disabled={credBusy || !credentialRef.trim()} onClick={() => void refreshCredStatus()}>
+            Check status
+          </button>
+        </div>
+        {credPresent !== null && (
+          <p role="status">Credential for this reference: {credPresent ? 'present in the OS store' : 'not present'}.</p>
+        )}
+        {credMessage && <p role="status">{credMessage}</p>}
+        {credError && <p className="error" role="alert" aria-label="Credential error">{credError}</p>}
+      </section>
+
       <section className="card" aria-labelledby="providers-dispatch-title">
         <h2 id="providers-dispatch-title">Dispatch</h2>
         <form onSubmit={handleDispatch}>
-          <fieldset disabled={streamState === 'streaming'}>
+          <fieldset disabled={streamState === 'streaming' || streamState === 'cancelling'}>
             <label htmlFor="dispatch-model">Model</label>
             <input id="dispatch-model" value={model} onChange={(e) => setModel(e.target.value)} required autoComplete="off" />
             <label htmlFor="dispatch-mode">Routing mode</label>
@@ -425,13 +609,27 @@ export function Providers({ client, workspaceId }: { client: Client; workspaceId
             <input id="dispatch-prompt" value={prompt} onChange={(e) => setPrompt(e.target.value)} required autoComplete="off" placeholder="Ask the configured model…" />
           </fieldset>
           <div className="actions">
-            <button type="submit" disabled={streamState === 'streaming'}>Send</button>
+            <button type="submit" disabled={streamState === 'streaming' || streamState === 'cancelling'}>Send</button>
             {streamState === 'streaming' && (
               <button type="button" className="secondary" onClick={() => void handleCancel()}>
                 Cancel stream
               </button>
             )}
+            {streamState === 'cancelling' && (
+              <button type="button" className="secondary" disabled>
+                Cancelling…
+              </button>
+            )}
+            {streamState === 'error' && runRetained && (
+              <button type="button" className="secondary" onClick={() => void handleResumeWatch()}>
+                Resume watching this run
+              </button>
+            )}
           </div>
+          {streamState === 'cancelling' && (
+            <p role="status">Cancelling — waiting for the backend to confirm the stream has ended.</p>
+          )}
+          {streamNotice && <p role="status">{streamNotice}</p>}
         </form>
         <div className="authorize-row">
           <label htmlFor="permit-cap">Paid authorization — token cap</label>
@@ -476,6 +674,57 @@ export function Providers({ client, workspaceId }: { client: Client; workspaceId
           <p>No usage recorded yet.</p>
         )}
         <button type="button" className="secondary" onClick={() => void refreshUsage()}>Refresh usage</button>
+      </section>
+
+      <section className="card" aria-labelledby="providers-access-title">
+        <h2 id="providers-access-title">Browser session access</h2>
+        <p>
+          Owner operations (configure, authorize, credentials) are refused for paired browser
+          sessions unless the host approves them here. Approval is per workspace, names the
+          exact session, and expires. This panel works in the desktop app (the host); a browser
+          cannot approve itself.
+        </p>
+        {accessNote && <p className="help">{accessNote}</p>}
+        {access && (
+          <>
+            <h3>Pending approval requests</h3>
+            {access.pending.length === 0 ? (
+              <p>No browser session is waiting for approval.</p>
+            ) : (
+              <ul>
+                {access.pending.map((p) => (
+                  <li key={p.session}>
+                    Session <code>{p.session}</code> — {p.attempts} refused attempt
+                    {p.attempts === 1 ? '' : 's'}, last{' '}
+                    {new Date(p.lastSeenMs).toLocaleTimeString()}{' '}
+                    <button type="button" className="secondary" disabled={accessBusy} onClick={() => void handleApproveSession(p.session)}>
+                      Approve for 30 minutes
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <h3>Active grants</h3>
+            {access.grants.length === 0 ? (
+              <p>No active grants.</p>
+            ) : (
+              <ul>
+                {access.grants.map((g) => (
+                  <li key={g.session}>
+                    Session <code>{g.session}</code> — expires{' '}
+                    {new Date(g.expiresAtMs).toLocaleTimeString()}{' '}
+                    <button type="button" className="secondary" disabled={accessBusy} onClick={() => void handleRevokeSession(g.session)}>
+                      Revoke
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </>
+        )}
+        <button type="button" className="secondary" disabled={accessBusy} onClick={() => void refreshAccess()}>
+          Refresh session access
+        </button>
       </section>
     </div>
   );

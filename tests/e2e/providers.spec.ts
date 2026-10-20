@@ -37,12 +37,15 @@ test('provider workflow: rejected authorization, persisted config, dispatch, dis
     req.on('data', (c) => (body += c));
     req.on('end', () => {
       const parsed = JSON.parse(body) as { stream?: boolean };
+      // "slow" prompts drip for ~12 s so cancellation (not
+      // completion) is the only way a stream ends quickly.
+      const tokenCount = body.includes('slow') ? 60 : 12;
       res.writeHead(200, { 'Content-Type': 'application/x-ndjson' });
       if (parsed.stream) {
         let i = 0;
         const timer = setInterval(() => {
           i++;
-          if (i <= 12) {
+          if (i <= tokenCount) {
             res.write(
               JSON.stringify({
                 model: 'x',
@@ -204,6 +207,24 @@ test('provider workflow: rejected authorization, persisted config, dispatch, dis
     await expect(page.locator('.provider-output')).toContainText('tok3');
     await page.getByRole('button', { name: 'Cancel stream' }).click();
     await expect(page.getByText('Stream cancelled.')).toBeVisible();
+
+    // 4b. Navigation cleanup: start a stream, leave the screen
+    // mid-stream — the run must be cancelled on unmount, and
+    // coming back shows no lingering reservation.
+    await page.locator('#dispatch-prompt').fill('slow count please');
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(page.locator('.provider-output')).toContainText('tok3');
+    await page.getByRole('button', { name: 'Workspace', exact: true }).click();
+    await expect(page.getByRole('heading', { level: 1, name: 'Providers E2E Workspace' })).toBeVisible();
+    await page.getByRole('button', { name: 'AI Providers', exact: true }).click();
+    await expect(page.getByRole('heading', { level: 1, name: 'AI providers' })).toBeVisible();
+    const returnedAt = Date.now();
+    await page.getByRole('button', { name: 'Refresh usage' }).click();
+    await expect(page.locator('[aria-labelledby="providers-usage-title"]')).toContainText('0 / 0');
+    expect(
+      Date.now() - returnedAt,
+      'the reservation must clear via unmount cancellation, not by waiting out a 12 s stream',
+    ).toBeLessThan(8000);
 
     // 5. Zero-Cost Lock refuses the paid model; with the lock
     // off, the missing permit refuses instead; and authorizing
