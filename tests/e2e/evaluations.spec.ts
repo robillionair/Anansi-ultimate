@@ -110,8 +110,8 @@ test('evaluation: saved idea set -> assess -> save -> reopen -> rubric v2 -> his
 
     // Select two concepts and assess the first under the
     // standard rubric; the second stays unassessed.
-    await page.getByLabel(/1\. Alpha/).check();
-    await page.getByLabel(/3\. Gamma/).check();
+    await page.getByLabel('Alpha', { exact: true }).check();
+    await page.getByLabel('Gamma', { exact: true }).check();
     await page.getByLabel('Problem clarity score').first().selectOption('5');
     await page.getByLabel('Rationale').first().fill('Very sharp problem statement.');
     await expect(page.getByText(/Preview summary: 5 \(assessed 1 of 5 dimensions\)/)).toBeVisible();
@@ -143,7 +143,7 @@ test('evaluation: saved idea set -> assess -> save -> reopen -> rubric v2 -> his
     await page.getByRole('button', { name: 'Save rubric as new version' }).click();
     await expect(page.getByText(/Rubric saved as version 2/)).toBeVisible();
 
-    await page.getByLabel(/1\. Alpha/).check();
+    await page.getByLabel('Alpha', { exact: true }).check();
     await page.getByLabel('Problem clarity score').first().selectOption('5');
     await page.getByLabel('Customer specificity score').first().selectOption('4');
     await page.getByRole('button', { name: 'Save evaluation' }).click();

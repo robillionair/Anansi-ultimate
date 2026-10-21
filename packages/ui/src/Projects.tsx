@@ -957,7 +957,7 @@ function EvaluationPanel(props: EvalPanelProps) {
               disabled={!selection.includes(i) && selection.length >= 3}
               onChange={e => setSelection(prev => e.target.checked ? [...prev, i] : prev.filter(x => x !== i))}
             />{' '}
-            {i + 1}. {concept.name}
+            {concept.name}
           </label>
         ))}
       </fieldset>
