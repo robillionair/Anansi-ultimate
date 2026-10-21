@@ -96,6 +96,12 @@ function failure(value:unknown,operation=''):Error {
         case 'FORBIDDEN':return new Error('This vault request does not match the workspace or application process.');
       }
     }
+    if(operation.startsWith('artifacts/')){
+      // Registry refusals are composed for the user at the core
+      // (archived project, stale revision, sealed boundary) and
+      // are surfaced verbatim, like provider dispatch detail.
+      if(typeof value.message==='string'&&value.message)return new Error(value.message);
+    }
     if(operation.startsWith('jobs/')&&value.code==='REVISION_CONFLICT')return new Error('This job changed or its lease expired. Refresh jobs and try again.');
     switch(value.code){
       case 'NOT_FOUND': return new Error('The requested item was not found in this workspace. Try again after refreshing.');
@@ -190,7 +196,7 @@ export function httpClient(endpoint:string,token:string):Client {
   if(!/^[a-f0-9]{64}$/.test(token))throw new Error('Enter the 64-character token from the current private pairing file.');
   return client(async(operation,request)=>{
     let response:Response;
-    const path = operation.startsWith('jobs/') || operation.startsWith('memories/') || operation.startsWith('relationships/') || operation.startsWith('ai/') || operation.startsWith('vault/')
+    const path = operation.startsWith('jobs/') || operation.startsWith('memories/') || operation.startsWith('relationships/') || operation.startsWith('ai/') || operation.startsWith('vault/') || operation.startsWith('artifacts/')
       ? operation
       : operation === 'readiness'
       ? 'readiness'

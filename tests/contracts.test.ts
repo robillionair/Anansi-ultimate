@@ -59,6 +59,26 @@ test('memory HTTP/native operations use scoped commands, validated DTOs and sani
   Object.defineProperty(globalThis,'window',{configurable:true,value:{__TAURI_INTERNALS__:{invoke:async(c:string,a:unknown)=>{command=c;args=a;return {contractVersion:1,memories:[],nextOffset:null};}}}});
   try{await nativeClient().listMemories('a'.repeat(32));assert.equal(command,'memory_command');assert.deepEqual(args,{command:'list',request:{contractVersion:1,workspaceId:'a'.repeat(32)}});}finally{if(window)Object.defineProperty(globalThis,'window',window);else Reflect.deleteProperty(globalThis,'window');}
 });
+test('artifact registry HTTP operations use the scoped artifacts route', async () => {
+  const { httpClient } = await import('../packages/contracts/src/client.ts');
+  const original = globalThis.fetch; let address = '';
+  const record = {
+    artifactId: 'a'.repeat(32), projectId: 'b'.repeat(32), type: 'concept', version: 1,
+    title: 'Concept', timestamp: '2026-10-21T00:00:00.000Z', sourceReferences: [],
+    generator: { kind: 'manual' }, validationStatus: 'unvalidated', privacy: 'private',
+    contentHash: 'c'.repeat(64),
+  };
+  try {
+    globalThis.fetch = async (input) => {
+      address = String(input);
+      return new Response(JSON.stringify({ contractVersion: 1, artifact: record, body: 'text' }));
+    };
+    const client = httpClient('http://127.0.0.1:1451', 'a'.repeat(64));
+    await client.registerProjectArtifact('b'.repeat(32), 'b'.repeat(32), { type: 'concept', title: 'Concept', body: 'text' });
+    assert.match(address, /\/v1\/artifacts\/register$/, 'the registry group is routed as its own scope, not under workspaces/');
+  } finally { globalThis.fetch = original; }
+});
+
 test('artifact registry validators enforce the section 9 record shape', async () => {
   const { validArtifactDetails, validArtifactListResponse } = await import('../packages/contracts/src/validators.mjs');
   const record = {
