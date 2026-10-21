@@ -417,14 +417,9 @@ pub fn remap_opportunity_references(
                 && !revision_field.is_null()
             {
                 let rev_fail = || {
-                    invalid(
-                        "The opportunity set references a memory revision outside the backup.",
-                    )
+                    invalid("The opportunity set references a memory revision outside the backup.")
                 };
-                let old_revision = revision_field
-                    .as_str()
-                    .ok_or_else(rev_fail)?
-                    .to_string();
+                let old_revision = revision_field.as_str().ok_or_else(rev_fail)?.to_string();
                 let (owner_memory, owner_workspace) =
                     revision_owners.get(&old_revision).ok_or_else(rev_fail)?;
                 if owner_memory != &old || owner_workspace != workspace {
@@ -1388,27 +1383,21 @@ mod tests {
                 .is_err()
         );
         // A revision the package does not know fails closed.
-        assert!(
-            remap_opportunity_references(&body, &ids, &BTreeMap::new(), "ws-1").is_err()
-        );
+        assert!(remap_opportunity_references(&body, &ids, &BTreeMap::new(), "ws-1").is_err());
         // A revision belonging to a DIFFERENT memory fails closed.
         let mut foreign_revision = BTreeMap::new();
         foreign_revision.insert(
             "rev-1".to_string(),
             ("mem-2".to_string(), "ws-1".to_string()),
         );
-        assert!(
-            remap_opportunity_references(&body, &ids, &foreign_revision, "ws-1").is_err()
-        );
+        assert!(remap_opportunity_references(&body, &ids, &foreign_revision, "ws-1").is_err());
         // A revision from a different workspace fails closed.
         let mut other_workspace = BTreeMap::new();
         other_workspace.insert(
             "rev-1".to_string(),
             ("mem-1".to_string(), "ws-2".to_string()),
         );
-        assert!(
-            remap_opportunity_references(&body, &ids, &other_workspace, "ws-1").is_err()
-        );
+        assert!(remap_opportunity_references(&body, &ids, &other_workspace, "ws-1").is_err());
         // Non-opportunity bodies are untouched.
         assert!(
             remap_opportunity_references(
