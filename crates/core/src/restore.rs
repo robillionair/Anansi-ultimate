@@ -51,10 +51,12 @@ fn remap_metadata(
 /// `artifact://` source references point at the restored
 /// artifacts, and evaluation bodies have their typed source
 /// and rubric ids remapped with the content hash recomputed
-/// over the rewritten body. A reference to an artifact that
-/// is not in the package fails closed - a restored artifact
-/// must never link back into the source workspace. Bodies
-/// of every other type are opaque and preserved exactly.
+/// over the rewritten body. Opportunity set bodies (type
+/// `idea`) likewise have their embedded memory source ids
+/// remapped. A reference to an artifact that is not in the
+/// package fails closed - a restored artifact must never
+/// link back into the source workspace. Bodies of every
+/// other type are opaque and preserved exactly.
 fn remap_artifact_row(
     names: &[String],
     columns: &mut [rusqlite::types::Value],
@@ -92,6 +94,21 @@ fn remap_artifact_row(
         let hash_i = index("content_hash")?;
         if let Value::Text(body) = &columns[body_i] {
             let rewritten = crate::evaluations::remap_evaluation_references(body, ids)?;
+            columns[hash_i] = Value::Text(crate::content::hash(rewritten.as_bytes()));
+            columns[body_i] = Value::Text(rewritten);
+        }
+    }
+    // Opportunity sets (type `idea`, body format
+    // `anansi-opportunity-set`) embed the memory ids of their
+    // memory sources: those resolve to the restored memories,
+    // with the hash recomputed when the body changed.
+    let is_idea = matches!(&columns[type_i], Value::Text(t) if t == "idea");
+    if is_idea {
+        let body_i = index("body")?;
+        let hash_i = index("content_hash")?;
+        if let Value::Text(body) = &columns[body_i]
+            && let Some(rewritten) = crate::opportunities::remap_opportunity_references(body, ids)?
+        {
             columns[hash_i] = Value::Text(crate::content::hash(rewritten.as_bytes()));
             columns[body_i] = Value::Text(rewritten);
         }

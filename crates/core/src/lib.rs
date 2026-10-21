@@ -17,6 +17,7 @@ pub mod ideas;
 pub mod jobs;
 pub mod lifecycle;
 pub mod memory;
+pub mod opportunities;
 pub mod privacy;
 pub mod provider_credentials;
 pub mod provider_dispatch;

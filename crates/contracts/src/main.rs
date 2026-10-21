@@ -20,6 +20,11 @@ use anansi_core::memory::{
     MemoryDetails, MemoryDraft, MemoryList, MemoryListRequest, MemoryMetadata, MemoryReadRequest,
     MemoryWriteRequest,
 };
+use anansi_core::opportunities::{
+    OpportunitiesGenerateStartRequest, OpportunitiesGenerateStartResponse,
+    OpportunitiesPollResponse, OpportunitiesRunRequest, OpportunitiesSaveResponse,
+    OpportunityConcept, OpportunitySet, OpportunitySourceRecord, SuppliedSourceInput,
+};
 use anansi_core::provider_dispatch::{
     ProviderAuthorizeRequest, ProviderAuthorizeResponse, ProviderCatalogResponse,
     ProviderConfigureRequest, ProviderConfigureResponse, ProviderCredentialRemoveResponse,
@@ -69,6 +74,15 @@ fn main() {
         "IdeasGenerateStartResponse":schemars::schema_for!(IdeasGenerateStartResponse),
         "IdeasPollResponse":schemars::schema_for!(IdeasPollResponse),
         "IdeasSaveResponse":schemars::schema_for!(IdeasSaveResponse),
+        "SuppliedSourceInput":schemars::schema_for!(SuppliedSourceInput),
+        "OpportunitiesGenerateStartRequest":schemars::schema_for!(OpportunitiesGenerateStartRequest),
+        "OpportunitiesRunRequest":schemars::schema_for!(OpportunitiesRunRequest),
+        "OpportunitiesGenerateStartResponse":schemars::schema_for!(OpportunitiesGenerateStartResponse),
+        "OpportunitiesPollResponse":schemars::schema_for!(OpportunitiesPollResponse),
+        "OpportunitiesSaveResponse":schemars::schema_for!(OpportunitiesSaveResponse),
+        "OpportunitySet":schemars::schema_for!(OpportunitySet),
+        "OpportunityConcept":schemars::schema_for!(OpportunityConcept),
+        "OpportunitySourceRecord":schemars::schema_for!(OpportunitySourceRecord),
         "RubricDimension":schemars::schema_for!(RubricDimension),
         "RubricDoc":schemars::schema_for!(RubricDoc),
         "AssessmentInput":schemars::schema_for!(AssessmentInput),

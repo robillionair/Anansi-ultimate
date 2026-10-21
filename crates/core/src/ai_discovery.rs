@@ -819,7 +819,11 @@ impl Core {
             | "ideas-generate-start"
             | "ideas-generate-poll"
             | "ideas-generate-cancel"
-            | "ideas-save" => {
+            | "ideas-save"
+            | "opportunities-generate-start"
+            | "opportunities-generate-poll"
+            | "opportunities-generate-cancel"
+            | "opportunities-save" => {
                 // The session scope arrives only via
                 // `callerContext`, which the API layer stamps from
                 // the authenticated token (overwriting client
@@ -854,6 +858,8 @@ impl Core {
                             | "providers-stream-cancel"
                             | "ideas-generate-poll"
                             | "ideas-generate-cancel"
+                            | "opportunities-generate-poll"
+                            | "opportunities-generate-cancel"
                     ) {
                         // Poll/cancel address state that a validated
                         // stream-start created; the run record
@@ -917,6 +923,7 @@ impl Core {
                         | "providers-stream-start"
                         | "providers-usage"
                         | "ideas-generate-start"
+                        | "opportunities-generate-start"
                 ) && !crate::provider_dispatch::has_config(&scope)
                     && let (Ok(root), Some(wid)) = (self.storage_root(), &workspace_id)
                     && let Some(json) = crate::provider_dispatch::load_config_file(&root, wid)?
