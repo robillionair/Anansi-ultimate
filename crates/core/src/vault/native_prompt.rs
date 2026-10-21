@@ -74,6 +74,23 @@ pub struct WindowsCredentialProvider {
 
 type PromptFields = (Zeroizing<Vec<u8>>, Zeroizing<Vec<u8>>);
 
+/// The provider's configuration is consumed by the Windows
+/// CredUI flow (origin confirmation, prompt target); this
+/// Debug surface keeps the same configuration inspectable on
+/// every platform. None of the fields are secrets: a workspace
+/// label, a prompt target label, an optional browser origin
+/// and a confirmation flag.
+impl std::fmt::Debug for WindowsCredentialProvider {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WindowsCredentialProvider")
+            .field("workspace", &self.workspace)
+            .field("target", &self.target)
+            .field("browser_origin", &self.browser_origin)
+            .field("browser_confirmed", &self.browser_confirmed)
+            .finish()
+    }
+}
+
 impl WindowsCredentialProvider {
     pub fn new(workspace: &str) -> Self {
         Self {

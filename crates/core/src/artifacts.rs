@@ -232,9 +232,9 @@ fn validate_registration(req: &ArtifactRegisterRequest) -> Result<(), CommandErr
 }
 
 #[derive(Deserialize)]
-struct ProjectMeta {
-    kind: String,
-    status: MemoryState,
+pub(crate) struct ProjectMeta {
+    pub(crate) kind: String,
+    pub(crate) status: MemoryState,
 }
 
 /// Resolve the §9 project identity: the project memory's current

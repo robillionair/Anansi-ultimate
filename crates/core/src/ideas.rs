@@ -640,14 +640,14 @@ fn poll(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
             .get("done")
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
-        if let Some(d) = polled.get("disclosure") {
-            if let Ok(d) = serde_json::from_value::<DisclosureRecord>(d.clone()) {
-                with_runs(|map| {
-                    if let Some(run) = map.get_mut(&key) {
-                        run.disclosure = Some(d);
-                    }
-                });
-            }
+        if let Some(d) = polled.get("disclosure")
+            && let Ok(d) = serde_json::from_value::<DisclosureRecord>(d.clone())
+        {
+            with_runs(|map| {
+                if let Some(run) = map.get_mut(&key) {
+                    run.disclosure = Some(d);
+                }
+            });
         }
         let mut saw_completed = false;
         let mut failure: Option<String> = None;
@@ -656,12 +656,11 @@ fn poll(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
                 Some("token") => {
                     if let Some(text) = event.get("text").and_then(|v| v.as_str()) {
                         with_runs(|map| {
-                            if let Some(run) = map.get_mut(&key) {
-                                if run.text.chars().count() + text.chars().count()
+                            if let Some(run) = map.get_mut(&key)
+                                && run.text.chars().count() + text.chars().count()
                                     <= MAX_OUTPUT_CHARS
-                                {
-                                    run.text.push_str(text);
-                                }
+                            {
+                                run.text.push_str(text);
                             }
                         });
                     }
