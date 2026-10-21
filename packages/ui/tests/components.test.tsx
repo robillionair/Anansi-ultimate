@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { IntentChoice, Onboarding, PrivacyReview, intents } from '../src/Onboarding';
 import { Navigation, plannedGroups } from '../src/Navigation';
 import { Settings } from '../src/Settings';
-import { Projects } from '../src/Projects';
+import { Projects, IdeaSetView } from '../src/Projects';
 import { Tasks } from '../src/Tasks';
 import { People } from '../src/People';
 import { KnowledgeRecords } from '../src/KnowledgeRecords';
@@ -272,4 +272,24 @@ test('disclosure panel renders exactly what ANANSI sent, including attempts and 
 test('projects screen renders its identity and editor statically',()=>{
   const html=renderToStaticMarkup(<Projects client={{} as any} workspaceId={'a'.repeat(32)}/>);
   assert.match(html,/Projects/);assert.match(html,/New project/);assert.match(html,/Project title/);
+});
+
+test('idea set view shows the first three hypotheses, honest labels and disabled future actions', () => {
+  const concept = (name: string) => ({
+    name, problem: 'p', targetCustomer: 'c', solution: 's', whyUseful: 'w',
+    differentiationHypothesis: 'h', revenueModel: 'r', engineeringComplexity: 'low',
+    implementationCost: 'about a week', keyRisks: ['risk'], requiredValidation: 'interviews',
+    minimumViableVersion: 'mvp',
+  });
+  const html = renderToStaticMarkup(
+    <IdeaSetView ideaSet={{ topic: 'harbor', concepts: ['A', 'B', 'C', 'D', 'E'].map(concept) }} />,
+  );
+  assert.match(html, /Model-generated hypotheses/);
+  assert.match(html, /not researched facts/);
+  assert.match(html, /1\. A/);
+  assert.match(html, /3\. C/);
+  assert.doesNotMatch(html, /4\. D/, 'only three concepts are visible before expansion');
+  assert.match(html, /Show all 5 concepts/);
+  assert.match(html, /Compare/);
+  assert.match(html, /disabled/);
 });

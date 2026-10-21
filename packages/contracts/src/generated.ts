@@ -527,6 +527,241 @@ export interface HybridSearchResult {
   snippet?: string | null;
   title: string;
 }
+/**
+ * One §21 concept. All fields are model-generated hypotheses.
+ */
+export interface IdeaConcept {
+  differentiationHypothesis: string;
+  engineeringComplexity: string;
+  implementationCost: string;
+  keyRisks: string[];
+  minimumViableVersion: string;
+  name: string;
+  problem: string;
+  requiredValidation: string;
+  revenueModel: string;
+  solution: string;
+  targetCustomer: string;
+  whyUseful: string;
+}
+export interface IdeaSet {
+  concepts: IdeaConcept[];
+  /**
+   * Set when the model returned more than 10 concepts and
+   * the set was truncated to the §22 bound.
+   */
+  note?: string | null;
+  /**
+   * Provenance of the brief the set was generated from.
+   */
+  topic: string;
+}
+/**
+ * One §21 concept. All fields are model-generated hypotheses.
+ */
+export interface IdeaConcept {
+  differentiationHypothesis: string;
+  engineeringComplexity: string;
+  implementationCost: string;
+  keyRisks: string[];
+  minimumViableVersion: string;
+  name: string;
+  problem: string;
+  requiredValidation: string;
+  revenueModel: string;
+  solution: string;
+  targetCustomer: string;
+  whyUseful: string;
+}
+export interface IdeasGenerateStartRequest {
+  budget: string;
+  contextMemoryIds?: string[];
+  contractVersion?: number;
+  customer: string;
+  mode?: string | null;
+  model?: string | null;
+  objective: string;
+  options?: IdeasOptions | null;
+  permitId?: string | null;
+  projectId: string;
+  provider?: string | null;
+  technology: string;
+  topic: string;
+  workspaceId: string;
+  zeroCostLock?: boolean;
+}
+export interface IdeasOptions {
+  exploreUnrelatedDomains?: boolean;
+  preferHighRevenue?: boolean;
+  preferLocalFirst?: boolean;
+  preferSimple?: boolean;
+  preferSoftwareOnly?: boolean;
+}
+/**
+ * Cost knowledge about a model. `Unknown` is treated as paid everywhere
+ * cost is enforced (decision M5-D5).
+ */
+export type CostClass = "free" | "paid" | "unknown";
+/**
+ * User-facing routing modes, verbatim from MASTER_SPEC §17.
+ */
+export type RoutingMode = "auto" | "autoFree" | "private" | "fast" | "deep" | "coding" | "vision" | "chooseModel";
+
+export interface IdeasGenerateStartResponse {
+  contractVersion: number;
+  disclosure?: DisclosureRecord | null;
+  runId: string;
+}
+/**
+ * "View What ANANSI Sent" at adapter level (§19): what was about to be
+ * / was transmitted, to whom, and why. The UI rendering of this record
+ * is application integration; producing it is the dispatcher's job.
+ */
+export interface DisclosureRecord {
+  attempts: AttemptRecord[];
+  costClass: CostClass;
+  endpointHost: string;
+  estimatedInputTokens: number;
+  local: boolean;
+  messageCount: number;
+  model: string;
+  provider: string;
+  redactionCount: number;
+  routingMode: RoutingMode;
+  routingReason: string;
+  segmentCount: number;
+  usage?: Usage | null;
+}
+export interface AttemptRecord {
+  model: string;
+  outcome: string;
+  provider: string;
+}
+export interface Usage {
+  inputTokens: number;
+  outputTokens: number;
+}
+export interface IdeasOptions {
+  exploreUnrelatedDomains?: boolean;
+  preferHighRevenue?: boolean;
+  preferLocalFirst?: boolean;
+  preferSimple?: boolean;
+  preferSoftwareOnly?: boolean;
+}
+/**
+ * Cost knowledge about a model. `Unknown` is treated as paid everywhere
+ * cost is enforced (decision M5-D5).
+ */
+/**
+ * User-facing routing modes, verbatim from MASTER_SPEC §17.
+ */
+
+export interface IdeasPollResponse {
+  contractVersion: number;
+  disclosure?: DisclosureRecord | null;
+  error?: string | null;
+  ideaSet?: IdeaSet | null;
+  partialChars: number;
+  runId: string;
+  /**
+   * running | cancelling | complete | invalid | failed | cancelled
+   */
+  status: string;
+}
+/**
+ * "View What ANANSI Sent" at adapter level (§19): what was about to be
+ * / was transmitted, to whom, and why. The UI rendering of this record
+ * is application integration; producing it is the dispatcher's job.
+ */
+export interface DisclosureRecord {
+  attempts: AttemptRecord[];
+  costClass: CostClass;
+  endpointHost: string;
+  estimatedInputTokens: number;
+  local: boolean;
+  messageCount: number;
+  model: string;
+  provider: string;
+  redactionCount: number;
+  routingMode: RoutingMode;
+  routingReason: string;
+  segmentCount: number;
+  usage?: Usage | null;
+}
+export interface AttemptRecord {
+  model: string;
+  outcome: string;
+  provider: string;
+}
+export interface Usage {
+  inputTokens: number;
+  outputTokens: number;
+}
+export interface IdeaSet {
+  concepts: IdeaConcept[];
+  /**
+   * Set when the model returned more than 10 concepts and
+   * the set was truncated to the §22 bound.
+   */
+  note?: string | null;
+  /**
+   * Provenance of the brief the set was generated from.
+   */
+  topic: string;
+}
+/**
+ * One §21 concept. All fields are model-generated hypotheses.
+ */
+export interface IdeaConcept {
+  differentiationHypothesis: string;
+  engineeringComplexity: string;
+  implementationCost: string;
+  keyRisks: string[];
+  minimumViableVersion: string;
+  name: string;
+  problem: string;
+  requiredValidation: string;
+  revenueModel: string;
+  solution: string;
+  targetCustomer: string;
+  whyUseful: string;
+}
+export interface IdeasRunRequest {
+  contractVersion?: number;
+  runId: string;
+  workspaceId: string;
+}
+export interface IdeasSaveResponse {
+  alreadySaved: boolean;
+  artifact: ArtifactRecord;
+  body: string;
+  contractVersion: number;
+}
+/**
+ * One artifact version's metadata — the §9 field set.
+ */
+export interface ArtifactRecord {
+  artifactId: string;
+  contentHash: string;
+  /**
+   * Generator/model metadata: `{"kind":"manual"}` in this
+   * slice; generator slices record model provenance here.
+   */
+  generator?: {
+    [k: string]: unknown;
+  };
+  privacy: string;
+  projectId: string;
+  sourceReferences: string[];
+  /**
+   * The §9 timestamp: when this version was registered.
+   */
+  timestamp: string;
+  title: string;
+  type: string;
+  validationStatus: string;
+  version: number;
+}
 export interface IndexEmbeddingsRequest {
   contractVersion: number;
   endpoint?: string | null;
@@ -861,7 +1096,6 @@ export type LocalityConfig = "local" | "cloud";
  * Cost knowledge about a model. `Unknown` is treated as paid everywhere
  * cost is enforced (decision M5-D5).
  */
-export type CostClass = "free" | "paid" | "unknown";
 export type SpeedTier = "fast" | "balanced" | "deep";
 
 export interface ProviderConfigureRequest {
@@ -1076,7 +1310,6 @@ export interface Segment {
 /**
  * User-facing routing modes, verbatim from MASTER_SPEC §17.
  */
-export type RoutingMode = "auto" | "autoFree" | "private" | "fast" | "deep" | "coding" | "vision" | "chooseModel";
 
 export interface ProviderDispatchResponse {
   contractVersion: number;

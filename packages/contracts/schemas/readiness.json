@@ -2395,6 +2395,866 @@
     "title": "HybridSearchResult",
     "type": "object"
   },
+  "IdeaConcept": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "description": "One §21 concept. All fields are model-generated hypotheses.",
+    "properties": {
+      "differentiationHypothesis": {
+        "type": "string"
+      },
+      "engineeringComplexity": {
+        "type": "string"
+      },
+      "implementationCost": {
+        "type": "string"
+      },
+      "keyRisks": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "minimumViableVersion": {
+        "type": "string"
+      },
+      "name": {
+        "type": "string"
+      },
+      "problem": {
+        "type": "string"
+      },
+      "requiredValidation": {
+        "type": "string"
+      },
+      "revenueModel": {
+        "type": "string"
+      },
+      "solution": {
+        "type": "string"
+      },
+      "targetCustomer": {
+        "type": "string"
+      },
+      "whyUseful": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "name",
+      "problem",
+      "targetCustomer",
+      "solution",
+      "whyUseful",
+      "differentiationHypothesis",
+      "revenueModel",
+      "engineeringComplexity",
+      "implementationCost",
+      "keyRisks",
+      "requiredValidation",
+      "minimumViableVersion"
+    ],
+    "title": "IdeaConcept",
+    "type": "object"
+  },
+  "IdeaSet": {
+    "$defs": {
+      "IdeaConcept": {
+        "description": "One §21 concept. All fields are model-generated hypotheses.",
+        "properties": {
+          "differentiationHypothesis": {
+            "type": "string"
+          },
+          "engineeringComplexity": {
+            "type": "string"
+          },
+          "implementationCost": {
+            "type": "string"
+          },
+          "keyRisks": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "minimumViableVersion": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "problem": {
+            "type": "string"
+          },
+          "requiredValidation": {
+            "type": "string"
+          },
+          "revenueModel": {
+            "type": "string"
+          },
+          "solution": {
+            "type": "string"
+          },
+          "targetCustomer": {
+            "type": "string"
+          },
+          "whyUseful": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "problem",
+          "targetCustomer",
+          "solution",
+          "whyUseful",
+          "differentiationHypothesis",
+          "revenueModel",
+          "engineeringComplexity",
+          "implementationCost",
+          "keyRisks",
+          "requiredValidation",
+          "minimumViableVersion"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "concepts": {
+        "items": {
+          "$ref": "#/$defs/IdeaConcept"
+        },
+        "type": "array"
+      },
+      "note": {
+        "description": "Set when the model returned more than 10 concepts and\nthe set was truncated to the §22 bound.",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "topic": {
+        "description": "Provenance of the brief the set was generated from.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "concepts",
+      "topic"
+    ],
+    "title": "IdeaSet",
+    "type": "object"
+  },
+  "IdeasGenerateStartRequest": {
+    "$defs": {
+      "IdeasOptions": {
+        "additionalProperties": false,
+        "properties": {
+          "exploreUnrelatedDomains": {
+            "default": false,
+            "type": "boolean"
+          },
+          "preferHighRevenue": {
+            "default": false,
+            "type": "boolean"
+          },
+          "preferLocalFirst": {
+            "default": false,
+            "type": "boolean"
+          },
+          "preferSimple": {
+            "default": false,
+            "type": "boolean"
+          },
+          "preferSoftwareOnly": {
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "budget": {
+        "type": "string"
+      },
+      "contextMemoryIds": {
+        "default": [],
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "contractVersion": {
+        "default": 1,
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "customer": {
+        "type": "string"
+      },
+      "mode": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "model": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "objective": {
+        "type": "string"
+      },
+      "options": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/IdeasOptions"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "permitId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "projectId": {
+        "type": "string"
+      },
+      "provider": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "technology": {
+        "type": "string"
+      },
+      "topic": {
+        "type": "string"
+      },
+      "workspaceId": {
+        "type": "string"
+      },
+      "zeroCostLock": {
+        "default": false,
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "workspaceId",
+      "projectId",
+      "topic",
+      "customer",
+      "budget",
+      "technology",
+      "objective"
+    ],
+    "title": "IdeasGenerateStartRequest",
+    "type": "object"
+  },
+  "IdeasGenerateStartResponse": {
+    "$defs": {
+      "AttemptRecord": {
+        "properties": {
+          "model": {
+            "type": "string"
+          },
+          "outcome": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "model",
+          "outcome"
+        ],
+        "type": "object"
+      },
+      "CostClass": {
+        "description": "Cost knowledge about a model. `Unknown` is treated as paid everywhere\ncost is enforced (decision M5-D5).",
+        "enum": [
+          "free",
+          "paid",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "DisclosureRecord": {
+        "description": "\"View What ANANSI Sent\" at adapter level (§19): what was about to be\n/ was transmitted, to whom, and why. The UI rendering of this record\nis application integration; producing it is the dispatcher's job.",
+        "properties": {
+          "attempts": {
+            "items": {
+              "$ref": "#/$defs/AttemptRecord"
+            },
+            "type": "array"
+          },
+          "costClass": {
+            "$ref": "#/$defs/CostClass"
+          },
+          "endpointHost": {
+            "type": "string"
+          },
+          "estimatedInputTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "local": {
+            "type": "boolean"
+          },
+          "messageCount": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "model": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "redactionCount": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "routingMode": {
+            "$ref": "#/$defs/RoutingMode"
+          },
+          "routingReason": {
+            "type": "string"
+          },
+          "segmentCount": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "usage": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Usage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "provider",
+          "model",
+          "endpointHost",
+          "local",
+          "routingMode",
+          "routingReason",
+          "messageCount",
+          "segmentCount",
+          "redactionCount",
+          "estimatedInputTokens",
+          "costClass",
+          "attempts"
+        ],
+        "type": "object"
+      },
+      "RoutingMode": {
+        "description": "User-facing routing modes, verbatim from MASTER_SPEC §17.",
+        "enum": [
+          "auto",
+          "autoFree",
+          "private",
+          "fast",
+          "deep",
+          "coding",
+          "vision",
+          "chooseModel"
+        ],
+        "type": "string"
+      },
+      "Usage": {
+        "properties": {
+          "inputTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "outputTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "inputTokens",
+          "outputTokens"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "disclosure": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/DisclosureRecord"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "runId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "runId"
+    ],
+    "title": "IdeasGenerateStartResponse",
+    "type": "object"
+  },
+  "IdeasOptions": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "exploreUnrelatedDomains": {
+        "default": false,
+        "type": "boolean"
+      },
+      "preferHighRevenue": {
+        "default": false,
+        "type": "boolean"
+      },
+      "preferLocalFirst": {
+        "default": false,
+        "type": "boolean"
+      },
+      "preferSimple": {
+        "default": false,
+        "type": "boolean"
+      },
+      "preferSoftwareOnly": {
+        "default": false,
+        "type": "boolean"
+      }
+    },
+    "title": "IdeasOptions",
+    "type": "object"
+  },
+  "IdeasPollResponse": {
+    "$defs": {
+      "AttemptRecord": {
+        "properties": {
+          "model": {
+            "type": "string"
+          },
+          "outcome": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "model",
+          "outcome"
+        ],
+        "type": "object"
+      },
+      "CostClass": {
+        "description": "Cost knowledge about a model. `Unknown` is treated as paid everywhere\ncost is enforced (decision M5-D5).",
+        "enum": [
+          "free",
+          "paid",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "DisclosureRecord": {
+        "description": "\"View What ANANSI Sent\" at adapter level (§19): what was about to be\n/ was transmitted, to whom, and why. The UI rendering of this record\nis application integration; producing it is the dispatcher's job.",
+        "properties": {
+          "attempts": {
+            "items": {
+              "$ref": "#/$defs/AttemptRecord"
+            },
+            "type": "array"
+          },
+          "costClass": {
+            "$ref": "#/$defs/CostClass"
+          },
+          "endpointHost": {
+            "type": "string"
+          },
+          "estimatedInputTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "local": {
+            "type": "boolean"
+          },
+          "messageCount": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "model": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "redactionCount": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "routingMode": {
+            "$ref": "#/$defs/RoutingMode"
+          },
+          "routingReason": {
+            "type": "string"
+          },
+          "segmentCount": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "usage": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Usage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "provider",
+          "model",
+          "endpointHost",
+          "local",
+          "routingMode",
+          "routingReason",
+          "messageCount",
+          "segmentCount",
+          "redactionCount",
+          "estimatedInputTokens",
+          "costClass",
+          "attempts"
+        ],
+        "type": "object"
+      },
+      "IdeaConcept": {
+        "description": "One §21 concept. All fields are model-generated hypotheses.",
+        "properties": {
+          "differentiationHypothesis": {
+            "type": "string"
+          },
+          "engineeringComplexity": {
+            "type": "string"
+          },
+          "implementationCost": {
+            "type": "string"
+          },
+          "keyRisks": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "minimumViableVersion": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "problem": {
+            "type": "string"
+          },
+          "requiredValidation": {
+            "type": "string"
+          },
+          "revenueModel": {
+            "type": "string"
+          },
+          "solution": {
+            "type": "string"
+          },
+          "targetCustomer": {
+            "type": "string"
+          },
+          "whyUseful": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "problem",
+          "targetCustomer",
+          "solution",
+          "whyUseful",
+          "differentiationHypothesis",
+          "revenueModel",
+          "engineeringComplexity",
+          "implementationCost",
+          "keyRisks",
+          "requiredValidation",
+          "minimumViableVersion"
+        ],
+        "type": "object"
+      },
+      "IdeaSet": {
+        "properties": {
+          "concepts": {
+            "items": {
+              "$ref": "#/$defs/IdeaConcept"
+            },
+            "type": "array"
+          },
+          "note": {
+            "description": "Set when the model returned more than 10 concepts and\nthe set was truncated to the §22 bound.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "topic": {
+            "description": "Provenance of the brief the set was generated from.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "concepts",
+          "topic"
+        ],
+        "type": "object"
+      },
+      "RoutingMode": {
+        "description": "User-facing routing modes, verbatim from MASTER_SPEC §17.",
+        "enum": [
+          "auto",
+          "autoFree",
+          "private",
+          "fast",
+          "deep",
+          "coding",
+          "vision",
+          "chooseModel"
+        ],
+        "type": "string"
+      },
+      "Usage": {
+        "properties": {
+          "inputTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "outputTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "inputTokens",
+          "outputTokens"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "disclosure": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/DisclosureRecord"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "error": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "ideaSet": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/IdeaSet"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "partialChars": {
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "runId": {
+        "type": "string"
+      },
+      "status": {
+        "description": "running | cancelling | complete | invalid | failed | cancelled",
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "runId",
+      "status",
+      "partialChars"
+    ],
+    "title": "IdeasPollResponse",
+    "type": "object"
+  },
+  "IdeasRunRequest": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "contractVersion": {
+        "default": 1,
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "runId": {
+        "type": "string"
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "workspaceId",
+      "runId"
+    ],
+    "title": "IdeasRunRequest",
+    "type": "object"
+  },
+  "IdeasSaveResponse": {
+    "$defs": {
+      "ArtifactRecord": {
+        "description": "One artifact version's metadata — the §9 field set.",
+        "properties": {
+          "artifactId": {
+            "type": "string"
+          },
+          "contentHash": {
+            "type": "string"
+          },
+          "generator": {
+            "description": "Generator/model metadata: `{\"kind\":\"manual\"}` in this\nslice; generator slices record model provenance here."
+          },
+          "privacy": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "sourceReferences": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "timestamp": {
+            "description": "The §9 timestamp: when this version was registered.",
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "validationStatus": {
+            "type": "string"
+          },
+          "version": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "artifactId",
+          "projectId",
+          "type",
+          "version",
+          "title",
+          "timestamp",
+          "sourceReferences",
+          "validationStatus",
+          "privacy",
+          "contentHash"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "alreadySaved": {
+        "type": "boolean"
+      },
+      "artifact": {
+        "$ref": "#/$defs/ArtifactRecord"
+      },
+      "body": {
+        "type": "string"
+      },
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "artifact",
+      "body",
+      "alreadySaved"
+    ],
+    "title": "IdeasSaveResponse",
+    "type": "object"
+  },
   "IndexEmbeddingsRequest": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,

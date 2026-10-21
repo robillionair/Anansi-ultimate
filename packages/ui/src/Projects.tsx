@@ -1,6 +1,8 @@
 import { EntityHistory } from './EntityHistory';
-import { useEffect, useState } from 'react';
-import type { ArtifactDetails, ArtifactRecord, Client, MemoryDetails, MemoryDraft, MemoryMetadata, RelationshipRecord } from '@anansi/contracts';
+import { useEffect, useRef, useState } from 'react';
+import type { ArtifactDetails, ArtifactRecord, Client, IdeaConcept, IdeaSet, MemoryDetails, MemoryDraft, MemoryMetadata, RelationshipRecord } from '@anansi/contracts';
+import type { DisclosureRecord } from '@anansi/contracts';
+import { DisclosurePanel } from './Providers';
 
 const blank = (): MemoryDraft => ({
   title: '',
@@ -32,6 +34,18 @@ export function Projects({ client, workspaceId }: { client: Client; workspaceId:
   const [reviseForm, setReviseForm] = useState({ title: '', body: '', sources: '' });
 
   // Relationship creation state
+  // M6 Slice 2: project-scoped idea generation (SS21-22).
+  const [ideaForm, setIdeaForm] = useState({ topic: '', customer: '', budget: '', technology: '', objective: '' });
+  const [ideaOptions, setIdeaOptions] = useState({ exploreUnrelatedDomains: false, preferSimple: false, preferHighRevenue: false, preferLocalFirst: false, preferSoftwareOnly: false });
+  const [ideaLock, setIdeaLock] = useState(true);
+  const [contextMemories, setContextMemories] = useState<MemoryMetadata[]>([]);
+  const [selectedContext, setSelectedContext] = useState<string[]>([]);
+  const [ideaRun, setIdeaRun] = useState<{ runId: string; status: string; partialChars: number; error: string | null } | null>(null);
+  const [ideaSet, setIdeaSet] = useState<IdeaSet | null>(null);
+  const [ideaDisclosure, setIdeaDisclosure] = useState<DisclosureRecord | null>(null);
+  const [savedIdeaArtifact, setSavedIdeaArtifact] = useState('');
+  const ideaRunRef = useRef('');
+
   const [relTargetId, setRelTargetId] = useState('');
   const [relPredicate, setRelPredicate] = useState('relates_to');
 
@@ -78,12 +92,89 @@ export function Projects({ client, workspaceId }: { client: Client; workspaceId:
     const relList = await client.listRelationships(workspaceId, { recordId: id });
     setRelationships(relList.relationships);
 
+    // Load the memories the user may explicitly approve as
+    // idea-generation context (nothing is selected by default).
+    const memList = await client.listMemories(workspaceId, { limit: 100 });
+    setContextMemories(memList.memories.filter(m => m.id !== id));
+    setSelectedContext([]);
+    setIdeaRun(null);
+    setIdeaSet(null);
+    setIdeaDisclosure(null);
+    setSavedIdeaArtifact('');
+    ideaRunRef.current = '';
+
     // Load this project's artifacts (latest versions)
     const artList = await client.listProjectArtifacts(workspaceId, id);
     setArtifacts(artList.artifacts);
     setArtifactVersions([]);
     setSelectedArtifact('');
     setViewedArtifact(null);
+  }
+
+  // Poll the active generation run; cancel it if the screen
+  // unmounts (navigation), like the Providers screen.
+  useEffect(() => {
+    if (!ideaRun || (ideaRun.status !== 'running' && ideaRun.status !== 'cancelling')) return;
+    const timer = setInterval(() => {
+      void (async () => {
+        try {
+          const polled = await client.pollProjectIdeas(workspaceId, ideaRun.runId);
+          setIdeaRun({ runId: polled.runId, status: polled.status, partialChars: polled.partialChars, error: polled.error ?? null });
+          if (polled.disclosure) setIdeaDisclosure(polled.disclosure);
+          if (polled.status === 'complete' && polled.ideaSet) setIdeaSet(polled.ideaSet);
+          if (polled.status !== 'running' && polled.status !== 'cancelling') ideaRunRef.current = '';
+        } catch {
+          // Transient poll failures keep the run state; the
+          // next interval retries.
+        }
+      })();
+    }, 800);
+    return () => clearInterval(timer);
+  }, [ideaRun?.runId, ideaRun?.status, client, workspaceId]);
+
+  useEffect(() => () => {
+    if (ideaRunRef.current) {
+      void client.cancelProjectIdeas(workspaceId, ideaRunRef.current).catch(() => undefined);
+    }
+  }, [client, workspaceId]);
+
+  async function generateIdeas() {
+    if (!current) return;
+    setError('');
+    setNotice('');
+    setIdeaSet(null);
+    setSavedIdeaArtifact('');
+    const started = await client.startProjectIdeas(workspaceId, {
+      projectId: current.memory.id,
+      topic: ideaForm.topic,
+      customer: ideaForm.customer,
+      budget: ideaForm.budget,
+      technology: ideaForm.technology,
+      objective: ideaForm.objective,
+      contextMemoryIds: selectedContext,
+      options: ideaOptions,
+      zeroCostLock: ideaLock,
+    });
+    ideaRunRef.current = started.runId;
+    setIdeaRun({ runId: started.runId, status: 'running', partialChars: 0, error: null });
+    if (started.disclosure) setIdeaDisclosure(started.disclosure);
+  }
+
+  async function cancelIdeas() {
+    if (!ideaRun) return;
+    const polled = await client.cancelProjectIdeas(workspaceId, ideaRun.runId);
+    setIdeaRun({ runId: polled.runId, status: polled.status, partialChars: polled.partialChars, error: polled.error ?? null });
+  }
+
+  async function saveIdeas() {
+    if (!ideaRun || !current) return;
+    const saved = await client.saveProjectIdeas(workspaceId, ideaRun.runId);
+    setSavedIdeaArtifact(saved.artifact.artifactId);
+    const artList = await client.listProjectArtifacts(workspaceId, current.memory.id);
+    setArtifacts(artList.artifacts);
+    setNotice(saved.alreadySaved
+      ? 'This idea set was already saved as an artifact; no duplicate was created.'
+      : `Idea set saved as artifact ${saved.artifact.artifactId}.`);
   }
 
   async function openArtifact(artifactId: string) {
@@ -198,6 +289,90 @@ export function Projects({ client, workspaceId }: { client: Client; workspaceId:
             {!tasks.length && <p>No tasks associated with this project yet.</p>}
           </section>
 
+          <section aria-labelledby="project-ideas-heading">
+            <h3 id="project-ideas-heading">Idea generation</h3>
+            <p className="help">
+              Concepts are model-generated hypotheses, not researched facts. This milestone does not score
+              ideas: the order below is the model's own order. Only the memories you explicitly select are
+              sent, exactly as the disclosure after generation shows.
+            </p>
+            <form
+              onSubmit={e => {
+                e.preventDefault();
+                void run(generateIdeas);
+              }}
+            >
+              <label htmlFor="idea-topic">Industry or topic</label>
+              <input id="idea-topic" value={ideaForm.topic} onChange={e => setIdeaForm(f => ({ ...f, topic: e.target.value }))} required autoComplete="off" />
+              <label htmlFor="idea-customer">Intended customer</label>
+              <input id="idea-customer" value={ideaForm.customer} onChange={e => setIdeaForm(f => ({ ...f, customer: e.target.value }))} required autoComplete="off" />
+              <label htmlFor="idea-budget">Available budget</label>
+              <input id="idea-budget" value={ideaForm.budget} onChange={e => setIdeaForm(f => ({ ...f, budget: e.target.value }))} required autoComplete="off" />
+              <label htmlFor="idea-technology">Preferred technology</label>
+              <input id="idea-technology" value={ideaForm.technology} onChange={e => setIdeaForm(f => ({ ...f, technology: e.target.value }))} required autoComplete="off" />
+              <label htmlFor="idea-objective">Business or personal objective</label>
+              <input id="idea-objective" value={ideaForm.objective} onChange={e => setIdeaForm(f => ({ ...f, objective: e.target.value }))} required autoComplete="off" />
+              <fieldset>
+                <legend>Approved memory context</legend>
+                <p className="help">Nothing is scanned automatically. Selected memories are sent to the configured provider for this run only; sealed memories cannot be sent.</p>
+                {contextMemories.length === 0 && <p className="help">No other memories in this workspace yet.</p>}
+                {contextMemories.map(m => (
+                  <label key={m.id}>
+                    <input
+                      type="checkbox"
+                      disabled={m.privacy === 'sealed'}
+                      checked={selectedContext.includes(m.id)}
+                      onChange={e => setSelectedContext(prev => e.target.checked ? [...prev, m.id] : prev.filter(id => id !== m.id))}
+                    />{' '}
+                    {m.title} · {m.privacy}
+                  </label>
+                ))}
+              </fieldset>
+              <fieldset>
+                <legend>Preferences</legend>
+                {([
+                  ['exploreUnrelatedDomains', 'Explore unrelated domains'],
+                  ['preferSimple', 'Prefer simple products'],
+                  ['preferHighRevenue', 'Prefer high-revenue opportunities'],
+                  ['preferLocalFirst', 'Prefer local-first AI'],
+                  ['preferSoftwareOnly', 'Prefer software-only products'],
+                ] as const).map(([key, label]) => (
+                  <label key={key}>
+                    <input type="checkbox" checked={ideaOptions[key]} onChange={e => setIdeaOptions(o => ({ ...o, [key]: e.target.checked }))} /> {label}
+                  </label>
+                ))}
+                <label>
+                  <input type="checkbox" checked={ideaLock} onChange={e => setIdeaLock(e.target.checked)} /> Zero-Cost Lock (never spend)
+                </label>
+              </fieldset>
+              <button type="submit" disabled={busy || ideaRun?.status === 'running' || ideaRun?.status === 'cancelling'}>
+                Generate product ideas
+              </button>
+              {(ideaRun?.status === 'running' || ideaRun?.status === 'cancelling') && (
+                <button type="button" className="secondary" disabled={ideaRun.status === 'cancelling'} onClick={() => void run(cancelIdeas)}>
+                  Cancel generation
+                </button>
+              )}
+            </form>
+            {ideaRun && ideaRun.status === 'running' && <p role="status">Generating… {ideaRun.partialChars} characters received.</p>}
+            {ideaRun && ideaRun.status === 'cancelling' && <p role="status">Cancelling… waiting for the provider stream to stop.</p>}
+            {ideaRun && ideaRun.status === 'cancelled' && <p role="status">Generation cancelled. Nothing was saved.</p>}
+            {ideaRun && (ideaRun.status === 'failed' || ideaRun.status === 'invalid') && (
+              <p role="alert">Generation {ideaRun.status}: {ideaRun.error ?? 'the provider did not produce a usable set.'} Nothing was saved; you can generate again.</p>
+            )}
+            {ideaDisclosure && <DisclosurePanel disclosure={ideaDisclosure} />}
+            {ideaSet && (
+              <div>
+                <IdeaSetView ideaSet={ideaSet} />
+                {savedIdeaArtifact ? (
+                  <p role="status">Saved as artifact {savedIdeaArtifact} in this project.</p>
+                ) : (
+                  <button type="button" disabled={busy} onClick={() => void run(saveIdeas)}>Save idea set as artifact</button>
+                )}
+              </div>
+            )}
+          </section>
+
           <section aria-labelledby="project-artifacts-heading">
             <h3 id="project-artifacts-heading">Artifacts</h3>
             <p className="help">Versioned registry (§9): every version is immutable — revising creates a new version; earlier versions stay readable exactly as written.</p>
@@ -274,7 +449,12 @@ export function Projects({ client, workspaceId }: { client: Client; workspaceId:
                         ? 'the latest version.'
                         : 'an immutable earlier version (read-only).'}
                     </p>
-                    <pre className="provider-output">{viewedArtifact.body}</pre>
+                    {(() => {
+                      const parsedSet = parseIdeaSetBody(viewedArtifact.body);
+                      return parsedSet
+                        ? <IdeaSetView ideaSet={parsedSet} />
+                        : <pre className="provider-output">{viewedArtifact.body}</pre>;
+                    })()}
                     <p className="help">
                       Artifact {viewedArtifact.artifact.artifactId} · Project {viewedArtifact.artifact.projectId} · Hash {viewedArtifact.artifact.contentHash.slice(0, 12)}… ·
                       Generator {viewedArtifact.artifact.generator ? JSON.stringify(viewedArtifact.artifact.generator) : 'none'} ·
@@ -385,5 +565,75 @@ export function Projects({ client, workspaceId }: { client: Client; workspaceId:
         </>
       )}
     </section>
+  );
+}
+
+
+/** Parse a saved artifact body as an idea set, when it is one. */
+function parseIdeaSetBody(body: string): IdeaSet | null {
+  try {
+    const parsed = JSON.parse(body) as Partial<IdeaSet>;
+    if (parsed && Array.isArray(parsed.concepts) && typeof parsed.topic === 'string') {
+      return parsed as IdeaSet;
+    }
+  } catch {
+    // Not JSON: an ordinary text artifact.
+  }
+  return null;
+}
+
+function ConceptCard({ concept, index }: { concept: IdeaConcept; index: number }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <article className="card">
+      <h4>{index + 1}. {concept.name}</h4>
+      <p><strong>Problem:</strong> {concept.problem}</p>
+      <p><strong>Target customer:</strong> {concept.targetCustomer}</p>
+      <p><strong>Proposed solution:</strong> {concept.solution}</p>
+      {expanded && (
+        <div>
+          <p><strong>Why it may be useful:</strong> {concept.whyUseful}</p>
+          <p><strong>Differentiation hypothesis:</strong> {concept.differentiationHypothesis}</p>
+          <p><strong>Potential revenue model:</strong> {concept.revenueModel}</p>
+          <p><strong>Engineering complexity:</strong> {concept.engineeringComplexity}</p>
+          <p><strong>Approximate implementation cost:</strong> {concept.implementationCost}</p>
+          <p><strong>Key risks:</strong></p>
+          <ul>{concept.keyRisks.map(r => <li key={r}>{r}</li>)}</ul>
+          <p><strong>Required validation:</strong> {concept.requiredValidation}</p>
+          <p><strong>Minimum viable version:</strong> {concept.minimumViableVersion}</p>
+        </div>
+      )}
+      <div>
+        <button type="button" className="secondary" onClick={() => setExpanded(v => !v)}>{expanded ? 'Close' : 'Explore'}</button>{' '}
+        <button type="button" className="secondary" disabled title="Compare arrives with the evaluation milestone (M7).">Compare</button>{' '}
+        <button type="button" className="secondary" disabled title="The Lexi-Collider arrives in M8.">Send to Collider</button>{' '}
+        <button type="button" className="secondary" disabled title="Product projects arrive with the Build milestone (M9).">Start Building</button>
+      </div>
+    </article>
+  );
+}
+
+/**
+ * A generated idea set: model-generated hypotheses in the
+ * model's order (no scoring in this milestone), the first
+ * three concepts visible with expansion for the rest (SS22).
+ */
+export function IdeaSetView({ ideaSet }: { ideaSet: IdeaSet }) {
+  const [showAll, setShowAll] = useState(false);
+  const visible = showAll ? ideaSet.concepts : ideaSet.concepts.slice(0, 3);
+  return (
+    <div>
+      <p className="help">
+        Model-generated hypotheses for “{ideaSet.topic}” — not researched facts. Presented in the model's
+        order; scoring arrives with the evaluation milestone.
+      </p>
+      {ideaSet.note && <p className="help">{ideaSet.note}</p>}
+      {visible.map((concept, i) => <ConceptCard key={concept.name + i} concept={concept} index={i} />)}
+      {!showAll && ideaSet.concepts.length > 3 && (
+        <button type="button" className="secondary" onClick={() => setShowAll(true)}>
+          Show all {ideaSet.concepts.length} concepts
+        </button>
+      )}
+    </div>
   );
 }

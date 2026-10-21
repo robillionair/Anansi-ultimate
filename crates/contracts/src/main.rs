@@ -1,5 +1,9 @@
 #![recursion_limit = "512"]
 
+use anansi_core::ideas::{
+    IdeaConcept, IdeaSet, IdeasGenerateStartRequest, IdeasGenerateStartResponse, IdeasOptions,
+    IdeasPollResponse, IdeasRunRequest, IdeasSaveResponse,
+};
 use anansi_core::artifacts::{
     ArtifactDetails, ArtifactListRequest, ArtifactListResponse, ArtifactReadRequest,
     ArtifactRecord, ArtifactRegisterRequest, ArtifactReviseRequest, ArtifactVersionsResponse,
@@ -56,6 +60,14 @@ fn main() {
         "ArtifactDetails":schemars::schema_for!(ArtifactDetails),
         "ArtifactListResponse":schemars::schema_for!(ArtifactListResponse),
         "ArtifactVersionsResponse":schemars::schema_for!(ArtifactVersionsResponse),
+        "IdeasGenerateStartRequest":schemars::schema_for!(IdeasGenerateStartRequest),
+        "IdeasRunRequest":schemars::schema_for!(IdeasRunRequest),
+        "IdeasGenerateStartResponse":schemars::schema_for!(IdeasGenerateStartResponse),
+        "IdeasPollResponse":schemars::schema_for!(IdeasPollResponse),
+        "IdeasSaveResponse":schemars::schema_for!(IdeasSaveResponse),
+        "IdeaSet":schemars::schema_for!(IdeaSet),
+        "IdeaConcept":schemars::schema_for!(IdeaConcept),
+        "IdeasOptions":schemars::schema_for!(IdeasOptions),
         "ProviderWorkspaceRequest":schemars::schema_for!(ProviderWorkspaceRequest),
         "UploadBegin":schemars::schema_for!(anansi_core::backup_upload::UploadBegin),
         "UploadPart":schemars::schema_for!(anansi_core::backup_upload::UploadPart),

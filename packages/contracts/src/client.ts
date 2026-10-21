@@ -1,8 +1,8 @@
 import { validReadiness, validError, validWorkspaceDetails, validWorkspaceList, validMemoryDetails, validMemoryList, validRelationshipDetails, validRelationshipList, validJobDetails, validJobList, validArtifactChunk, validAiDiscoveryResponse, validAskResponse, validHybridSearchResponse, validCompiledContext, validIndexEmbeddingsResponse } from './validators.mjs';
 import { invoke } from '@tauri-apps/api/core';
-import { validAskRunResponse, validProviderCatalogResponse, validProviderConfigureResponse, validProviderAuthorizeResponse, validProviderDispatchResponse, validProviderStreamStartResponse, validProviderPollResponse, validProviderUsageResponse, validProviderCredentialSetResponse, validProviderCredentialRemoveResponse, validProviderCredentialStatusResponse, validProviderSessionAccessResponse, validArtifactDetails, validArtifactListResponse, validArtifactVersionsResponse } from './validators.mjs';
-import type { AskRunResponse, ProviderCatalogResponse, ProviderConfigureResponse, ProviderAuthorizeResponse, ProviderDispatchResponse, ProviderStreamStartResponse, ProviderPollResponse, ProviderUsageResponse, RuntimeConfig, CompletionRequest, ProviderCredentialSetResponse, ProviderCredentialRemoveResponse, ProviderCredentialStatusResponse, ProviderSessionAccessResponse } from './generated';
-export type { AskRunResponse, ProviderCatalogResponse, ProviderCatalogEntry, ProviderConfigureResponse, ProviderAuthorizeResponse, ProviderDispatchResponse, ProviderStreamStartResponse, ProviderPollResponse, ProviderUsageResponse, ProviderUsageEntry, RuntimeConfig, CompletionRequest, DisclosureRecord, ProviderCredentialSetResponse, ProviderCredentialRemoveResponse, ProviderCredentialStatusResponse, ProviderSessionAccessResponse, ProviderPendingAccess, ProviderGrantInfo } from './generated';
+import { validAskRunResponse, validProviderCatalogResponse, validProviderConfigureResponse, validProviderAuthorizeResponse, validProviderDispatchResponse, validProviderStreamStartResponse, validProviderPollResponse, validProviderUsageResponse, validProviderCredentialSetResponse, validProviderCredentialRemoveResponse, validProviderCredentialStatusResponse, validProviderSessionAccessResponse, validArtifactDetails, validArtifactListResponse, validArtifactVersionsResponse, validIdeasGenerateStartResponse, validIdeasPollResponse, validIdeasSaveResponse } from './validators.mjs';
+import type { IdeasGenerateStartRequest, IdeasGenerateStartResponse, IdeasPollResponse, IdeasSaveResponse, IdeaSet, IdeaConcept, AskRunResponse, ProviderCatalogResponse, ProviderConfigureResponse, ProviderAuthorizeResponse, ProviderDispatchResponse, ProviderStreamStartResponse, ProviderPollResponse, ProviderUsageResponse, RuntimeConfig, CompletionRequest, ProviderCredentialSetResponse, ProviderCredentialRemoveResponse, ProviderCredentialStatusResponse, ProviderSessionAccessResponse } from './generated';
+export type { IdeasGenerateStartRequest, IdeasGenerateStartResponse, IdeasPollResponse, IdeasSaveResponse, IdeaSet, IdeaConcept, AskRunResponse, ProviderCatalogResponse, ProviderCatalogEntry, ProviderConfigureResponse, ProviderAuthorizeResponse, ProviderDispatchResponse, ProviderStreamStartResponse, ProviderPollResponse, ProviderUsageResponse, ProviderUsageEntry, RuntimeConfig, CompletionRequest, DisclosureRecord, ProviderCredentialSetResponse, ProviderCredentialRemoveResponse, ProviderCredentialStatusResponse, ProviderSessionAccessResponse, ProviderPendingAccess, ProviderGrantInfo } from './generated';
 import {validSnapshotPreview,validRestoreResult,validBackupSchedule,validUploadStatus} from './validators.mjs';
 import type {SnapshotPreview,RestoreResult,BackupSchedule,AiDiscoveryResponse,HardwareProfile,DiscoveredRuntime,ModelRecommendation,RuntimeKind,RuntimeStatus,FitLevel,AskRequest,AskResponse,AskStatus,GroundedCitation,DisclosureManifest,HybridSearchRequest,HybridSearchResult,HybridSearchResponse,ContextCompilationRequest,CompiledContext,ContextChunk,IndexEmbeddingsRequest,IndexEmbeddingsResponse} from './generated';
 export type {SnapshotPreview,RestoreResult,BackupSchedule,AiDiscoveryResponse,HardwareProfile,DiscoveredRuntime,ModelRecommendation,RuntimeKind,RuntimeStatus,FitLevel,AskRequest,AskResponse,AskStatus,GroundedCitation,DisclosureManifest,HybridSearchRequest,HybridSearchResult,HybridSearchResponse,ContextCompilationRequest,CompiledContext,ContextChunk,IndexEmbeddingsRequest,IndexEmbeddingsResponse} from './generated';
@@ -11,6 +11,7 @@ export type { ArtifactDetails, ArtifactListResponse, ArtifactVersionsResponse, A
 import type { Readiness, WorkspaceDetails, WorkspaceList, Intent, MemoryDraft, MemoryDetails, MemoryList, MemoryMetadata, Privacy, LifecycleChange, RelationshipDraft, RelationshipRecord, RelationshipDetails, RelationshipList, Job, JobDetails, JobList, ArtifactChunk, ExportSelection, JobAction } from './generated';
 export type { Readiness, WorkspaceDetails, WorkspaceList, Intent, MemoryDraft, MemoryDetails, MemoryList, MemoryMetadata, Privacy, LifecycleChange, RelationshipDraft, RelationshipRecord, RelationshipDetails, RelationshipList, Job, JobDetails, JobList, ArtifactChunk, ExportSelection, JobAction } from './generated';
 export type VaultCommandName = 'setup'|'seal'|'unlock'|'read'|'lock'|'rotate'|'backup'|'export'|'preview'|'restore';
+export type IdeasStartInput = Omit<IdeasGenerateStartRequest, 'contractVersion' | 'workspaceId'>;
 export interface Client {
   vaultCommand?:(command:VaultCommandName,request:Record<string,unknown>)=>Promise<Record<string,unknown>>;
   startAsk(workspaceId:string,prompt:string,options?:{runtimeEndpoint?:string;modelTag?:string;embeddingModel?:string}):Promise<AskRunResponse>;
@@ -64,6 +65,10 @@ export interface Client {
   providersCredentialRemove(workspaceId: string, provider: string, reference: string): Promise<ProviderCredentialRemoveResponse>;
   providersCredentialStatus(workspaceId: string, provider: string, reference: string): Promise<ProviderCredentialStatusResponse>;
   providersSessionAccess(workspaceId: string): Promise<ProviderSessionAccessResponse>;
+  startProjectIdeas(workspaceId: string, input: IdeasStartInput): Promise<IdeasGenerateStartResponse>;
+  pollProjectIdeas(workspaceId: string, runId: string): Promise<IdeasPollResponse>;
+  cancelProjectIdeas(workspaceId: string, runId: string): Promise<IdeasPollResponse>;
+  saveProjectIdeas(workspaceId: string, runId: string): Promise<IdeasSaveResponse>;
 }
 function decode<T extends {contractVersion:number}>(value:unknown, validate:(value:unknown)=>value is T):T {
   if(!validate(value)||value.contractVersion!==1)throw new Error('The core returned an incompatible response. Update both applications.');
@@ -95,6 +100,12 @@ function failure(value:unknown,operation=''):Error {
         case 'VAULT_UNAVAILABLE':return new Error('The native vault operation was cancelled, unavailable or could not finish. Retry through the native controls. No plaintext fallback was used.');
         case 'FORBIDDEN':return new Error('This vault request does not match the workspace or application process.');
       }
+    }
+    if(operation.startsWith('ai/ideas-')){
+      // Idea-generation refusals and outcomes are composed for
+      // the user at the core (archived project, model not
+      // configured, gates) - surface them verbatim.
+      if(typeof value.message==='string'&&value.message)return new Error(value.message);
     }
     if(operation.startsWith('artifacts/')){
       // Registry refusals are composed for the user at the core
@@ -186,6 +197,10 @@ function client(call:Call):Client {
     providersCredentialRemove:async(workspaceId,provider,reference)=>decode(await call('ai/providers-credential-remove',{workspaceId,provider,reference}),validProviderCredentialRemoveResponse),
     providersCredentialStatus:async(workspaceId,provider,reference)=>decode(await call('ai/providers-credential-status',{workspaceId,provider,reference}),validProviderCredentialStatusResponse),
     providersSessionAccess:async(workspaceId)=>decode(await call('ai/providers-session-access',{workspaceId}),validProviderSessionAccessResponse),
+    startProjectIdeas:async(workspaceId,input)=>decode(await call('ai/ideas-generate-start',{workspaceId,...input}),validIdeasGenerateStartResponse),
+    pollProjectIdeas:async(workspaceId,runId)=>decode(await call('ai/ideas-generate-poll',{workspaceId,runId}),validIdeasPollResponse),
+    cancelProjectIdeas:async(workspaceId,runId)=>decode(await call('ai/ideas-generate-cancel',{workspaceId,runId}),validIdeasPollResponse),
+    saveProjectIdeas:async(workspaceId,runId)=>decode(await call('ai/ideas-save',{workspaceId,runId}),validIdeasSaveResponse),
     vaultCommand:async(command,request)=>await call('vault/'+command,request) as Record<string,unknown>,
   };
 }

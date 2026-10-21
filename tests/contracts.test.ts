@@ -79,6 +79,32 @@ test('artifact registry HTTP operations use the scoped artifacts route', async (
   } finally { globalThis.fetch = original; }
 });
 
+test('idea generation validators enforce the section 21 concept shape', async () => {
+  const { validIdeasPollResponse, validIdeaConcept } = await import('../packages/contracts/src/validators.mjs');
+  const concept = {
+    name: 'Harbor', problem: 'p', targetCustomer: 'c', solution: 's', whyUseful: 'w',
+    differentiationHypothesis: 'h', revenueModel: 'r', engineeringComplexity: 'medium',
+    implementationCost: 'about 3 weeks', keyRisks: ['adoption'], requiredValidation: 'interviews',
+    minimumViableVersion: 'one workflow',
+  };
+  assert.equal(validIdeaConcept(concept), true);
+  const missing = { ...concept } as Record<string, unknown>; delete missing['differentiationHypothesis'];
+  assert.equal(validIdeaConcept(missing), false, 'a concept without a section 21 field is rejected');
+  const disclosure = {
+    provider: 'ollama', model: 'llama-x', endpointHost: '127.0.0.1', local: true,
+    routingMode: 'auto', routingReason: 'only candidate', messageCount: 1, segmentCount: 2,
+    redactionCount: 0, estimatedInputTokens: 10, costClass: 'free', usage: null, attempts: [],
+  };
+  assert.equal(validIdeasPollResponse({
+    contractVersion: 1, runId: 'a'.repeat(32), status: 'complete', partialChars: 10,
+    ideaSet: { concepts: [concept], topic: 'harbor' }, disclosure,
+  }), true);
+  assert.equal(validIdeasPollResponse({
+    contractVersion: 1, runId: 'a'.repeat(32), status: 'complete', partialChars: 10,
+    ideaSet: { concepts: [{ ...concept, keyRisks: 'not-an-array' }], topic: 'harbor' }, disclosure,
+  }), false);
+});
+
 test('artifact registry validators enforce the section 9 record shape', async () => {
   const { validArtifactDetails, validArtifactListResponse } = await import('../packages/contracts/src/validators.mjs');
   const record = {
