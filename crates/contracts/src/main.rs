@@ -20,6 +20,12 @@ use anansi_core::memory::{
     MemoryDetails, MemoryDraft, MemoryList, MemoryListRequest, MemoryMetadata, MemoryReadRequest,
     MemoryWriteRequest,
 };
+use anansi_core::forge::{
+    DevelopmentPlan, ForgeAnswers, ForgeBuildStartRequest, ForgeExportRequest,
+    ForgeExportResponse, ForgePollResponse, ForgeRunRequest, ForgeSaveResponse,
+    ForgeSpecStartRequest, ForgeStartResponse, ProductSpec, ProductSpecDoc, SourceFile,
+    SourcePackageDoc,
+};
 use anansi_core::opportunities::{
     OpportunitiesGenerateStartRequest, OpportunitiesGenerateStartResponse,
     OpportunitiesPollResponse, OpportunitiesRunRequest, OpportunitiesSaveResponse,
@@ -83,6 +89,20 @@ fn main() {
         "OpportunitySet":schemars::schema_for!(OpportunitySet),
         "OpportunityConcept":schemars::schema_for!(OpportunityConcept),
         "OpportunitySourceRecord":schemars::schema_for!(OpportunitySourceRecord),
+        "ForgeSpecStartRequest":schemars::schema_for!(ForgeSpecStartRequest),
+        "ForgeBuildStartRequest":schemars::schema_for!(ForgeBuildStartRequest),
+        "ForgeRunRequest":schemars::schema_for!(ForgeRunRequest),
+        "ForgeStartResponse":schemars::schema_for!(ForgeStartResponse),
+        "ForgePollResponse":schemars::schema_for!(ForgePollResponse),
+        "ForgeSaveResponse":schemars::schema_for!(ForgeSaveResponse),
+        "ForgeExportRequest":schemars::schema_for!(ForgeExportRequest),
+        "ForgeExportResponse":schemars::schema_for!(ForgeExportResponse),
+        "ProductSpec":schemars::schema_for!(ProductSpec),
+        "ProductSpecDoc":schemars::schema_for!(ProductSpecDoc),
+        "ForgeAnswers":schemars::schema_for!(ForgeAnswers),
+        "DevelopmentPlan":schemars::schema_for!(DevelopmentPlan),
+        "SourceFile":schemars::schema_for!(SourceFile),
+        "SourcePackageDoc":schemars::schema_for!(SourcePackageDoc),
         "RubricDimension":schemars::schema_for!(RubricDimension),
         "RubricDoc":schemars::schema_for!(RubricDoc),
         "AssessmentInput":schemars::schema_for!(AssessmentInput),

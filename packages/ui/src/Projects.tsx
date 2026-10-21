@@ -5,6 +5,14 @@ import type { DisclosureRecord } from '@anansi/contracts';
 import { DisclosurePanel } from './Providers';
 import { IdeaRunController } from './ideaRun';
 import { OpportunityRunController } from './opportunityRun';
+import {
+  ForgeBuildPanel,
+  ForgeSpecPanel,
+  SourcePackageView,
+  SpecificationView,
+  parseProductSpecBody,
+  parseSourcePackageBody,
+} from './Forge';
 
 const blank = (): MemoryDraft => ({
   title: '',
@@ -700,11 +708,66 @@ export function Projects({ client, workspaceId }: { client: Client; workspaceId:
                         ? parseEvaluationBody(viewedArtifact.body)
                         : null;
                       if (parsedEvaluation) return <EvaluationView evaluation={parsedEvaluation} />;
+                      const parsedSpec = viewedArtifact.artifact.type === 'specification'
+                        ? parseProductSpecBody(viewedArtifact.body)
+                        : null;
+                      if (parsedSpec) {
+                        return (
+                          <div>
+                            <SpecificationView doc={parsedSpec} />
+                            {current && (
+                              <ForgeBuildPanel
+                                client={client}
+                                workspaceId={workspaceId}
+                                projectId={current.memory.id}
+                                spec={viewedArtifact.artifact}
+                                notify={(message, isError) => { if (isError) setError(message); else setNotice(message); }}
+                                onSaved={() => {
+                                  void (async () => {
+                                    const artList = await client.listProjectArtifacts(workspaceId, current.memory.id);
+                                    setArtifacts(artList.artifacts);
+                                  })();
+                                }}
+                              />
+                            )}
+                          </div>
+                        );
+                      }
+                      const parsedPackage = viewedArtifact.artifact.type === 'source-package'
+                        ? parseSourcePackageBody(viewedArtifact.body)
+                        : null;
+                      if (parsedPackage) {
+                        return (
+                          <SourcePackageView
+                            doc={parsedPackage}
+                            artifact={viewedArtifact.artifact}
+                            client={client}
+                            workspaceId={workspaceId}
+                            notify={(message, isError) => { if (isError) setError(message); else setNotice(message); }}
+                          />
+                        );
+                      }
                       const parsedOpportunities = parseOpportunitySetBody(viewedArtifact.body);
                       if (parsedOpportunities) {
                         return (
                           <div>
                             <OpportunitySetView opportunitySet={parsedOpportunities} />
+                            {viewedArtifact.artifact.type === 'idea' && current && (
+                              <ForgeSpecPanel
+                                client={client}
+                                workspaceId={workspaceId}
+                                projectId={current.memory.id}
+                                source={viewedArtifact.artifact}
+                                concepts={parsedOpportunities.concepts}
+                                notify={(message, isError) => { if (isError) setError(message); else setNotice(message); }}
+                                onSaved={() => {
+                                  void (async () => {
+                                    const artList = await client.listProjectArtifacts(workspaceId, current.memory.id);
+                                    setArtifacts(artList.artifacts);
+                                  })();
+                                }}
+                              />
+                            )}
                             {viewedArtifact.artifact.type === 'idea' && current && (
                               <EvaluationPanel
                                 client={client}
@@ -734,6 +797,22 @@ export function Projects({ client, workspaceId }: { client: Client; workspaceId:
                         ? (
                           <div>
                             <IdeaSetView ideaSet={parsedSet} compareHint="Use Compare & evaluate below for this saved set." />
+                            {viewedArtifact.artifact.type === 'idea' && current && (
+                              <ForgeSpecPanel
+                                client={client}
+                                workspaceId={workspaceId}
+                                projectId={current.memory.id}
+                                source={viewedArtifact.artifact}
+                                concepts={parsedSet.concepts}
+                                notify={(message, isError) => { if (isError) setError(message); else setNotice(message); }}
+                                onSaved={() => {
+                                  void (async () => {
+                                    const artList = await client.listProjectArtifacts(workspaceId, current.memory.id);
+                                    setArtifacts(artList.artifacts);
+                                  })();
+                                }}
+                              />
+                            )}
                             {viewedArtifact.artifact.type === 'idea' && current && (
                               <EvaluationPanel
                                 client={client}

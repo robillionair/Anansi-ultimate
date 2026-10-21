@@ -1840,6 +1840,34 @@
     "title": "DeleteRelationshipRequest",
     "type": "object"
   },
+  "DevelopmentPlan": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "buildNotes": {
+        "type": "string"
+      },
+      "steps": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "summary": {
+        "type": "string"
+      },
+      "testingNotes": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "summary",
+      "steps",
+      "buildNotes",
+      "testingNotes"
+    ],
+    "title": "DevelopmentPlan",
+    "type": "object"
+  },
   "DisclosureManifest": {
     "$defs": {
       "SourceMemoryReference": {
@@ -2243,6 +2271,975 @@
       "alreadySaved"
     ],
     "title": "EvaluationsSaveResponse",
+    "type": "object"
+  },
+  "ForgeAnswers": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "description": "The user's three essential answers, kept verbatim.",
+    "properties": {
+      "intendedUsers": {
+        "type": "string"
+      },
+      "mustHave": {
+        "type": "string"
+      },
+      "purpose": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "purpose",
+      "intendedUsers",
+      "mustHave"
+    ],
+    "title": "ForgeAnswers",
+    "type": "object"
+  },
+  "ForgeBuildStartRequest": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "contractVersion": {
+        "default": 1,
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "mode": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "model": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "permitId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "projectId": {
+        "type": "string"
+      },
+      "provider": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "specArtifactId": {
+        "description": "The saved specification artifact to build from.",
+        "type": "string"
+      },
+      "specVersion": {
+        "description": "The exact specification version to pin.",
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "workspaceId": {
+        "type": "string"
+      },
+      "zeroCostLock": {
+        "default": false,
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "workspaceId",
+      "projectId",
+      "specArtifactId",
+      "specVersion"
+    ],
+    "title": "ForgeBuildStartRequest",
+    "type": "object"
+  },
+  "ForgeExportRequest": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "artifactId": {
+        "type": "string"
+      },
+      "contractVersion": {
+        "default": 1,
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "version": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "workspaceId",
+      "artifactId",
+      "version"
+    ],
+    "title": "ForgeExportRequest",
+    "type": "object"
+  },
+  "ForgeExportResponse": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "filename": {
+        "type": "string"
+      },
+      "files": {
+        "description": "The package-relative paths in the tar, in order.",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "sha256": {
+        "description": "SHA-256 of the tar bytes.",
+        "type": "string"
+      },
+      "tarBase64": {
+        "description": "Base64 of the USTAR tarball (regular files only).",
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "filename",
+      "sha256",
+      "tarBase64",
+      "files"
+    ],
+    "title": "ForgeExportResponse",
+    "type": "object"
+  },
+  "ForgePollResponse": {
+    "$defs": {
+      "AttemptRecord": {
+        "properties": {
+          "model": {
+            "type": "string"
+          },
+          "outcome": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "model",
+          "outcome"
+        ],
+        "type": "object"
+      },
+      "CostClass": {
+        "description": "Cost knowledge about a model. `Unknown` is treated as paid everywhere\ncost is enforced (decision M5-D5).",
+        "enum": [
+          "free",
+          "paid",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "DevelopmentPlan": {
+        "properties": {
+          "buildNotes": {
+            "type": "string"
+          },
+          "steps": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "testingNotes": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "summary",
+          "steps",
+          "buildNotes",
+          "testingNotes"
+        ],
+        "type": "object"
+      },
+      "DisclosureRecord": {
+        "description": "\"View What ANANSI Sent\" at adapter level (§19): what was about to be\n/ was transmitted, to whom, and why. The UI rendering of this record\nis application integration; producing it is the dispatcher's job.",
+        "properties": {
+          "attempts": {
+            "items": {
+              "$ref": "#/$defs/AttemptRecord"
+            },
+            "type": "array"
+          },
+          "costClass": {
+            "$ref": "#/$defs/CostClass"
+          },
+          "endpointHost": {
+            "type": "string"
+          },
+          "estimatedInputTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "local": {
+            "type": "boolean"
+          },
+          "messageCount": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "model": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "redactionCount": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "routingMode": {
+            "$ref": "#/$defs/RoutingMode"
+          },
+          "routingReason": {
+            "type": "string"
+          },
+          "segmentCount": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "usage": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Usage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "provider",
+          "model",
+          "endpointHost",
+          "local",
+          "routingMode",
+          "routingReason",
+          "messageCount",
+          "segmentCount",
+          "redactionCount",
+          "estimatedInputTokens",
+          "costClass",
+          "attempts"
+        ],
+        "type": "object"
+      },
+      "ForgeAnswers": {
+        "description": "The user's three essential answers, kept verbatim.",
+        "properties": {
+          "intendedUsers": {
+            "type": "string"
+          },
+          "mustHave": {
+            "type": "string"
+          },
+          "purpose": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "purpose",
+          "intendedUsers",
+          "mustHave"
+        ],
+        "type": "object"
+      },
+      "ProductSpec": {
+        "description": "The model's specification fields (strict-parsed).",
+        "properties": {
+          "acceptanceCriteria": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "dataAndState": {
+            "type": "string"
+          },
+          "features": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "intendedUsers": {
+            "type": "string"
+          },
+          "nonGoals": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "openQuestions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "pages": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "purpose": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "summary",
+          "purpose",
+          "intendedUsers",
+          "features",
+          "pages",
+          "nonGoals",
+          "dataAndState",
+          "acceptanceCriteria",
+          "openQuestions"
+        ],
+        "type": "object"
+      },
+      "ProductSpecDoc": {
+        "description": "A saved product specification: pins the exact source\nartifact version and concept it was drafted from.",
+        "properties": {
+          "answers": {
+            "$ref": "#/$defs/ForgeAnswers"
+          },
+          "concept": {
+            "description": "Snapshot of the concept as of the pinned version."
+          },
+          "conceptIndex": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "format": {
+            "type": "string"
+          },
+          "formatVersion": {
+            "format": "uint8",
+            "maximum": 255,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sourceArtifactId": {
+            "type": "string"
+          },
+          "sourceVersion": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "spec": {
+            "$ref": "#/$defs/ProductSpec"
+          },
+          "template": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "format",
+          "formatVersion",
+          "template",
+          "sourceArtifactId",
+          "sourceVersion",
+          "conceptIndex",
+          "concept",
+          "answers",
+          "spec"
+        ],
+        "type": "object"
+      },
+      "RoutingMode": {
+        "description": "User-facing routing modes, verbatim from MASTER_SPEC §17.",
+        "enum": [
+          "auto",
+          "autoFree",
+          "private",
+          "fast",
+          "deep",
+          "coding",
+          "vision",
+          "chooseModel"
+        ],
+        "type": "string"
+      },
+      "SourceFile": {
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "content"
+        ],
+        "type": "object"
+      },
+      "SourcePackageDoc": {
+        "description": "A saved source package: pins the specification version\nit was generated from, carries the plan and the bounded\nfile set, and states its limitations verbatim.",
+        "properties": {
+          "conceptName": {
+            "type": "string"
+          },
+          "files": {
+            "items": {
+              "$ref": "#/$defs/SourceFile"
+            },
+            "type": "array"
+          },
+          "format": {
+            "type": "string"
+          },
+          "formatVersion": {
+            "format": "uint8",
+            "maximum": 255,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "limitations": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "plan": {
+            "$ref": "#/$defs/DevelopmentPlan"
+          },
+          "sourceArtifactId": {
+            "type": "string"
+          },
+          "sourceVersion": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "specArtifactId": {
+            "type": "string"
+          },
+          "specVersion": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "template": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "format",
+          "formatVersion",
+          "template",
+          "specArtifactId",
+          "specVersion",
+          "sourceArtifactId",
+          "sourceVersion",
+          "conceptName",
+          "plan",
+          "files",
+          "limitations"
+        ],
+        "type": "object"
+      },
+      "Usage": {
+        "properties": {
+          "inputTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "outputTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "inputTokens",
+          "outputTokens"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "disclosure": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/DisclosureRecord"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "error": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "partialChars": {
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "runId": {
+        "type": "string"
+      },
+      "sourcePackage": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/SourcePackageDoc"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "spec": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/ProductSpecDoc"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "status": {
+        "description": "running | cancelling | complete | invalid | failed | cancelled",
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "runId",
+      "status",
+      "partialChars"
+    ],
+    "title": "ForgePollResponse",
+    "type": "object"
+  },
+  "ForgeRunRequest": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "contractVersion": {
+        "default": 1,
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "runId": {
+        "type": "string"
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "workspaceId",
+      "runId"
+    ],
+    "title": "ForgeRunRequest",
+    "type": "object"
+  },
+  "ForgeSaveResponse": {
+    "$defs": {
+      "ArtifactRecord": {
+        "description": "One artifact version's metadata — the §9 field set.",
+        "properties": {
+          "artifactId": {
+            "type": "string"
+          },
+          "contentHash": {
+            "type": "string"
+          },
+          "generator": {
+            "description": "Generator/model metadata: `{\"kind\":\"manual\"}` in this\nslice; generator slices record model provenance here."
+          },
+          "privacy": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "sourceReferences": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "timestamp": {
+            "description": "The §9 timestamp: when this version was registered.",
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "validationStatus": {
+            "type": "string"
+          },
+          "version": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "artifactId",
+          "projectId",
+          "type",
+          "version",
+          "title",
+          "timestamp",
+          "sourceReferences",
+          "validationStatus",
+          "privacy",
+          "contentHash"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "alreadySaved": {
+        "type": "boolean"
+      },
+      "artifact": {
+        "$ref": "#/$defs/ArtifactRecord"
+      },
+      "body": {
+        "type": "string"
+      },
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "artifact",
+      "body",
+      "alreadySaved"
+    ],
+    "title": "ForgeSaveResponse",
+    "type": "object"
+  },
+  "ForgeSpecStartRequest": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "conceptIndex": {
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "contractVersion": {
+        "default": 1,
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "intendedUsers": {
+        "type": "string"
+      },
+      "mode": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "model": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "mustHave": {
+        "type": "string"
+      },
+      "permitId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "projectId": {
+        "type": "string"
+      },
+      "provider": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "purpose": {
+        "description": "Essential questions (§29): bounded free-text answers.",
+        "type": "string"
+      },
+      "sourceArtifactId": {
+        "description": "The saved idea/opportunity artifact to develop.",
+        "type": "string"
+      },
+      "sourceVersion": {
+        "description": "The exact artifact version to pin (never \"latest\").",
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "workspaceId": {
+        "type": "string"
+      },
+      "zeroCostLock": {
+        "default": false,
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "workspaceId",
+      "projectId",
+      "sourceArtifactId",
+      "sourceVersion",
+      "conceptIndex",
+      "purpose",
+      "intendedUsers",
+      "mustHave"
+    ],
+    "title": "ForgeSpecStartRequest",
+    "type": "object"
+  },
+  "ForgeStartResponse": {
+    "$defs": {
+      "AttemptRecord": {
+        "properties": {
+          "model": {
+            "type": "string"
+          },
+          "outcome": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "model",
+          "outcome"
+        ],
+        "type": "object"
+      },
+      "CostClass": {
+        "description": "Cost knowledge about a model. `Unknown` is treated as paid everywhere\ncost is enforced (decision M5-D5).",
+        "enum": [
+          "free",
+          "paid",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "DisclosureRecord": {
+        "description": "\"View What ANANSI Sent\" at adapter level (§19): what was about to be\n/ was transmitted, to whom, and why. The UI rendering of this record\nis application integration; producing it is the dispatcher's job.",
+        "properties": {
+          "attempts": {
+            "items": {
+              "$ref": "#/$defs/AttemptRecord"
+            },
+            "type": "array"
+          },
+          "costClass": {
+            "$ref": "#/$defs/CostClass"
+          },
+          "endpointHost": {
+            "type": "string"
+          },
+          "estimatedInputTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "local": {
+            "type": "boolean"
+          },
+          "messageCount": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "model": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "redactionCount": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "routingMode": {
+            "$ref": "#/$defs/RoutingMode"
+          },
+          "routingReason": {
+            "type": "string"
+          },
+          "segmentCount": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "usage": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Usage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "provider",
+          "model",
+          "endpointHost",
+          "local",
+          "routingMode",
+          "routingReason",
+          "messageCount",
+          "segmentCount",
+          "redactionCount",
+          "estimatedInputTokens",
+          "costClass",
+          "attempts"
+        ],
+        "type": "object"
+      },
+      "RoutingMode": {
+        "description": "User-facing routing modes, verbatim from MASTER_SPEC §17.",
+        "enum": [
+          "auto",
+          "autoFree",
+          "private",
+          "fast",
+          "deep",
+          "coding",
+          "vision",
+          "chooseModel"
+        ],
+        "type": "string"
+      },
+      "Usage": {
+        "properties": {
+          "inputTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "outputTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "inputTokens",
+          "outputTokens"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "disclosure": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/DisclosureRecord"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "runId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "runId"
+    ],
+    "title": "ForgeStartResponse",
     "type": "object"
   },
   "GroundedCitation": {
@@ -6369,6 +7366,209 @@
     "title": "OpportunitySourceRecord",
     "type": "object"
   },
+  "ProductSpec": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "description": "The model's specification fields (strict-parsed).",
+    "properties": {
+      "acceptanceCriteria": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "dataAndState": {
+        "type": "string"
+      },
+      "features": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "intendedUsers": {
+        "type": "string"
+      },
+      "nonGoals": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "openQuestions": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "pages": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "purpose": {
+        "type": "string"
+      },
+      "summary": {
+        "type": "string"
+      },
+      "title": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "title",
+      "summary",
+      "purpose",
+      "intendedUsers",
+      "features",
+      "pages",
+      "nonGoals",
+      "dataAndState",
+      "acceptanceCriteria",
+      "openQuestions"
+    ],
+    "title": "ProductSpec",
+    "type": "object"
+  },
+  "ProductSpecDoc": {
+    "$defs": {
+      "ForgeAnswers": {
+        "description": "The user's three essential answers, kept verbatim.",
+        "properties": {
+          "intendedUsers": {
+            "type": "string"
+          },
+          "mustHave": {
+            "type": "string"
+          },
+          "purpose": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "purpose",
+          "intendedUsers",
+          "mustHave"
+        ],
+        "type": "object"
+      },
+      "ProductSpec": {
+        "description": "The model's specification fields (strict-parsed).",
+        "properties": {
+          "acceptanceCriteria": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "dataAndState": {
+            "type": "string"
+          },
+          "features": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "intendedUsers": {
+            "type": "string"
+          },
+          "nonGoals": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "openQuestions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "pages": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "purpose": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "summary",
+          "purpose",
+          "intendedUsers",
+          "features",
+          "pages",
+          "nonGoals",
+          "dataAndState",
+          "acceptanceCriteria",
+          "openQuestions"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "description": "A saved product specification: pins the exact source\nartifact version and concept it was drafted from.",
+    "properties": {
+      "answers": {
+        "$ref": "#/$defs/ForgeAnswers"
+      },
+      "concept": {
+        "description": "Snapshot of the concept as of the pinned version."
+      },
+      "conceptIndex": {
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "format": {
+        "type": "string"
+      },
+      "formatVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "sourceArtifactId": {
+        "type": "string"
+      },
+      "sourceVersion": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "spec": {
+        "$ref": "#/$defs/ProductSpec"
+      },
+      "template": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "format",
+      "formatVersion",
+      "template",
+      "sourceArtifactId",
+      "sourceVersion",
+      "conceptIndex",
+      "concept",
+      "answers",
+      "spec"
+    ],
+    "title": "ProductSpecDoc",
+    "type": "object"
+  },
   "ProviderAuthorizeRequest": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
@@ -8569,6 +9769,133 @@
       "artifactId"
     ],
     "title": "SnapshotRequest",
+    "type": "object"
+  },
+  "SourceFile": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "content": {
+        "type": "string"
+      },
+      "path": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "path",
+      "content"
+    ],
+    "title": "SourceFile",
+    "type": "object"
+  },
+  "SourcePackageDoc": {
+    "$defs": {
+      "DevelopmentPlan": {
+        "properties": {
+          "buildNotes": {
+            "type": "string"
+          },
+          "steps": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "testingNotes": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "summary",
+          "steps",
+          "buildNotes",
+          "testingNotes"
+        ],
+        "type": "object"
+      },
+      "SourceFile": {
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "content"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "description": "A saved source package: pins the specification version\nit was generated from, carries the plan and the bounded\nfile set, and states its limitations verbatim.",
+    "properties": {
+      "conceptName": {
+        "type": "string"
+      },
+      "files": {
+        "items": {
+          "$ref": "#/$defs/SourceFile"
+        },
+        "type": "array"
+      },
+      "format": {
+        "type": "string"
+      },
+      "formatVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "limitations": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "plan": {
+        "$ref": "#/$defs/DevelopmentPlan"
+      },
+      "sourceArtifactId": {
+        "type": "string"
+      },
+      "sourceVersion": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "specArtifactId": {
+        "type": "string"
+      },
+      "specVersion": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "template": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "format",
+      "formatVersion",
+      "template",
+      "specArtifactId",
+      "specVersion",
+      "sourceArtifactId",
+      "sourceVersion",
+      "conceptName",
+      "plan",
+      "files",
+      "limitations"
+    ],
+    "title": "SourcePackageDoc",
     "type": "object"
   },
   "StandardRubricResponse": {

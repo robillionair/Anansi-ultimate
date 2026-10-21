@@ -431,6 +431,12 @@ export interface DeleteRelationshipRequest {
   id: string;
   workspaceId: string;
 }
+export interface DevelopmentPlan {
+  buildNotes: string;
+  steps: string[];
+  summary: string;
+  testingNotes: string;
+}
 export interface DisclosureManifest {
   characterCount: number;
   compiledPrompt: string;
@@ -526,6 +532,280 @@ export interface ArtifactRecord {
   type: string;
   validationStatus: string;
   version: number;
+}
+/**
+ * The user's three essential answers, kept verbatim.
+ */
+export interface ForgeAnswers {
+  intendedUsers: string;
+  mustHave: string;
+  purpose: string;
+}
+export interface ForgeBuildStartRequest {
+  contractVersion?: number;
+  mode?: string | null;
+  model?: string | null;
+  permitId?: string | null;
+  projectId: string;
+  provider?: string | null;
+  /**
+   * The saved specification artifact to build from.
+   */
+  specArtifactId: string;
+  /**
+   * The exact specification version to pin.
+   */
+  specVersion: number;
+  workspaceId: string;
+  zeroCostLock?: boolean;
+}
+export interface ForgeExportRequest {
+  artifactId: string;
+  contractVersion?: number;
+  version: number;
+  workspaceId: string;
+}
+export interface ForgeExportResponse {
+  contractVersion: number;
+  filename: string;
+  /**
+   * The package-relative paths in the tar, in order.
+   */
+  files: string[];
+  /**
+   * SHA-256 of the tar bytes.
+   */
+  sha256: string;
+  /**
+   * Base64 of the USTAR tarball (regular files only).
+   */
+  tarBase64: string;
+}
+/**
+ * Cost knowledge about a model. `Unknown` is treated as paid everywhere
+ * cost is enforced (decision M5-D5).
+ */
+export type CostClass = "free" | "paid" | "unknown";
+/**
+ * User-facing routing modes, verbatim from MASTER_SPEC §17.
+ */
+export type RoutingMode = "auto" | "autoFree" | "private" | "fast" | "deep" | "coding" | "vision" | "chooseModel";
+
+export interface ForgePollResponse {
+  contractVersion: number;
+  disclosure?: DisclosureRecord | null;
+  error?: string | null;
+  partialChars: number;
+  runId: string;
+  sourcePackage?: SourcePackageDoc | null;
+  spec?: ProductSpecDoc | null;
+  /**
+   * running | cancelling | complete | invalid | failed | cancelled
+   */
+  status: string;
+}
+/**
+ * "View What ANANSI Sent" at adapter level (§19): what was about to be
+ * / was transmitted, to whom, and why. The UI rendering of this record
+ * is application integration; producing it is the dispatcher's job.
+ */
+export interface DisclosureRecord {
+  attempts: AttemptRecord[];
+  costClass: CostClass;
+  endpointHost: string;
+  estimatedInputTokens: number;
+  local: boolean;
+  messageCount: number;
+  model: string;
+  provider: string;
+  redactionCount: number;
+  routingMode: RoutingMode;
+  routingReason: string;
+  segmentCount: number;
+  usage?: Usage | null;
+}
+export interface AttemptRecord {
+  model: string;
+  outcome: string;
+  provider: string;
+}
+export interface Usage {
+  inputTokens: number;
+  outputTokens: number;
+}
+/**
+ * A saved source package: pins the specification version
+ * it was generated from, carries the plan and the bounded
+ * file set, and states its limitations verbatim.
+ */
+export interface SourcePackageDoc {
+  conceptName: string;
+  files: SourceFile[];
+  format: string;
+  formatVersion: number;
+  limitations: string[];
+  plan: DevelopmentPlan;
+  sourceArtifactId: string;
+  sourceVersion: number;
+  specArtifactId: string;
+  specVersion: number;
+  template: string;
+}
+export interface SourceFile {
+  content: string;
+  path: string;
+}
+export interface DevelopmentPlan {
+  buildNotes: string;
+  steps: string[];
+  summary: string;
+  testingNotes: string;
+}
+/**
+ * A saved product specification: pins the exact source
+ * artifact version and concept it was drafted from.
+ */
+export interface ProductSpecDoc {
+  answers: ForgeAnswers;
+  /**
+   * Snapshot of the concept as of the pinned version.
+   */
+  concept: {
+    [k: string]: unknown;
+  };
+  conceptIndex: number;
+  format: string;
+  formatVersion: number;
+  sourceArtifactId: string;
+  sourceVersion: number;
+  spec: ProductSpec;
+  template: string;
+}
+/**
+ * The user's three essential answers, kept verbatim.
+ */
+export interface ForgeAnswers {
+  intendedUsers: string;
+  mustHave: string;
+  purpose: string;
+}
+/**
+ * The model's specification fields (strict-parsed).
+ */
+export interface ProductSpec {
+  acceptanceCriteria: string[];
+  dataAndState: string;
+  features: string[];
+  intendedUsers: string;
+  nonGoals: string[];
+  openQuestions: string[];
+  pages: string[];
+  purpose: string;
+  summary: string;
+  title: string;
+}
+export interface ForgeRunRequest {
+  contractVersion?: number;
+  runId: string;
+  workspaceId: string;
+}
+export interface ForgeSaveResponse {
+  alreadySaved: boolean;
+  artifact: ArtifactRecord;
+  body: string;
+  contractVersion: number;
+}
+/**
+ * One artifact version's metadata — the §9 field set.
+ */
+export interface ArtifactRecord {
+  artifactId: string;
+  contentHash: string;
+  /**
+   * Generator/model metadata: `{"kind":"manual"}` in this
+   * slice; generator slices record model provenance here.
+   */
+  generator?: {
+    [k: string]: unknown;
+  };
+  privacy: string;
+  projectId: string;
+  sourceReferences: string[];
+  /**
+   * The §9 timestamp: when this version was registered.
+   */
+  timestamp: string;
+  title: string;
+  type: string;
+  validationStatus: string;
+  version: number;
+}
+export interface ForgeSpecStartRequest {
+  conceptIndex: number;
+  contractVersion?: number;
+  intendedUsers: string;
+  mode?: string | null;
+  model?: string | null;
+  mustHave: string;
+  permitId?: string | null;
+  projectId: string;
+  provider?: string | null;
+  /**
+   * Essential questions (§29): bounded free-text answers.
+   */
+  purpose: string;
+  /**
+   * The saved idea/opportunity artifact to develop.
+   */
+  sourceArtifactId: string;
+  /**
+   * The exact artifact version to pin (never "latest").
+   */
+  sourceVersion: number;
+  workspaceId: string;
+  zeroCostLock?: boolean;
+}
+/**
+ * Cost knowledge about a model. `Unknown` is treated as paid everywhere
+ * cost is enforced (decision M5-D5).
+ */
+/**
+ * User-facing routing modes, verbatim from MASTER_SPEC §17.
+ */
+
+export interface ForgeStartResponse {
+  contractVersion: number;
+  disclosure?: DisclosureRecord | null;
+  runId: string;
+}
+/**
+ * "View What ANANSI Sent" at adapter level (§19): what was about to be
+ * / was transmitted, to whom, and why. The UI rendering of this record
+ * is application integration; producing it is the dispatcher's job.
+ */
+export interface DisclosureRecord {
+  attempts: AttemptRecord[];
+  costClass: CostClass;
+  endpointHost: string;
+  estimatedInputTokens: number;
+  local: boolean;
+  messageCount: number;
+  model: string;
+  provider: string;
+  redactionCount: number;
+  routingMode: RoutingMode;
+  routingReason: string;
+  segmentCount: number;
+  usage?: Usage | null;
+}
+export interface AttemptRecord {
+  model: string;
+  outcome: string;
+  provider: string;
+}
+export interface Usage {
+  inputTokens: number;
+  outputTokens: number;
 }
 export interface GroundedCitation {
   index: number;
@@ -671,11 +951,9 @@ export interface IdeasOptions {
  * Cost knowledge about a model. `Unknown` is treated as paid everywhere
  * cost is enforced (decision M5-D5).
  */
-export type CostClass = "free" | "paid" | "unknown";
 /**
  * User-facing routing modes, verbatim from MASTER_SPEC §17.
  */
-export type RoutingMode = "auto" | "autoFree" | "private" | "fast" | "deep" | "coding" | "vision" | "chooseModel";
 
 export interface IdeasGenerateStartResponse {
   contractVersion: number;
@@ -1440,6 +1718,64 @@ export interface OpportunitySourceRecord {
   sourceId: string;
   text?: string | null;
 }
+/**
+ * The model's specification fields (strict-parsed).
+ */
+export interface ProductSpec {
+  acceptanceCriteria: string[];
+  dataAndState: string;
+  features: string[];
+  intendedUsers: string;
+  nonGoals: string[];
+  openQuestions: string[];
+  pages: string[];
+  purpose: string;
+  summary: string;
+  title: string;
+}
+/**
+ * A saved product specification: pins the exact source
+ * artifact version and concept it was drafted from.
+ */
+export interface ProductSpecDoc {
+  answers: ForgeAnswers;
+  /**
+   * Snapshot of the concept as of the pinned version.
+   */
+  concept: {
+    [k: string]: unknown;
+  };
+  conceptIndex: number;
+  format: string;
+  formatVersion: number;
+  sourceArtifactId: string;
+  sourceVersion: number;
+  spec: ProductSpec;
+  template: string;
+}
+/**
+ * The user's three essential answers, kept verbatim.
+ */
+export interface ForgeAnswers {
+  intendedUsers: string;
+  mustHave: string;
+  purpose: string;
+}
+/**
+ * The model's specification fields (strict-parsed).
+ */
+export interface ProductSpec {
+  acceptanceCriteria: string[];
+  dataAndState: string;
+  features: string[];
+  intendedUsers: string;
+  nonGoals: string[];
+  openQuestions: string[];
+  pages: string[];
+  purpose: string;
+  summary: string;
+  title: string;
+}
 export interface ProviderAuthorizeRequest {
   allowUnknownCost?: boolean;
   contractVersion?: number;
@@ -2038,6 +2374,38 @@ export interface SnapshotRequest {
   contractVersion: number;
   jobId: string;
   workspaceId: string;
+}
+export interface SourceFile {
+  content: string;
+  path: string;
+}
+/**
+ * A saved source package: pins the specification version
+ * it was generated from, carries the plan and the bounded
+ * file set, and states its limitations verbatim.
+ */
+export interface SourcePackageDoc {
+  conceptName: string;
+  files: SourceFile[];
+  format: string;
+  formatVersion: number;
+  limitations: string[];
+  plan: DevelopmentPlan;
+  sourceArtifactId: string;
+  sourceVersion: number;
+  specArtifactId: string;
+  specVersion: number;
+  template: string;
+}
+export interface SourceFile {
+  content: string;
+  path: string;
+}
+export interface DevelopmentPlan {
+  buildNotes: string;
+  steps: string[];
+  summary: string;
+  testingNotes: string;
 }
 export interface StandardRubricResponse {
   contractVersion: number;
