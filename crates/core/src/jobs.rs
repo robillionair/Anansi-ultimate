@@ -215,6 +215,28 @@ impl Storage {
         read(&connection, workspace, id)
     }
 
+    /// Read a job WITHOUT opening the catalog through the
+    /// migrating connection. Verification paths must observe
+    /// the catalog exactly as it is: a lookup that silently
+    /// migrates would rewrite the durable schema it only
+    /// means to inspect — bumping a legacy schema-8 catalog
+    /// to 10 — and would leave that side effect behind even
+    /// when verification then fails. The vault seal depends
+    /// on this: its schema upgrade is explicit and
+    /// transactional, so it must see the true starting
+    /// version, and a pre-switch failure must leave the
+    /// catalog untouched.
+    pub(crate) fn read_job_readonly(&self, workspace: &str, id: &str) -> Result<Job, CommandError> {
+        validate_id(workspace)?;
+        validate_id(id)?;
+        let connection = Connection::open_with_flags(
+            self.root.join(crate::storage::DATABASE_NAME),
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+        )
+        .map_err(|_| missing())?;
+        read(&connection, workspace, id)
+    }
+
     /// Newest first, bounded page; state changes always require the observed version.
     pub fn list_jobs(&self, workspace: &str, offset: u32) -> Result<Vec<Job>, CommandError> {
         validate_id(workspace)?;

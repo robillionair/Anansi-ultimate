@@ -72,8 +72,15 @@ pub(crate) fn new_file(path: &Path) -> Result<File, CommandError> {
     Ok(file)
 }
 pub(crate) fn stage(storage: &Storage) -> Result<Storage, CommandError> {
-    // connection initializes/validates the trusted root before any stage paths are made.
-    storage.connection(false)?.ok_or_else(unavailable)?;
+    // Validate the trusted root WITHOUT opening its catalog:
+    // staging serves verification paths, which must not
+    // rewrite the live schema through the migrating
+    // connection (see Storage::read_job_readonly). Callers
+    // that operate on the live catalog open it themselves
+    // (execute_backup does, immediately after staging).
+    if !storage.root_ready(false)? {
+        return Err(unavailable());
+    }
     let parent = storage.root.join("backup-staging");
     reject_links(&parent).map_err(|_| unavailable())?;
     match fs::create_dir(&parent) {
@@ -725,7 +732,13 @@ impl Storage {
         job: &str,
         artifact: &str,
     ) -> Result<VerifiedSnapshot, CommandError> {
-        let owned = self.read_job(workspace, job)?;
+        // The job lookup is read-only on purpose: verifying a
+        // snapshot must not migrate the live catalog's schema.
+        // The vault seal's explicit, transactional upgrade
+        // depends on observing the true starting version, and
+        // a failed verification must leave the catalog
+        // untouched (see Storage::read_job_readonly).
+        let owned = self.read_job_readonly(workspace, job)?;
         if !matches!(owned.selection, ExportSelection::Backup { .. })
             || owned.state != crate::jobs::JobState::Completed
             || owned.artifact_id.as_deref() != Some(artifact)

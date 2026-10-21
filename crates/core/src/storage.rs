@@ -132,7 +132,7 @@ impl Storage {
         validate_root(&root)?;
         Ok(Self { root })
     }
-    fn root_ready(&self, create: bool) -> Result<bool, CommandError> {
+    pub(crate) fn root_ready(&self, create: bool) -> Result<bool, CommandError> {
         validate_root(&self.root)?;
         if !self.root.exists() {
             if !create {
