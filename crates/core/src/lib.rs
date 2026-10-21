@@ -2,6 +2,7 @@ pub mod readiness;
 pub use readiness::*;
 pub mod ai_discovery;
 pub mod artifacts;
+pub mod ideas;
 pub mod ask;
 pub mod ask_stream;
 pub mod backup;

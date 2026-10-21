@@ -240,7 +240,7 @@ struct ProjectMeta {
 /// Resolve the §9 project identity: the project memory's current
 /// metadata in this workspace. Unknown id → NotFound; a memory
 /// that is not a project → InvalidRequest.
-fn project_meta(
+pub(crate) fn project_meta(
     connection: &Connection,
     workspace_id: &str,
     project_id: &str,
@@ -263,7 +263,7 @@ fn project_meta(
     Ok(meta)
 }
 
-fn require_project_writable(
+pub(crate) fn require_project_writable(
     connection: &Connection,
     workspace_id: &str,
     project_id: &str,
@@ -314,6 +314,27 @@ impl Storage {
         &self,
         req: &ArtifactRegisterRequest,
     ) -> Result<ArtifactDetails, CommandError> {
+        self.artifact_register_inner(req, serde_json::json!({ "kind": "manual" }), "unvalidated")
+    }
+
+    /// Registration for machine-generated artifacts (idea
+    /// generation): the caller supplies the generator metadata
+    /// and the validation status its own validation earned.
+    pub(crate) fn artifact_register_generated(
+        &self,
+        req: &ArtifactRegisterRequest,
+        generator: Value,
+        validation_status: &str,
+    ) -> Result<ArtifactDetails, CommandError> {
+        self.artifact_register_inner(req, generator, validation_status)
+    }
+
+    fn artifact_register_inner(
+        &self,
+        req: &ArtifactRegisterRequest,
+        generator: Value,
+        validation_status: &str,
+    ) -> Result<ArtifactDetails, CommandError> {
         check_id(&req.workspace_id)?;
         check_id(&req.project_id)?;
         validate_registration(req)?;
@@ -321,13 +342,12 @@ impl Storage {
         require_project_writable(&connection, &req.workspace_id, &req.project_id)?;
         let artifact_id = new_artifact_id();
         let hash = content::hash(req.body.as_bytes());
-        let generator = serde_json::json!({ "kind": "manual" });
         connection
             .execute(
                 "INSERT INTO artifact_versions (workspace_id, artifact_id, project_id, version, \
                  artifact_type, title, body, content_hash, source_references, generator, \
                  validation_status, privacy, created_at) \
-                 VALUES (?1, ?2, ?3, 1, ?4, ?5, ?6, ?7, ?8, ?9, 'unvalidated', ?10, ?11)",
+                 VALUES (?1, ?2, ?3, 1, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
                 params![
                     req.workspace_id,
                     artifact_id,
@@ -338,6 +358,7 @@ impl Storage {
                     hash,
                     serde_json::to_string(&req.source_references).unwrap_or_default(),
                     generator.to_string(),
+                    validation_status,
                     req.privacy,
                     now_iso(),
                 ],

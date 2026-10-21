@@ -955,6 +955,31 @@ pub fn has_config(scope: &CallerScope) -> bool {
     with_backend(scope, |state| Ok(state.config.is_some())).unwrap_or(false)
 }
 
+/// The workspace's configured chat-capable models, in
+/// configuration order, as (provider, model) pairs. Used by
+/// higher-level workflows (idea generation) to resolve a
+/// default model from the same trusted configuration the
+/// dispatcher enforces — never from caller-asserted policy.
+pub fn configured_chat_models(scope: &CallerScope) -> Vec<(String, String)> {
+    with_backend(scope, |state| {
+        let mut out = Vec::new();
+        if let Some(config) = &state.config {
+            for provider in &config.providers {
+                if !provider.config.enabled {
+                    continue;
+                }
+                for model in &provider.models {
+                    if model.capabilities.chat {
+                        out.push((model.provider.clone(), model.id.clone()));
+                    }
+                }
+            }
+        }
+        Ok(out)
+    })
+    .unwrap_or_default()
+}
+
 /// The installed configuration as JSON (for persistence after a
 /// successful configure).
 pub fn configured_config_json(scope: &CallerScope) -> Option<String> {
@@ -1092,6 +1117,9 @@ pub fn providers_command(
     value: Value,
     scope: &CallerScope,
 ) -> Result<Value, CommandError> {
+    if operation.starts_with("ideas-") {
+        return crate::ideas::ideas_command(operation, value, scope);
+    }
     match operation {
         "providers-catalog" => to_value(&ProviderCatalogResponse {
             contract_version: 1,
