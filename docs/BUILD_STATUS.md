@@ -1,3 +1,39 @@
+## 2026-10-21 — M7 Slice 1: Product Forge (concept → specification → source package)
+
+Branch `muse/m7-slice1-product-forge` over the verified
+R17 preview checkpoint `e915f63` (Windows UI acceptance
+recorded by Antigravity at `15affdc2`). One template: a
+dependency-free static web application, labelled a
+prototype throughout. `forge-spec-*` / `forge-build-*`
+runs ride the M5 substrate with the established run
+discipline; generation pins exact artifact versions (spec
+from the pinned concept version, build from the pinned
+specification version); outputs are strict-validated
+(package files: 2–12, portable relative paths, allowlisted
+extensions, size caps, root index.html + README.md);
+saves are immutable `specification` / `source-package`
+artifacts; `forge-export` returns a deterministic USTAR
+tarball + provenance manifest; restore remaps the
+spec/package reference chain fail-closed. Per §32 there
+is no execution sandbox in this slice: build/test/
+preview/deployment stages are shown Unavailable and
+export-for-review is the deliverable; generated code is
+never executed. M6 status documentation reconciled in
+the same checkpoint (PHASE-006 status, proposal banner;
+nothing declared complete that is not). Linux evidence:
+core 220/225 (the 4 environmental live-Ollama failures
+plus one test list-ordering assumption in the new forge
+suite, fixed in this checkpoint and re-verified
+standalone: forge unit 6/6, forge_generation 3/3,
+forge_restore 2/2); providers+API 144/0; node contracts/UI
+54/54; e2e canonical subset 10/10 incl. the new
+forge.spec; strict Clippy + fmt clean; docs PASS.
+Record: `docs/handoffs/M7-slice1-addendum.md`; design:
+`docs/handoffs/M7-slice1-design.md`; AN-012 in progress.
+**Pending: Windows verification of this slice; the §32
+execution sandbox is a later separately approved slice;
+M5 production gates remain open.**
+
 ## 2026-10-21 — R17 integrated preview checkpoint (this checkpoint)
 
 Branch `codex/local-testing-r17`, created directly from the

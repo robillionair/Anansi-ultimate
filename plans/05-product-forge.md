@@ -1,6 +1,6 @@
 # M7 — Product Forge
 
-Status: tracked planning task; detailed implementation design and acceptance approval required before coding. This is not an implemented feature or a complete technical design.
+Status (2026-10-21): **first bounded vertical slice implemented** under the owner's M7 assignment — saved concept → product specification → development plan → generated source package → inert inspection → versioned save → export-for-review, one static-web prototype template, on branch `muse/m7-slice1-product-forge` (design: `docs/handoffs/M7-slice1-design.md`; record: `docs/handoffs/M7-slice1-addendum.md`). **Not implemented and not claimed:** the §32 execution sandbox and with it build/test/preview/deployment stages, the remaining §28 product types, and production certification — each remains planned for later separately approved slices.
 
 Authority: [master specification](../docs/MASTER_SPEC.md), sections 28–33, 66–67, 79–80; [canonical roadmap](../docs/ROADMAP.md).
 

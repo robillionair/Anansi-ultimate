@@ -586,12 +586,13 @@ fn invalid_outputs_and_provider_failure_save_nothing() {
             json!({ "contractVersion": 1, "workspaceId": f.ws, "projectId": f.project }),
         )
         .unwrap();
-    let types: Vec<&str> = list["artifacts"]
+    let mut types: Vec<&str> = list["artifacts"]
         .as_array()
         .unwrap()
         .iter()
         .map(|a| a["type"].as_str().unwrap())
         .collect();
+    types.sort();
     assert_eq!(types, ["idea", "specification"]);
 }
 
