@@ -104,6 +104,29 @@ fn remap_artifact_row(
             columns[body_i] = Value::Text(rewritten);
         }
     }
+    // Product Forge bodies pin other artifacts by id
+    // (specification → its source set; source-package → its
+    // specification and source set): those resolve to the
+    // restored artifacts, fail closed when a reference is
+    // not in the package, and the hash is recomputed when
+    // the body changed.
+    let is_specification = matches!(&columns[type_i], Value::Text(t) if t == "specification");
+    let is_package = matches!(&columns[type_i], Value::Text(t) if t == "source-package");
+    if is_specification || is_package {
+        let body_i = index("body")?;
+        let hash_i = index("content_hash")?;
+        if let Value::Text(body) = &columns[body_i] {
+            let rewritten = if is_specification {
+                crate::forge::remap_specification_references(body, ids)?
+            } else {
+                crate::forge::remap_source_package_references(body, ids)?
+            };
+            if let Some(rewritten) = rewritten {
+                columns[hash_i] = Value::Text(crate::content::hash(rewritten.as_bytes()));
+                columns[body_i] = Value::Text(rewritten);
+            }
+        }
+    }
     // Opportunity sets (type `idea`, body format
     // `anansi-opportunity-set`) embed the memory ids of their
     // memory sources: those resolve to the restored memories,

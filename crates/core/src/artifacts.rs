@@ -589,6 +589,8 @@ impl Core {
                     rubric: crate::evaluations::standard_rubric(),
                 })
             }
+            // M7 Slice 1: source-package export-for-review.
+            "forge-export" => crate::forge::export_package(&storage, value),
             _ => Err(invalid("Use a supported artifact operation.")),
         }
     }

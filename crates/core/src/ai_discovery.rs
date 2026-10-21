@@ -823,7 +823,15 @@ impl Core {
             | "opportunities-generate-start"
             | "opportunities-generate-poll"
             | "opportunities-generate-cancel"
-            | "opportunities-save" => {
+            | "opportunities-save"
+            | "forge-spec-start"
+            | "forge-spec-poll"
+            | "forge-spec-cancel"
+            | "forge-spec-save"
+            | "forge-build-start"
+            | "forge-build-poll"
+            | "forge-build-cancel"
+            | "forge-build-save" => {
                 // The session scope arrives only via
                 // `callerContext`, which the API layer stamps from
                 // the authenticated token (overwriting client
@@ -860,6 +868,10 @@ impl Core {
                             | "ideas-generate-cancel"
                             | "opportunities-generate-poll"
                             | "opportunities-generate-cancel"
+                            | "forge-spec-poll"
+                            | "forge-spec-cancel"
+                            | "forge-build-poll"
+                            | "forge-build-cancel"
                     ) {
                         // Poll/cancel address state that a validated
                         // stream-start created; the run record
@@ -924,6 +936,8 @@ impl Core {
                         | "providers-usage"
                         | "ideas-generate-start"
                         | "opportunities-generate-start"
+                        | "forge-spec-start"
+                        | "forge-build-start"
                 ) && !crate::provider_dispatch::has_config(&scope)
                     && let (Ok(root), Some(wid)) = (self.storage_root(), &workspace_id)
                     && let Some(json) = crate::provider_dispatch::load_config_file(&root, wid)?

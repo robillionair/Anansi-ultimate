@@ -1123,6 +1123,9 @@ pub fn providers_command(
     if operation.starts_with("opportunities-") {
         return crate::opportunities::opportunities_command(operation, value, scope);
     }
+    if operation.starts_with("forge-") {
+        return crate::forge::forge_command(operation, value, scope);
+    }
     match operation {
         "providers-catalog" => to_value(&ProviderCatalogResponse {
             contract_version: 1,
