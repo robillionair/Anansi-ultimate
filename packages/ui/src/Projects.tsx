@@ -784,6 +784,15 @@ function EvaluationPanel(props: EvalPanelProps) {
   const [choice, setChoice] = useState<string>('standard');
   const [doc, setDoc] = useState<RubricDoc | null>(null);
   const [docVersion, setDocVersion] = useState(0);
+  // While a chosen rubric artifact is being read, the editor
+  // still shows the previous document: an edit made in that
+  // window would be silently overwritten when the read
+  // resolves, and an evaluation saved then would cite the
+  // new artifact with the old document/version. The form is
+  // disabled until the read lands, and a superseded read
+  // never applies.
+  const [loadingRubric, setLoadingRubric] = useState(false);
+  const rubricLoadSeq = useRef(0);
   const [selection, setSelection] = useState<number[]>([]);
   const [scores, setScores] = useState<Record<string, { score: string; rationale: string }>>({});
   const [panelError, setPanelError] = useState('');
@@ -802,21 +811,29 @@ function EvaluationPanel(props: EvalPanelProps) {
   }, [client, workspaceId, projectId]);
 
   async function chooseRubric(value: string) {
+    const seq = ++rubricLoadSeq.current;
     setChoice(value);
     setPanelError('');
     if (value === 'standard') {
       setDoc(standard);
       setDocVersion(0);
+      setLoadingRubric(false);
       return;
     }
     const record = props.rubricArtifacts.find(a => a.artifactId === value);
     if (!record) return;
+    setLoadingRubric(true);
     try {
       const details = await client.readProjectArtifact(workspaceId, value, record.version);
+      if (rubricLoadSeq.current !== seq) return;
       setDoc(JSON.parse(details.body) as RubricDoc);
       setDocVersion(record.version);
     } catch (error) {
-      setPanelError(error instanceof Error ? error.message : 'That rubric could not be read.');
+      if (rubricLoadSeq.current === seq) {
+        setPanelError(error instanceof Error ? error.message : 'That rubric could not be read.');
+      }
+    } finally {
+      if (rubricLoadSeq.current === seq) setLoadingRubric(false);
     }
   }
 
@@ -968,40 +985,41 @@ function EvaluationPanel(props: EvalPanelProps) {
           <option key={a.artifactId} value={a.artifactId}>{a.title} (v{a.version})</option>
         ))}
       </select>
+      {loadingRubric && <p className="help" role="status">Loading the selected rubric…</p>}
       {doc && (
         <div>
           <label htmlFor="eval-rubric-name">Rubric name</label>
-          <input id="eval-rubric-name" value={doc.name} onChange={e => setDoc({ ...doc, name: e.target.value })} />
+          <input id="eval-rubric-name" disabled={loadingRubric} value={doc.name} onChange={e => setDoc({ ...doc, name: e.target.value })} />
           {doc.dimensions.map((dim, i) => (
             <div key={dim.key + i}>
               <label>
                 Dimension label{' '}
-                <input value={dim.label} onChange={e => patchDimension(i, { label: e.target.value })} />
+                <input disabled={loadingRubric} value={dim.label} onChange={e => patchDimension(i, { label: e.target.value })} />
               </label>{' '}
               <label>
                 Weight{' '}
-                <input type="number" min="0" step="0.5" value={dim.weight}
+                <input type="number" min="0" step="0.5" disabled={loadingRubric} value={dim.weight}
                   onChange={e => patchDimension(i, { weight: Number(e.target.value) })} />
               </label>{' '}
               <label>
                 Description{' '}
-                <input value={dim.description} onChange={e => patchDimension(i, { description: e.target.value })} />
+                <input disabled={loadingRubric} value={dim.description} onChange={e => patchDimension(i, { description: e.target.value })} />
               </label>{' '}
-              <button type="button" className="secondary" disabled={doc.dimensions.length <= 1}
+              <button type="button" className="secondary" disabled={loadingRubric || doc.dimensions.length <= 1}
                 onClick={() => setDoc({ ...doc, dimensions: doc.dimensions.filter((_, x) => x !== i) })}>
                 Remove dimension
               </button>
               <span className="help"> key: {dim.key}</span>
             </div>
           ))}
-          <button type="button" className="secondary" disabled={doc.dimensions.length >= 8}
+          <button type="button" className="secondary" disabled={loadingRubric || doc.dimensions.length >= 8}
             onClick={() => {
               const n = doc.dimensions.length + 1;
               setDoc({ ...doc, dimensions: [...doc.dimensions, { key: `dimension-${n}`, label: `Dimension ${n}`, description: '', weight: 1 }] });
             }}>
             Add dimension
           </button>{' '}
-          <button type="button" className="secondary" disabled={busy} onClick={() => void saveRubric()}>
+          <button type="button" className="secondary" disabled={busy || loadingRubric} onClick={() => void saveRubric()}>
             {choice === 'standard' ? 'Save rubric as artifact' : 'Save rubric as new version'}
           </button>
         </div>
@@ -1046,7 +1064,7 @@ function EvaluationPanel(props: EvalPanelProps) {
           </article>
         );
       })}
-      <button type="button" disabled={busy || selection.length === 0} onClick={() => void saveEvaluation()}>
+      <button type="button" disabled={busy || loadingRubric || selection.length === 0} onClick={() => void saveEvaluation()}>
         Save evaluation
       </button>
     </section>
