@@ -584,10 +584,10 @@ impl Core {
             "evaluations-standard-rubric" => {
                 let req: ArtifactListRequest = parse(value)?;
                 require_v1(req.contract_version)?;
-                to_value(&serde_json::json!({
-                    "contractVersion": 1,
-                    "rubric": crate::evaluations::standard_rubric(),
-                }))
+                to_value(&crate::evaluations::StandardRubricResponse {
+                    contract_version: 1,
+                    rubric: crate::evaluations::standard_rubric(),
+                })
             }
             _ => Err(invalid("Use a supported artifact operation.")),
         }

@@ -11,9 +11,7 @@
 //! silently scored zero. Scores are structured judgement,
 //! not market evidence; the stored document says so.
 
-use crate::artifacts::{
-    ArtifactListRequest, ArtifactRecord, ArtifactRegisterRequest,
-};
+use crate::artifacts::{ArtifactListRequest, ArtifactRecord, ArtifactRegisterRequest};
 use crate::ideas::{IdeaConcept, parse_idea_set};
 use crate::storage::{Storage, unavailable};
 use crate::{CommandError, ErrorCode};
@@ -122,22 +120,37 @@ pub fn validate_rubric(doc: &RubricDoc) -> Result<(), CommandError> {
             ));
         }
         if dim.label.trim().is_empty() || dim.label.chars().count() > 80 {
-            return Err(invalid("Each rubric dimension needs a label of up to 80 characters."));
+            return Err(invalid(
+                "Each rubric dimension needs a label of up to 80 characters.",
+            ));
         }
         if dim.description.chars().count() > 300 {
-            return Err(invalid("Rubric dimension descriptions are up to 300 characters."));
+            return Err(invalid(
+                "Rubric dimension descriptions are up to 300 characters.",
+            ));
         }
         if !dim.weight.is_finite() || dim.weight < 0.0 || dim.weight > 1000.0 {
-            return Err(invalid("Rubric weights are finite numbers between 0 and 1000."));
+            return Err(invalid(
+                "Rubric weights are finite numbers between 0 and 1000.",
+            ));
         }
         if dim.weight > 0.0 {
             any_weight = true;
         }
     }
     if !any_weight {
-        return Err(invalid("At least one rubric dimension needs a positive weight."));
+        return Err(invalid(
+            "At least one rubric dimension needs a positive weight.",
+        ));
     }
     Ok(())
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct StandardRubricResponse {
+    pub contract_version: u8,
+    pub rubric: RubricDoc,
 }
 
 // ---------------------------------------------------------------------
@@ -183,9 +196,9 @@ pub fn summarize(
                 if dim.weight <= 0.0 {
                     continue;
                 }
-                let entry = assessments.iter().find(|a| {
-                    a.concept_index == concept_index && a.dimension == dim.key
-                });
+                let entry = assessments
+                    .iter()
+                    .find(|a| a.concept_index == concept_index && a.dimension == dim.key);
                 if let Some(entry) = entry
                     && let Some(score) = entry.score
                 {
@@ -202,11 +215,8 @@ pub fn summarize(
                     None
                 },
                 assessed_dimensions: assessed,
-                total_dimensions: rubric
-                    .dimensions
-                    .iter()
-                    .filter(|d| d.weight > 0.0)
-                    .count() as u32,
+                total_dimensions: rubric.dimensions.iter().filter(|d| d.weight > 0.0).count()
+                    as u32,
             }
         })
         .collect()
@@ -297,9 +307,7 @@ pub fn save_evaluation(
         return Err(not_found());
     }
     if source.artifact.artifact_type != "idea" {
-        return Err(invalid(
-            "Evaluations start from a saved idea set artifact.",
-        ));
+        return Err(invalid("Evaluations start from a saved idea set artifact."));
     }
     let idea_set = parse_idea_set(&source.body, "").map_err(|e| invalid(&e))?;
     let rubric_source = storage.artifact_read(
@@ -314,16 +322,15 @@ pub fn save_evaluation(
     }
     let rubric = parse_rubric(&rubric_source.body)?;
 
-    let concepts: Vec<IdeaConcept> = indices
-        .iter()
-        .map(|&i| {
-            idea_set
-                .concepts
-                .get(i as usize)
-                .cloned()
-                .ok_or_else(|| invalid("A selected concept does not exist in the source idea set."))
-        })
-        .collect::<Result<_, _>>()?;
+    let concepts: Vec<IdeaConcept> =
+        indices
+            .iter()
+            .map(|&i| {
+                idea_set.concepts.get(i as usize).cloned().ok_or_else(|| {
+                    invalid("A selected concept does not exist in the source idea set.")
+                })
+            })
+            .collect::<Result<_, _>>()?;
 
     // Assessment validation: known concept + dimension, score
     // in range, rationale bounded, no duplicates. Missing
@@ -392,8 +399,11 @@ pub fn save_evaluation(
         let versions = storage.artifact_versions(&req.workspace_id, &record.artifact_id)?;
         for version in versions.versions {
             if version.content_hash == candidate_hash {
-                let details =
-                    storage.artifact_read(&req.workspace_id, &record.artifact_id, Some(version.version))?;
+                let details = storage.artifact_read(
+                    &req.workspace_id,
+                    &record.artifact_id,
+                    Some(version.version),
+                )?;
                 return Ok(EvaluationsSaveResponse {
                     contract_version: 1,
                     artifact: details.artifact,

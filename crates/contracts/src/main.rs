@@ -5,8 +5,8 @@ use anansi_core::artifacts::{
     ArtifactRecord, ArtifactRegisterRequest, ArtifactReviseRequest, ArtifactVersionsResponse,
 };
 use anansi_core::evaluations::{
-    AssessmentInput, ConceptSummary, EvaluationsSaveRequest, EvaluationsSaveResponse, RubricDoc,
-    RubricDimension, StandardRubricResponse,
+    AssessmentInput, ConceptSummary, EvaluationsSaveRequest, EvaluationsSaveResponse,
+    RubricDimension, RubricDoc, StandardRubricResponse,
 };
 use anansi_core::ideas::{
     IdeaConcept, IdeaSet, IdeasGenerateStartRequest, IdeasGenerateStartResponse, IdeasOptions,

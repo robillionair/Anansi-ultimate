@@ -92,7 +92,10 @@ fn fixture() -> Fixture {
         ws,
         project,
         idea_artifact: idea["artifact"]["artifactId"].as_str().unwrap().to_string(),
-        rubric_artifact: rubric["artifact"]["artifactId"].as_str().unwrap().to_string(),
+        rubric_artifact: rubric["artifact"]["artifactId"]
+            .as_str()
+            .unwrap()
+            .to_string(),
     }
 }
 
@@ -153,7 +156,10 @@ fn evaluation_save_embeds_snapshot_summary_and_provenance() {
     assert_eq!(body["summary"][1]["assessedDimensions"], 2);
     assert_eq!(body["summary"][1]["totalDimensions"], 5);
     assert!(
-        body["note"].as_str().unwrap().contains("not market evidence"),
+        body["note"]
+            .as_str()
+            .unwrap()
+            .contains("not market evidence"),
         "the honesty note is stored with the document"
     );
 }
@@ -193,7 +199,8 @@ fn identical_save_is_idempotent_and_rubric_revision_never_rewrites_history() {
             json!({ "contractVersion": 1, "workspaceId": f.ws, "artifactId": f.rubric_artifact, "version": 1 }),
         )
         .unwrap();
-    let mut rubric_doc: Value = serde_json::from_str(rubric_read["body"].as_str().unwrap()).unwrap();
+    let mut rubric_doc: Value =
+        serde_json::from_str(rubric_read["body"].as_str().unwrap()).unwrap();
     rubric_doc["dimensions"][0]["weight"] = json!(3.0);
     f.core
         .artifacts_command(
@@ -296,7 +303,10 @@ fn refusals_bounds_isolation_archive_and_restart() {
             json!({ "contractVersion": 1, "workspaceId": f2.ws, "id": f2.project }),
         )
         .unwrap();
-    let rev = project["memory"]["revisionId"].as_str().unwrap().to_string();
+    let rev = project["memory"]["revisionId"]
+        .as_str()
+        .unwrap()
+        .to_string();
     f2.core
         .memory_command(
             "revise",
@@ -323,5 +333,8 @@ fn refusals_bounds_isolation_archive_and_restart() {
         )
         .unwrap();
     assert_eq!(read["body"], saved["body"]);
-    assert_eq!(read["artifact"]["contentHash"], saved["artifact"]["contentHash"]);
+    assert_eq!(
+        read["artifact"]["contentHash"],
+        saved["artifact"]["contentHash"]
+    );
 }
