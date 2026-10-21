@@ -594,7 +594,7 @@ impl Core {
                 })
             }
             // M7 Slice 1: source-package export-for-review.
-            "forge-export" => crate::forge::export_package(&storage, value),
+            "forge-export" => crate::forge::export_package(storage, value),
             _ => Err(invalid("Use a supported artifact operation.")),
         }
     }

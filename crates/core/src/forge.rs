@@ -303,7 +303,9 @@ fn field_list(
     for item in items {
         let text = item
             .as_str()
-            .ok_or_else(|| format!("the model did not return a usable {what} ({field} entries must be text)"))?
+            .ok_or_else(|| {
+                format!("the model did not return a usable {what} ({field} entries must be text)")
+            })?
             .trim();
         if text.is_empty() || text.chars().count() > max_chars {
             return Err(format!(
@@ -318,15 +320,19 @@ fn field_list(
 /// Parse and validate a specification draft. The caller
 /// wraps it in a ProductSpecDoc with the pinned provenance.
 pub fn parse_product_spec(raw: &str) -> Result<ProductSpec, String> {
-    let parsed: Value = serde_json::from_str(strip_fences(raw))
-        .map_err(|_| "the model did not return a structured product specification (not JSON)".to_string())?;
+    let parsed: Value = serde_json::from_str(strip_fences(raw)).map_err(|_| {
+        "the model did not return a structured product specification (not JSON)".to_string()
+    })?;
     let data_and_state = parsed
         .get("dataAndState")
         .and_then(|v| v.as_str())
         .unwrap_or("")
         .trim();
     if data_and_state.chars().count() > 600 {
-        return Err("the model did not return a usable product specification (dataAndState is too long)".to_string());
+        return Err(
+            "the model did not return a usable product specification (dataAndState is too long)"
+                .to_string(),
+        );
     }
     Ok(ProductSpec {
         title: field_str(&parsed, "title", 120, "product specification")?,
@@ -359,7 +365,9 @@ pub fn validate_package_path(path: &str) -> Result<(), String> {
         return Err(fail("path must be 1 to 96 characters"));
     }
     if path.starts_with('/') || path.contains('\\') || path.contains(':') {
-        return Err(fail("absolute paths, backslashes and drive letters are not allowed"));
+        return Err(fail(
+            "absolute paths, backslashes and drive letters are not allowed",
+        ));
     }
     let segments: Vec<&str> = path.split('/').collect();
     for segment in &segments {
@@ -376,7 +384,9 @@ pub fn validate_package_path(path: &str) -> Result<(), String> {
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
         {
-            return Err(fail("segments may use letters, digits, '.', '_' and '-' only"));
+            return Err(fail(
+                "segments may use letters, digits, '.', '_' and '-' only",
+            ));
         }
     }
     let last = segments[segments.len() - 1].to_lowercase();
@@ -384,7 +394,9 @@ pub fn validate_package_path(path: &str) -> Result<(), String> {
         .iter()
         .any(|ext| last.ends_with(ext))
     {
-        return Err(fail("only .html, .css, .js, .md and .txt files are allowed"));
+        return Err(fail(
+            "only .html, .css, .js, .md and .txt files are allowed",
+        ));
     }
     Ok(())
 }
@@ -447,14 +459,13 @@ pub fn validate_package_files(files: &[SourceFile]) -> Result<(), String> {
 
 /// Parse and validate a build draft (plan + files). The
 /// caller wraps it in a SourcePackageDoc with provenance.
-pub fn parse_source_package(
-    raw: &str,
-) -> Result<(DevelopmentPlan, Vec<SourceFile>), String> {
-    let parsed: Value = serde_json::from_str(strip_fences(raw))
-        .map_err(|_| "the model did not return a structured source package (not JSON)".to_string())?;
-    let plan_doc = parsed
-        .get("plan")
-        .ok_or_else(|| "the model did not return a structured source package (missing plan)".to_string())?;
+pub fn parse_source_package(raw: &str) -> Result<(DevelopmentPlan, Vec<SourceFile>), String> {
+    let parsed: Value = serde_json::from_str(strip_fences(raw)).map_err(|_| {
+        "the model did not return a structured source package (not JSON)".to_string()
+    })?;
+    let plan_doc = parsed.get("plan").ok_or_else(|| {
+        "the model did not return a structured source package (missing plan)".to_string()
+    })?;
     let plan = DevelopmentPlan {
         summary: field_str(plan_doc, "summary", 1200, "development plan")?,
         steps: field_list(plan_doc, "steps", 2, 10, 300, "development plan")?,
@@ -464,18 +475,26 @@ pub fn parse_source_package(
     let raw_files = parsed
         .get("files")
         .and_then(|v| v.as_array())
-        .ok_or_else(|| "the model did not return a structured source package (missing files)".to_string())?;
+        .ok_or_else(|| {
+            "the model did not return a structured source package (missing files)".to_string()
+        })?;
     let mut files = Vec::new();
     for entry in raw_files {
         let path = entry
             .get("path")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| "the model did not return a structured source package (a file has no path)".to_string())?
+            .ok_or_else(|| {
+                "the model did not return a structured source package (a file has no path)"
+                    .to_string()
+            })?
             .to_string();
         let content = entry
             .get("content")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| "the model did not return a structured source package (a file has no content)".to_string())?
+            .ok_or_else(|| {
+                "the model did not return a structured source package (a file has no content)"
+                    .to_string()
+            })?
             .to_string();
         files.push(SourceFile { path, content });
     }
@@ -820,7 +839,9 @@ fn start_spec(value: Value, scope: &CallerScope) -> Result<Value, CommandError> 
         ));
     }
     if req.source_version < 1 {
-        return Err(invalid("Pin an exact source artifact version (1 or later)."));
+        return Err(invalid(
+            "Pin an exact source artifact version (1 or later).",
+        ));
     }
     let answers = ForgeAnswers {
         purpose: bounded_answer(&req.purpose, "purpose")?,
@@ -854,8 +875,11 @@ fn start_spec(value: Value, scope: &CallerScope) -> Result<Value, CommandError> 
     }
     let body_json: Value = serde_json::from_str(&source.body)
         .map_err(|_| invalid("The selected artifact is not a readable idea set."))?;
-    crate::ideas::parse_idea_set(&source.body, "forge")
-        .map_err(|e| invalid(&format!("The selected artifact is not a valid idea set: {e}")))?;
+    crate::ideas::parse_idea_set(&source.body, "forge").map_err(|e| {
+        invalid(&format!(
+            "The selected artifact is not a valid idea set: {e}"
+        ))
+    })?;
     let concepts = body_json
         .get("concepts")
         .and_then(|v| v.as_array())
@@ -929,11 +953,8 @@ fn start_build(value: Value, scope: &CallerScope) -> Result<Value, CommandError>
     drop(connection);
 
     // Pin the exact specification version.
-    let spec_artifact = storage.artifact_read(
-        &workspace_id,
-        &req.spec_artifact_id,
-        Some(req.spec_version),
-    )?;
+    let spec_artifact =
+        storage.artifact_read(&workspace_id, &req.spec_artifact_id, Some(req.spec_version))?;
     if spec_artifact.artifact.project_id != req.project_id {
         return Err(invalid(
             "The selected specification does not belong to this project.",
@@ -944,9 +965,8 @@ fn start_build(value: Value, scope: &CallerScope) -> Result<Value, CommandError>
             "Product Forge builds from a saved product specification artifact.",
         ));
     }
-    let spec_doc: ProductSpecDoc = serde_json::from_str(&spec_artifact.body).map_err(|_| {
-        invalid("The selected artifact is not a readable product specification.")
-    })?;
+    let spec_doc: ProductSpecDoc = serde_json::from_str(&spec_artifact.body)
+        .map_err(|_| invalid("The selected artifact is not a readable product specification."))?;
     if spec_doc.format != "anansi-product-spec" {
         return Err(invalid(
             "The selected artifact is not a product specification.",
@@ -1534,8 +1554,10 @@ pub fn export_package(storage: &Storage, value: Value) -> Result<Value, CommandE
     });
     let manifest_text =
         serde_json::to_string_pretty(&manifest).map_err(|_| crate::storage::unavailable())?;
-    let mut entries: Vec<(String, Vec<u8>)> =
-        vec![("ANANSI-PACKAGE.json".to_string(), manifest_text.into_bytes())];
+    let mut entries: Vec<(String, Vec<u8>)> = vec![(
+        "ANANSI-PACKAGE.json".to_string(),
+        manifest_text.into_bytes(),
+    )];
     for file in &doc.files {
         entries.push((file.path.clone(), file.content.clone().into_bytes()));
     }
@@ -1543,7 +1565,10 @@ pub fn export_package(storage: &Storage, value: Value) -> Result<Value, CommandE
     let tar = build_tar(&entries);
     serde_json::to_value(ForgeExportResponse {
         contract_version: 1,
-        filename: format!("{}-v{}.tar", details.artifact.artifact_id, details.artifact.version),
+        filename: format!(
+            "{}-v{}.tar",
+            details.artifact.artifact_id, details.artifact.version
+        ),
         sha256: crate::content::hash(&tar),
         tar_base64: base64_encode(&tar),
         files: paths,
@@ -1650,7 +1675,13 @@ mod tests {
         ] {
             assert!(validate_package_path(bad).is_err(), "accepted {bad:?}");
         }
-        for good in ["index.html", "README.md", "css/site.css", "js/app-2.js", "notes.txt"] {
+        for good in [
+            "index.html",
+            "README.md",
+            "css/site.css",
+            "js/app-2.js",
+            "notes.txt",
+        ] {
             assert!(validate_package_path(good).is_ok(), "refused {good:?}");
         }
     }
@@ -1705,7 +1736,7 @@ mod tests {
         // Second member header follows the first member's
         // padded content: 512 (header) + 512 (2 bytes data).
         assert_eq!(&a[1024..1034], b"index.html");
-        assert!(a.len() % 512 == 0);
+        assert!(a.len().is_multiple_of(512));
     }
 
     #[test]
@@ -1723,14 +1754,10 @@ mod tests {
         ids.insert("old-src".to_string(), "new-src".to_string());
         ids.insert("old-spec".to_string(), "new-spec".to_string());
         let spec = "{\"format\":\"anansi-product-spec\",\"sourceArtifactId\":\"old-src\"}";
-        let out = remap_specification_references(spec, &ids)
-            .unwrap()
-            .unwrap();
+        let out = remap_specification_references(spec, &ids).unwrap().unwrap();
         assert!(out.contains("\"new-src\""));
         let pkg = "{\"format\":\"anansi-source-package\",\"specArtifactId\":\"old-spec\",\"sourceArtifactId\":\"old-src\"}";
-        let out = remap_source_package_references(pkg, &ids)
-            .unwrap()
-            .unwrap();
+        let out = remap_source_package_references(pkg, &ids).unwrap().unwrap();
         assert!(out.contains("\"new-spec\"") && out.contains("\"new-src\""));
         let missing = "{\"format\":\"anansi-source-package\",\"specArtifactId\":\"nope\",\"sourceArtifactId\":\"old-src\"}";
         assert!(remap_source_package_references(missing, &ids).is_err());

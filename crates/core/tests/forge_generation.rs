@@ -300,7 +300,10 @@ fn run_spec_to_saved(f: &Fixture) -> (String, Value) {
             json!({ "contractVersion": 1, "workspaceId": f.ws, "runId": run_id }),
         )
         .unwrap();
-    let spec_id = saved["artifact"]["artifactId"].as_str().unwrap().to_string();
+    let spec_id = saved["artifact"]["artifactId"]
+        .as_str()
+        .unwrap()
+        .to_string();
     (spec_id, saved)
 }
 
@@ -458,10 +461,7 @@ fn full_forge_workflow_with_exact_version_pinning() {
         ["ANANSI-PACKAGE.json", "index.html", "app.js", "README.md"]
     );
     assert!(members.iter().all(|(_, _, kind)| *kind == b'0'));
-    let manifest: Value = serde_json::from_slice(
-        &tar[512..512 + members[0].1],
-    )
-    .unwrap();
+    let manifest: Value = serde_json::from_slice(&tar[512..512 + members[0].1]).unwrap();
     assert_eq!(manifest["specArtifactId"], spec_id);
     assert_eq!(manifest["files"].as_array().unwrap().len(), 3);
     assert_eq!(export["sha256"].as_str().unwrap().len(), 64);
@@ -475,7 +475,12 @@ fn full_forge_workflow_with_exact_version_pinning() {
             json!({ "contractVersion": 1, "workspaceId": f.ws, "artifactId": package_id, "version": 1 }),
         )
         .unwrap();
-    assert!(read["body"].as_str().unwrap().contains("anansi-source-package"));
+    assert!(
+        read["body"]
+            .as_str()
+            .unwrap()
+            .contains("anansi-source-package")
+    );
 
     // Revise the specification to v2; a build pinned to v2
     // records specVersion 2.
@@ -513,8 +518,10 @@ fn full_forge_workflow_with_exact_version_pinning() {
                 json!({ "contractVersion": 1, "workspaceId": f.ws, "runId": run2 }),
             )
             .unwrap();
-        if matches!(p["status"].as_str().unwrap(), "complete" | "invalid" | "failed" | "cancelled")
-            || Instant::now() > deadline
+        if matches!(
+            p["status"].as_str().unwrap(),
+            "complete" | "invalid" | "failed" | "cancelled"
+        ) || Instant::now() > deadline
         {
             break p;
         }
@@ -660,7 +667,10 @@ fn cancel_wrong_stage_isolation_and_archive() {
             json!({ "contractVersion": 1, "workspaceId": f.ws, "runId": run_id }),
         )
         .unwrap();
-    let spec_id = saved["artifact"]["artifactId"].as_str().unwrap().to_string();
+    let spec_id = saved["artifact"]["artifactId"]
+        .as_str()
+        .unwrap()
+        .to_string();
     let project_now = f
         .core
         .memory_command(

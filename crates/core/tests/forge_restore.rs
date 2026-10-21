@@ -6,11 +6,11 @@
 //! fail closed when a referenced artifact is not in the
 //! package, and the restored package must still export.
 
+use anansi_core::Core;
 use anansi_core::content;
 use anansi_core::jobs::ExportSelection;
 use anansi_core::readiness::CommandError;
 use anansi_core::storage::Storage;
-use anansi_core::Core;
 use serde_json::{Value, json};
 use std::path::Path;
 
@@ -39,7 +39,15 @@ fn project(core: &Core, ws: &str) -> String {
         .to_string()
 }
 
-fn register(core: &Core, ws: &str, project: &str, ty: &str, title: &str, body: String, refs: Vec<String>) -> String {
+fn register(
+    core: &Core,
+    ws: &str,
+    project: &str,
+    ty: &str,
+    title: &str,
+    body: String,
+    refs: Vec<String>,
+) -> String {
     core.artifacts_command(
         "register",
         json!({
@@ -96,7 +104,12 @@ fn backup_bytes(root: &Path, store: &Storage, ws: &str) -> Vec<u8> {
     store.execute_backup(&lease).unwrap();
     let done = store.read_job(ws, &job.id).unwrap();
     let artifact = done.artifact_id.unwrap();
-    std::fs::read(root.join("exports").join(ws).join(format!("{artifact}.tar"))).unwrap()
+    std::fs::read(
+        root.join("exports")
+            .join(ws)
+            .join(format!("{artifact}.tar")),
+    )
+    .unwrap()
 }
 
 fn upload_once(fresh: &Core, bytes: &[u8], tag: &str) -> (String, String, String, String) {
@@ -164,7 +177,15 @@ fn forge_chain_restores_with_remapped_references_and_exports() {
     let source = Storage::new(dir.path().to_path_buf()).unwrap();
     let ws = workspace(&core, "Forge Source");
     let proj = project(&core, &ws);
-    let idea = register(&core, &ws, &proj, "idea", "Idea set", "{\"topic\":\"t\",\"concepts\":[]}".to_string(), vec![]);
+    let idea = register(
+        &core,
+        &ws,
+        &proj,
+        "idea",
+        "Idea set",
+        "{\"topic\":\"t\",\"concepts\":[]}".to_string(),
+        vec![],
+    );
     let spec = register(
         &core,
         &ws,
@@ -188,7 +209,10 @@ fn forge_chain_restores_with_remapped_references_and_exports() {
     let fresh_dir = tempfile::tempdir().unwrap();
     let fresh = Core::with_storage_root(fresh_dir.path().to_path_buf());
     let restored = try_upload_restore(&fresh, &bytes, "Forge Restored").unwrap();
-    let restored_ws = restored["workspaces"][0]["id"].as_str().unwrap().to_string();
+    let restored_ws = restored["workspaces"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
     assert_ne!(restored_ws, ws);
 
     // Find the restored trio in the restored project.
@@ -216,7 +240,11 @@ fn forge_chain_restores_with_remapped_references_and_exports() {
             .unwrap()
             .to_string()
     };
-    let (r_idea, r_spec, r_package) = (by_type("idea"), by_type("specification"), by_type("source-package"));
+    let (r_idea, r_spec, r_package) = (
+        by_type("idea"),
+        by_type("specification"),
+        by_type("source-package"),
+    );
     assert_ne!(r_spec, spec);
     assert_ne!(r_package, package);
 
@@ -258,8 +286,7 @@ fn forge_chain_restores_with_remapped_references_and_exports() {
         json!(["ANANSI-PACKAGE.json", "index.html", "README.md"])
     );
     // Original workspace untouched.
-    let original: Value =
-        serde_json::from_str(&read_original(&core, &ws, &package)).unwrap();
+    let original: Value = serde_json::from_str(&read_original(&core, &ws, &package)).unwrap();
     assert_eq!(original["specArtifactId"], spec);
 }
 
@@ -281,7 +308,15 @@ fn package_citing_an_absent_specification_fails_the_restore_closed() {
     let source = Storage::new(dir.path().to_path_buf()).unwrap();
     let ws = workspace(&core, "Forge Broken");
     let proj = project(&core, &ws);
-    let idea = register(&core, &ws, &proj, "idea", "Idea set", "{\"topic\":\"t\",\"concepts\":[]}".to_string(), vec![]);
+    let idea = register(
+        &core,
+        &ws,
+        &proj,
+        "idea",
+        "Idea set",
+        "{\"topic\":\"t\",\"concepts\":[]}".to_string(),
+        vec![],
+    );
     // The cited specification is not an artifact of this
     // workspace (it lives nowhere in the backup).
     register(
