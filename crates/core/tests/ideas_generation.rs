@@ -20,6 +20,7 @@ struct Fake {
     mode: Arc<Mutex<String>>,
     last_body: Arc<Mutex<String>>,
     dripped: Arc<AtomicBool>,
+    broken: Arc<Mutex<std::collections::HashSet<usize>>>,
 }
 
 fn idea_json(n: usize) -> String {
@@ -62,11 +63,16 @@ fn start_fake() -> Fake {
     let mode = Arc::new(Mutex::new("valid".to_string()));
     let last_body = Arc::new(Mutex::new(String::new()));
     let dripped = Arc::new(AtomicBool::new(false));
-    let (m2, b2, d2) = (mode.clone(), last_body.clone(), dripped.clone());
+    let broken = Arc::new(Mutex::new(std::collections::HashSet::new()));
+    let (m2, b2, d2, br2) = (mode.clone(), last_body.clone(), dripped.clone(), broken.clone());
+    let mut conn_seq = 0usize;
     std::thread::spawn(move || {
         for stream in listener.incoming() {
             let Ok(mut stream) = stream else { continue };
-            let (mode, last_body, dripped) = (m2.clone(), b2.clone(), d2.clone());
+            let conn_id = conn_seq;
+            conn_seq += 1;
+            let (mode, last_body, dripped, broken) =
+                (m2.clone(), b2.clone(), d2.clone(), br2.clone());
             std::thread::spawn(move || {
                 let mut reader = BufReader::new(stream.try_clone().unwrap());
                 let mut content_length = 0usize;
@@ -114,6 +120,9 @@ fn start_fake() -> Fake {
                     );
                     let frame = format!("{:x}\r\n{}\r\n", line.len(), line);
                     if stream.write_all(frame.as_bytes()).is_err() {
+                        // The client closed the connection
+                        // (cancellation): record which stream died.
+                        broken.lock().unwrap().insert(conn_id);
                         return;
                     }
                     if i == 0 {
@@ -134,6 +143,7 @@ fn start_fake() -> Fake {
         mode,
         last_body,
         dripped,
+        broken,
     }
 }
 
@@ -584,4 +594,56 @@ fn concurrent_saves_resolve_to_exactly_one_artifact() {
         1,
         "exactly one stored artifact after concurrent saves"
     );
+}
+
+#[test]
+fn cap_eviction_cancels_the_oldest_active_stream() {
+    let fake = start_fake();
+    *fake.mode.lock().unwrap() = "valid-slow".to_string();
+    let f = fixture(&fake);
+    let mut run_ids: Vec<String> = Vec::new();
+    for _ in 0..32 {
+        let started = start_run(&f, json!({}));
+        run_ids.push(started["runId"].as_str().unwrap().to_string());
+    }
+    // The 33rd start makes room BEFORE its provider stream
+    // starts: the oldest run is evicted from the registry and
+    // its provider stream is cancelled (not silently dropped).
+    let last = start_run(&f, json!({}));
+    let last_id = last["runId"].as_str().unwrap().to_string();
+
+    let err = f
+        .core
+        .ai_command(
+            "ideas-generate-poll",
+            json!({ "contractVersion": 1, "workspaceId": f.ws, "runId": run_ids[0] }),
+        )
+        .unwrap_err();
+    assert_eq!(err.code, anansi_core::ErrorCode::NotFound, "evicted run leaves the registry");
+
+    // Cancellation closed the evicted stream's connection
+    // (connection 0) while its neighbour (connection 1) lives.
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        let broken = fake.broken.lock().unwrap().clone();
+        if broken.contains(&0) {
+            assert!(
+                !broken.contains(&1),
+                "only the evicted stream is cancelled, not its neighbours"
+            );
+            break;
+        }
+        assert!(Instant::now() < deadline, "the evicted stream was never cancelled: {broken:?}");
+        std::thread::sleep(Duration::from_millis(50));
+    }
+
+    // The newest run is alive and generating.
+    let polled = f
+        .core
+        .ai_command(
+            "ideas-generate-poll",
+            json!({ "contractVersion": 1, "workspaceId": f.ws, "runId": last_id }),
+        )
+        .unwrap();
+    assert_eq!(polled["status"], "running", "{polled}");
 }

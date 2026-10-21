@@ -334,6 +334,10 @@ fn privacy_class(privacy: Privacy) -> PrivacyClass {
 
 struct IdeaRun {
     session: String,
+    /// The scope the run was started under: retained so TTL
+    /// expiry or cap eviction can cancel the run's provider
+    /// stream later, outside the registry lock.
+    scope: CallerScope,
     project_id: String,
     topic: String,
     context_ids: Vec<String>,
@@ -362,8 +366,128 @@ const MAX_RUNS_PER_WORKSPACE: usize = 32;
 fn with_runs<T>(f: impl FnOnce(&mut HashMap<String, IdeaRun>) -> T) -> T {
     let mut guard = RUNS.lock().unwrap_or_else(|p| p.into_inner());
     let map = guard.get_or_insert_with(HashMap::new);
-    map.retain(|_, r| r.created.elapsed() < RUN_TTL);
     f(map)
+}
+
+/// A run removed from the registry by TTL expiry or the
+/// retained-runs cap. Eviction alone must never orphan a live
+/// provider stream: active victims are cancelled by the caller
+/// (outside the registry lock) through `cancel_evicted`, which
+/// settles the stream's accounting via the M5 cancel path.
+struct Evicted {
+    scope: CallerScope,
+    stream_run_id: String,
+    capability: String,
+    active: bool,
+}
+
+impl Evicted {
+    fn from_run(run: IdeaRun) -> Self {
+        Self {
+            active: matches!(run.status.as_str(), "running" | "cancelling"),
+            scope: run.scope,
+            stream_run_id: run.stream_run_id,
+            capability: run.capability,
+        }
+    }
+}
+
+/// Remove expired runs (every workspace) and, when
+/// `workspace_key` names a workspace at its retained cap, its
+/// oldest runs. Returns the victims; the caller cancels the
+/// active ones after the registry lock is released.
+fn collect_evictions(workspace_key: Option<&str>) -> Vec<Evicted> {
+    with_runs(|map| {
+        let mut out = Vec::new();
+        let expired: Vec<String> = map
+            .iter()
+            .filter(|(_, r)| r.created.elapsed() >= RUN_TTL)
+            .map(|(k, _)| k.clone())
+            .collect();
+        for key in expired {
+            if let Some(run) = map.remove(&key) {
+                out.push(Evicted::from_run(run));
+            }
+        }
+        if let Some(workspace) = workspace_key {
+            let prefix = format!("{workspace}/");
+            loop {
+                let count = map.keys().filter(|k| k.starts_with(&prefix)).count();
+                if count < MAX_RUNS_PER_WORKSPACE {
+                    break;
+                }
+                let oldest = map
+                    .iter()
+                    .filter(|(k, _)| k.starts_with(&prefix))
+                    .min_by_key(|(_, r)| r.created)
+                    .map(|(k, _)| k.clone());
+                match oldest {
+                    Some(key) => {
+                        if let Some(run) = map.remove(&key) {
+                            out.push(Evicted::from_run(run));
+                        }
+                    }
+                    None => break,
+                }
+            }
+        }
+        out
+    })
+}
+
+fn cancel_evicted_with(
+    evicted: Vec<Evicted>,
+    cancel: impl Fn(&CallerScope, &str, &str) -> Result<Value, CommandError>,
+) {
+    for victim in evicted {
+        if victim.active && !victim.stream_run_id.is_empty() {
+            // Best effort: the provider backend's own stream
+            // TTL is the backstop, and an explicit cancel is
+            // the bounded path (sliced reads, reservation
+            // settlement) from M5.
+            let _ = cancel(&victim.scope, &victim.stream_run_id, &victim.capability);
+        }
+    }
+}
+
+fn cancel_evicted(evicted: Vec<Evicted>) {
+    cancel_evicted_with(evicted, |scope, run_id, capability| {
+        let workspace_id = scope.logical_workspace.clone().unwrap_or_default();
+        let run_request = json!({
+            "contractVersion": 1,
+            "workspaceId": workspace_id,
+            "runId": run_id,
+            "capability": capability,
+        });
+        providers_command("providers-stream-cancel", run_request.clone(), scope)?;
+        // Drain to the terminal event: the poll that observes
+        // completion removes the stream record and settles
+        // its ledger reservation (bounded: ~2 s of polling;
+        // the provider stream TTL is the backstop).
+        for _ in 0..100 {
+            match providers_command("providers-stream-poll", run_request.clone(), scope) {
+                Ok(polled) => {
+                    if polled.get("done").and_then(|v| v.as_bool()).unwrap_or(false) {
+                        break;
+                    }
+                }
+                Err(_) => break,
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        Ok(json!({}))
+    });
+}
+
+/// Insert a run after room has been made; still enforces the
+/// cap (defense in depth against races between the room-making
+/// and the insert). Returns any victims for cancellation.
+fn insert_run(scope: &CallerScope, run_id: &str, run: IdeaRun) -> Vec<Evicted> {
+    let victims = collect_evictions(Some(&scope.workspace));
+    with_runs(|map| {
+        map.insert(run_key(scope, run_id), run);
+    });
+    victims
 }
 
 fn run_key(scope: &CallerScope, run_id: &str) -> String {
@@ -384,6 +508,9 @@ pub fn ideas_command(
     value: Value,
     scope: &CallerScope,
 ) -> Result<Value, CommandError> {
+    // TTL expiry applies on every operation; expired active
+    // runs are cancelled, never silently dropped.
+    cancel_evicted(collect_evictions(None));
     match operation {
         "ideas-generate-start" => start(value, scope),
         "ideas-generate-poll" => poll(value, scope),
@@ -490,6 +617,11 @@ fn start(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
         Some(p) => json!([p, model]),
         None => Value::Null,
     };
+    // Make room BEFORE the provider stream starts: evicting
+    // the oldest run here (and cancelling its stream) frees
+    // both registries' slots; inserting after the start could
+    // not, because the provider layer refuses a 33rd stream.
+    cancel_evicted(collect_evictions(Some(&scope.workspace)));
     let dispatch = json!({
         "contractVersion": 1,
         "workspaceId": workspace_id,
@@ -516,6 +648,7 @@ fn start(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
             // client renders one uniform failure surface.
             let run = IdeaRun {
                 session: scope.session.clone(),
+                scope: scope.clone(),
                 project_id: req.project_id.clone(),
                 topic: req.topic.trim().to_string(),
                 context_ids: req.context_memory_ids.clone(),
@@ -531,9 +664,7 @@ fn start(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
                 saving: false,
                 created: Instant::now(),
             };
-            with_runs(|map| {
-                map.insert(run_key(scope, &run_id), run);
-            });
+            cancel_evicted(insert_run(scope, &run_id, run));
             return serde_json::to_value(IdeasGenerateStartResponse {
                 contract_version: 1,
                 run_id,
@@ -552,6 +683,7 @@ fn start(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
     .map_err(|_| crate::storage::unavailable())?;
     let run = IdeaRun {
         session: scope.session.clone(),
+        scope: scope.clone(),
         project_id: req.project_id.clone(),
         topic: req.topic.trim().to_string(),
         context_ids: req.context_memory_ids.clone(),
@@ -575,21 +707,7 @@ fn start(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
         saving: false,
         created: Instant::now(),
     };
-    with_runs(|map| {
-        let prefix = format!("{}/", scope.workspace);
-        let mine: Vec<String> = map
-            .keys()
-            .filter(|k| k.starts_with(&prefix))
-            .cloned()
-            .collect();
-        if mine.len() >= MAX_RUNS_PER_WORKSPACE {
-            // Evict the oldest run in this workspace.
-            if let Some(oldest) = mine.iter().min_by_key(|k| map.get(*k).map(|r| r.created)) {
-                map.remove(oldest);
-            }
-        }
-        map.insert(run_key(scope, &run_id), run);
-    });
+    cancel_evicted(insert_run(scope, &run_id, run));
     serde_json::to_value(IdeasGenerateStartResponse {
         contract_version: 1,
         run_id,
@@ -892,4 +1010,122 @@ fn save(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
         already_saved: false,
     })
     .map_err(|_| crate::storage::unavailable())
+}
+
+
+#[cfg(test)]
+mod eviction_tests {
+    use super::*;
+
+    fn scope_for(workspace: &str) -> CallerScope {
+        CallerScope {
+            session: "unit-session".to_string(),
+            workspace: workspace.to_string(),
+            storage_root: None,
+            logical_workspace: Some(workspace.to_string()),
+        }
+    }
+
+    fn fabricated_run(scope: &CallerScope, age: Duration, status: &str, stream: &str) -> IdeaRun {
+        IdeaRun {
+            session: scope.session.clone(),
+            scope: scope.clone(),
+            project_id: "p".repeat(32),
+            topic: "t".to_string(),
+            context_ids: Vec::new(),
+            stream_run_id: stream.to_string(),
+            capability: "cap".to_string(),
+            disclosure: None,
+            text: String::new(),
+            status: status.to_string(),
+            idea_set: None,
+            error: None,
+            saved_artifact: None,
+            saved_body: None,
+            saving: false,
+            created: Instant::now() - age,
+        }
+    }
+
+    #[test]
+    fn ttl_eviction_collects_only_expired_runs_and_marks_active() {
+        let scope = scope_for("unit-ws-ttl");
+        with_runs(|map| {
+            map.insert(
+                run_key(&scope, "old-active"),
+                fabricated_run(&scope, RUN_TTL + Duration::from_secs(30), "running", "stream-old"),
+            );
+            map.insert(
+                run_key(&scope, "old-done"),
+                fabricated_run(&scope, RUN_TTL + Duration::from_secs(30), "complete", "stream-done"),
+            );
+            map.insert(
+                run_key(&scope, "fresh"),
+                fabricated_run(&scope, Duration::from_secs(5), "running", "stream-fresh"),
+            );
+        });
+        let victims = collect_evictions(None);
+        let mine: Vec<&Evicted> = victims
+            .iter()
+            .filter(|v| v.scope.workspace == "unit-ws-ttl")
+            .collect();
+        assert_eq!(mine.len(), 2, "both expired runs are collected");
+        let old_active = mine
+            .iter()
+            .find(|v| v.stream_run_id == "stream-old")
+            .expect("expired running run is a victim");
+        assert!(old_active.active, "an expired RUNNING run must be cancelled, not dropped");
+        let old_done = mine
+            .iter()
+            .find(|v| v.stream_run_id == "stream-done")
+            .expect("expired terminal run is a victim");
+        assert!(!old_done.active, "terminal runs need no cancellation");
+        let remaining = with_runs(|map| map.contains_key(&run_key(&scope, "fresh")));
+        assert!(remaining, "fresh runs survive the sweep");
+        with_runs(|map| {
+            map.remove(&run_key(&scope, "fresh"));
+        });
+    }
+
+    #[test]
+    fn cap_eviction_removes_the_oldest_and_cancels_only_active_victims() {
+        let scope = scope_for("unit-ws-cap");
+        // 33 fabricated runs, staggered ages 0..=32 seconds.
+        with_runs(|map| {
+            for i in 0..33u64 {
+                map.insert(
+                    run_key(&scope, &format!("run-{i}")),
+                    fabricated_run(
+                        &scope,
+                        Duration::from_secs(32 - i),
+                        if i == 0 { "complete" } else { "running" },
+                        &format!("stream-{i}"),
+                    ),
+                );
+            }
+        });
+        let victims = collect_evictions(Some("unit-ws-cap"));
+        assert_eq!(victims.len(), 2, "33 retained runs evict down to room for one insert (31)");
+        // Oldest first: stream-0 (complete, inactive) and
+        // stream-1 (running, active).
+        let cancelled = std::sync::Mutex::new(Vec::new());
+        cancel_evicted_with(victims, |_, run_id, _| {
+            cancelled.lock().unwrap().push(run_id.to_string());
+            Ok(json!({}))
+        });
+        assert_eq!(
+            cancelled.lock().unwrap().clone(),
+            vec!["stream-1".to_string()],
+            "only the active victim is cancelled"
+        );
+        let remaining = with_runs(|map| {
+            map.keys()
+                .filter(|k| k.starts_with("unit-ws-cap/"))
+                .count()
+        });
+        assert_eq!(remaining, 31);
+        with_runs(|map| {
+            map.retain(|k, _| !k.starts_with("unit-ws-cap/"));
+        });
+    }
 }
