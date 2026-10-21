@@ -1,5 +1,9 @@
-#![recursion_limit = "256"]
+#![recursion_limit = "512"]
 
+use anansi_core::artifacts::{
+    ArtifactDetails, ArtifactListRequest, ArtifactListResponse, ArtifactReadRequest, ArtifactRecord,
+    ArtifactRegisterRequest, ArtifactReviseRequest, ArtifactVersionsResponse,
+};
 use anansi_core::jobs::{
     ArtifactChunk, ControlJobRequest, EnqueueExportRequest, Job, JobDetails, JobList,
     ListJobsRequest, ReadArtifactRequest,
@@ -44,6 +48,14 @@ fn main() {
         "ProviderCredentialRemoveResponse":schemars::schema_for!(ProviderCredentialRemoveResponse),
         "ProviderCredentialStatusResponse":schemars::schema_for!(ProviderCredentialStatusResponse),
         "ProviderSessionAccessResponse":schemars::schema_for!(ProviderSessionAccessResponse),
+        "ArtifactRegisterRequest":schemars::schema_for!(ArtifactRegisterRequest),
+        "ArtifactReviseRequest":schemars::schema_for!(ArtifactReviseRequest),
+        "ArtifactListRequest":schemars::schema_for!(ArtifactListRequest),
+        "ArtifactReadRequest":schemars::schema_for!(ArtifactReadRequest),
+        "ArtifactRecord":schemars::schema_for!(ArtifactRecord),
+        "ArtifactDetails":schemars::schema_for!(ArtifactDetails),
+        "ArtifactListResponse":schemars::schema_for!(ArtifactListResponse),
+        "ArtifactVersionsResponse":schemars::schema_for!(ArtifactVersionsResponse),
         "ProviderWorkspaceRequest":schemars::schema_for!(ProviderWorkspaceRequest),
         "UploadBegin":schemars::schema_for!(anansi_core::backup_upload::UploadBegin),
         "UploadPart":schemars::schema_for!(anansi_core::backup_upload::UploadPart),

@@ -42,6 +42,151 @@ export interface ArtifactChunk {
   bytes: number[];
   contractVersion: number;
 }
+export interface ArtifactDetails {
+  artifact: ArtifactRecord;
+  body: string;
+  contractVersion: number;
+}
+/**
+ * One artifact version's metadata — the §9 field set.
+ */
+export interface ArtifactRecord {
+  artifactId: string;
+  contentHash: string;
+  /**
+   * Generator/model metadata: `{"kind":"manual"}` in this
+   * slice; generator slices record model provenance here.
+   */
+  generator?: {
+    [k: string]: unknown;
+  };
+  privacy: string;
+  projectId: string;
+  sourceReferences: string[];
+  /**
+   * The §9 timestamp: when this version was registered.
+   */
+  timestamp: string;
+  title: string;
+  type: string;
+  validationStatus: string;
+  version: number;
+}
+export interface ArtifactListRequest {
+  contractVersion?: number;
+  projectId: string;
+  workspaceId: string;
+}
+export interface ArtifactListResponse {
+  artifacts: ArtifactRecord[];
+  contractVersion: number;
+}
+/**
+ * One artifact version's metadata — the §9 field set.
+ */
+export interface ArtifactRecord {
+  artifactId: string;
+  contentHash: string;
+  /**
+   * Generator/model metadata: `{"kind":"manual"}` in this
+   * slice; generator slices record model provenance here.
+   */
+  generator?: {
+    [k: string]: unknown;
+  };
+  privacy: string;
+  projectId: string;
+  sourceReferences: string[];
+  /**
+   * The §9 timestamp: when this version was registered.
+   */
+  timestamp: string;
+  title: string;
+  type: string;
+  validationStatus: string;
+  version: number;
+}
+export interface ArtifactReadRequest {
+  artifactId: string;
+  contractVersion?: number;
+  version?: number | null;
+  workspaceId: string;
+}
+/**
+ * One artifact version's metadata — the §9 field set.
+ */
+export interface ArtifactRecord {
+  artifactId: string;
+  contentHash: string;
+  /**
+   * Generator/model metadata: `{"kind":"manual"}` in this
+   * slice; generator slices record model provenance here.
+   */
+  generator?: {
+    [k: string]: unknown;
+  };
+  privacy: string;
+  projectId: string;
+  sourceReferences: string[];
+  /**
+   * The §9 timestamp: when this version was registered.
+   */
+  timestamp: string;
+  title: string;
+  type: string;
+  validationStatus: string;
+  version: number;
+}
+export interface ArtifactRegisterRequest {
+  body: string;
+  contractVersion?: number;
+  privacy?: string;
+  projectId: string;
+  sourceReferences?: string[];
+  title: string;
+  type: string;
+  workspaceId: string;
+}
+export interface ArtifactReviseRequest {
+  artifactId: string;
+  body: string;
+  contractVersion?: number;
+  expectedVersion: number;
+  sourceReferences?: string[];
+  title: string;
+  workspaceId: string;
+}
+export interface ArtifactVersionsResponse {
+  artifactId: string;
+  contractVersion: number;
+  projectId: string;
+  versions: ArtifactRecord[];
+}
+/**
+ * One artifact version's metadata — the §9 field set.
+ */
+export interface ArtifactRecord {
+  artifactId: string;
+  contentHash: string;
+  /**
+   * Generator/model metadata: `{"kind":"manual"}` in this
+   * slice; generator slices record model provenance here.
+   */
+  generator?: {
+    [k: string]: unknown;
+  };
+  privacy: string;
+  projectId: string;
+  sourceReferences: string[];
+  /**
+   * The §9 timestamp: when this version was registered.
+   */
+  timestamp: string;
+  title: string;
+  type: string;
+  validationStatus: string;
+  version: number;
+}
 export interface AskRequest {
   contractVersion: number;
   embeddingModel?: string | null;

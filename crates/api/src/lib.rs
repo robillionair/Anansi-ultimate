@@ -48,6 +48,7 @@ pub fn router(state: Arc<ApiState>) -> Router {
         .route("/v1/relationships/{operation}", post(relationship))
         .route("/v1/jobs/{operation}", post(job))
         .route("/v1/ai/{operation}", post(ai))
+        .route("/v1/artifacts/{operation}", post(artifact))
         .route("/v1/vault/{operation}", post(vault))
         .fallback(|| async {
             error(
@@ -462,6 +463,56 @@ async fn vault(
                 | ErrorCode::ContentIntegrity
                 | ErrorCode::UnsupportedSchema => StatusCode::CONFLICT,
                 ErrorCode::StorageUnavailable => StatusCode::SERVICE_UNAVAILABLE,
+                _ => StatusCode::BAD_REQUEST,
+            };
+            (status, Json(e)).into_response()
+        }
+        Err(_) => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(anansi_core::storage::unavailable()),
+        )
+            .into_response(),
+    }
+}
+
+async fn artifact(
+    Path(operation): Path<String>,
+    State(state): State<Arc<ApiState>>,
+    request: Request<Body>,
+) -> Response {
+    let bytes = match axum::body::to_bytes(request.into_body(), 320 * 1024).await {
+        Ok(v) => v,
+        Err(_) => {
+            return error(
+                StatusCode::BAD_REQUEST,
+                ErrorCode::InvalidRequest,
+                "Artifact request exceeds its limit.",
+            );
+        }
+    };
+    let input = match serde_json::from_slice(&bytes) {
+        Ok(v) => v,
+        Err(_) => {
+            return error(
+                StatusCode::BAD_REQUEST,
+                ErrorCode::InvalidRequest,
+                "Use the supported artifact request.",
+            );
+        }
+    };
+    match tokio::task::spawn_blocking(move || state.core.artifacts_command(&operation, input)).await
+    {
+        Ok(Ok(value)) => Json(value).into_response(),
+        Ok(Err(e)) => {
+            let status = match e.code {
+                ErrorCode::NotFound | ErrorCode::MemoryNotFound => StatusCode::NOT_FOUND,
+                ErrorCode::RevisionConflict
+                | ErrorCode::ContentIntegrity
+                | ErrorCode::UnsupportedSchema => StatusCode::CONFLICT,
+                ErrorCode::StorageUnavailable => StatusCode::SERVICE_UNAVAILABLE,
+                ErrorCode::VaultUnavailable => StatusCode::FORBIDDEN,
+                ErrorCode::Forbidden => StatusCode::FORBIDDEN,
+                ErrorCode::Unauthorized => StatusCode::UNAUTHORIZED,
                 _ => StatusCode::BAD_REQUEST,
             };
             (status, Json(e)).into_response()
