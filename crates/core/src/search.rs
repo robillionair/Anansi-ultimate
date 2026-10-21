@@ -122,18 +122,20 @@ pub(crate) fn parse_body_query(text: &str) -> Result<(String, Vec<String>), Comm
     Ok((expression, literal_terms))
 }
 
-pub(crate) fn ensure_fts_table(conn: &Connection) -> Result<(), CommandError> {
-    conn.execute_batch(
-        "CREATE VIRTUAL TABLE IF NOT EXISTS memory_body_fts USING fts5(
+/// The one definition of the derived full-text index. The
+/// backup verifier recognises exactly the objects this DDL
+/// creates; the two must never drift, so both use this text.
+pub(crate) const FTS_DDL: &str = "CREATE VIRTUAL TABLE IF NOT EXISTS memory_body_fts USING fts5(
             workspace_id UNINDEXED,
             memory_id UNINDEXED,
             revision_id UNINDEXED,
             title,
             body,
             tokenize='unicode61 remove_diacritics 2'
-        );",
-    )
-    .map_err(|_| unavailable())
+        );";
+
+pub(crate) fn ensure_fts_table(conn: &Connection) -> Result<(), CommandError> {
+    conn.execute_batch(FTS_DDL).map_err(|_| unavailable())
 }
 
 pub(crate) fn sync_index_tx(

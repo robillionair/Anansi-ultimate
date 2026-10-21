@@ -46,6 +46,60 @@ fn remap_metadata(
     serde_json::to_string(&value).map_err(|_| crate::jobs::invalid())
 }
 
+
+/// Reference rewriting for one artifact_versions row, after
+/// the generic id columns have been remapped: contained
+/// `artifact://` source references point at the restored
+/// artifacts, and evaluation bodies have their typed source
+/// and rubric ids remapped with the content hash recomputed
+/// over the rewritten body. A reference to an artifact that
+/// is not in the package fails closed - a restored artifact
+/// must never link back into the source workspace. Bodies
+/// of every other type are opaque and preserved exactly.
+fn remap_artifact_row(
+    names: &[String],
+    columns: &mut [rusqlite::types::Value],
+    ids: &std::collections::BTreeMap<String, String>,
+) -> Result<(), CommandError> {
+    use rusqlite::types::Value;
+    let index = |name: &str| -> Result<usize, CommandError> {
+        names
+            .iter()
+            .position(|n| n == name)
+            .ok_or_else(crate::jobs::invalid)
+    };
+    let refs_i = index("source_references")?;
+    if let Value::Text(raw) = &columns[refs_i] {
+        let refs: Vec<String> = serde_json::from_str(raw).map_err(|_| crate::jobs::invalid())?;
+        let mut out = Vec::new();
+        for reference in refs {
+            if let Some(rest) = reference.strip_prefix("artifact://") {
+                let (id, version) = rest.rsplit_once("@v").ok_or_else(crate::jobs::invalid)?;
+                let new = ids.get(id).ok_or_else(crate::jobs::invalid)?;
+                out.push(format!("artifact://{new}@v{version}"));
+            } else if reference.starts_with("artifact:") {
+                return Err(crate::jobs::invalid());
+            } else {
+                out.push(reference);
+            }
+        }
+        columns[refs_i] =
+            Value::Text(serde_json::to_string(&out).map_err(|_| crate::jobs::invalid())?);
+    }
+    let type_i = index("artifact_type")?;
+    let is_evaluation = matches!(&columns[type_i], Value::Text(t) if t == "evaluation");
+    if is_evaluation {
+        let body_i = index("body")?;
+        let hash_i = index("content_hash")?;
+        if let Value::Text(body) = &columns[body_i] {
+            let rewritten = crate::evaluations::remap_evaluation_references(body, ids)?;
+            columns[hash_i] = Value::Text(crate::content::hash(rewritten.as_bytes()));
+            columns[body_i] = Value::Text(rewritten);
+        }
+    }
+    Ok(())
+}
+
 impl crate::storage::Storage {
     pub fn restore_snapshot(
         &self,
@@ -59,6 +113,33 @@ impl crate::storage::Storage {
         let verified = self.verify_snapshot(workspace, job, artifact)?;
         if verified.preview.sha256 != expected_hash {
             return Err(crate::jobs::conflict());
+        }
+        {
+            let connection = self
+                .connection(false)?
+                .ok_or_else(crate::storage::unavailable)?;
+            let prior: Option<String> = connection
+                .query_row(
+                    "SELECT workspace_id FROM restore_origins WHERE backup_id=?1 LIMIT 1",
+                    [artifact],
+                    |r| r.get(0),
+                )
+                .ok();
+            if let Some(existing) = prior {
+                let existing_name: String = connection
+                    .query_row(
+                        "SELECT name FROM workspaces WHERE id=?1",
+                        [&existing],
+                        |r| r.get(0),
+                    )
+                    .unwrap_or_else(|_| existing.clone());
+                return Err(CommandError::new(
+                    crate::ErrorCode::RevisionConflict,
+                    &format!(
+                        "This backup was already restored as workspace '{existing_name}'. Import the package again as a new backup to restore another copy."
+                    ),
+                ));
+            }
         }
         let source = rusqlite::Connection::open_with_flags(
             verified.stage.root.join("catalog.sqlite3"),
@@ -75,6 +156,7 @@ impl crate::storage::Storage {
             "SELECT id,workspace_id FROM memories",
             "SELECT id,workspace_id FROM memory_revisions",
             "SELECT id,workspace_id FROM relationships",
+            "SELECT DISTINCT artifact_id,workspace_id FROM artifact_versions",
         ];
         if verified.info.application {
             identity_queries.extend([
@@ -104,12 +186,16 @@ impl crate::storage::Storage {
             "memory_revisions",
             "relationships",
             "relationship_revisions",
+            "artifact_versions",
         ];
         if verified.info.application {
             tables.extend(["jobs", "backup_schedules"]);
         }
         let mut prepared = Vec::new();
         let mut workspaces = Vec::new();
+        let mut revision_meta: std::collections::BTreeMap<String, (String, crate::privacy::Privacy)> =
+            std::collections::BTreeMap::new();
+        let mut memory_current: Vec<(String, String, String)> = Vec::new();
         for table in tables {
             let mut q = source
                 .prepare(&format!("SELECT * FROM {table}"))
@@ -134,6 +220,7 @@ impl crate::storage::Storage {
                             "memory_id",
                             "current_revision",
                             "relationship_id",
+                            "project_id",
                             "source_id",
                             "target_id",
                             "artifact_id",
@@ -183,9 +270,37 @@ impl crate::storage::Storage {
                     columns[2] = rusqlite::types::Value::Text(renamed.to_ascii_lowercase());
                     workspaces.push(crate::workspace::Workspace { id, name: renamed });
                 }
+                if table == "artifact_versions" {
+                    remap_artifact_row(&names, &mut columns, &ids)?;
+                }
+                if table == "memory_revisions" {
+                    let id_i = names.iter().position(|n| n == "id").ok_or_else(crate::jobs::invalid)?;
+                    let meta_i = names.iter().position(|n| n == "metadata").ok_or_else(crate::jobs::invalid)?;
+                    if let (rusqlite::types::Value::Text(revision), rusqlite::types::Value::Text(raw)) =
+                        (&columns[id_i], &columns[meta_i])
+                    {
+                        let meta: crate::memory::MemoryMetadata =
+                            serde_json::from_str(raw).map_err(|_| crate::jobs::invalid())?;
+                        revision_meta.insert(revision.clone(), (meta.title, meta.privacy));
+                    }
+                }
+                if table == "memories" {
+                    let text = |name: &str, columns: &[rusqlite::types::Value]| -> Result<String, CommandError> {
+                        let i = names.iter().position(|n| n == name).ok_or_else(crate::jobs::invalid)?;
+                        match &columns[i] {
+                            rusqlite::types::Value::Text(t) => Ok(t.clone()),
+                            _ => Err(crate::jobs::invalid()),
+                        }
+                    };
+                    memory_current.push((
+                        text("workspace_id", &columns)?,
+                        text("id", &columns)?,
+                        text("current_revision", &columns)?,
+                    ));
+                }
                 values.push(columns);
             }
-            prepared.push((table, names.len(), values));
+            prepared.push((table, names, values));
         }
         let mut connection = self
             .connection(false)?
@@ -210,6 +325,8 @@ impl crate::storage::Storage {
                 ));
             }
         }
+        let mut restored_bodies: std::collections::BTreeMap<String, String> =
+            std::collections::BTreeMap::new();
         let mut q = source
             .prepare("SELECT workspace_id,memory_id,id,body_hash FROM memory_revisions")
             .map_err(|_| crate::jobs::invalid())?;
@@ -228,6 +345,7 @@ impl crate::storage::Storage {
             }
             let body = std::str::from_utf8(&bytes).map_err(|_| crate::content::integrity())?;
             crate::content::write(&self.root, &ids[&w], &ids[&m], &ids[&r], body)?;
+            restored_bodies.insert(ids[&r].clone(), body.to_string());
         }
         if verified.info.application {
             let mut q=source.prepare("SELECT workspace_id,artifact_id,artifact_hash FROM jobs WHERE state='Completed'").map_err(|_|crate::jobs::invalid())?;
@@ -255,7 +373,8 @@ impl crate::storage::Storage {
                     .map_err(|_| crate::storage::unavailable())?;
             }
         }
-        for (table, count, rows) in prepared {
+        for (table, names, rows) in prepared {
+            let count = names.len();
             let slots = (1..=count)
                 .map(|i| format!("?{i}"))
                 .collect::<Vec<_>>()
@@ -276,6 +395,30 @@ impl crate::storage::Storage {
                 }
                 tx.execute("INSERT INTO restore_origins(workspace_id,new_id,original_workspace,original_id,backup_id) VALUES(?1,?2,?3,?4,?5)",rusqlite::params![ids[old_workspace],new,old_workspace,original,artifact]).map_err(|_|crate::storage::unavailable())?;
             }
+        }
+        // Rebuild derived search state from the restored
+        // canonical content; archived index rows are never
+        // imported. sync_index_tx applies the search
+        // boundary, so Sealed content is never indexed (and
+        // verified packages cannot contain any).
+        crate::search::ensure_fts_table(&tx).map_err(|_| crate::storage::unavailable())?;
+        for (new_workspace, new_memory, new_revision) in &memory_current {
+            let (title, privacy) = revision_meta
+                .get(new_revision)
+                .ok_or_else(crate::jobs::invalid)?;
+            let body = restored_bodies
+                .get(new_revision)
+                .ok_or_else(crate::jobs::invalid)?;
+            crate::search::sync_index_tx(
+                &tx,
+                new_workspace,
+                new_memory,
+                new_revision,
+                title,
+                body,
+                privacy,
+            )
+            .map_err(|_| crate::storage::unavailable())?;
         }
         tx.commit().map_err(|_| crate::jobs::invalid())?;
         Ok(RestoreResult {

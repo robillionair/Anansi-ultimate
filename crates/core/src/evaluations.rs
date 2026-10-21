@@ -168,7 +168,7 @@ pub struct AssessmentInput {
     pub rationale: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ConceptSummary {
     pub concept_index: u32,
@@ -225,7 +225,7 @@ pub fn summarize(
 // ---------------------------------------------------------------------
 // The stored evaluation document
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct EvaluationDoc {
     format: String,
@@ -451,6 +451,48 @@ pub fn save_evaluation(
         body: details.body,
         already_saved: false,
     })
+}
+
+/// The artifact references an evaluation document carries:
+/// (source artifact id, source version, rubric artifact id,
+/// rubric version). Used by backup verification and restore,
+/// which must resolve and remap exactly these fields.
+pub(crate) fn evaluation_references(
+    body: &str,
+) -> Option<(String, u32, String, u32)> {
+    let doc: EvaluationDoc = serde_json::from_str(body).ok()?;
+    if doc.format != "anansi-evaluation" {
+        return None;
+    }
+    Some((
+        doc.source_artifact_id,
+        doc.source_version,
+        doc.rubric_artifact_id,
+        doc.rubric_version,
+    ))
+}
+
+/// Rewrite an evaluation body's source/rubric ids through a
+/// restore id map. A reference missing from the map fails
+/// closed: a restored evaluation must never point back into
+/// the source workspace.
+pub(crate) fn remap_evaluation_references(
+    body: &str,
+    map: &std::collections::BTreeMap<String, String>,
+) -> Result<String, CommandError> {
+    let mut doc: EvaluationDoc = serde_json::from_str(body).map_err(|_| invalid("The evaluation document is invalid."))?;
+    if doc.format != "anansi-evaluation" {
+        return Err(invalid("The evaluation document is invalid."));
+    }
+    doc.source_artifact_id = map
+        .get(&doc.source_artifact_id)
+        .cloned()
+        .ok_or_else(|| invalid("The evaluation references an artifact outside the backup."))?;
+    doc.rubric_artifact_id = map
+        .get(&doc.rubric_artifact_id)
+        .cloned()
+        .ok_or_else(|| invalid("The evaluation references an artifact outside the backup."))?;
+    serde_json::to_string(&doc).map_err(|_| invalid("The evaluation document is invalid."))
 }
 
 #[cfg(test)]

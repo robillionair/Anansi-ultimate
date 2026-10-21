@@ -28,6 +28,7 @@ const TABLES: &[&str] = &[
     "memory_revisions",
     "relationships",
     "relationship_revisions",
+    "artifact_versions",
     "restore_origins",
 ];
 
@@ -399,6 +400,19 @@ impl Storage {
             .map_err(|_| unavailable())?;
         // Privacy may change after the read snapshot. Recheck all current classifications under lock.
         for workspace in &ids {
+            let sealed_artifacts: bool = publish
+                .query_row(
+                    "SELECT EXISTS(SELECT 1 FROM artifact_versions WHERE workspace_id=?1 AND privacy='sealed')",
+                    [workspace],
+                    |r| r.get(0),
+                )
+                .map_err(|_| unavailable())?;
+            if sealed_artifacts {
+                return Err(CommandError::new(
+                    crate::ErrorCode::VaultUnavailable,
+                    "Sealed artifacts cannot be included in a plaintext backup.",
+                ));
+            }
             let mut q = publish
                 .prepare("SELECT metadata FROM memory_revisions WHERE workspace_id=?1")
                 .map_err(|_| unavailable())?;
@@ -430,15 +444,181 @@ fn octal(bytes: &[u8]) -> Result<usize, CommandError> {
     .map_err(|_| invalid())
 }
 type SchemaRow = (String, String, String, Option<String>);
-fn schema_definition(db: &Connection) -> Result<Vec<SchemaRow>, CommandError> {
+
+fn schema_objects(
+    db: &Connection,
+) -> Result<std::collections::BTreeMap<String, SchemaRow>, CommandError> {
     let mut q = db
         .prepare("SELECT type,name,tbl_name,sql FROM sqlite_schema ORDER BY name")
         .map_err(|_| invalid())?;
-    q.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))
+    let rows = q
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))
+        .map_err(|_| invalid())?
+        .collect::<rusqlite::Result<Vec<SchemaRow>>>()
+        .map_err(|_| invalid())?;
+    Ok(rows
+        .into_iter()
+        .map(|row| (row.1.clone(), row))
+        .collect())
+}
+
+/// The schema of a pre-artifact catalog (migrations
+/// 0001-0008), exactly as the older releases created it.
+const LEGACY_SCHEMA_8: &str = concat!(
+    include_str!("../migrations/0001_workspace.sql"),
+    "\n",
+    include_str!("../migrations/0002_onboarding.sql"),
+    "\n",
+    include_str!("../migrations/0003_memory.sql"),
+    include_str!("../migrations/0004_lifecycle.sql"),
+    include_str!("../migrations/0005_entities.sql"),
+    include_str!("../migrations/0006_relationship_history.sql"),
+    include_str!("../migrations/0007_jobs.sql"),
+    include_str!("../migrations/0008_backups.sql")
+);
+const VAULT_SCHEMA_9: &str = include_str!("../migrations/0009_vault.sql");
+const ARTIFACTS_SCHEMA_10: &str = include_str!("../migrations/0010_artifacts.sql");
+
+fn in_memory_schema(ddl: &[&str]) -> Result<Connection, CommandError> {
+    let db = Connection::open_in_memory().map_err(|_| invalid())?;
+    for batch in ddl {
+        db.execute_batch(batch).map_err(|_| invalid())?;
+    }
+    Ok(db)
+}
+
+/// The embeddings table is the one object whose stored
+/// CREATE text has a supported in-place ALTER history (see
+/// vector::ensure_embeddings_table), so its identity is its
+/// column fingerprint rather than its CREATE text.
+fn embeddings_fingerprint(db: &Connection) -> Result<String, CommandError> {
+    let mut q = db
+        .prepare(
+            "SELECT name,type,\"notnull\",dflt_value,pk FROM pragma_table_info('memory_embeddings') ORDER BY name",
+        )
+        .map_err(|_| invalid())?;
+    let cols = q
+        .query_map([], |r| {
+            Ok(format!(
+                "{}:{}:{}:{}:{}",
+                r.get::<_, String>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, i64>(2)?,
+                r.get::<_, Option<String>>(3)?.unwrap_or_default(),
+                r.get::<_, i64>(4)?
+            ))
+        })
         .map_err(|_| invalid())?
         .collect::<rusqlite::Result<Vec<_>>>()
-        .map_err(|_| invalid())
+        .map_err(|_| invalid())?;
+    if cols.is_empty() {
+        return Err(invalid());
+    }
+    Ok(cols.join("|"))
 }
+
+/// Named schema groups a catalog may contain. Derived
+/// structures (vault, full-text index, embeddings) are
+/// recognised exactly - built from the same DDL the runtime
+/// executes - never ignored wholesale.
+struct SchemaGroups {
+    core10: std::collections::BTreeMap<String, SchemaRow>,
+    core8: std::collections::BTreeMap<String, SchemaRow>,
+    vault: std::collections::BTreeMap<String, SchemaRow>,
+    fts: std::collections::BTreeMap<String, SchemaRow>,
+    embeddings: std::collections::BTreeMap<String, SchemaRow>,
+    embeddings_fingerprint: String,
+}
+
+fn schema_groups() -> Result<SchemaGroups, CommandError> {
+    let core10 = schema_objects(&in_memory_schema(&[crate::storage::CURRENT_SCHEMA])?)?;
+    let core8 = schema_objects(&in_memory_schema(&[LEGACY_SCHEMA_8])?)?;
+    let v9 = schema_objects(&in_memory_schema(&[LEGACY_SCHEMA_8, VAULT_SCHEMA_9])?)?;
+    let vault: std::collections::BTreeMap<_, _> = v9
+        .into_iter()
+        .filter(|(name, _)| !core8.contains_key(name))
+        .collect();
+    let fts = schema_objects(&in_memory_schema(&[crate::search::FTS_DDL])?)?;
+    let emb_db = Connection::open_in_memory().map_err(|_| invalid())?;
+    crate::vector::ensure_embeddings_table(&emb_db).map_err(|_| invalid())?;
+    let embeddings_fingerprint = embeddings_fingerprint(&emb_db)?;
+    let embeddings = schema_objects(&emb_db)?;
+    Ok(SchemaGroups {
+        core10,
+        core8,
+        vault,
+        fts,
+        embeddings,
+        embeddings_fingerprint,
+    })
+}
+
+fn definition_matches(
+    groups: &SchemaGroups,
+    name: &str,
+    actual: &SchemaRow,
+    expected: &SchemaRow,
+    db: &Connection,
+) -> Result<bool, CommandError> {
+    if name == "memory_embeddings" {
+        return Ok(actual.0 == expected.0
+            && embeddings_fingerprint(db)? == groups.embeddings_fingerprint);
+    }
+    Ok(actual == expected)
+}
+
+/// Every required object present with an identical
+/// definition; every catalog object accounted for by a
+/// group; each optional group complete or absent.
+fn check_schema(
+    db: &Connection,
+    groups: &SchemaGroups,
+    required: &std::collections::BTreeMap<String, SchemaRow>,
+    optional: &[&std::collections::BTreeMap<String, SchemaRow>],
+) -> Result<(), CommandError> {
+    let actual = schema_objects(db)?;
+    for (name, def) in required {
+        match actual.get(name) {
+            Some(found) if definition_matches(groups, name, found, def, db)? => {}
+            _ => return Err(invalid()),
+        }
+    }
+    for group in optional {
+        let present = group.keys().filter(|name| actual.contains_key(*name)).count();
+        if present != 0 && present != group.len() {
+            return Err(invalid());
+        }
+    }
+    for (name, found) in &actual {
+        let known = required
+            .get(name)
+            .or_else(|| optional.iter().find_map(|g| g.get(name)));
+        match known {
+            Some(def) if definition_matches(groups, name, found, def, db)? => {}
+            _ => return Err(invalid()),
+        }
+    }
+    Ok(())
+}
+
+/// Migrate an isolated staging catalog from schema 8/9 to
+/// 10 with the same step the storage migrator uses. Only
+/// ever called after the legacy structure has been fully
+/// validated; the source package is never touched.
+fn migrate_staging_catalog(path: &Path) -> Result<(), CommandError> {
+    let mut connection = Connection::open(path).map_err(|_| invalid())?;
+    connection
+        .execute_batch("PRAGMA trusted_schema=OFF;")
+        .map_err(|_| invalid())?;
+    let tx = connection.transaction().map_err(|_| invalid())?;
+    tx.execute_batch(ARTIFACTS_SCHEMA_10)
+        .map_err(|_| invalid())?;
+    tx.pragma_update(None, "user_version", SCHEMA_VERSION)
+        .map_err(|_| invalid())?;
+    tx.commit().map_err(|_| invalid())?;
+    Ok(())
+}
+
 /// Strict USTAR subset: regular files, exact portable names, zero extension fields and no duplicates.
 #[cfg(test)]
 pub(crate) fn unpack(data: &[u8], root: &Path) -> Result<(), CommandError> {
@@ -618,43 +798,88 @@ impl Storage {
         if expected != actual {
             return Err(invalid());
         }
-        let db = Connection::open_with_flags(
-            temporary.root.join("catalog.sqlite3"),
-            OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-        )
-        .map_err(|_| invalid())?;
-        db.execute_batch("PRAGMA trusted_schema=OFF;")
+        let groups = schema_groups()?;
+        let open_catalog = |root: &Path| -> Result<Connection, CommandError> {
+            let db = Connection::open_with_flags(
+                root.join("catalog.sqlite3"),
+                OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+            )
             .map_err(|_| invalid())?;
-        let expected = Connection::open_in_memory().map_err(|_| invalid())?;
-        expected
-            .execute_batch(crate::storage::CURRENT_SCHEMA)
-            .map_err(|_| invalid())?;
-        if schema_definition(&db)? != schema_definition(&expected)? {
-            return Err(invalid());
-        }
-        let schema: i64 = db
-            .pragma_query_value(None, "user_version", |r| r.get(0))
-            .map_err(|_| invalid())?;
-        let identity: i64 = db
-            .pragma_query_value(None, "application_id", |r| r.get(0))
-            .map_err(|_| invalid())?;
-        let integrity: String = db
-            .query_row("PRAGMA integrity_check", [], |r| r.get(0))
-            .map_err(|_| invalid())?;
-        if schema != SCHEMA_VERSION
-            || identity != 0x414e414e
-            || integrity != "ok"
-            || db
+            db.execute_batch("PRAGMA trusted_schema=OFF;")
+                .map_err(|_| invalid())?;
+            Ok(db)
+        };
+        // Identity, integrity and foreign keys must hold for
+        // the catalog exactly as packaged - for legacy
+        // packages this runs BEFORE any staging migration.
+        let catalog_version = |db: &Connection| -> Result<i64, CommandError> {
+            let version: i64 = db
+                .pragma_query_value(None, "user_version", |r| r.get(0))
+                .map_err(|_| invalid())?;
+            let identity: i64 = db
+                .pragma_query_value(None, "application_id", |r| r.get(0))
+                .map_err(|_| invalid())?;
+            let integrity: String = db
+                .query_row("PRAGMA integrity_check", [], |r| r.get(0))
+                .map_err(|_| invalid())?;
+            let fk_bad = db
                 .prepare("PRAGMA foreign_key_check")
                 .map_err(|_| invalid())?
                 .query([])
                 .map_err(|_| invalid())?
                 .next()
                 .map_err(|_| invalid())?
-                .is_some()
-        {
-            return Err(invalid());
+                .is_some();
+            if identity != 0x414e414e || integrity != "ok" || fk_bad {
+                return Err(invalid());
+            }
+            Ok(version)
+        };
+        let mut db = open_catalog(&temporary.root)?;
+        let actual_version = catalog_version(&db)?;
+        let optional_current = [&groups.vault, &groups.fts, &groups.embeddings];
+        match info.schema_version {
+            SCHEMA_VERSION => {
+                if actual_version != SCHEMA_VERSION {
+                    return Err(invalid());
+                }
+                check_schema(&db, &groups, &groups.core10, &optional_current)?;
+            }
+            8 | 9 => {
+                // Bounded legacy path: the declared version
+                // must agree with the catalog, the legacy
+                // structure must be exact, and only then is
+                // the isolated staging copy migrated - the
+                // package itself is never modified.
+                if actual_version != info.schema_version {
+                    return Err(invalid());
+                }
+                if info.schema_version == 9 {
+                    check_schema(
+                        &db,
+                        &groups,
+                        &groups.core8,
+                        &[&groups.vault, &groups.fts, &groups.embeddings],
+                    )?;
+                } else {
+                    check_schema(
+                        &db,
+                        &groups,
+                        &groups.core8,
+                        &[&groups.fts, &groups.embeddings],
+                    )?;
+                }
+                drop(db);
+                migrate_staging_catalog(&temporary.root.join("catalog.sqlite3"))?;
+                db = open_catalog(&temporary.root)?;
+                if catalog_version(&db)? != SCHEMA_VERSION {
+                    return Err(invalid());
+                }
+                check_schema(&db, &groups, &groups.core10, &optional_current)?;
+            }
+            _ => return Err(invalid()),
         }
+        let schema = SCHEMA_VERSION;
         let unsafe_policy:bool=db.query_row("SELECT EXISTS(SELECT 1 FROM backup_schedules WHERE enabled<>0) OR EXISTS(SELECT 1 FROM jobs WHERE state IN ('Queued','Running')) OR EXISTS(SELECT 1 FROM backup_uploads)",[],|r|r.get(0)).map_err(|_|invalid())?;
         if unsafe_policy {
             return Err(invalid());
@@ -767,6 +992,109 @@ impl Storage {
                 }
             }
             referenced.insert(path);
+        }
+        // Artifact registry rows: structure, integrity and
+        // references are verified before anything is imported.
+        {
+            let mut artifact_keys = BTreeSet::new();
+            let mut version_sets: std::collections::BTreeMap<(String, String), Vec<i64>> =
+                std::collections::BTreeMap::new();
+            let mut pending_refs: Vec<(String, String, i64)> = Vec::new();
+            let mut query = db
+                .prepare("SELECT workspace_id,artifact_id,project_id,version,artifact_type,body,content_hash,source_references,generator,privacy FROM artifact_versions")
+                .map_err(|_| invalid())?;
+            let mut rows = query.query([]).map_err(|_| invalid())?;
+            while let Some(row) = rows.next().map_err(|_| invalid())? {
+                let (w, a, project, v, kind, body, hash, refs_raw, generator, privacy): (
+                    String,
+                    String,
+                    String,
+                    i64,
+                    String,
+                    String,
+                    String,
+                    String,
+                    Option<String>,
+                    String,
+                ) = (
+                    row.get(0).map_err(|_| invalid())?,
+                    row.get(1).map_err(|_| invalid())?,
+                    row.get(2).map_err(|_| invalid())?,
+                    row.get(3).map_err(|_| invalid())?,
+                    row.get(4).map_err(|_| invalid())?,
+                    row.get(5).map_err(|_| invalid())?,
+                    row.get(6).map_err(|_| invalid())?,
+                    row.get(7).map_err(|_| invalid())?,
+                    row.get(8).map_err(|_| invalid())?,
+                    row.get(9).map_err(|_| invalid())?,
+                );
+                for id in [&w, &a, &project] {
+                    crate::workspace::validate_id(id)?;
+                }
+                if !info.workspaces.contains(&w) || v < 1 {
+                    return Err(invalid());
+                }
+                let project_exists: bool = db
+                    .query_row(
+                        "SELECT EXISTS(SELECT 1 FROM memories WHERE workspace_id=?1 AND id=?2)",
+                        params![w, project],
+                        |r| r.get(0),
+                    )
+                    .map_err(|_| invalid())?;
+                if !project_exists {
+                    return Err(invalid());
+                }
+                if privacy != "standard" && privacy != "private" {
+                    return Err(invalid());
+                }
+                if content::hash(body.as_bytes()) != hash {
+                    return Err(content::integrity());
+                }
+                if let Some(raw) = &generator {
+                    let parsed: serde_json::Value =
+                        serde_json::from_str(raw).map_err(|_| invalid())?;
+                    if !parsed.is_object() {
+                        return Err(invalid());
+                    }
+                }
+                let refs: Vec<String> =
+                    serde_json::from_str(&refs_raw).map_err(|_| invalid())?;
+                for reference in &refs {
+                    if let Some(rest) = reference.strip_prefix("artifact://") {
+                        let (id, version) = rest.rsplit_once("@v").ok_or_else(invalid)?;
+                        crate::workspace::validate_id(id)?;
+                        let version: i64 = version.parse().map_err(|_| invalid())?;
+                        pending_refs.push((w.clone(), id.to_string(), version));
+                    } else if reference.starts_with("artifact:") {
+                        return Err(invalid());
+                    }
+                }
+                if kind == "evaluation" {
+                    let (source, source_v, rubric, rubric_v) =
+                        crate::evaluations::evaluation_references(&body)
+                            .ok_or_else(invalid)?;
+                    pending_refs.push((w.clone(), source, i64::from(source_v)));
+                    pending_refs.push((w.clone(), rubric, i64::from(rubric_v)));
+                }
+                version_sets
+                    .entry((w.clone(), a.clone()))
+                    .or_default()
+                    .push(v);
+                artifact_keys.insert((w, a, v));
+            }
+            for versions in version_sets.values() {
+                let mut sorted = versions.clone();
+                sorted.sort_unstable();
+                let expected: Vec<i64> = (1..=versions.len() as i64).collect();
+                if sorted != expected {
+                    return Err(invalid());
+                }
+            }
+            for key in &pending_refs {
+                if !artifact_keys.contains(key) {
+                    return Err(invalid());
+                }
+            }
         }
         if info.application {
             let mut jobs = db

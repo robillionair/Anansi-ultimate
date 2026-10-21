@@ -107,11 +107,13 @@ anything is imported.
   is preserved through `restore_origins` (original ↔ new id
   for every entity, artifacts included) — the original
   workspace is never modified.
-- **Idempotent retries:** if `restore_origins` already
-  records this backup artifact, restore returns the original
-  result instead of importing a duplicate. (Re-uploading the
+- **No duplicate imports from retries:** if `restore_origins`
+  already records this backup artifact, restore refuses with
+  a conflict naming the workspace it was already restored
+  as, instead of importing a duplicate. (Re-uploading the
   same package as a new artifact is the explicit path to a
-  second copy.) The import itself stays a single transaction
+  second copy; the settled same-name refusal is preserved.)
+  The import itself stays a single transaction
   after all bodies are staged, so an interrupted restore
   leaves no partial rows.
 - **Derived state:** archived FTS/embedding data is never
