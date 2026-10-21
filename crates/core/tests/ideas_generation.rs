@@ -7,7 +7,7 @@
 use anansi_core::Core;
 use serde_json::{Value, json};
 use std::io::{BufRead, BufReader, Read, Write};
-use std::net::TcpListener;
+use std::net::{TcpListener, TcpStream};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -21,6 +21,47 @@ struct Fake {
     last_body: Arc<Mutex<String>>,
     dripped: Arc<AtomicBool>,
     broken: Arc<Mutex<std::collections::HashSet<usize>>>,
+    /// Gated mode: a stream writes its first chunk and then
+    /// holds behind this gate until the test opens it, so a
+    /// stream stays active for exactly as long as the test
+    /// needs — activity is never a timing assumption.
+    gate: Arc<AtomicBool>,
+    /// Connections that have written their first chunk.
+    begun: Arc<Mutex<std::collections::HashSet<usize>>>,
+    /// Connections that wrote their final frame.
+    finished: Arc<Mutex<std::collections::HashSet<usize>>>,
+    /// Connection id → run index, parsed from the run's topic
+    /// marker (`evictprobeNN`) in the request body, so tests
+    /// name connections by the run they belong to instead of
+    /// assuming accept order.
+    conn_run: Arc<Mutex<std::collections::HashMap<usize, usize>>>,
+}
+
+impl Fake {
+    fn conn_of(&self, run: usize) -> Option<usize> {
+        self.conn_run
+            .lock()
+            .unwrap()
+            .iter()
+            .find(|&(_, &r)| r == run)
+            .map(|(&c, _)| c)
+    }
+
+    fn is_begun(&self, conn: usize) -> bool {
+        self.begun.lock().unwrap().contains(&conn)
+    }
+
+    fn is_broken(&self, conn: usize) -> bool {
+        self.broken.lock().unwrap().contains(&conn)
+    }
+
+    fn is_finished(&self, conn: usize) -> bool {
+        self.finished.lock().unwrap().contains(&conn)
+    }
+
+    fn broken_conns(&self) -> std::collections::HashSet<usize> {
+        self.broken.lock().unwrap().clone()
+    }
 }
 
 fn idea_json(n: usize) -> String {
@@ -57,6 +98,50 @@ fn ndjson_chunks(text: &str, chunks: usize) -> Vec<String> {
     out
 }
 
+/// The run index a test encoded in the brief's topic marker
+/// (`evictprobeNN`), so a connection can be attributed to the
+/// run that opened it.
+fn parse_run_marker(body: &str) -> Option<usize> {
+    let pos = body.find("evictprobe")? + "evictprobe".len();
+    body.get(pos..pos + 2)?.parse().ok()
+}
+
+/// Hold a gated stream open until the gate opens. Returns
+/// false when the client closes the connection first (a
+/// cancellation or eviction): the close is observed directly
+/// as the socket reaching EOF, and recorded in `broken`.
+fn hold_behind_gate(
+    stream: &TcpStream,
+    gate: &AtomicBool,
+    broken: &Mutex<std::collections::HashSet<usize>>,
+    conn_id: usize,
+) -> bool {
+    let _ = stream.set_read_timeout(Some(Duration::from_millis(25)));
+    let mut buf = [0u8; 1];
+    while !gate.load(Ordering::SeqCst) {
+        match stream.peek(&mut buf) {
+            Ok(0) => {
+                broken.lock().unwrap().insert(conn_id);
+                return false;
+            }
+            Ok(_) => {}
+            Err(e)
+                if matches!(
+                    e.kind(),
+                    std::io::ErrorKind::WouldBlock
+                        | std::io::ErrorKind::TimedOut
+                        | std::io::ErrorKind::Interrupted
+                ) => {}
+            Err(_) => {
+                broken.lock().unwrap().insert(conn_id);
+                return false;
+            }
+        }
+    }
+    let _ = stream.set_read_timeout(None);
+    true
+}
+
 fn start_fake() -> Fake {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap();
@@ -64,11 +149,19 @@ fn start_fake() -> Fake {
     let last_body = Arc::new(Mutex::new(String::new()));
     let dripped = Arc::new(AtomicBool::new(false));
     let broken = Arc::new(Mutex::new(std::collections::HashSet::new()));
-    let (m2, b2, d2, br2) = (
+    let gate = Arc::new(AtomicBool::new(false));
+    let begun = Arc::new(Mutex::new(std::collections::HashSet::new()));
+    let finished = Arc::new(Mutex::new(std::collections::HashSet::new()));
+    let conn_run = Arc::new(Mutex::new(std::collections::HashMap::new()));
+    let (m2, b2, d2, br2, g2, be2, fi2, cr2) = (
         mode.clone(),
         last_body.clone(),
         dripped.clone(),
         broken.clone(),
+        gate.clone(),
+        begun.clone(),
+        finished.clone(),
+        conn_run.clone(),
     );
     let mut conn_seq = 0usize;
     std::thread::spawn(move || {
@@ -76,8 +169,16 @@ fn start_fake() -> Fake {
             let Ok(mut stream) = stream else { continue };
             let conn_id = conn_seq;
             conn_seq += 1;
-            let (mode, last_body, dripped, broken) =
-                (m2.clone(), b2.clone(), d2.clone(), br2.clone());
+            let (mode, last_body, dripped, broken, gate, begun, finished, conn_run) = (
+                m2.clone(),
+                b2.clone(),
+                d2.clone(),
+                br2.clone(),
+                g2.clone(),
+                be2.clone(),
+                fi2.clone(),
+                cr2.clone(),
+            );
             std::thread::spawn(move || {
                 let mut reader = BufReader::new(stream.try_clone().unwrap());
                 let mut content_length = 0usize;
@@ -97,6 +198,9 @@ fn start_fake() -> Fake {
                 let mut body = vec![0u8; content_length];
                 reader.read_exact(&mut body).unwrap_or(());
                 *last_body.lock().unwrap() = String::from_utf8_lossy(&body).to_string();
+                if let Some(run) = parse_run_marker(&last_body.lock().unwrap()) {
+                    conn_run.lock().unwrap().insert(conn_id, run);
+                }
                 let mode = mode.lock().unwrap().clone();
                 if mode == "fail" {
                     let payload = "provider exploded";
@@ -114,7 +218,17 @@ fn start_fake() -> Fake {
                     _ => idea_json(6),
                 };
                 let slow = mode == "valid-slow";
-                let chunks = ndjson_chunks(&text, if slow { 24 } else { 3 });
+                let gated = mode == "gated";
+                let chunks = ndjson_chunks(
+                    &text,
+                    if gated {
+                        8
+                    } else if slow {
+                        24
+                    } else {
+                        3
+                    },
+                );
                 let _ = stream.write_all(
                     b"HTTP/1.1 200 OK\r\nContent-Type: application/x-ndjson\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n",
                 );
@@ -132,6 +246,12 @@ fn start_fake() -> Fake {
                     }
                     if i == 0 {
                         dripped.store(true, Ordering::SeqCst);
+                        begun.lock().unwrap().insert(conn_id);
+                        if gated && !hold_behind_gate(&stream, &gate, &broken, conn_id) {
+                            // The client closed the gated
+                            // stream (cancellation / eviction).
+                            return;
+                        }
                     }
                     if slow {
                         std::thread::sleep(Duration::from_millis(250));
@@ -139,7 +259,11 @@ fn start_fake() -> Fake {
                 }
                 let final_line = "{\"model\":\"llama-x\",\"message\":{\"role\":\"assistant\",\"content\":\"\"},\"done\":true,\"prompt_eval_count\":10,\"eval_count\":40}\n";
                 let frame = format!("{:x}\r\n{}\r\n0\r\n\r\n", final_line.len(), final_line);
-                let _ = stream.write_all(frame.as_bytes());
+                if stream.write_all(frame.as_bytes()).is_ok() {
+                    finished.lock().unwrap().insert(conn_id);
+                } else {
+                    broken.lock().unwrap().insert(conn_id);
+                }
             });
         }
     });
@@ -149,6 +273,10 @@ fn start_fake() -> Fake {
         last_body,
         dripped,
         broken,
+        gate,
+        begun,
+        finished,
+        conn_run,
     }
 }
 
@@ -256,6 +384,19 @@ fn poll_until(f: &Fixture, run_id: &str, timeout: Duration) -> Value {
             return polled;
         }
         std::thread::sleep(Duration::from_millis(25));
+    }
+}
+
+/// Wait for a condition the test's synchronization guarantees
+/// will become true (a gated stream has begun, a cancelled
+/// connection reaches EOF, a reservation settles) — never for
+/// a wall-clock guess about how long work takes. The deadline
+/// only bounds the failure message.
+fn wait_until(deadline: Duration, what: &str, mut condition: impl FnMut() -> bool) {
+    let start = Instant::now();
+    while !condition() {
+        assert!(start.elapsed() < deadline, "timed out waiting for {what}");
+        std::thread::sleep(Duration::from_millis(10));
     }
 }
 
@@ -603,18 +744,75 @@ fn concurrent_saves_resolve_to_exactly_one_artifact() {
 #[test]
 fn cap_eviction_cancels_the_oldest_active_stream() {
     let fake = start_fake();
-    *fake.mode.lock().unwrap() = "valid-slow".to_string();
+    *fake.mode.lock().unwrap() = "gated".to_string();
     let f = fixture(&fake);
+    let usage = |f: &Fixture| {
+        f.core
+            .ai_command(
+                "providers-usage",
+                json!({ "contractVersion": 1, "workspaceId": f.ws }),
+            )
+            .unwrap()
+    };
+
+    // Fill the per-workspace cap with gated streams. A gated
+    // stream writes its first chunk and then holds behind the
+    // server gate, so no run can finish on its own: the old
+    // failure mode — the oldest of 32 merely-slow streams
+    // completing naturally before the evicting start, on a
+    // slow machine — is designed out, not timed around. Every
+    // start is synchronized on the server having taken that
+    // run's connection and begun its stream.
     let mut run_ids: Vec<String> = Vec::new();
-    for _ in 0..32 {
-        let started = start_run(&f, json!({}));
+    for i in 0..32 {
+        let started = start_run(
+            &f,
+            json!({ "topic": format!("harbor logistics evictprobe{i:02}") }),
+        );
         run_ids.push(started["runId"].as_str().unwrap().to_string());
+        wait_until(
+            Duration::from_secs(30),
+            "each run's stream to begin",
+            || fake.conn_of(i).is_some_and(|c| fake.is_begun(c)),
+        );
     }
+    let oldest_conn = fake.conn_of(0).unwrap();
+    let neighbour_conn = fake.conn_of(1).unwrap();
+
+    // The oldest run and its neighbour are provably active
+    // before eviction: the application reports both running,
+    // and the quota ledger holds exactly one token reservation
+    // per gated stream (every brief is the same length, so the
+    // holds are uniform).
+    for run_id in [&run_ids[0], &run_ids[1]] {
+        let polled = f
+            .core
+            .ai_command(
+                "ideas-generate-poll",
+                json!({ "contractVersion": 1, "workspaceId": f.ws, "runId": run_id }),
+            )
+            .unwrap();
+        assert_eq!(polled["status"], "running", "{polled}");
+    }
+    let before = usage(&f);
+    assert_eq!(before["totalRequests"], 32, "{before}");
+    let reserved_before = before["reservedTokens"].as_u64().unwrap();
+    assert!(
+        reserved_before > 0 && reserved_before % 32 == 0,
+        "one uniform token hold per gated stream: {before}"
+    );
+    let hold = reserved_before / 32;
+
     // The 33rd start makes room BEFORE its provider stream
     // starts: the oldest run is evicted from the registry and
     // its provider stream is cancelled (not silently dropped).
-    let last = start_run(&f, json!({}));
+    let last = start_run(&f, json!({ "topic": "harbor logistics evictprobe32" }));
     let last_id = last["runId"].as_str().unwrap().to_string();
+    wait_until(
+        Duration::from_secs(30),
+        "the newest stream to begin",
+        || fake.conn_of(32).is_some_and(|c| fake.is_begun(c)),
+    );
 
     let err = f
         .core
@@ -629,32 +827,69 @@ fn cap_eviction_cancels_the_oldest_active_stream() {
         "evicted run leaves the registry"
     );
 
-    // Cancellation closed the evicted stream's connection
-    // (connection 0) while its neighbour (connection 1) lives.
-    let deadline = Instant::now() + Duration::from_secs(10);
-    loop {
-        let broken = fake.broken.lock().unwrap().clone();
-        if broken.contains(&0) {
-            assert!(
-                !broken.contains(&1),
-                "only the evicted stream is cancelled, not its neighbours"
-            );
-            break;
-        }
-        assert!(
-            Instant::now() < deadline,
-            "the evicted stream was never cancelled: {broken:?}"
-        );
-        std::thread::sleep(Duration::from_millis(50));
+    // Eviction closed exactly the evicted stream's connection:
+    // the gated server observes the client closing it, while
+    // its neighbour's connection stays open.
+    wait_until(
+        Duration::from_secs(30),
+        "the evicted stream's connection to close",
+        || fake.is_broken(oldest_conn),
+    );
+    assert_eq!(
+        fake.broken_conns(),
+        std::collections::HashSet::from([oldest_conn]),
+        "only the evicted stream is cancelled, not its neighbours"
+    );
+    assert!(!fake.is_broken(neighbour_conn));
+
+    // The neighbour and the newest run are still active...
+    for run_id in [&run_ids[1], &last_id] {
+        let polled = f
+            .core
+            .ai_command(
+                "ideas-generate-poll",
+                json!({ "contractVersion": 1, "workspaceId": f.ws, "runId": run_id }),
+            )
+            .unwrap();
+        assert_eq!(polled["status"], "running", "{polled}");
     }
 
-    // The newest run is alive and generating.
-    let polled = f
-        .core
-        .ai_command(
-            "ideas-generate-poll",
-            json!({ "contractVersion": 1, "workspaceId": f.ws, "runId": last_id }),
-        )
-        .unwrap();
-    assert_eq!(polled["status"], "running", "{polled}");
+    // ...and the evicted stream's reservation is released:
+    // exactly 32 holds remain (31 survivors + the new run). A
+    // leaked eviction hold would read 33 holds; a collateral
+    // cancellation would read fewer.
+    wait_until(
+        Duration::from_secs(30),
+        "the evicted reservation to settle",
+        || {
+            let u = usage(&f);
+            u["totalRequests"] == 33 && u["reservedTokens"] == 32 * hold
+        },
+    );
+
+    // Cleanup: open the gate and drain every remaining
+    // test-owned stream to completion, leaving no connection
+    // or reservation behind.
+    fake.gate.store(true, Ordering::SeqCst);
+    for run_id in run_ids[1..].iter().chain(std::iter::once(&last_id)) {
+        let done = poll_until(&f, run_id, Duration::from_secs(30));
+        assert_eq!(done["status"], "complete", "{done}");
+    }
+    wait_until(
+        Duration::from_secs(30),
+        "every test-owned connection to end",
+        || {
+            (0..=32).all(|i| {
+                let c = fake.conn_of(i).unwrap();
+                if i == 0 {
+                    fake.is_broken(c)
+                } else {
+                    fake.is_finished(c)
+                }
+            })
+        },
+    );
+    let after = usage(&f);
+    assert_eq!(after["reservedTokens"], 0, "{after}");
+    assert_eq!(after["reservedRequests"], 0, "{after}");
 }
