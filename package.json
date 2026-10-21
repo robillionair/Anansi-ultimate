@@ -27,7 +27,7 @@
     "build:web": "pnpm --filter @anansi/web build",
     "dev:api": "node scripts/cargo.mjs run --locked -p anansi-api",
     "test:rust": "node scripts/cargo.mjs test --workspace --locked",
-    "test:ui": "node --import tsx --test tests/contracts.test.ts packages/ui/tests/components.test.tsx"
+    "test:ui": "node --import tsx --test tests/contracts.test.ts packages/ui/tests/components.test.tsx packages/ui/tests/idea-run.test.ts"
   },
   "devDependencies": {
     "typescript": "7.0.2",

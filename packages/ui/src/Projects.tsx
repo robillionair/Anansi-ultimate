@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { ArtifactDetails, ArtifactRecord, Client, IdeaConcept, IdeaSet, MemoryDetails, MemoryDraft, MemoryMetadata, RelationshipRecord } from '@anansi/contracts';
 import type { DisclosureRecord } from '@anansi/contracts';
 import { DisclosurePanel } from './Providers';
+import { IdeaRunController } from './ideaRun';
 
 const blank = (): MemoryDraft => ({
   title: '',
@@ -44,7 +45,15 @@ export function Projects({ client, workspaceId }: { client: Client; workspaceId:
   const [ideaSet, setIdeaSet] = useState<IdeaSet | null>(null);
   const [ideaDisclosure, setIdeaDisclosure] = useState<DisclosureRecord | null>(null);
   const [savedIdeaArtifact, setSavedIdeaArtifact] = useState('');
-  const ideaRunRef = useRef('');
+  const ideaControllerRef = useRef<{ key: string; controller: IdeaRunController } | null>(null);
+  function ideaController(): IdeaRunController {
+    if (!ideaControllerRef.current || ideaControllerRef.current.key !== workspaceId) {
+      const old = ideaControllerRef.current?.controller;
+      if (old) void old.reset();
+      ideaControllerRef.current = { key: workspaceId, controller: new IdeaRunController(client, workspaceId) };
+    }
+    return ideaControllerRef.current.controller;
+  }
 
   const [relTargetId, setRelTargetId] = useState('');
   const [relPredicate, setRelPredicate] = useState('relates_to');
@@ -68,6 +77,10 @@ export function Projects({ client, workspaceId }: { client: Client; workspaceId:
   }
 
   async function open(id: string) {
+    // Switching projects supersedes any generation in flight:
+    // cancel it and invalidate its late responses (the run
+    // controller's epoch does the invalidating).
+    await ideaController().reset();
     const proj = await client.readMemory(workspaceId, id);
     setCurrent(proj);
     setDraft({
@@ -101,7 +114,6 @@ export function Projects({ client, workspaceId }: { client: Client; workspaceId:
     setIdeaSet(null);
     setIdeaDisclosure(null);
     setSavedIdeaArtifact('');
-    ideaRunRef.current = '';
 
     // Load this project's artifacts (latest versions)
     const artList = await client.listProjectArtifacts(workspaceId, id);
@@ -118,11 +130,14 @@ export function Projects({ client, workspaceId }: { client: Client; workspaceId:
     const timer = setInterval(() => {
       void (async () => {
         try {
-          const polled = await client.pollProjectIdeas(workspaceId, ideaRun.runId);
+          // Serialized + staleness-checked by the controller:
+          // a tick during an in-flight poll is skipped, and a
+          // response for a superseded run is dropped.
+          const polled = await ideaController().pollOnce();
+          if (!polled) return;
           setIdeaRun({ runId: polled.runId, status: polled.status, partialChars: polled.partialChars, error: polled.error ?? null });
           if (polled.disclosure) setIdeaDisclosure(polled.disclosure);
           if (polled.status === 'complete' && polled.ideaSet) setIdeaSet(polled.ideaSet);
-          if (polled.status !== 'running' && polled.status !== 'cancelling') ideaRunRef.current = '';
         } catch {
           // Transient poll failures keep the run state; the
           // next interval retries.
@@ -133,10 +148,8 @@ export function Projects({ client, workspaceId }: { client: Client; workspaceId:
   }, [ideaRun?.runId, ideaRun?.status, client, workspaceId]);
 
   useEffect(() => () => {
-    if (ideaRunRef.current) {
-      void client.cancelProjectIdeas(workspaceId, ideaRunRef.current).catch(() => undefined);
-    }
-  }, [client, workspaceId]);
+    void ideaControllerRef.current?.controller.reset();
+  }, []);
 
   async function generateIdeas() {
     if (!current) return;
@@ -144,7 +157,7 @@ export function Projects({ client, workspaceId }: { client: Client; workspaceId:
     setNotice('');
     setIdeaSet(null);
     setSavedIdeaArtifact('');
-    const started = await client.startProjectIdeas(workspaceId, {
+    const started = await ideaController().start({
       projectId: current.memory.id,
       topic: ideaForm.topic,
       customer: ideaForm.customer,
@@ -155,14 +168,15 @@ export function Projects({ client, workspaceId }: { client: Client; workspaceId:
       options: ideaOptions,
       zeroCostLock: ideaLock,
     });
-    ideaRunRef.current = started.runId;
+    if (!started) return; // superseded while the start was in flight
     setIdeaRun({ runId: started.runId, status: 'running', partialChars: 0, error: null });
     if (started.disclosure) setIdeaDisclosure(started.disclosure);
   }
 
   async function cancelIdeas() {
     if (!ideaRun) return;
-    const polled = await client.cancelProjectIdeas(workspaceId, ideaRun.runId);
+    const polled = await ideaController().cancel();
+    if (!polled) return;
     setIdeaRun({ runId: polled.runId, status: polled.status, partialChars: polled.partialChars, error: polled.error ?? null });
   }
 
@@ -210,6 +224,11 @@ export function Projects({ client, workspaceId }: { client: Client; workspaceId:
         <button
           disabled={busy}
           onClick={() => {
+            void ideaController().reset();
+            setIdeaRun(null);
+            setIdeaSet(null);
+            setIdeaDisclosure(null);
+            setSavedIdeaArtifact('');
             setCurrent(null);
             setDraft(blank());
             setTasks([]);
