@@ -59,6 +59,22 @@ test('memory HTTP/native operations use scoped commands, validated DTOs and sani
   Object.defineProperty(globalThis,'window',{configurable:true,value:{__TAURI_INTERNALS__:{invoke:async(c:string,a:unknown)=>{command=c;args=a;return {contractVersion:1,memories:[],nextOffset:null};}}}});
   try{await nativeClient().listMemories('a'.repeat(32));assert.equal(command,'memory_command');assert.deepEqual(args,{command:'list',request:{contractVersion:1,workspaceId:'a'.repeat(32)}});}finally{if(window)Object.defineProperty(globalThis,'window',window);else Reflect.deleteProperty(globalThis,'window');}
 });
+test('artifact registry validators enforce the section 9 record shape', async () => {
+  const { validArtifactDetails, validArtifactListResponse } = await import('../packages/contracts/src/validators.mjs');
+  const record = {
+    artifactId: 'a'.repeat(32), projectId: 'b'.repeat(32), type: 'concept', version: 1,
+    title: 'Concept', timestamp: '2026-10-21T00:00:00.000Z', sourceReferences: ['memory://x'],
+    generator: { kind: 'manual' }, validationStatus: 'unvalidated', privacy: 'private',
+    contentHash: 'c'.repeat(64),
+  };
+  assert.equal(validArtifactDetails({ contractVersion: 1, artifact: record, body: 'text' }), true);
+  const { validationStatus, ...missingField } = record;
+  assert.equal(validArtifactDetails({ contractVersion: 1, artifact: missingField, body: 'text' }), false,
+    'a record missing a section 9 field is rejected');
+  assert.equal(validArtifactDetails({ contractVersion: 1, artifact: { ...record, version: 'one' }, body: 'text' }), false);
+  assert.equal(validArtifactListResponse({ contractVersion: 1, artifacts: [record] }), true);
+});
+
 test('runtime schema accepts a readiness DTO and rejects malformed and unknown fields',()=>{
   assert.deepEqual(decodeReadiness(actual),actual);
   for(const value of [{...actual,uptimeMs:'5'},{...actual,secret:'unknown'},{...actual,contractVersion:2},null,{}])assert.throws(()=>decodeReadiness(value));

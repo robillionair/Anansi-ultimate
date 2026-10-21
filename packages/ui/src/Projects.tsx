@@ -1,6 +1,6 @@
 import { EntityHistory } from './EntityHistory';
 import { useEffect, useState } from 'react';
-import type { Client, MemoryDetails, MemoryDraft, MemoryMetadata, RelationshipRecord } from '@anansi/contracts';
+import type { ArtifactDetails, ArtifactRecord, Client, MemoryDetails, MemoryDraft, MemoryMetadata, RelationshipRecord } from '@anansi/contracts';
 
 const blank = (): MemoryDraft => ({
   title: '',
@@ -22,6 +22,14 @@ export function Projects({ client, workspaceId }: { client: Client; workspaceId:
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+
+  // Artifact registry state (M6 Slice 1)
+  const [artifacts, setArtifacts] = useState<ArtifactRecord[]>([]);
+  const [artifactVersions, setArtifactVersions] = useState<ArtifactRecord[]>([]);
+  const [selectedArtifact, setSelectedArtifact] = useState<string>('');
+  const [viewedArtifact, setViewedArtifact] = useState<ArtifactDetails | null>(null);
+  const [artifactForm, setArtifactForm] = useState({ type: 'note', title: '', body: '', privacy: 'private', sources: '' });
+  const [reviseForm, setReviseForm] = useState({ title: '', body: '', sources: '' });
 
   // Relationship creation state
   const [relTargetId, setRelTargetId] = useState('');
@@ -69,6 +77,30 @@ export function Projects({ client, workspaceId }: { client: Client; workspaceId:
     // Load relationships for this project
     const relList = await client.listRelationships(workspaceId, { recordId: id });
     setRelationships(relList.relationships);
+
+    // Load this project's artifacts (latest versions)
+    const artList = await client.listProjectArtifacts(workspaceId, id);
+    setArtifacts(artList.artifacts);
+    setArtifactVersions([]);
+    setSelectedArtifact('');
+    setViewedArtifact(null);
+  }
+
+  async function openArtifact(artifactId: string) {
+    const versions = await client.listProjectArtifactVersions(workspaceId, artifactId);
+    setSelectedArtifact(artifactId);
+    setArtifactVersions(versions.versions);
+    const latest = versions.versions[versions.versions.length - 1];
+    if (latest) {
+      const details = await client.readProjectArtifact(workspaceId, artifactId, latest.version);
+      setViewedArtifact(details);
+      setReviseForm({ title: details.artifact.title, body: details.body, sources: details.artifact.sourceReferences.join('\n') });
+    }
+  }
+
+  async function viewArtifactVersion(artifactId: string, version: number) {
+    const details = await client.readProjectArtifact(workspaceId, artifactId, version);
+    setViewedArtifact(details);
   }
 
   useEffect(() => {
@@ -164,6 +196,120 @@ export function Projects({ client, workspaceId }: { client: Client; workspaceId:
               ))}
             </ul>
             {!tasks.length && <p>No tasks associated with this project yet.</p>}
+          </section>
+
+          <section aria-labelledby="project-artifacts-heading">
+            <h3 id="project-artifacts-heading">Artifacts</h3>
+            <p className="help">Versioned registry (§9): every version is immutable — revising creates a new version; earlier versions stay readable exactly as written.</p>
+            <ul aria-label="Artifacts in this project">
+              {artifacts.map(a => (
+                <li key={a.artifactId}>
+                  <button disabled={busy} className="secondary" onClick={() => void run(() => openArtifact(a.artifactId))}>
+                    {a.title}
+                  </button>
+                  <span> · {a.type} · Latest version {a.version} · {a.privacy} · {a.validationStatus}</span>
+                </li>
+              ))}
+            </ul>
+            {!artifacts.length && <p>No artifacts registered for this project yet.</p>}
+
+            <form
+              onSubmit={e => {
+                e.preventDefault();
+                void run(async () => {
+                  const created = await client.registerProjectArtifact(workspaceId, current.memory.id, {
+                    type: artifactForm.type,
+                    title: artifactForm.title,
+                    body: artifactForm.body,
+                    privacy: artifactForm.privacy,
+                    sourceReferences: artifactForm.sources ? artifactForm.sources.split('\n').filter(Boolean) : [],
+                  });
+                  const artList = await client.listProjectArtifacts(workspaceId, current.memory.id);
+                  setArtifacts(artList.artifacts);
+                  setArtifactForm({ type: 'note', title: '', body: '', privacy: 'private', sources: '' });
+                  await openArtifact(created.artifact.artifactId);
+                  setNotice(`Artifact registered. Version ${created.artifact.version}.`);
+                });
+              }}
+            >
+              <h4>Register an artifact</h4>
+              <label htmlFor="artifact-type">Artifact type</label>
+              <select id="artifact-type" value={artifactForm.type} onChange={e => setArtifactForm(f => ({ ...f, type: e.target.value }))}>
+                {['research', 'source', 'idea', 'concept', 'experiment', 'prototype', 'generated-file', 'simulation', 'agent-test', 'decision', 'launch-material', 'feedback', 'note'].map(t => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
+              <label htmlFor="artifact-title">Artifact title</label>
+              <input id="artifact-title" value={artifactForm.title} onChange={e => setArtifactForm(f => ({ ...f, title: e.target.value }))} required autoComplete="off" />
+              <label htmlFor="artifact-body">Artifact text</label>
+              <textarea id="artifact-body" value={artifactForm.body} onChange={e => setArtifactForm(f => ({ ...f, body: e.target.value }))} rows={5} required />
+              <label htmlFor="artifact-privacy">Privacy classification</label>
+              <select id="artifact-privacy" value={artifactForm.privacy} onChange={e => setArtifactForm(f => ({ ...f, privacy: e.target.value }))}>
+                <option value="private">Private</option>
+                <option value="standard">Standard</option>
+              </select>
+              <label htmlFor="artifact-sources">Source references (one per line)</label>
+              <textarea id="artifact-sources" rows={2} value={artifactForm.sources} onChange={e => setArtifactForm(f => ({ ...f, sources: e.target.value }))} />
+              <button type="submit" disabled={busy}>Register artifact</button>
+            </form>
+
+            {selectedArtifact && (
+              <div>
+                <h4>Version history</h4>
+                <ul aria-label="Artifact versions">
+                  {artifactVersions.map(v => (
+                    <li key={v.version}>
+                      <button disabled={busy} className="secondary" onClick={() => void run(() => viewArtifactVersion(selectedArtifact, v.version))}>
+                        View version {v.version}
+                      </button>
+                      <span> · {v.timestamp} · {v.validationStatus} · {v.privacy}</span>
+                    </li>
+                  ))}
+                </ul>
+                {viewedArtifact && (
+                  <div>
+                    <p>
+                      Viewing version {viewedArtifact.artifact.version} of {viewedArtifact.artifact.title} —{' '}
+                      {viewedArtifact.artifact.version === artifactVersions[artifactVersions.length - 1]?.version
+                        ? 'the latest version.'
+                        : 'an immutable earlier version (read-only).'}
+                    </p>
+                    <pre className="provider-output">{viewedArtifact.body}</pre>
+                    <p className="help">
+                      Artifact {viewedArtifact.artifact.artifactId} · Project {viewedArtifact.artifact.projectId} · Hash {viewedArtifact.artifact.contentHash.slice(0, 12)}… ·
+                      Generator {viewedArtifact.artifact.generator ? JSON.stringify(viewedArtifact.artifact.generator) : 'none'} ·
+                      Sources: {viewedArtifact.artifact.sourceReferences.join(', ') || 'none'}
+                    </p>
+                    <form
+                      onSubmit={e => {
+                        e.preventDefault();
+                        void run(async () => {
+                          const latest = artifactVersions[artifactVersions.length - 1];
+                          const revised = await client.reviseProjectArtifact(workspaceId, selectedArtifact, latest.version, {
+                            title: reviseForm.title,
+                            body: reviseForm.body,
+                            sourceReferences: reviseForm.sources ? reviseForm.sources.split('\n').filter(Boolean) : [],
+                          });
+                          const artList = await client.listProjectArtifacts(workspaceId, current.memory.id);
+                          setArtifacts(artList.artifacts);
+                          await openArtifact(selectedArtifact);
+                          setNotice(`Artifact revised. Version ${revised.artifact.version} created; earlier versions are unchanged.`);
+                        });
+                      }}
+                    >
+                      <h4>Revise artifact (creates a new version)</h4>
+                      <label htmlFor="artifact-revise-title">Title</label>
+                      <input id="artifact-revise-title" value={reviseForm.title} onChange={e => setReviseForm(f => ({ ...f, title: e.target.value }))} required autoComplete="off" />
+                      <label htmlFor="artifact-revise-body">Text</label>
+                      <textarea id="artifact-revise-body" value={reviseForm.body} onChange={e => setReviseForm(f => ({ ...f, body: e.target.value }))} rows={5} required />
+                      <label htmlFor="artifact-revise-sources">Source references (one per line)</label>
+                      <textarea id="artifact-revise-sources" rows={2} value={reviseForm.sources} onChange={e => setReviseForm(f => ({ ...f, sources: e.target.value }))} />
+                      <button type="submit" disabled={busy}>Save new version</button>
+                    </form>
+                  </div>
+                )}
+              </div>
+            )}
           </section>
 
           <section aria-labelledby="project-relationships-heading">

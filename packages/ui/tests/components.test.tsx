@@ -268,3 +268,8 @@ test('disclosure panel renders exactly what ANANSI sent, including attempts and 
   assert.match(html,/11 in \/ 7 out/);
   assert.match(html,/ollama\/llama-x: succeeded/);
 });
+
+test('projects screen renders its identity and editor statically',()=>{
+  const html=renderToStaticMarkup(<Projects client={{} as any} workspaceId={'a'.repeat(32)}/>);
+  assert.match(html,/Projects/);assert.match(html,/New project/);assert.match(html,/Project title/);
+});
