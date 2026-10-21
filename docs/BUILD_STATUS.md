@@ -1,3 +1,29 @@
+## 2026-10-21 — R17 integrated preview checkpoint (this checkpoint)
+
+Branch `codex/local-testing-r17`, created directly from the
+Windows-verified R17 repair tip `ab95e14` (history
+preserved; the R11 preview commit `f6cecd2` and the Tauri
+`artifact_command` capability fix are ancestors, verified
+present in-tree, not re-applied). Contents: everything in
+the R16 preview plus M6 Slice 4 (Opportunity Discovery)
+and the R17 exact-revision restore repair. This checkpoint
+changes only preview materials: `PREVIEW.md` rewritten for
+R17 (composition, owner test guide extended with
+opportunity discovery and the exact-revision provenance
+check) and `Start ANANSI Preview.cmd` pointed at the new
+separate data root `%LOCALAPPDATA%\ANANSI-Preview\r17`
+(never the owner's existing data; R11/R16 roots untouched).
+The owner has confirmed Windows verification of the R17
+repair (restore regressions 3/3, opportunity units 5/5,
+strict all-target Clippy, docs) on top of the R17 pass.
+Linux evidence for this branch: documentation validation
+PASS; browser e2e subset re-run on the final tree —
+app checkpoint, integrated workflow, opportunities —
+**3/3**. Application code is identical to the repair
+checkpoint (core 210/214, only the 4 environmental
+live-Ollama failures). **Pending: Windows build/launch of
+this preview checkpoint.** M5 production gates remain open.
+
 ## 2026-10-21 — R17 repair: exact-revision provenance at restore (this checkpoint)
 
 Branch `muse/m6-r17-repair` over the Slice 4 checkpoint
