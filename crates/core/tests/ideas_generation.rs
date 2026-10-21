@@ -64,7 +64,12 @@ fn start_fake() -> Fake {
     let last_body = Arc::new(Mutex::new(String::new()));
     let dripped = Arc::new(AtomicBool::new(false));
     let broken = Arc::new(Mutex::new(std::collections::HashSet::new()));
-    let (m2, b2, d2, br2) = (mode.clone(), last_body.clone(), dripped.clone(), broken.clone());
+    let (m2, b2, d2, br2) = (
+        mode.clone(),
+        last_body.clone(),
+        dripped.clone(),
+        broken.clone(),
+    );
     let mut conn_seq = 0usize;
     std::thread::spawn(move || {
         for stream in listener.incoming() {
@@ -573,8 +578,7 @@ fn concurrent_saves_resolve_to_exactly_one_artifact() {
         handles.into_iter().map(|h| h.join().unwrap()).collect()
     });
     assert_eq!(
-        results[0]["artifact"]["artifactId"],
-        results[1]["artifact"]["artifactId"],
+        results[0]["artifact"]["artifactId"], results[1]["artifact"]["artifactId"],
         "concurrent saves must resolve to the same artifact"
     );
     let fresh = results
@@ -619,7 +623,11 @@ fn cap_eviction_cancels_the_oldest_active_stream() {
             json!({ "contractVersion": 1, "workspaceId": f.ws, "runId": run_ids[0] }),
         )
         .unwrap_err();
-    assert_eq!(err.code, anansi_core::ErrorCode::NotFound, "evicted run leaves the registry");
+    assert_eq!(
+        err.code,
+        anansi_core::ErrorCode::NotFound,
+        "evicted run leaves the registry"
+    );
 
     // Cancellation closed the evicted stream's connection
     // (connection 0) while its neighbour (connection 1) lives.
@@ -633,7 +641,10 @@ fn cap_eviction_cancels_the_oldest_active_stream() {
             );
             break;
         }
-        assert!(Instant::now() < deadline, "the evicted stream was never cancelled: {broken:?}");
+        assert!(
+            Instant::now() < deadline,
+            "the evicted stream was never cancelled: {broken:?}"
+        );
         std::thread::sleep(Duration::from_millis(50));
     }
 

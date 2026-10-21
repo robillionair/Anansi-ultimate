@@ -467,7 +467,11 @@ fn cancel_evicted(evicted: Vec<Evicted>) {
         for _ in 0..100 {
             match providers_command("providers-stream-poll", run_request.clone(), scope) {
                 Ok(polled) => {
-                    if polled.get("done").and_then(|v| v.as_bool()).unwrap_or(false) {
+                    if polled
+                        .get("done")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false)
+                    {
                         break;
                     }
                 }
@@ -968,34 +972,35 @@ fn save(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
         }
     };
     let disclosure = disclosure.ok_or_else(crate::storage::unavailable)?;
-    let details = storage.artifact_register_generated(
-        &ArtifactRegisterRequest {
-            contract_version: 1,
-            workspace_id: workspace_id.clone(),
-            project_id: project_id.clone(),
-            artifact_type: "idea".to_string(),
-            title,
-            body: body.clone(),
-            source_references: context_ids
-                .iter()
-                .map(|id| format!("memory://{id}"))
-                .collect(),
-            privacy: "private".to_string(),
-        },
-        json!({
-            "kind": "model",
-            "provider": disclosure.provider.clone(),
-            "model": disclosure.model.clone(),
-        }),
-        "validated",
-    )
-    .inspect_err(|_| {
-        with_runs(|map| {
-            if let Some(run) = map.get_mut(&key) {
-                run.saving = false;
-            }
-        });
-    })?;
+    let details = storage
+        .artifact_register_generated(
+            &ArtifactRegisterRequest {
+                contract_version: 1,
+                workspace_id: workspace_id.clone(),
+                project_id: project_id.clone(),
+                artifact_type: "idea".to_string(),
+                title,
+                body: body.clone(),
+                source_references: context_ids
+                    .iter()
+                    .map(|id| format!("memory://{id}"))
+                    .collect(),
+                privacy: "private".to_string(),
+            },
+            json!({
+                "kind": "model",
+                "provider": disclosure.provider.clone(),
+                "model": disclosure.model.clone(),
+            }),
+            "validated",
+        )
+        .inspect_err(|_| {
+            with_runs(|map| {
+                if let Some(run) = map.get_mut(&key) {
+                    run.saving = false;
+                }
+            });
+        })?;
     with_runs(|map| {
         if let Some(run) = map.get_mut(&key) {
             run.saved_artifact = Some(details.artifact.clone());
@@ -1011,7 +1016,6 @@ fn save(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
     })
     .map_err(|_| crate::storage::unavailable())
 }
-
 
 #[cfg(test)]
 mod eviction_tests {
@@ -1053,11 +1057,21 @@ mod eviction_tests {
         with_runs(|map| {
             map.insert(
                 run_key(&scope, "old-active"),
-                fabricated_run(&scope, RUN_TTL + Duration::from_secs(30), "running", "stream-old"),
+                fabricated_run(
+                    &scope,
+                    RUN_TTL + Duration::from_secs(30),
+                    "running",
+                    "stream-old",
+                ),
             );
             map.insert(
                 run_key(&scope, "old-done"),
-                fabricated_run(&scope, RUN_TTL + Duration::from_secs(30), "complete", "stream-done"),
+                fabricated_run(
+                    &scope,
+                    RUN_TTL + Duration::from_secs(30),
+                    "complete",
+                    "stream-done",
+                ),
             );
             map.insert(
                 run_key(&scope, "fresh"),
@@ -1074,7 +1088,10 @@ mod eviction_tests {
             .iter()
             .find(|v| v.stream_run_id == "stream-old")
             .expect("expired running run is a victim");
-        assert!(old_active.active, "an expired RUNNING run must be cancelled, not dropped");
+        assert!(
+            old_active.active,
+            "an expired RUNNING run must be cancelled, not dropped"
+        );
         let old_done = mine
             .iter()
             .find(|v| v.stream_run_id == "stream-done")
@@ -1105,7 +1122,11 @@ mod eviction_tests {
             }
         });
         let victims = collect_evictions(Some("unit-ws-cap"));
-        assert_eq!(victims.len(), 2, "33 retained runs evict down to room for one insert (31)");
+        assert_eq!(
+            victims.len(),
+            2,
+            "33 retained runs evict down to room for one insert (31)"
+        );
         // Oldest first: stream-0 (complete, inactive) and
         // stream-1 (running, active).
         let cancelled = std::sync::Mutex::new(Vec::new());
@@ -1118,11 +1139,8 @@ mod eviction_tests {
             vec!["stream-1".to_string()],
             "only the active victim is cancelled"
         );
-        let remaining = with_runs(|map| {
-            map.keys()
-                .filter(|k| k.starts_with("unit-ws-cap/"))
-                .count()
-        });
+        let remaining =
+            with_runs(|map| map.keys().filter(|k| k.starts_with("unit-ws-cap/")).count());
         assert_eq!(remaining, 31);
         with_runs(|map| {
             map.retain(|k, _| !k.starts_with("unit-ws-cap/"));
