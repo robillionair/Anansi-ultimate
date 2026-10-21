@@ -30,7 +30,7 @@ Base: integrated checkpoint `2098c25`
   document), tests with every behavior, no completion claim
   without a verified workflow.
 
-## Data model (workspace SQLite, schema v8 → v9)
+## Data model (workspace SQLite, schema v8 → v10)
 
 New table `artifact_versions` (one row per immutable version):
 

@@ -145,7 +145,7 @@ impl VaultStore {
         let app: i64 = probe
             .pragma_query_value(None, "application_id", |r| r.get(0))
             .map_err(invalid)?;
-        if app != 0x414e414e || ![8, 9].contains(&version) {
+        if app != 0x414e414e || ![8, 9, 10].contains(&version) {
             return Err(VaultError::UnsupportedSchema);
         }
         drop(probe);
@@ -226,11 +226,16 @@ impl VaultStore {
         let tx = db
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(invalid)?;
-        if tx
-            .pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))
-            .map_err(invalid)?
-            != 8
-        {
+        // Sealing starts from a database no vault has upgraded
+        // yet: the legacy workspace version 8, or the current
+        // workspace version 10 (M6 artifact registry). Version 9
+        // is only reachable through the vault's own upgrade, so
+        // it means a vault already exists here.
+        if !matches!(
+            tx.pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))
+                .map_err(invalid)?,
+            8 | 10
+        ) {
             return Err(VaultError::UnsupportedSchema);
         }
         let snapshot = Snapshot::capture(&tx, &self.root, &setup.context, false)?;
@@ -300,6 +305,23 @@ impl VaultStore {
             db.execute_batch(include_str!("../../migrations/0009_vault.sql"))
                 .map_err(invalid)?;
             db.pragma_update(None, "user_version", 9).map_err(invalid)?;
+        } else if version == 10 {
+            // Workspace schema v10 (M6 artifact registry) may land
+            // before any vault exists in this database. Apply the
+            // vault tables then, keeping the higher user_version:
+            // the vault owns step 9, the workspace chain owns 10,
+            // and neither may move the counter backwards.
+            let vault_tables: i64 = db
+                .query_row(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='vaults'",
+                    [],
+                    |r| r.get(0),
+                )
+                .map_err(invalid)?;
+            if vault_tables == 0 {
+                db.execute_batch(include_str!("../../migrations/0009_vault.sql"))
+                    .map_err(invalid)?;
+            }
         } else if version != 9 {
             return Err(VaultError::UnsupportedSchema);
         }

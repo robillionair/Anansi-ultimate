@@ -136,7 +136,7 @@ fn titles_isolate_filter_rank_page_refresh_and_preserve_revision_provenance() {
     assert_eq!(
         db.query_row("PRAGMA user_version", [], |row| row.get::<_, u32>(0))
             .unwrap(),
-        8
+        10
     );
     assert_eq!(
         db.query_row(

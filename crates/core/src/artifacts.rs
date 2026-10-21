@@ -207,7 +207,9 @@ fn validate_write(
             .iter()
             .any(|r| r.is_empty() || r.chars().count() > 512)
     {
-        return Err(invalid("Use at most 32 source references of up to 512 characters."));
+        return Err(invalid(
+            "Use at most 32 source references of up to 512 characters.",
+        ));
     }
     Ok(())
 }
@@ -379,11 +381,7 @@ impl Storage {
                     req.body,
                     hash,
                     serde_json::to_string(&req.source_references).unwrap_or_default(),
-                    latest
-                        .record
-                        .generator
-                        .as_ref()
-                        .map(|g| g.to_string()),
+                    latest.record.generator.as_ref().map(|g| g.to_string()),
                     latest.record.validation_status,
                     latest.record.privacy,
                     now_iso(),
@@ -547,7 +545,11 @@ impl Core {
             "read" => {
                 let req: ArtifactReadRequest = parse(value)?;
                 require_v1(req.contract_version)?;
-                to_value(&storage.artifact_read(&req.workspace_id, &req.artifact_id, req.version)?)
+                to_value(&storage.artifact_read(
+                    &req.workspace_id,
+                    &req.artifact_id,
+                    req.version,
+                )?)
             }
             _ => Err(invalid("Use a supported artifact operation.")),
         }

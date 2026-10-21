@@ -454,7 +454,7 @@ fn acknowledgement_and_stale_backup_refuse_activation() {
     assert_eq!(
         db.pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))
             .unwrap(),
-        8
+        10
     );
     assert_eq!(
         db.query_row("SELECT count(*) FROM memories", [], |r| r.get::<_, i64>(0))

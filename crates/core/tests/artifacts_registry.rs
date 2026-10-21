@@ -12,7 +12,10 @@ fn core_with_project() -> (tempfile::TempDir, Core, String, String) {
     let dir = tempfile::tempdir().unwrap();
     let core = Core::with_storage_root(dir.path().to_path_buf());
     let ws = core
-        .workspace_command("create", json!({ "contractVersion": 1, "name": "Registry" }))
+        .workspace_command(
+            "create",
+            json!({ "contractVersion": 1, "name": "Registry" }),
+        )
         .unwrap()["workspace"]["id"]
         .as_str()
         .unwrap()
@@ -92,7 +95,10 @@ fn full_lifecycle_with_all_section9_fields_and_immutable_versions() {
 
     // List shows the latest version once; versions shows both.
     let list = core
-        .artifacts_command("list", json!({ "contractVersion": 1, "workspaceId": ws, "projectId": pid }))
+        .artifacts_command(
+            "list",
+            json!({ "contractVersion": 1, "workspaceId": ws, "projectId": pid }),
+        )
         .unwrap();
     assert_eq!(list["artifacts"].as_array().unwrap().len(), 1);
     assert_eq!(list["artifacts"][0]["version"], 2);
@@ -130,7 +136,11 @@ fn stale_write_conflict_stores_nothing() {
             json!({ "contractVersion": 1, "workspaceId": ws, "artifactId": id }),
         )
         .unwrap();
-    assert_eq!(versions["versions"].as_array().unwrap().len(), 2, "only the accepted revision exists");
+    assert_eq!(
+        versions["versions"].as_array().unwrap().len(),
+        2,
+        "only the accepted revision exists"
+    );
 }
 
 #[test]
@@ -230,9 +240,15 @@ fn tampered_body_fails_integrity_and_archived_project_refuses_writes() {
     // Archived projects refuse new artifacts (restore first).
     let (_d2, core2, ws2, pid2) = core_with_project();
     let project = core2
-        .memory_command("read", json!({ "contractVersion": 1, "workspaceId": ws2, "id": pid2 }))
+        .memory_command(
+            "read",
+            json!({ "contractVersion": 1, "workspaceId": ws2, "id": pid2 }),
+        )
         .unwrap();
-    let rev = project["memory"]["revisionId"].as_str().unwrap().to_string();
+    let rev = project["memory"]["revisionId"]
+        .as_str()
+        .unwrap()
+        .to_string();
     core2
         .memory_command(
             "revise",
@@ -280,7 +296,11 @@ fn registry_survives_reopen() {
             .unwrap();
         let pid = project["memory"]["id"].as_str().unwrap().to_string();
         let v1 = register(&core, &ws, &pid, "durable");
-        (ws, pid, v1["artifact"]["artifactId"].as_str().unwrap().to_string())
+        (
+            ws,
+            pid,
+            v1["artifact"]["artifactId"].as_str().unwrap().to_string(),
+        )
     };
     let core = Core::with_storage_root(root);
     let read = core
