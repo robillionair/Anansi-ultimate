@@ -3,8 +3,7 @@
 //! commands and the real job upload/restore flow.
 
 use anansi_core::{
-    Core,
-    content,
+    Core, content,
     jobs::ExportSelection,
     storage::{DATABASE_NAME, Storage},
 };
@@ -87,7 +86,10 @@ fn rich_fixture(core: &Core) -> Rich {
                    "body":standard["rubric"].to_string(),"sourceReferences":[],"privacy":"private"}),
         )
         .unwrap();
-    let rubric_id = rubric["artifact"]["artifactId"].as_str().unwrap().to_string();
+    let rubric_id = rubric["artifact"]["artifactId"]
+        .as_str()
+        .unwrap()
+        .to_string();
     let assess = json!([
         {"conceptIndex":0,"dimension":"problem-clarity","score":5,"rationale":"Sharp."},
         {"conceptIndex":0,"dimension":"mvp-feasibility","score":3,"rationale":""}
@@ -180,7 +182,10 @@ fn rich_fixture(core: &Core) -> Rich {
 /// order, as comparable JSON (ids included under "artifactId").
 fn artifact_dump(core: &Core, ws: &str, project: &str) -> Vec<Value> {
     let list = core
-        .artifacts_command("list", json!({"contractVersion":1,"workspaceId":ws,"projectId":project}))
+        .artifacts_command(
+            "list",
+            json!({"contractVersion":1,"workspaceId":ws,"projectId":project}),
+        )
         .unwrap();
     let mut out = Vec::new();
     for record in list["artifacts"].as_array().unwrap() {
@@ -217,7 +222,6 @@ fn artifact_dump(core: &Core, ws: &str, project: &str) -> Vec<Value> {
     });
     out
 }
-
 
 /// A stable identity for an artifact across stores: its
 /// type plus its body with (for evaluations) the two id
@@ -267,7 +271,12 @@ fn backup(store: &Storage, ws: &str, application: bool) -> (String, String) {
 }
 
 fn package_bytes(root: &Path, ws: &str, artifact: &str) -> Vec<u8> {
-    std::fs::read(root.join("exports").join(ws).join(format!("{artifact}.tar"))).unwrap()
+    std::fs::read(
+        root.join("exports")
+            .join(ws)
+            .join(format!("{artifact}.tar")),
+    )
+    .unwrap()
 }
 
 /// The real consumer flow: upload the package into a fresh
@@ -354,7 +363,14 @@ fn assert_round_tripped(source: &[Value], restored: &[Value], id_map: &BTreeMap<
             .unwrap_or_else(|| panic!("missing restored artifact {key}"));
         let new_id = id_map[entry["artifactId"].as_str().unwrap()].clone();
         assert_eq!(got["artifactId"].as_str().unwrap(), new_id);
-        for field in ["type", "version", "title", "validationStatus", "privacy", "generator"] {
+        for field in [
+            "type",
+            "version",
+            "title",
+            "validationStatus",
+            "privacy",
+            "generator",
+        ] {
             assert_eq!(&entry[field], &got[field], "{field} of {key}");
         }
         // Source references remap artifact ids.
@@ -375,11 +391,17 @@ fn assert_round_tripped(source: &[Value], restored: &[Value], id_map: &BTreeMap<
                     .collect(),
             )
         };
-        assert_eq!(remap_refs(&entry["sourceReferences"]), got["sourceReferences"]);
+        assert_eq!(
+            remap_refs(&entry["sourceReferences"]),
+            got["sourceReferences"]
+        );
         if entry["type"] == "evaluation" {
-            let mut expected: Value = serde_json::from_str(entry["body"].as_str().unwrap()).unwrap();
-            expected["sourceArtifactId"] = json!(id_map[expected["sourceArtifactId"].as_str().unwrap()]);
-            expected["rubricArtifactId"] = json!(id_map[expected["rubricArtifactId"].as_str().unwrap()]);
+            let mut expected: Value =
+                serde_json::from_str(entry["body"].as_str().unwrap()).unwrap();
+            expected["sourceArtifactId"] =
+                json!(id_map[expected["sourceArtifactId"].as_str().unwrap()]);
+            expected["rubricArtifactId"] =
+                json!(id_map[expected["rubricArtifactId"].as_str().unwrap()]);
             let got_body: Value = serde_json::from_str(got["body"].as_str().unwrap()).unwrap();
             assert_eq!(expected, got_body, "evaluation body of {key}");
             assert_eq!(
@@ -409,14 +431,20 @@ fn workspace_backup_restores_artifacts_evaluations_and_archived_projects() {
     let root_b = dir.path().join("b");
     let core_b = Core::with_storage_root(root_b.clone());
     let (restored, _preview) = upload_restore(&core_b, &bytes, "Recovered");
-    let new_ws = restored["workspaces"][0]["id"].as_str().unwrap().to_string();
+    let new_ws = restored["workspaces"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
     assert_ne!(new_ws, rich.ws);
 
     // Map source ids to restored ids through the memory
     // list (the archived project is not in the default
     // active listing, so list everything).
     let projects = core_b
-        .memory_command("list", json!({"contractVersion":1,"workspaceId":new_ws,"includeArchived":true}))
+        .memory_command(
+            "list",
+            json!({"contractVersion":1,"workspaceId":new_ws,"includeArchived":true}),
+        )
         .unwrap();
     let mut new_project = String::new();
     let mut new_archived = String::new();
@@ -428,7 +456,10 @@ fn workspace_backup_restores_artifacts_evaluations_and_archived_projects() {
             new_archived = p["id"].as_str().unwrap().to_string();
         }
     }
-    assert!(!new_project.is_empty() && !new_archived.is_empty(), "projects list: {projects}");
+    assert!(
+        !new_project.is_empty() && !new_archived.is_empty(),
+        "projects list: {projects}"
+    );
     let after = artifact_dump(&core_b, &new_ws, &new_project);
     let id_map = pair_ids(&before, &after);
     assert_round_tripped(&before, &after, &id_map);
@@ -566,7 +597,9 @@ fn tar_members(bytes: &[u8]) -> BTreeMap<String, Vec<u8>> {
         let end = h[..100].iter().position(|b| *b == 0).unwrap();
         let name = std::str::from_utf8(&h[..end]).unwrap().to_string();
         let size = usize::from_str_radix(
-            std::str::from_utf8(&h[124..136]).unwrap().trim_matches(['\0', ' ']),
+            std::str::from_utf8(&h[124..136])
+                .unwrap()
+                .trim_matches(['\0', ' ']),
             8,
         )
         .unwrap();
@@ -618,7 +651,11 @@ fn refresh_catalog_member(members: &mut BTreeMap<String, Vec<u8>>) {
     );
 }
 
-fn edit_catalog(members: &mut BTreeMap<String, Vec<u8>>, dir: &Path, edit: impl FnOnce(&rusqlite::Connection)) {
+fn edit_catalog(
+    members: &mut BTreeMap<String, Vec<u8>>,
+    dir: &Path,
+    edit: impl FnOnce(&rusqlite::Connection),
+) {
     let path = dir.join("edit-catalog.sqlite3");
     std::fs::write(&path, &members["catalog.sqlite3"]).unwrap();
     let conn = rusqlite::Connection::open(&path).unwrap();
@@ -644,7 +681,13 @@ fn legacy_source(scratch: &Core) -> String {
     ws
 }
 
-fn legacy_package(scratch: &Core, scratch_root: &Path, dir: &Path, declared: i64, ws: &str) -> Vec<u8> {
+fn legacy_package(
+    scratch: &Core,
+    scratch_root: &Path,
+    dir: &Path,
+    declared: i64,
+    ws: &str,
+) -> Vec<u8> {
     let ws = ws.to_string();
     let source = rusqlite::Connection::open(scratch_root.join(DATABASE_NAME)).unwrap();
     let catalog_path = dir.join(format!("legacy-{declared}.sqlite3"));
@@ -661,11 +704,14 @@ fn legacy_package(scratch: &Core, scratch_root: &Path, dir: &Path, declared: i64
         "0007_jobs.sql",
         "0008_backups.sql",
     ] {
-        ddl.push_str(&std::fs::read_to_string(
-            Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("migrations")
-                .join(file),
-        ).unwrap());
+        ddl.push_str(
+            &std::fs::read_to_string(
+                Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join("migrations")
+                    .join(file),
+            )
+            .unwrap(),
+        );
     }
     if declared >= 9 {
         ddl.push_str(
@@ -688,15 +734,29 @@ fn legacy_package(scratch: &Core, scratch_root: &Path, dir: &Path, declared: i64
     catalog
         .pragma_update(None, "application_id", 0x414e414e)
         .unwrap();
-    catalog.pragma_update(None, "user_version", declared).unwrap();
+    catalog
+        .pragma_update(None, "user_version", declared)
+        .unwrap();
     let tx = catalog.transaction().unwrap();
-    for table in ["workspaces", "workspace_settings", "memories", "memory_revisions"] {
-        let key = if table == "workspaces" { "id" } else { "workspace_id" };
+    for table in [
+        "workspaces",
+        "workspace_settings",
+        "memories",
+        "memory_revisions",
+    ] {
+        let key = if table == "workspaces" {
+            "id"
+        } else {
+            "workspace_id"
+        };
         let mut q = source
             .prepare(&format!("SELECT * FROM {table} WHERE {key}=?1"))
             .unwrap();
         let count = q.column_count();
-        let slots = (1..=count).map(|i| format!("?{i}")).collect::<Vec<_>>().join(",");
+        let slots = (1..=count)
+            .map(|i| format!("?{i}"))
+            .collect::<Vec<_>>()
+            .join(",");
         let mut insert = tx
             .prepare(&format!("INSERT INTO {table} VALUES({slots})"))
             .unwrap();
@@ -736,10 +796,7 @@ fn legacy_package(scratch: &Core, scratch_root: &Path, dir: &Path, declared: i64
         )
         .unwrap(),
     );
-    members.insert(
-        format!("bodies/{revision}.md"),
-        b"legacy body one".to_vec(),
-    );
+    members.insert(format!("bodies/{revision}.md"), b"legacy body one".to_vec());
     let manifest = anansi_core::backup::BackupManifest {
         format: anansi_core::backup::BACKUP_FORMAT.into(),
         format_version: anansi_core::backup::BACKUP_VERSION,
@@ -773,7 +830,10 @@ fn legacy_schema_8_and_9_packages_restore_and_unknown_versions_fail_closed() {
         let fresh_root = dir.path().join(format!("fresh-{declared}"));
         let fresh = Core::with_storage_root(fresh_root);
         let (restored, _preview) = upload_restore(&fresh, &bytes, &format!("Legacy {declared}"));
-        let new_ws = restored["workspaces"][0]["id"].as_str().unwrap().to_string();
+        let new_ws = restored["workspaces"][0]["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
         let list = fresh
             .memory_command("list", json!({"contractVersion":1,"workspaceId":new_ws}))
             .unwrap();
@@ -809,7 +869,10 @@ fn legacy_schema_8_and_9_packages_restore_and_unknown_versions_fail_closed() {
                 member.sha256 = content::hash(&snap);
             }
         }
-        members.insert("manifest.json".into(), serde_json::to_vec(&manifest).unwrap());
+        members.insert(
+            "manifest.json".into(),
+            serde_json::to_vec(&manifest).unwrap(),
+        );
         bytes = tar_build(&members);
         let fresh = Core::with_storage_root(dir.path().join(format!("refuse-{declared}-{actual}")));
         assert!(
@@ -906,9 +969,11 @@ fn repeat_restore_conflicts_and_failed_restore_imports_nothing() {
     let before = count(&store_a);
     // Same name: refused. Different name: still refused - the
     // backup was already restored from this artifact.
-    assert!(store_a
-        .restore_snapshot(&rich.ws, &job, &artifact, "Recovered workspace", &hash)
-        .is_err());
+    assert!(
+        store_a
+            .restore_snapshot(&rich.ws, &job, &artifact, "Recovered workspace", &hash)
+            .is_err()
+    );
     let retry = store_a.restore_snapshot(&rich.ws, &job, &artifact, "Another name", &hash);
     let error = retry.err().expect("repeat restore must be refused");
     assert!(

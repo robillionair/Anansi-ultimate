@@ -46,7 +46,6 @@ fn remap_metadata(
     serde_json::to_string(&value).map_err(|_| crate::jobs::invalid())
 }
 
-
 /// Reference rewriting for one artifact_versions row, after
 /// the generic id columns have been remapped: contained
 /// `artifact://` source references point at the restored
@@ -193,8 +192,10 @@ impl crate::storage::Storage {
         }
         let mut prepared = Vec::new();
         let mut workspaces = Vec::new();
-        let mut revision_meta: std::collections::BTreeMap<String, (String, crate::privacy::Privacy)> =
-            std::collections::BTreeMap::new();
+        let mut revision_meta: std::collections::BTreeMap<
+            String,
+            (String, crate::privacy::Privacy),
+        > = std::collections::BTreeMap::new();
         let mut memory_current: Vec<(String, String, String)> = Vec::new();
         for table in tables {
             let mut q = source
@@ -274,10 +275,18 @@ impl crate::storage::Storage {
                     remap_artifact_row(&names, &mut columns, &ids)?;
                 }
                 if table == "memory_revisions" {
-                    let id_i = names.iter().position(|n| n == "id").ok_or_else(crate::jobs::invalid)?;
-                    let meta_i = names.iter().position(|n| n == "metadata").ok_or_else(crate::jobs::invalid)?;
-                    if let (rusqlite::types::Value::Text(revision), rusqlite::types::Value::Text(raw)) =
-                        (&columns[id_i], &columns[meta_i])
+                    let id_i = names
+                        .iter()
+                        .position(|n| n == "id")
+                        .ok_or_else(crate::jobs::invalid)?;
+                    let meta_i = names
+                        .iter()
+                        .position(|n| n == "metadata")
+                        .ok_or_else(crate::jobs::invalid)?;
+                    if let (
+                        rusqlite::types::Value::Text(revision),
+                        rusqlite::types::Value::Text(raw),
+                    ) = (&columns[id_i], &columns[meta_i])
                     {
                         let meta: crate::memory::MemoryMetadata =
                             serde_json::from_str(raw).map_err(|_| crate::jobs::invalid())?;
@@ -285,8 +294,13 @@ impl crate::storage::Storage {
                     }
                 }
                 if table == "memories" {
-                    let text = |name: &str, columns: &[rusqlite::types::Value]| -> Result<String, CommandError> {
-                        let i = names.iter().position(|n| n == name).ok_or_else(crate::jobs::invalid)?;
+                    let text = |name: &str,
+                                columns: &[rusqlite::types::Value]|
+                     -> Result<String, CommandError> {
+                        let i = names
+                            .iter()
+                            .position(|n| n == name)
+                            .ok_or_else(crate::jobs::invalid)?;
                         match &columns[i] {
                             rusqlite::types::Value::Text(t) => Ok(t.clone()),
                             _ => Err(crate::jobs::invalid()),

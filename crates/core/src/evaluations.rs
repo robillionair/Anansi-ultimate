@@ -457,9 +457,7 @@ pub fn save_evaluation(
 /// (source artifact id, source version, rubric artifact id,
 /// rubric version). Used by backup verification and restore,
 /// which must resolve and remap exactly these fields.
-pub(crate) fn evaluation_references(
-    body: &str,
-) -> Option<(String, u32, String, u32)> {
+pub(crate) fn evaluation_references(body: &str) -> Option<(String, u32, String, u32)> {
     let doc: EvaluationDoc = serde_json::from_str(body).ok()?;
     if doc.format != "anansi-evaluation" {
         return None;
@@ -480,7 +478,8 @@ pub(crate) fn remap_evaluation_references(
     body: &str,
     map: &std::collections::BTreeMap<String, String>,
 ) -> Result<String, CommandError> {
-    let mut doc: EvaluationDoc = serde_json::from_str(body).map_err(|_| invalid("The evaluation document is invalid."))?;
+    let mut doc: EvaluationDoc =
+        serde_json::from_str(body).map_err(|_| invalid("The evaluation document is invalid."))?;
     if doc.format != "anansi-evaluation" {
         return Err(invalid("The evaluation document is invalid."));
     }

@@ -456,10 +456,7 @@ fn schema_objects(
         .map_err(|_| invalid())?
         .collect::<rusqlite::Result<Vec<SchemaRow>>>()
         .map_err(|_| invalid())?;
-    Ok(rows
-        .into_iter()
-        .map(|row| (row.1.clone(), row))
-        .collect())
+    Ok(rows.into_iter().map(|row| (row.1.clone(), row)).collect())
 }
 
 /// The schema of a pre-artifact catalog (migrations
@@ -561,8 +558,9 @@ fn definition_matches(
     db: &Connection,
 ) -> Result<bool, CommandError> {
     if name == "memory_embeddings" {
-        return Ok(actual.0 == expected.0
-            && embeddings_fingerprint(db)? == groups.embeddings_fingerprint);
+        return Ok(
+            actual.0 == expected.0 && embeddings_fingerprint(db)? == groups.embeddings_fingerprint
+        );
     }
     Ok(actual == expected)
 }
@@ -584,7 +582,10 @@ fn check_schema(
         }
     }
     for group in optional {
-        let present = group.keys().filter(|name| actual.contains_key(*name)).count();
+        let present = group
+            .keys()
+            .filter(|name| actual.contains_key(*name))
+            .count();
         if present != 0 && present != group.len() {
             return Err(invalid());
         }
@@ -1057,8 +1058,7 @@ impl Storage {
                         return Err(invalid());
                     }
                 }
-                let refs: Vec<String> =
-                    serde_json::from_str(&refs_raw).map_err(|_| invalid())?;
+                let refs: Vec<String> = serde_json::from_str(&refs_raw).map_err(|_| invalid())?;
                 for reference in &refs {
                     if let Some(rest) = reference.strip_prefix("artifact://") {
                         let (id, version) = rest.rsplit_once("@v").ok_or_else(invalid)?;
@@ -1071,8 +1071,7 @@ impl Storage {
                 }
                 if kind == "evaluation" {
                     let (source, source_v, rubric, rubric_v) =
-                        crate::evaluations::evaluation_references(&body)
-                            .ok_or_else(invalid)?;
+                        crate::evaluations::evaluation_references(&body).ok_or_else(invalid)?;
                     pending_refs.push((w.clone(), source, i64::from(source_v)));
                     pending_refs.push((w.clone(), rubric, i64::from(rubric_v)));
                 }
