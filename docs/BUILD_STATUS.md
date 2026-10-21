@@ -1,3 +1,47 @@
+## 2026-10-21 — R16 integrated preview checkpoint + vault ladder reconciliation (this checkpoint)
+
+Branch `codex/local-testing-r16`, from the verified R16 tip
+`a1b0c80` directly (the R11 preview commit `f6cecd2` is an
+ancestor; the Tauri `artifact_command` capability fix is
+preserved). Composition: R16 + the vault schema-ladder
+reconciliation (branch `muse/vault-ladder-reconciliation`;
+production fix: vault snapshot verification/staging no
+longer migrates the live catalog it opens, so a genuine
+schema-8 seal now lands at 9 and a pre-switch abort leaves
+schema 8 with no registry table; crash matrix runs on real
+legacy-8 and explicit schema-10 fixtures — see
+`docs/handoffs/vault-ladder-reconciliation-addendum.md`) +
+updated PREVIEW.md/launcher (separate data root
+`%LOCALAPPDATA%\ANANSI-Preview\r16`; Windows build/launch
+instructions; owner test guide) + a new integrated browser
+spec (project → ideas → saved artifact → evaluation →
+backup → fresh restore → restart → reopen; restored
+evaluations resolve to restored sources) + a production UI
+fix for a rubric-load race the verification exposed (rubric
+edits made while a rubric read was in flight were silently
+overwritten; the form is now disabled during loads and
+superseded reads never apply) + an order-agnostic
+evaluations e2e history check. Full record:
+`docs/handoffs/R16-preview-checkpoint-addendum.md`.
+Linux evidence on the final tree: core suite 196/200 (only
+the 4 live-Ollama `semantic_workflow` tests fail —
+environmental, no Ollama on this machine; `vault_increment2`
+9/9, ladder closed on Linux); `backup_artifacts` 5/5,
+`backup_restore` 7/7, lib 34/34; vault suites 11/11 + 2/2 +
+1/1 + 3/3 + 1/1 + 2/2; providers+API 144 passed / 0 failed;
+node contracts+UI 47/47, tsc clean, contracts check clean,
+web build ok; browser e2e 8/8 (integrated workflow,
+checkpoint, artifacts, ideas, evaluations, providers,
+vault, backups); clippy `-D warnings` clean incl.
+`--all-targets`; fmt clean. **Windows verification of this
+checkpoint is pending** (the owner's pass covers R16 and
+R15's suites); the PREVIEW.md Windows steps were not
+executed on the preparing (Linux) machine. M5 production
+gates remain open (Windows native acceptance incl. real
+CredUI/keyring, live-provider verification, G1 audit,
+remote CI); Slice 4 stays owner-gated. No pushes, no
+master merge.
+
 ## 2026-10-21 — M6 R15 repair: eviction-test synchronization + strict clippy (this checkpoint)
 
 Repairs the two remaining findings from the owner's Windows
