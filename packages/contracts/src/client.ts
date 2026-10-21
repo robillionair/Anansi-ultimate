@@ -1,8 +1,8 @@
 import { validReadiness, validError, validWorkspaceDetails, validWorkspaceList, validMemoryDetails, validMemoryList, validRelationshipDetails, validRelationshipList, validJobDetails, validJobList, validArtifactChunk, validAiDiscoveryResponse, validAskResponse, validHybridSearchResponse, validCompiledContext, validIndexEmbeddingsResponse } from './validators.mjs';
 import { invoke } from '@tauri-apps/api/core';
-import { validAskRunResponse, validProviderCatalogResponse, validProviderConfigureResponse, validProviderAuthorizeResponse, validProviderDispatchResponse, validProviderStreamStartResponse, validProviderPollResponse, validProviderUsageResponse, validProviderCredentialSetResponse, validProviderCredentialRemoveResponse, validProviderCredentialStatusResponse, validProviderSessionAccessResponse, validArtifactDetails, validArtifactListResponse, validArtifactVersionsResponse, validIdeasGenerateStartResponse, validIdeasPollResponse, validIdeasSaveResponse, validEvaluationsSaveResponse, validStandardRubricResponse } from './validators.mjs';
-import type { EvaluationsSaveRequest, EvaluationsSaveResponse, RubricDoc, StandardRubricResponse, IdeasGenerateStartRequest, IdeasGenerateStartResponse, IdeasPollResponse, IdeasSaveResponse, IdeaSet, IdeaConcept, AskRunResponse, ProviderCatalogResponse, ProviderConfigureResponse, ProviderAuthorizeResponse, ProviderDispatchResponse, ProviderStreamStartResponse, ProviderPollResponse, ProviderUsageResponse, RuntimeConfig, CompletionRequest, ProviderCredentialSetResponse, ProviderCredentialRemoveResponse, ProviderCredentialStatusResponse, ProviderSessionAccessResponse } from './generated';
-export type { EvaluationsSaveRequest, EvaluationsSaveResponse, RubricDoc, RubricDimension, AssessmentInput, ConceptSummary, StandardRubricResponse, IdeasGenerateStartRequest, IdeasGenerateStartResponse, IdeasPollResponse, IdeasSaveResponse, IdeaSet, IdeaConcept, AskRunResponse, ProviderCatalogResponse, ProviderCatalogEntry, ProviderConfigureResponse, ProviderAuthorizeResponse, ProviderDispatchResponse, ProviderStreamStartResponse, ProviderPollResponse, ProviderUsageResponse, ProviderUsageEntry, RuntimeConfig, CompletionRequest, DisclosureRecord, ProviderCredentialSetResponse, ProviderCredentialRemoveResponse, ProviderCredentialStatusResponse, ProviderSessionAccessResponse, ProviderPendingAccess, ProviderGrantInfo } from './generated';
+import { validAskRunResponse, validProviderCatalogResponse, validProviderConfigureResponse, validProviderAuthorizeResponse, validProviderDispatchResponse, validProviderStreamStartResponse, validProviderPollResponse, validProviderUsageResponse, validProviderCredentialSetResponse, validProviderCredentialRemoveResponse, validProviderCredentialStatusResponse, validProviderSessionAccessResponse, validArtifactDetails, validArtifactListResponse, validArtifactVersionsResponse, validIdeasGenerateStartResponse, validIdeasPollResponse, validIdeasSaveResponse, validOpportunitiesGenerateStartResponse, validOpportunitiesPollResponse, validOpportunitiesSaveResponse, validEvaluationsSaveResponse, validStandardRubricResponse } from './validators.mjs';
+import type { EvaluationsSaveRequest, EvaluationsSaveResponse, RubricDoc, StandardRubricResponse, IdeasGenerateStartRequest, IdeasGenerateStartResponse, IdeasPollResponse, IdeasSaveResponse, IdeaSet, IdeaConcept, OpportunitiesGenerateStartRequest, OpportunitiesGenerateStartResponse, OpportunitiesPollResponse, OpportunitiesSaveResponse, OpportunitySet, OpportunityConcept, OpportunitySourceRecord, SuppliedSourceInput, AskRunResponse, ProviderCatalogResponse, ProviderConfigureResponse, ProviderAuthorizeResponse, ProviderDispatchResponse, ProviderStreamStartResponse, ProviderPollResponse, ProviderUsageResponse, RuntimeConfig, CompletionRequest, ProviderCredentialSetResponse, ProviderCredentialRemoveResponse, ProviderCredentialStatusResponse, ProviderSessionAccessResponse } from './generated';
+export type { EvaluationsSaveRequest, EvaluationsSaveResponse, RubricDoc, RubricDimension, AssessmentInput, ConceptSummary, StandardRubricResponse, IdeasGenerateStartRequest, IdeasGenerateStartResponse, IdeasPollResponse, IdeasSaveResponse, IdeaSet, IdeaConcept, OpportunitiesGenerateStartRequest, OpportunitiesGenerateStartResponse, OpportunitiesPollResponse, OpportunitiesSaveResponse, OpportunitySet, OpportunityConcept, OpportunitySourceRecord, SuppliedSourceInput, AskRunResponse, ProviderCatalogResponse, ProviderCatalogEntry, ProviderConfigureResponse, ProviderAuthorizeResponse, ProviderDispatchResponse, ProviderStreamStartResponse, ProviderPollResponse, ProviderUsageResponse, ProviderUsageEntry, RuntimeConfig, CompletionRequest, DisclosureRecord, ProviderCredentialSetResponse, ProviderCredentialRemoveResponse, ProviderCredentialStatusResponse, ProviderSessionAccessResponse, ProviderPendingAccess, ProviderGrantInfo } from './generated';
 import {validSnapshotPreview,validRestoreResult,validBackupSchedule,validUploadStatus} from './validators.mjs';
 import type {SnapshotPreview,RestoreResult,BackupSchedule,AiDiscoveryResponse,HardwareProfile,DiscoveredRuntime,ModelRecommendation,RuntimeKind,RuntimeStatus,FitLevel,AskRequest,AskResponse,AskStatus,GroundedCitation,DisclosureManifest,HybridSearchRequest,HybridSearchResult,HybridSearchResponse,ContextCompilationRequest,CompiledContext,ContextChunk,IndexEmbeddingsRequest,IndexEmbeddingsResponse} from './generated';
 export type {SnapshotPreview,RestoreResult,BackupSchedule,AiDiscoveryResponse,HardwareProfile,DiscoveredRuntime,ModelRecommendation,RuntimeKind,RuntimeStatus,FitLevel,AskRequest,AskResponse,AskStatus,GroundedCitation,DisclosureManifest,HybridSearchRequest,HybridSearchResult,HybridSearchResponse,ContextCompilationRequest,CompiledContext,ContextChunk,IndexEmbeddingsRequest,IndexEmbeddingsResponse} from './generated';
@@ -13,6 +13,7 @@ export type { Readiness, WorkspaceDetails, WorkspaceList, Intent, MemoryDraft, M
 export type VaultCommandName = 'setup'|'seal'|'unlock'|'read'|'lock'|'rotate'|'backup'|'export'|'preview'|'restore';
 export type EvaluationsSaveInput = Omit<EvaluationsSaveRequest, 'contractVersion' | 'workspaceId'>;
 export type IdeasStartInput = Omit<IdeasGenerateStartRequest, 'contractVersion' | 'workspaceId'>;
+export type OpportunitiesStartInput = Omit<OpportunitiesGenerateStartRequest, 'contractVersion' | 'workspaceId'>;
 export interface Client {
   vaultCommand?:(command:VaultCommandName,request:Record<string,unknown>)=>Promise<Record<string,unknown>>;
   startAsk(workspaceId:string,prompt:string,options?:{runtimeEndpoint?:string;modelTag?:string;embeddingModel?:string}):Promise<AskRunResponse>;
@@ -70,6 +71,10 @@ export interface Client {
   pollProjectIdeas(workspaceId: string, runId: string): Promise<IdeasPollResponse>;
   cancelProjectIdeas(workspaceId: string, runId: string): Promise<IdeasPollResponse>;
   saveProjectIdeas(workspaceId: string, runId: string): Promise<IdeasSaveResponse>;
+  startProjectOpportunities(workspaceId: string, input: OpportunitiesStartInput): Promise<OpportunitiesGenerateStartResponse>;
+  pollProjectOpportunities(workspaceId: string, runId: string): Promise<OpportunitiesPollResponse>;
+  cancelProjectOpportunities(workspaceId: string, runId: string): Promise<OpportunitiesPollResponse>;
+  saveProjectOpportunities(workspaceId: string, runId: string): Promise<OpportunitiesSaveResponse>;
   saveProjectEvaluation(workspaceId: string, input: EvaluationsSaveInput): Promise<EvaluationsSaveResponse>;
   getStandardRubric(workspaceId: string, projectId: string): Promise<StandardRubricResponse>;
 }
@@ -104,10 +109,11 @@ function failure(value:unknown,operation=''):Error {
         case 'FORBIDDEN':return new Error('This vault request does not match the workspace or application process.');
       }
     }
-    if(operation.startsWith('ai/ideas-')){
-      // Idea-generation refusals and outcomes are composed for
-      // the user at the core (archived project, model not
-      // configured, gates) - surface them verbatim.
+    if(operation.startsWith('ai/ideas-')||operation.startsWith('ai/opportunities-')){
+      // Idea-generation and opportunity-discovery refusals
+      // and outcomes are composed for the user at the core
+      // (archived project, model not configured, gates) -
+      // surface them verbatim.
       if(typeof value.message==='string'&&value.message)return new Error(value.message);
     }
     if(operation.startsWith('artifacts/')){
@@ -204,6 +210,10 @@ function client(call:Call):Client {
     pollProjectIdeas:async(workspaceId,runId)=>decode(await call('ai/ideas-generate-poll',{workspaceId,runId}),validIdeasPollResponse),
     cancelProjectIdeas:async(workspaceId,runId)=>decode(await call('ai/ideas-generate-cancel',{workspaceId,runId}),validIdeasPollResponse),
     saveProjectIdeas:async(workspaceId,runId)=>decode(await call('ai/ideas-save',{workspaceId,runId}),validIdeasSaveResponse),
+    startProjectOpportunities:async(workspaceId,input)=>decode(await call('ai/opportunities-generate-start',{workspaceId,...input}),validOpportunitiesGenerateStartResponse),
+    pollProjectOpportunities:async(workspaceId,runId)=>decode(await call('ai/opportunities-generate-poll',{workspaceId,runId}),validOpportunitiesPollResponse),
+    cancelProjectOpportunities:async(workspaceId,runId)=>decode(await call('ai/opportunities-generate-cancel',{workspaceId,runId}),validOpportunitiesPollResponse),
+    saveProjectOpportunities:async(workspaceId,runId)=>decode(await call('ai/opportunities-save',{workspaceId,runId}),validOpportunitiesSaveResponse),
     saveProjectEvaluation:async(workspaceId,input)=>decode(await call('artifacts/evaluations-save',{workspaceId,...input}),validEvaluationsSaveResponse),
     getStandardRubric:async(workspaceId,projectId)=>decode(await call('artifacts/evaluations-standard-rubric',{workspaceId,projectId}),validStandardRubricResponse),
     vaultCommand:async(command,request)=>await call('vault/'+command,request) as Record<string,unknown>,

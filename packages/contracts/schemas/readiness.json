@@ -5348,6 +5348,1027 @@
     "title": "OpenWorkspaceRequest",
     "type": "object"
   },
+  "OpportunitiesGenerateStartRequest": {
+    "$defs": {
+      "SuppliedSourceInput": {
+        "additionalProperties": false,
+        "description": "One piece of source material the user typed or pasted for\nthis run. `kind` is one of: problem, complaint,\nobservation, excerpt.",
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "label": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "text"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "contractVersion": {
+        "default": 1,
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "focus": {
+        "description": "Optional one-line focus for the discovery brief.",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "memoryIds": {
+        "default": [],
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "mode": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "model": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "permitId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "projectId": {
+        "type": "string"
+      },
+      "provider": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "sources": {
+        "items": {
+          "$ref": "#/$defs/SuppliedSourceInput"
+        },
+        "type": "array"
+      },
+      "workspaceId": {
+        "type": "string"
+      },
+      "zeroCostLock": {
+        "default": false,
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "workspaceId",
+      "projectId"
+    ],
+    "title": "OpportunitiesGenerateStartRequest",
+    "type": "object"
+  },
+  "OpportunitiesGenerateStartResponse": {
+    "$defs": {
+      "AttemptRecord": {
+        "properties": {
+          "model": {
+            "type": "string"
+          },
+          "outcome": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "model",
+          "outcome"
+        ],
+        "type": "object"
+      },
+      "CostClass": {
+        "description": "Cost knowledge about a model. `Unknown` is treated as paid everywhere\ncost is enforced (decision M5-D5).",
+        "enum": [
+          "free",
+          "paid",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "DisclosureRecord": {
+        "description": "\"View What ANANSI Sent\" at adapter level (§19): what was about to be\n/ was transmitted, to whom, and why. The UI rendering of this record\nis application integration; producing it is the dispatcher's job.",
+        "properties": {
+          "attempts": {
+            "items": {
+              "$ref": "#/$defs/AttemptRecord"
+            },
+            "type": "array"
+          },
+          "costClass": {
+            "$ref": "#/$defs/CostClass"
+          },
+          "endpointHost": {
+            "type": "string"
+          },
+          "estimatedInputTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "local": {
+            "type": "boolean"
+          },
+          "messageCount": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "model": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "redactionCount": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "routingMode": {
+            "$ref": "#/$defs/RoutingMode"
+          },
+          "routingReason": {
+            "type": "string"
+          },
+          "segmentCount": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "usage": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Usage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "provider",
+          "model",
+          "endpointHost",
+          "local",
+          "routingMode",
+          "routingReason",
+          "messageCount",
+          "segmentCount",
+          "redactionCount",
+          "estimatedInputTokens",
+          "costClass",
+          "attempts"
+        ],
+        "type": "object"
+      },
+      "RoutingMode": {
+        "description": "User-facing routing modes, verbatim from MASTER_SPEC §17.",
+        "enum": [
+          "auto",
+          "autoFree",
+          "private",
+          "fast",
+          "deep",
+          "coding",
+          "vision",
+          "chooseModel"
+        ],
+        "type": "string"
+      },
+      "Usage": {
+        "properties": {
+          "inputTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "outputTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "inputTokens",
+          "outputTokens"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "disclosure": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/DisclosureRecord"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "runId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "runId"
+    ],
+    "title": "OpportunitiesGenerateStartResponse",
+    "type": "object"
+  },
+  "OpportunitiesPollResponse": {
+    "$defs": {
+      "AttemptRecord": {
+        "properties": {
+          "model": {
+            "type": "string"
+          },
+          "outcome": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "model",
+          "outcome"
+        ],
+        "type": "object"
+      },
+      "CostClass": {
+        "description": "Cost knowledge about a model. `Unknown` is treated as paid everywhere\ncost is enforced (decision M5-D5).",
+        "enum": [
+          "free",
+          "paid",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "DisclosureRecord": {
+        "description": "\"View What ANANSI Sent\" at adapter level (§19): what was about to be\n/ was transmitted, to whom, and why. The UI rendering of this record\nis application integration; producing it is the dispatcher's job.",
+        "properties": {
+          "attempts": {
+            "items": {
+              "$ref": "#/$defs/AttemptRecord"
+            },
+            "type": "array"
+          },
+          "costClass": {
+            "$ref": "#/$defs/CostClass"
+          },
+          "endpointHost": {
+            "type": "string"
+          },
+          "estimatedInputTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "local": {
+            "type": "boolean"
+          },
+          "messageCount": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "model": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "redactionCount": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "routingMode": {
+            "$ref": "#/$defs/RoutingMode"
+          },
+          "routingReason": {
+            "type": "string"
+          },
+          "segmentCount": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "usage": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Usage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "provider",
+          "model",
+          "endpointHost",
+          "local",
+          "routingMode",
+          "routingReason",
+          "messageCount",
+          "segmentCount",
+          "redactionCount",
+          "estimatedInputTokens",
+          "costClass",
+          "attempts"
+        ],
+        "type": "object"
+      },
+      "OpportunityConcept": {
+        "description": "One §21 opportunity: the twelve concept fields plus the\nsupplied sources it cites and its stated assumptions.\nAll fields are model-generated hypotheses.",
+        "properties": {
+          "assumptions": {
+            "description": "The model's stated assumptions for this opportunity.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "differentiationHypothesis": {
+            "type": "string"
+          },
+          "engineeringComplexity": {
+            "type": "string"
+          },
+          "implementationCost": {
+            "type": "string"
+          },
+          "keyRisks": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "minimumViableVersion": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "problem": {
+            "type": "string"
+          },
+          "requiredValidation": {
+            "type": "string"
+          },
+          "revenueModel": {
+            "type": "string"
+          },
+          "solution": {
+            "type": "string"
+          },
+          "sourceReferences": {
+            "description": "Ids of supplied sources this opportunity derives\nfrom; validated against the sources actually sent.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "targetCustomer": {
+            "type": "string"
+          },
+          "whyUseful": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "problem",
+          "targetCustomer",
+          "solution",
+          "whyUseful",
+          "differentiationHypothesis",
+          "revenueModel",
+          "engineeringComplexity",
+          "implementationCost",
+          "keyRisks",
+          "requiredValidation",
+          "minimumViableVersion",
+          "sourceReferences",
+          "assumptions"
+        ],
+        "type": "object"
+      },
+      "OpportunitySet": {
+        "description": "A validated opportunity set: the document saved as the\nartifact body and returned by poll.",
+        "properties": {
+          "concepts": {
+            "items": {
+              "$ref": "#/$defs/OpportunityConcept"
+            },
+            "type": "array"
+          },
+          "format": {
+            "type": "string"
+          },
+          "formatVersion": {
+            "format": "uint8",
+            "maximum": 255,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/$defs/OpportunitySourceRecord"
+            },
+            "type": "array"
+          },
+          "topic": {
+            "description": "Headline for the set: the user's focus when given,\nelse derived from the first supplied source.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "format",
+          "formatVersion",
+          "topic",
+          "sources",
+          "concepts"
+        ],
+        "type": "object"
+      },
+      "OpportunitySourceRecord": {
+        "description": "A source that was actually sent for a run, recorded in\nthe saved set so provenance survives reopen and restore.\nSupplied texts are embedded verbatim (`text`); memory\nsources are referenced by id and revision (`memoryId`,\n`revisionId`) — their content lives in the workspace.",
+        "properties": {
+          "kind": {
+            "description": "problem | complaint | observation | excerpt | memory",
+            "type": "string"
+          },
+          "label": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "memoryId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "revisionId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sourceId": {
+            "type": "string"
+          },
+          "text": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "sourceId",
+          "kind"
+        ],
+        "type": "object"
+      },
+      "RoutingMode": {
+        "description": "User-facing routing modes, verbatim from MASTER_SPEC §17.",
+        "enum": [
+          "auto",
+          "autoFree",
+          "private",
+          "fast",
+          "deep",
+          "coding",
+          "vision",
+          "chooseModel"
+        ],
+        "type": "string"
+      },
+      "Usage": {
+        "properties": {
+          "inputTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "outputTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "inputTokens",
+          "outputTokens"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "disclosure": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/DisclosureRecord"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "error": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "opportunitySet": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/OpportunitySet"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "partialChars": {
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "runId": {
+        "type": "string"
+      },
+      "status": {
+        "description": "running | cancelling | complete | invalid | failed | cancelled",
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "runId",
+      "status",
+      "partialChars"
+    ],
+    "title": "OpportunitiesPollResponse",
+    "type": "object"
+  },
+  "OpportunitiesRunRequest": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "contractVersion": {
+        "default": 1,
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "runId": {
+        "type": "string"
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "workspaceId",
+      "runId"
+    ],
+    "title": "OpportunitiesRunRequest",
+    "type": "object"
+  },
+  "OpportunitiesSaveResponse": {
+    "$defs": {
+      "ArtifactRecord": {
+        "description": "One artifact version's metadata — the §9 field set.",
+        "properties": {
+          "artifactId": {
+            "type": "string"
+          },
+          "contentHash": {
+            "type": "string"
+          },
+          "generator": {
+            "description": "Generator/model metadata: `{\"kind\":\"manual\"}` in this\nslice; generator slices record model provenance here."
+          },
+          "privacy": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "sourceReferences": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "timestamp": {
+            "description": "The §9 timestamp: when this version was registered.",
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "validationStatus": {
+            "type": "string"
+          },
+          "version": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "artifactId",
+          "projectId",
+          "type",
+          "version",
+          "title",
+          "timestamp",
+          "sourceReferences",
+          "validationStatus",
+          "privacy",
+          "contentHash"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "alreadySaved": {
+        "type": "boolean"
+      },
+      "artifact": {
+        "$ref": "#/$defs/ArtifactRecord"
+      },
+      "body": {
+        "type": "string"
+      },
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "artifact",
+      "body",
+      "alreadySaved"
+    ],
+    "title": "OpportunitiesSaveResponse",
+    "type": "object"
+  },
+  "OpportunityConcept": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "description": "One §21 opportunity: the twelve concept fields plus the\nsupplied sources it cites and its stated assumptions.\nAll fields are model-generated hypotheses.",
+    "properties": {
+      "assumptions": {
+        "description": "The model's stated assumptions for this opportunity.",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "differentiationHypothesis": {
+        "type": "string"
+      },
+      "engineeringComplexity": {
+        "type": "string"
+      },
+      "implementationCost": {
+        "type": "string"
+      },
+      "keyRisks": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "minimumViableVersion": {
+        "type": "string"
+      },
+      "name": {
+        "type": "string"
+      },
+      "problem": {
+        "type": "string"
+      },
+      "requiredValidation": {
+        "type": "string"
+      },
+      "revenueModel": {
+        "type": "string"
+      },
+      "solution": {
+        "type": "string"
+      },
+      "sourceReferences": {
+        "description": "Ids of supplied sources this opportunity derives\nfrom; validated against the sources actually sent.",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "targetCustomer": {
+        "type": "string"
+      },
+      "whyUseful": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "name",
+      "problem",
+      "targetCustomer",
+      "solution",
+      "whyUseful",
+      "differentiationHypothesis",
+      "revenueModel",
+      "engineeringComplexity",
+      "implementationCost",
+      "keyRisks",
+      "requiredValidation",
+      "minimumViableVersion",
+      "sourceReferences",
+      "assumptions"
+    ],
+    "title": "OpportunityConcept",
+    "type": "object"
+  },
+  "OpportunitySet": {
+    "$defs": {
+      "OpportunityConcept": {
+        "description": "One §21 opportunity: the twelve concept fields plus the\nsupplied sources it cites and its stated assumptions.\nAll fields are model-generated hypotheses.",
+        "properties": {
+          "assumptions": {
+            "description": "The model's stated assumptions for this opportunity.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "differentiationHypothesis": {
+            "type": "string"
+          },
+          "engineeringComplexity": {
+            "type": "string"
+          },
+          "implementationCost": {
+            "type": "string"
+          },
+          "keyRisks": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "minimumViableVersion": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "problem": {
+            "type": "string"
+          },
+          "requiredValidation": {
+            "type": "string"
+          },
+          "revenueModel": {
+            "type": "string"
+          },
+          "solution": {
+            "type": "string"
+          },
+          "sourceReferences": {
+            "description": "Ids of supplied sources this opportunity derives\nfrom; validated against the sources actually sent.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "targetCustomer": {
+            "type": "string"
+          },
+          "whyUseful": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "problem",
+          "targetCustomer",
+          "solution",
+          "whyUseful",
+          "differentiationHypothesis",
+          "revenueModel",
+          "engineeringComplexity",
+          "implementationCost",
+          "keyRisks",
+          "requiredValidation",
+          "minimumViableVersion",
+          "sourceReferences",
+          "assumptions"
+        ],
+        "type": "object"
+      },
+      "OpportunitySourceRecord": {
+        "description": "A source that was actually sent for a run, recorded in\nthe saved set so provenance survives reopen and restore.\nSupplied texts are embedded verbatim (`text`); memory\nsources are referenced by id and revision (`memoryId`,\n`revisionId`) — their content lives in the workspace.",
+        "properties": {
+          "kind": {
+            "description": "problem | complaint | observation | excerpt | memory",
+            "type": "string"
+          },
+          "label": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "memoryId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "revisionId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sourceId": {
+            "type": "string"
+          },
+          "text": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "sourceId",
+          "kind"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "description": "A validated opportunity set: the document saved as the\nartifact body and returned by poll.",
+    "properties": {
+      "concepts": {
+        "items": {
+          "$ref": "#/$defs/OpportunityConcept"
+        },
+        "type": "array"
+      },
+      "format": {
+        "type": "string"
+      },
+      "formatVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "note": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "sources": {
+        "items": {
+          "$ref": "#/$defs/OpportunitySourceRecord"
+        },
+        "type": "array"
+      },
+      "topic": {
+        "description": "Headline for the set: the user's focus when given,\nelse derived from the first supplied source.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "format",
+      "formatVersion",
+      "topic",
+      "sources",
+      "concepts"
+    ],
+    "title": "OpportunitySet",
+    "type": "object"
+  },
+  "OpportunitySourceRecord": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "description": "A source that was actually sent for a run, recorded in\nthe saved set so provenance survives reopen and restore.\nSupplied texts are embedded verbatim (`text`); memory\nsources are referenced by id and revision (`memoryId`,\n`revisionId`) — their content lives in the workspace.",
+    "properties": {
+      "kind": {
+        "description": "problem | complaint | observation | excerpt | memory",
+        "type": "string"
+      },
+      "label": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "memoryId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "revisionId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "sourceId": {
+        "type": "string"
+      },
+      "text": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "sourceId",
+      "kind"
+    ],
+    "title": "OpportunitySourceRecord",
+    "type": "object"
+  },
   "ProviderAuthorizeRequest": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
@@ -7614,6 +8635,31 @@
       "rubric"
     ],
     "title": "StandardRubricResponse",
+    "type": "object"
+  },
+  "SuppliedSourceInput": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "description": "One piece of source material the user typed or pasted for\nthis run. `kind` is one of: problem, complaint,\nobservation, excerpt.",
+    "properties": {
+      "kind": {
+        "type": "string"
+      },
+      "label": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "text": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "kind",
+      "text"
+    ],
+    "title": "SuppliedSourceInput",
     "type": "object"
   },
   "UpdateSettingsRequest": {

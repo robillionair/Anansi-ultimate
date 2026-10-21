@@ -1117,6 +1117,329 @@ export interface OpenWorkspaceRequest {
   contractVersion: number;
   id: string;
 }
+export interface OpportunitiesGenerateStartRequest {
+  contractVersion?: number;
+  /**
+   * Optional one-line focus for the discovery brief.
+   */
+  focus?: string | null;
+  memoryIds?: string[];
+  mode?: string | null;
+  model?: string | null;
+  permitId?: string | null;
+  projectId: string;
+  provider?: string | null;
+  sources?: SuppliedSourceInput[];
+  workspaceId: string;
+  zeroCostLock?: boolean;
+}
+/**
+ * One piece of source material the user typed or pasted for
+ * this run. `kind` is one of: problem, complaint,
+ * observation, excerpt.
+ */
+export interface SuppliedSourceInput {
+  kind: string;
+  label?: string | null;
+  text: string;
+}
+/**
+ * Cost knowledge about a model. `Unknown` is treated as paid everywhere
+ * cost is enforced (decision M5-D5).
+ */
+/**
+ * User-facing routing modes, verbatim from MASTER_SPEC §17.
+ */
+
+export interface OpportunitiesGenerateStartResponse {
+  contractVersion: number;
+  disclosure?: DisclosureRecord | null;
+  runId: string;
+}
+/**
+ * "View What ANANSI Sent" at adapter level (§19): what was about to be
+ * / was transmitted, to whom, and why. The UI rendering of this record
+ * is application integration; producing it is the dispatcher's job.
+ */
+export interface DisclosureRecord {
+  attempts: AttemptRecord[];
+  costClass: CostClass;
+  endpointHost: string;
+  estimatedInputTokens: number;
+  local: boolean;
+  messageCount: number;
+  model: string;
+  provider: string;
+  redactionCount: number;
+  routingMode: RoutingMode;
+  routingReason: string;
+  segmentCount: number;
+  usage?: Usage | null;
+}
+export interface AttemptRecord {
+  model: string;
+  outcome: string;
+  provider: string;
+}
+export interface Usage {
+  inputTokens: number;
+  outputTokens: number;
+}
+/**
+ * Cost knowledge about a model. `Unknown` is treated as paid everywhere
+ * cost is enforced (decision M5-D5).
+ */
+/**
+ * User-facing routing modes, verbatim from MASTER_SPEC §17.
+ */
+
+export interface OpportunitiesPollResponse {
+  contractVersion: number;
+  disclosure?: DisclosureRecord | null;
+  error?: string | null;
+  opportunitySet?: OpportunitySet | null;
+  partialChars: number;
+  runId: string;
+  /**
+   * running | cancelling | complete | invalid | failed | cancelled
+   */
+  status: string;
+}
+/**
+ * "View What ANANSI Sent" at adapter level (§19): what was about to be
+ * / was transmitted, to whom, and why. The UI rendering of this record
+ * is application integration; producing it is the dispatcher's job.
+ */
+export interface DisclosureRecord {
+  attempts: AttemptRecord[];
+  costClass: CostClass;
+  endpointHost: string;
+  estimatedInputTokens: number;
+  local: boolean;
+  messageCount: number;
+  model: string;
+  provider: string;
+  redactionCount: number;
+  routingMode: RoutingMode;
+  routingReason: string;
+  segmentCount: number;
+  usage?: Usage | null;
+}
+export interface AttemptRecord {
+  model: string;
+  outcome: string;
+  provider: string;
+}
+export interface Usage {
+  inputTokens: number;
+  outputTokens: number;
+}
+/**
+ * A validated opportunity set: the document saved as the
+ * artifact body and returned by poll.
+ */
+export interface OpportunitySet {
+  concepts: OpportunityConcept[];
+  format: string;
+  formatVersion: number;
+  note?: string | null;
+  sources: OpportunitySourceRecord[];
+  /**
+   * Headline for the set: the user's focus when given,
+   * else derived from the first supplied source.
+   */
+  topic: string;
+}
+/**
+ * One §21 opportunity: the twelve concept fields plus the
+ * supplied sources it cites and its stated assumptions.
+ * All fields are model-generated hypotheses.
+ */
+export interface OpportunityConcept {
+  /**
+   * The model's stated assumptions for this opportunity.
+   */
+  assumptions: string[];
+  differentiationHypothesis: string;
+  engineeringComplexity: string;
+  implementationCost: string;
+  keyRisks: string[];
+  minimumViableVersion: string;
+  name: string;
+  problem: string;
+  requiredValidation: string;
+  revenueModel: string;
+  solution: string;
+  /**
+   * Ids of supplied sources this opportunity derives
+   * from; validated against the sources actually sent.
+   */
+  sourceReferences: string[];
+  targetCustomer: string;
+  whyUseful: string;
+}
+/**
+ * A source that was actually sent for a run, recorded in
+ * the saved set so provenance survives reopen and restore.
+ * Supplied texts are embedded verbatim (`text`); memory
+ * sources are referenced by id and revision (`memoryId`,
+ * `revisionId`) — their content lives in the workspace.
+ */
+export interface OpportunitySourceRecord {
+  /**
+   * problem | complaint | observation | excerpt | memory
+   */
+  kind: string;
+  label?: string | null;
+  memoryId?: string | null;
+  revisionId?: string | null;
+  sourceId: string;
+  text?: string | null;
+}
+export interface OpportunitiesRunRequest {
+  contractVersion?: number;
+  runId: string;
+  workspaceId: string;
+}
+export interface OpportunitiesSaveResponse {
+  alreadySaved: boolean;
+  artifact: ArtifactRecord;
+  body: string;
+  contractVersion: number;
+}
+/**
+ * One artifact version's metadata — the §9 field set.
+ */
+export interface ArtifactRecord {
+  artifactId: string;
+  contentHash: string;
+  /**
+   * Generator/model metadata: `{"kind":"manual"}` in this
+   * slice; generator slices record model provenance here.
+   */
+  generator?: {
+    [k: string]: unknown;
+  };
+  privacy: string;
+  projectId: string;
+  sourceReferences: string[];
+  /**
+   * The §9 timestamp: when this version was registered.
+   */
+  timestamp: string;
+  title: string;
+  type: string;
+  validationStatus: string;
+  version: number;
+}
+/**
+ * One §21 opportunity: the twelve concept fields plus the
+ * supplied sources it cites and its stated assumptions.
+ * All fields are model-generated hypotheses.
+ */
+export interface OpportunityConcept {
+  /**
+   * The model's stated assumptions for this opportunity.
+   */
+  assumptions: string[];
+  differentiationHypothesis: string;
+  engineeringComplexity: string;
+  implementationCost: string;
+  keyRisks: string[];
+  minimumViableVersion: string;
+  name: string;
+  problem: string;
+  requiredValidation: string;
+  revenueModel: string;
+  solution: string;
+  /**
+   * Ids of supplied sources this opportunity derives
+   * from; validated against the sources actually sent.
+   */
+  sourceReferences: string[];
+  targetCustomer: string;
+  whyUseful: string;
+}
+/**
+ * A validated opportunity set: the document saved as the
+ * artifact body and returned by poll.
+ */
+export interface OpportunitySet {
+  concepts: OpportunityConcept[];
+  format: string;
+  formatVersion: number;
+  note?: string | null;
+  sources: OpportunitySourceRecord[];
+  /**
+   * Headline for the set: the user's focus when given,
+   * else derived from the first supplied source.
+   */
+  topic: string;
+}
+/**
+ * One §21 opportunity: the twelve concept fields plus the
+ * supplied sources it cites and its stated assumptions.
+ * All fields are model-generated hypotheses.
+ */
+export interface OpportunityConcept {
+  /**
+   * The model's stated assumptions for this opportunity.
+   */
+  assumptions: string[];
+  differentiationHypothesis: string;
+  engineeringComplexity: string;
+  implementationCost: string;
+  keyRisks: string[];
+  minimumViableVersion: string;
+  name: string;
+  problem: string;
+  requiredValidation: string;
+  revenueModel: string;
+  solution: string;
+  /**
+   * Ids of supplied sources this opportunity derives
+   * from; validated against the sources actually sent.
+   */
+  sourceReferences: string[];
+  targetCustomer: string;
+  whyUseful: string;
+}
+/**
+ * A source that was actually sent for a run, recorded in
+ * the saved set so provenance survives reopen and restore.
+ * Supplied texts are embedded verbatim (`text`); memory
+ * sources are referenced by id and revision (`memoryId`,
+ * `revisionId`) — their content lives in the workspace.
+ */
+export interface OpportunitySourceRecord {
+  /**
+   * problem | complaint | observation | excerpt | memory
+   */
+  kind: string;
+  label?: string | null;
+  memoryId?: string | null;
+  revisionId?: string | null;
+  sourceId: string;
+  text?: string | null;
+}
+/**
+ * A source that was actually sent for a run, recorded in
+ * the saved set so provenance survives reopen and restore.
+ * Supplied texts are embedded verbatim (`text`); memory
+ * sources are referenced by id and revision (`memoryId`,
+ * `revisionId`) — their content lives in the workspace.
+ */
+export interface OpportunitySourceRecord {
+  /**
+   * problem | complaint | observation | excerpt | memory
+   */
+  kind: string;
+  label?: string | null;
+  memoryId?: string | null;
+  revisionId?: string | null;
+  sourceId: string;
+  text?: string | null;
+}
 export interface ProviderAuthorizeRequest {
   allowUnknownCost?: boolean;
   contractVersion?: number;
@@ -1729,6 +2052,16 @@ export interface RubricDimension {
   key: string;
   label: string;
   weight: number;
+}
+/**
+ * One piece of source material the user typed or pasted for
+ * this run. `kind` is one of: problem, complaint,
+ * observation, excerpt.
+ */
+export interface SuppliedSourceInput {
+  kind: string;
+  label?: string | null;
+  text: string;
 }
 export type Intent = "second_memory" | "invent_product" | "build_application" | "connect_ai" | "explore";
 
