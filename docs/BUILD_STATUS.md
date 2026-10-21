@@ -1,3 +1,30 @@
+## 2026-10-21 — R17 repair: exact-revision provenance at restore (this checkpoint)
+
+Branch `muse/m6-r17-repair` over the Slice 4 checkpoint
+`7253b56`. Windows verification of R17
+passed opportunities_generation 6/6, opportunity units 5/5,
+opportunities_restore 1/1, UI/contracts 51/51, TypeScript,
+strict Clippy and docs — and a focused diagnostic confirmed
+one defect: restored opportunity sets kept the SOURCE
+workspace's `revisionId` for memory sources. The repair
+remaps `revisionId` through the restore identity map and
+validates it against the package's own `memory_revisions`
+rows (the revision must belong to the referenced memory in
+the artifact's own workspace; missing or mismatched fails
+the restore closed before anything is written). Original
+identities remain recoverable via `restore_origins`.
+`opportunities_restore` grows to 3 tests: the original
+identity test strengthened with revision assertions, a
+real discovery round trip proving the restored set
+resolves its pinned historical revision to exactly the
+text generation used (not the memory's later revision),
+and missing/mismatched revision refusals with a control.
+Full record: `docs/handoffs/M6-r17-repair-addendum.md`.
+Linux evidence on the final tree: core **210/214** (only
+the 4 environmental live-Ollama failures), clippy
+`--all-targets` + fmt clean. **Windows verification of
+this repair is pending**; M5 production gates remain open.
+
 ## 2026-10-21 — M6 Slice 4: project-scoped Opportunity Discovery (this checkpoint)
 
 Branch `muse/m6-slice4-opportunity-discovery` over the

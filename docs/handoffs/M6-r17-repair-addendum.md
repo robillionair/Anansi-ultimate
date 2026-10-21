@@ -69,10 +69,12 @@ passed because it asserted memory ids only.
 ## Verification (Linux, this machine)
 
 - `opportunities_restore` 3/3; opportunity unit tests 5/5.
-- Full `anansi-core` suite: see BUILD_STATUS for the exact
-  totals on the final tree (the 4 live-Ollama
-  `semantic_workflow` tests remain environmental failures
-  on this machine).
+- Full `anansi-core` suite on the final tree: **210 passed
+  / 4 failed** of 214 — the only failures are the 4 known
+  environmental `semantic_workflow` tests requiring a live
+  Ollama (absent here). The restore-path change is covered
+  by the full run: backup_artifacts, backup_restore,
+  evaluations, artifacts, ideas and vault suites all pass.
 - Clippy `--all-targets -D warnings` and fmt clean.
 
 **Windows verification of this repair is pending.** The
