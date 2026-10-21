@@ -138,9 +138,8 @@ current tar/manifest code.
   the settled same-name refusal), artifacts_registry,
   evaluations, ideas_generation, ideas_validation —
   27 passed / 0 failed. Core lib unit tests 34/34.
-  Providers 120/120. API: all test binaries pass (the
-  delivery report carries the summed count). UI/contracts
-  (node): 47/47.
+  Providers 120/120. API 24/24. UI/contracts (node):
+  47/47.
 - Browser e2e (ideas, evaluations, artifacts,
   app_checkpoint, providers): 5/5.
 - Clippy (`-D warnings`), fmt, tsc, contracts:check, docs
