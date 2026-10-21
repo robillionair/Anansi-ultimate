@@ -94,16 +94,16 @@ fn rich_fixture(core: &Core) -> Rich {
         {"conceptIndex":0,"dimension":"problem-clarity","score":5,"rationale":"Sharp."},
         {"conceptIndex":0,"dimension":"mvp-feasibility","score":3,"rationale":""}
     ]);
-    for rubric_version in [1] {
-        core.artifacts_command(
-            "evaluations-save",
-            json!({"contractVersion":1,"workspaceId":ws,"projectId":project,
-                   "sourceArtifactId":idea_id,"sourceVersion":1,
-                   "rubricArtifactId":rubric_id,"rubricVersion":rubric_version,
-                   "conceptIndices":[0],"assessments":assess}),
-        )
-        .unwrap();
-    }
+    // One evaluation citing rubric v1 (the v2 evaluation
+    // follows the rubric revision below).
+    core.artifacts_command(
+        "evaluations-save",
+        json!({"contractVersion":1,"workspaceId":ws,"projectId":project,
+               "sourceArtifactId":idea_id,"sourceVersion":1,
+               "rubricArtifactId":rubric_id,"rubricVersion":1,
+               "conceptIndices":[0],"assessments":assess}),
+    )
+    .unwrap();
     // Rubric v2 (problem-clarity weighs 3), then an evaluation
     // citing v2.
     let mut rubric_v2 = standard["rubric"].clone();
@@ -681,13 +681,7 @@ fn legacy_source(scratch: &Core) -> String {
     ws
 }
 
-fn legacy_package(
-    scratch: &Core,
-    scratch_root: &Path,
-    dir: &Path,
-    declared: i64,
-    ws: &str,
-) -> Vec<u8> {
+fn legacy_package(scratch_root: &Path, dir: &Path, declared: i64, ws: &str) -> Vec<u8> {
     let ws = ws.to_string();
     let source = rusqlite::Connection::open(scratch_root.join(DATABASE_NAME)).unwrap();
     let catalog_path = dir.join(format!("legacy-{declared}.sqlite3"));
@@ -826,7 +820,7 @@ fn legacy_schema_8_and_9_packages_restore_and_unknown_versions_fail_closed() {
     let scratch = Core::with_storage_root(scratch_root.clone());
     let legacy_ws = legacy_source(&scratch);
     for declared in [8, 9] {
-        let bytes = legacy_package(&scratch, &scratch_root, dir.path(), declared, &legacy_ws);
+        let bytes = legacy_package(&scratch_root, dir.path(), declared, &legacy_ws);
         let fresh_root = dir.path().join(format!("fresh-{declared}"));
         let fresh = Core::with_storage_root(fresh_root);
         let (restored, _preview) = upload_restore(&fresh, &bytes, &format!("Legacy {declared}"));
@@ -849,7 +843,7 @@ fn legacy_schema_8_and_9_packages_restore_and_unknown_versions_fail_closed() {
     // Declared versions outside {8, 9, 10} fail closed, and a
     // declaration that disagrees with the catalog does too.
     for (declared, actual) in [(7, 7), (11, 11), (9, 8)] {
-        let mut bytes = legacy_package(&scratch, &scratch_root, dir.path(), actual, &legacy_ws);
+        let mut bytes = legacy_package(&scratch_root, dir.path(), actual, &legacy_ws);
         let mut members = tar_members(&bytes);
         members.insert(
             "snapshot.json".into(),
