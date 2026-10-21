@@ -210,7 +210,7 @@ test('opportunity discovery: supplied sources -> discover -> save -> evaluate ->
 
     // Evaluate the saved set with the existing rubric panel.
     await page.getByRole('button', { name: 'Opportunity set: Dock offices lose supplier quotes in shared inboxes.', exact: true }).click();
-    await expect(page.getByRole('heading', { name: 'Supplied sources' })).toBeVisible();
+    await expect(page.locator('section[aria-labelledby="project-artifacts-heading"]').getByRole('heading', { name: 'Supplied sources' })).toBeVisible();
     await page.getByLabel('Opportunity 0', { exact: true }).check();
     await page.getByLabel('Problem clarity score').first().selectOption('5');
     await page.getByRole('button', { name: 'Save evaluation' }).click();
@@ -279,9 +279,11 @@ test('opportunity discovery: supplied sources -> discover -> save -> evaluate ->
     });
     const setDoc = JSON.parse(setRead.body.body as string);
     const memorySource = (setDoc.sources as Record<string, any>[]).find(s => s.kind === 'memory');
+    if (!memorySource) throw new Error('restored set lost its memory source');
     expect(memorySource.memoryId).toBe(restoredMemoryId);
     expect(memorySource.sourceId).toBe(restoredMemoryId);
     const suppliedSource = (setDoc.sources as Record<string, any>[]).find(s => s.kind === 'problem');
+    if (!suppliedSource) throw new Error('restored set lost its supplied source');
     expect(suppliedSource.text).toBe(problemText);
     expect(setDoc.concepts[0].sourceReferences).toContain(restoredMemoryId);
     expect(setDoc.concepts[0].sourceReferences).toContain('supplied-1');
@@ -302,7 +304,7 @@ test('opportunity discovery: supplied sources -> discover -> save -> evaluate ->
     await pairAndOpen(restoredWorkspaceId);
     await page.getByRole('button', { name: /Harbor App/ }).first().click();
     await page.getByRole('button', { name: 'Opportunity set: Dock offices lose supplier quotes in shared inboxes.', exact: true }).click();
-    await expect(page.getByRole('heading', { name: 'Supplied sources' })).toBeVisible();
+    await expect(page.locator('section[aria-labelledby="project-artifacts-heading"]').getByRole('heading', { name: 'Supplied sources' })).toBeVisible();
     await expect(page.getByText(restoredMemoryId).first()).toBeVisible();
     await expect(page.getByText('1. Opportunity 0')).toBeVisible();
   } finally {

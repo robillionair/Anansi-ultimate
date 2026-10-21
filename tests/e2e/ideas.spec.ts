@@ -154,7 +154,7 @@ test('idea generation: project -> explicit context -> generate -> 3 + expand -> 
     await page.getByLabel('Available budget').fill('small');
     await page.getByLabel('Preferred technology').fill('rust');
     await page.getByLabel('Business or personal objective').fill('find a product');
-    await page.getByLabel(/Field notes/).check();
+    await page.getByRole('group', { name: 'Approved memory context' }).getByLabel(/Field notes/).check();
 
     await page.getByRole('button', { name: 'Generate product ideas' }).click();
     await expect(page.getByText('1. Concept 0')).toBeVisible();
