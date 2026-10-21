@@ -1,6 +1,6 @@
 # M6 — Innovation Studio foundation
 
-Status: tracked planning task; detailed implementation design and acceptance approval required before coding. This is not an implemented feature or a complete technical design.
+Status (2026-10-21): **implemented in four owner-approved slices, delivered and Windows-accepted through the R17 preview checkpoint** (`codex/local-testing-r17`, tip `e915f63`). Delivered: Slice 1 — universal projects + versioned artifact registry; Slice 2 — project-scoped idea generation on the M5 substrate; Slice 3 — transparent rubric evaluation/comparison; Slice 4 — Opportunity Discovery from deliberately supplied sources only — plus the R13/R15/R16 reliability and recovery repairs, the vault schema-ladder reconciliation, and the R17 exact-revision restore repair. Evidence: `docs/handoffs/M6-slice1-addendum.md` … `M6-slice4-addendum.md`, `M6-r17-repair-addendum.md`, and `docs/BUILD_STATUS.md`. **Not complete and not claimed:** the broader Opportunity Engine scope beyond the delivered slices, LEXI-COLLIDER (M8), pre-project idea storage (owner decision still open), and all standing production gates (M5 native/live-provider/G1/CI) remain planned or gated exactly as recorded in `docs/REQUIREMENTS_MATRIX.md` (AN-027: in progress).
 
 Authority: [master specification](../docs/MASTER_SPEC.md), sections 9, 20–22, 66–67, 73, 79–80; [canonical roadmap](../docs/ROADMAP.md).
 
@@ -8,4 +8,4 @@ Required scope: Opportunity Engine, 5–10 ideas, scoring, universal product pro
 
 Dependencies: complete the preceding milestone and verify relevant shared contracts. Before implementation, inventory every bullet in the cited sections, define task-sized vertical slices, exact files, security boundaries, migrations, tests, observable workflow evidence, rollback and acceptance criteria. Record unresolved design choices in decisions; do not invent integrations or claim mocks are live verification.
 
-Planning completion requires requirement-level traceability, explicit deferred sub-slices with rationale, current official dependency/provider verification where relevant, executable verification commands and reviewable Definition of Done. Stop at each approved task boundary. M0 is the current implementation phase; do not start this milestone during reconciliation.
+Planning completion requires requirement-level traceability, explicit deferred sub-slices with rationale, current official dependency/provider verification where relevant, executable verification commands and reviewable Definition of Done. Stop at each approved task boundary. (Superseded 2026-10-21: the slices above were subsequently approved, implemented and verified slice by slice; this paragraph remains as the standing rule for any further M6 scope.)

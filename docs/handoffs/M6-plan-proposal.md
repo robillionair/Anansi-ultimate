@@ -1,5 +1,22 @@
 # M6 plan proposal — Innovation Studio Foundation (FOR OWNER APPROVAL)
 
+> **Status update (2026-10-21, appended — the proposal text
+> below is unchanged historical record):** the owner approved
+> this plan slice by slice and all four slices were
+> implemented, delivered as checksummed bundle-in-ZIP
+> checkpoints, and Windows-accepted through the R17 preview
+> checkpoint (`codex/local-testing-r17` @ `e915f63`): Slice 1
+> projects + artifact registry, Slice 2 idea generation,
+> Slice 3 rubric evaluation, Slice 4 Opportunity Discovery
+> (supplied sources only — plan decision 2 settled by the
+> owner), plus the R13/R15/R16/R17 repairs. Records:
+> `M6-slice1-addendum.md` … `M6-slice4-addendum.md`,
+> `M6-r17-repair-addendum.md`, `docs/BUILD_STATUS.md`.
+> Still open/deferred, exactly as the matrix records:
+> pre-project idea storage (plan decision 3), the broader
+> Opportunity Engine, Collider (M8), and the standing M5
+> production gates.
+
 Status: **proposal only. No M6 product implementation has
 started; none will until the owner approves this plan (or an
 amended version).** Prepared 2026-10-21 on
