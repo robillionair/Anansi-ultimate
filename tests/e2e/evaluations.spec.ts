@@ -149,13 +149,42 @@ test('evaluation: saved idea set -> assess -> save -> reopen -> rubric v2 -> his
     await page.getByRole('button', { name: 'Save evaluation' }).click();
     await expect(page.getByText(/Evaluation saved as artifact/)).toBeVisible();
 
-    // Two evaluations now exist; the first still renders with
-    // the v1 rubric (weight 1), the new one cites v2.
+    // Two evaluations now exist; each must render with the
+    // rubric snapshot it was saved under (v1: weight 1, v2:
+    // weight 3) — revising the rubric must not rewrite
+    // history. The artifact list is ordered by artifact id,
+    // so which button comes first varies between runs: open
+    // both and check each against its own cited rubric
+    // version instead of assuming a position.
     const evaluationButtons = page.getByRole('button', { name: /Evaluation: Idea set/ });
     await expect(evaluationButtons).toHaveCount(2);
-    await evaluationButtons.first().click();
-    await expect(page.getByText(/version 1\)/)).toBeVisible();
-    await expect(page.getByText(/Problem clarity — weight 1\./)).toBeVisible();
+    const citedRubricVersion = async () => {
+      const text = await page.getByText(/Evaluation of idea artifact/).innerText();
+      const match = text.match(/under rubric artifact \w+ \(version (\d+)\)/);
+      return match ? Number(match[1]) : -1;
+    };
+    const seenRubricVersions = new Set<number>();
+    for (const index of [0, 1]) {
+      await evaluationButtons.nth(index).click();
+      // The detail view swaps asynchronously; wait until it
+      // cites a rubric version not seen yet (the two
+      // evaluations cite different versions by construction).
+      await expect
+        .poll(
+          async () => {
+            const v = await citedRubricVersion();
+            return v > 0 && !seenRubricVersions.has(v) ? v : -1;
+          },
+          { timeout: 15000 },
+        )
+        .toBeGreaterThan(0);
+      const rubricVersion = await citedRubricVersion();
+      seenRubricVersions.add(rubricVersion);
+      await expect(
+        page.getByText(new RegExp(`Problem clarity — weight ${rubricVersion === 1 ? '1' : '3'}\\.`)),
+      ).toBeVisible();
+    }
+    expect([...seenRubricVersions].sort()).toEqual([1, 2]);
   } finally {
     await stopApi();
   }
