@@ -762,7 +762,7 @@ impl Storage {
             crate::backup::MAX_MANIFEST_BYTES,
         )?)
         .map_err(|_| invalid())?;
-        if info.schema_version != SCHEMA_VERSION
+        if !matches!(info.schema_version, 8 | 9 | SCHEMA_VERSION)
             || info.workspaces.is_empty()
             || info.workspaces.len() > MAX_RECORDS as usize
             || !info.workspaces.contains(&checked.manifest.workspace_id)

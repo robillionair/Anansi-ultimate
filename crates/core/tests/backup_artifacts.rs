@@ -45,6 +45,7 @@ fn make_project(core: &Core, ws: &str, title: &str) -> String {
 
 pub struct Rich {
     pub ws: String,
+    pub note_memory_id: String,
     pub project: String,
     pub idea: String,
     pub rubric: String,
@@ -120,14 +121,25 @@ fn rich_fixture(core: &Core) -> Rich {
                "conceptIndices":[0],"assessments":assess}),
     )
     .unwrap();
-    // Archived second project with one artifact.
+    // Archived second project with one artifact. The note
+    // memory is created first so the artifact can carry a
+    // memory:// source reference (which restore must
+    // preserve intact - only artifact:// references remap).
+    let note_memory = core
+        .memory_command(
+            "create",
+            json!({"contractVersion":1,"workspaceId":ws,"kind":"note",
+                   "draft":{"title":"Field notes","body":"harbor quixoticzeppelin survey","privacy":"private"}}),
+        )
+        .unwrap();
+    let note_memory_id = note_memory["memory"]["id"].as_str().unwrap().to_string();
     let archived_project = make_project(core, &ws, "Retired App");
     let note = core
         .artifacts_command(
             "register",
             json!({"contractVersion":1,"workspaceId":ws,"projectId":archived_project,
                    "type":"note","title":"Retired note","body":"archived body",
-                   "sourceReferences":[],"privacy":"private"}),
+                   "sourceReferences":[format!("memory://{note_memory_id}")],"privacy":"private"}),
         )
         .unwrap();
     let archived_artifact = note["artifact"]["artifactId"].as_str().unwrap().to_string();
@@ -145,13 +157,7 @@ fn rich_fixture(core: &Core) -> Rich {
                "lifecycle":{"state":"archived","confirmed":true,"successorId":null}}),
     )
     .unwrap();
-    // A searchable note; the search creates the FTS table.
-    core.memory_command(
-        "create",
-        json!({"contractVersion":1,"workspaceId":ws,"kind":"note",
-               "draft":{"title":"Field notes","body":"harbor quixoticzeppelin survey","privacy":"private"}}),
-    )
-    .unwrap();
+    // The search creates the FTS table in the source store.
     let hits = core
         .memory_command(
             "list",
@@ -161,6 +167,7 @@ fn rich_fixture(core: &Core) -> Rich {
     assert_eq!(hits["memories"].as_array().unwrap().len(), 1);
     Rich {
         ws,
+        note_memory_id,
         project,
         idea: idea_id,
         rubric: rubric_id,
@@ -428,6 +435,11 @@ fn workspace_backup_restores_artifacts_evaluations_and_archived_projects() {
     let after_archived = artifact_dump(&core_b, &new_ws, &new_archived);
     assert_eq!(after_archived.len(), 1);
     assert_eq!(after_archived[0]["body"], "archived body");
+    assert_eq!(
+        after_archived[0]["sourceReferences"],
+        json!([format!("memory://{}", rich.note_memory_id)]),
+        "memory:// references are preserved intact"
+    );
     assert_ne!(
         after_archived[0]["artifactId"].as_str().unwrap(),
         rich.archived_artifact
@@ -541,4 +553,413 @@ fn application_backup_from_a_used_database_round_trips() {
         .unwrap();
     assert_eq!(stale_rows, 0, "archived FTS rows are never imported");
     let _ = Path::new("");
+}
+
+// ---------------------------------------------------------------------
+// Legacy packages and failure modes.
+
+fn tar_members(bytes: &[u8]) -> BTreeMap<String, Vec<u8>> {
+    let mut result = BTreeMap::new();
+    let mut offset = 0;
+    while offset + 512 <= bytes.len() && bytes[offset..offset + 512].iter().any(|b| *b != 0) {
+        let h = &bytes[offset..offset + 512];
+        let end = h[..100].iter().position(|b| *b == 0).unwrap();
+        let name = std::str::from_utf8(&h[..end]).unwrap().to_string();
+        let size = usize::from_str_radix(
+            std::str::from_utf8(&h[124..136]).unwrap().trim_matches(['\0', ' ']),
+            8,
+        )
+        .unwrap();
+        result.insert(name, bytes[offset + 512..offset + 512 + size].to_vec());
+        offset = (offset + 512 + size).div_ceil(512) * 512;
+    }
+    result
+}
+
+fn tar_build(members: &BTreeMap<String, Vec<u8>>) -> Vec<u8> {
+    let mut out = Vec::new();
+    for (name, data) in members {
+        let mut h = [0u8; 512];
+        h[..name.len()].copy_from_slice(name.as_bytes());
+        h[100..108].copy_from_slice(b"0000644\0");
+        h[108..116].copy_from_slice(b"0000000\0");
+        h[116..124].copy_from_slice(b"0000000\0");
+        h[124..136].copy_from_slice(format!("{:011o}\0", data.len()).as_bytes());
+        h[136..148].copy_from_slice(b"00000000000\0");
+        h[148..156].fill(b' ');
+        h[156] = b'0';
+        h[257..263].copy_from_slice(b"ustar\0");
+        h[263..265].copy_from_slice(b"00");
+        let sum: u32 = h.iter().map(|b| u32::from(*b)).sum();
+        h[148..156].copy_from_slice(format!("{sum:06o}\0 ").as_bytes());
+        out.extend_from_slice(&h);
+        out.extend_from_slice(data);
+        let pad = (512 - data.len() % 512) % 512;
+        out.extend(std::iter::repeat_n(0, pad));
+    }
+    out.extend(std::iter::repeat_n(0, 1024));
+    out
+}
+
+/// Fix the manifest entry for a replaced catalog member.
+fn refresh_catalog_member(members: &mut BTreeMap<String, Vec<u8>>) {
+    let catalog = members["catalog.sqlite3"].clone();
+    let mut manifest: anansi_core::backup::BackupManifest =
+        serde_json::from_slice(&members["manifest.json"]).unwrap();
+    for member in &mut manifest.members {
+        if member.path == "catalog.sqlite3" {
+            member.bytes = catalog.len() as u64;
+            member.sha256 = content::hash(&catalog);
+        }
+    }
+    members.insert(
+        "manifest.json".into(),
+        serde_json::to_vec(&manifest).unwrap(),
+    );
+}
+
+fn edit_catalog(members: &mut BTreeMap<String, Vec<u8>>, dir: &Path, edit: impl FnOnce(&rusqlite::Connection)) {
+    let path = dir.join("edit-catalog.sqlite3");
+    std::fs::write(&path, &members["catalog.sqlite3"]).unwrap();
+    let conn = rusqlite::Connection::open(&path).unwrap();
+    edit(&conn);
+    drop(conn);
+    members.insert("catalog.sqlite3".into(), std::fs::read(&path).unwrap());
+    refresh_catalog_member(members);
+}
+
+/// Build a package in the actual older format: a catalog
+/// created from the schema-8 (or schema-9) migrations,
+/// populated from a real workspace's rows, packaged with the
+/// current manifest/tar code and the older declared version.
+fn legacy_source(scratch: &Core) -> String {
+    let ws = workspace(scratch, "Legacy source");
+    scratch
+        .memory_command(
+            "create",
+            json!({"contractVersion":1,"workspaceId":ws,"kind":"note",
+                   "draft":{"title":"Legacy note","body":"legacy body one","privacy":"private"}}),
+        )
+        .unwrap();
+    ws
+}
+
+fn legacy_package(scratch: &Core, scratch_root: &Path, dir: &Path, declared: i64, ws: &str) -> Vec<u8> {
+    let ws = ws.to_string();
+    let source = rusqlite::Connection::open(scratch_root.join(DATABASE_NAME)).unwrap();
+    let catalog_path = dir.join(format!("legacy-{declared}.sqlite3"));
+    let _ = std::fs::remove_file(&catalog_path);
+    let mut catalog = rusqlite::Connection::open(&catalog_path).unwrap();
+    let mut ddl = String::new();
+    for file in [
+        "0001_workspace.sql",
+        "0002_onboarding.sql",
+        "0003_memory.sql",
+        "0004_lifecycle.sql",
+        "0005_entities.sql",
+        "0006_relationship_history.sql",
+        "0007_jobs.sql",
+        "0008_backups.sql",
+    ] {
+        ddl.push_str(&std::fs::read_to_string(
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("migrations")
+                .join(file),
+        ).unwrap());
+    }
+    if declared >= 9 {
+        ddl.push_str(
+            &std::fs::read_to_string(
+                Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations/0009_vault.sql"),
+            )
+            .unwrap(),
+        );
+    }
+    catalog.execute_batch(&ddl).unwrap();
+    if declared >= 9 {
+        // The vault seeds its write guard armed; real writes
+        // happen inside a maintenance window (see the vault
+        // catalog). Populate inside one, then close it so the
+        // packaged catalog is in its resting state.
+        catalog
+            .execute("UPDATE vault_maintenance SET enabled=1", [])
+            .unwrap();
+    }
+    catalog
+        .pragma_update(None, "application_id", 0x414e414e)
+        .unwrap();
+    catalog.pragma_update(None, "user_version", declared).unwrap();
+    let tx = catalog.transaction().unwrap();
+    for table in ["workspaces", "workspace_settings", "memories", "memory_revisions"] {
+        let key = if table == "workspaces" { "id" } else { "workspace_id" };
+        let mut q = source
+            .prepare(&format!("SELECT * FROM {table} WHERE {key}=?1"))
+            .unwrap();
+        let count = q.column_count();
+        let slots = (1..=count).map(|i| format!("?{i}")).collect::<Vec<_>>().join(",");
+        let mut insert = tx
+            .prepare(&format!("INSERT INTO {table} VALUES({slots})"))
+            .unwrap();
+        let mut rows = q.query(rusqlite::params![ws]).unwrap();
+        while let Some(row) = rows.next().unwrap() {
+            let values = (0..count)
+                .map(|i| row.get::<_, rusqlite::types::Value>(i))
+                .collect::<rusqlite::Result<Vec<_>>>()
+                .unwrap();
+            insert.execute(rusqlite::params_from_iter(values)).unwrap();
+        }
+    }
+    tx.commit().unwrap();
+    if declared >= 9 {
+        catalog
+            .execute("UPDATE vault_maintenance SET enabled=0", [])
+            .unwrap();
+    }
+    drop(catalog);
+    // Body members from the real revision rows.
+    let revision: String = source
+        .query_row(
+            "SELECT id FROM memory_revisions WHERE workspace_id=?1",
+            rusqlite::params![ws],
+            |r| r.get(0),
+        )
+        .unwrap();
+    let mut members = BTreeMap::new();
+    members.insert(
+        "catalog.sqlite3".into(),
+        std::fs::read(&catalog_path).unwrap(),
+    );
+    members.insert(
+        "snapshot.json".into(),
+        serde_json::to_vec(
+            &json!({"schemaVersion": declared, "application": false, "workspaces": [ws]}),
+        )
+        .unwrap(),
+    );
+    members.insert(
+        format!("bodies/{revision}.md"),
+        b"legacy body one".to_vec(),
+    );
+    let manifest = anansi_core::backup::BackupManifest {
+        format: anansi_core::backup::BACKUP_FORMAT.into(),
+        format_version: anansi_core::backup::BACKUP_VERSION,
+        workspace_id: ws.clone(),
+        workspace_name: "Legacy source".into(),
+        created_at: chrono::Utc::now().to_rfc3339(),
+        members: members
+            .iter()
+            .map(|(path, data)| anansi_core::backup::BackupMember {
+                path: path.clone(),
+                bytes: data.len() as u64,
+                sha256: content::hash(data),
+            })
+            .collect(),
+    };
+    members.insert(
+        "manifest.json".into(),
+        serde_json::to_vec(&manifest).unwrap(),
+    );
+    tar_build(&members)
+}
+
+#[test]
+fn legacy_schema_8_and_9_packages_restore_and_unknown_versions_fail_closed() {
+    let dir = tempfile::tempdir().unwrap();
+    let scratch_root = dir.path().join("scratch");
+    let scratch = Core::with_storage_root(scratch_root.clone());
+    let legacy_ws = legacy_source(&scratch);
+    for declared in [8, 9] {
+        let bytes = legacy_package(&scratch, &scratch_root, dir.path(), declared, &legacy_ws);
+        let fresh_root = dir.path().join(format!("fresh-{declared}"));
+        let fresh = Core::with_storage_root(fresh_root);
+        let (restored, _preview) = upload_restore(&fresh, &bytes, &format!("Legacy {declared}"));
+        let new_ws = restored["workspaces"][0]["id"].as_str().unwrap().to_string();
+        let list = fresh
+            .memory_command("list", json!({"contractVersion":1,"workspaceId":new_ws}))
+            .unwrap();
+        assert_eq!(list["memories"].as_array().unwrap().len(), 1);
+        let read = fresh
+            .memory_command(
+                "read",
+                json!({"contractVersion":1,"workspaceId":new_ws,"id":list["memories"][0]["id"]}),
+            )
+            .unwrap();
+        assert_eq!(read["body"], "legacy body one");
+    }
+    // Declared versions outside {8, 9, 10} fail closed, and a
+    // declaration that disagrees with the catalog does too.
+    for (declared, actual) in [(7, 7), (11, 11), (9, 8)] {
+        let mut bytes = legacy_package(&scratch, &scratch_root, dir.path(), actual, &legacy_ws);
+        let mut members = tar_members(&bytes);
+        members.insert(
+            "snapshot.json".into(),
+            serde_json::to_vec(
+                &json!({"schemaVersion": declared, "application": false,
+                        "workspaces": [serde_json::from_slice::<anansi_core::backup::BackupManifest>(&members["manifest.json"]).unwrap().workspace_id]}),
+            )
+            .unwrap(),
+        );
+        // snapshot.json is itself a manifest member; refresh hashes.
+        let snap = members["snapshot.json"].clone();
+        let mut manifest: anansi_core::backup::BackupManifest =
+            serde_json::from_slice(&members["manifest.json"]).unwrap();
+        for member in &mut manifest.members {
+            if member.path == "snapshot.json" {
+                member.bytes = snap.len() as u64;
+                member.sha256 = content::hash(&snap);
+            }
+        }
+        members.insert("manifest.json".into(), serde_json::to_vec(&manifest).unwrap());
+        bytes = tar_build(&members);
+        let fresh = Core::with_storage_root(dir.path().join(format!("refuse-{declared}-{actual}")));
+        assert!(
+            upload_preview(&fresh, &bytes).is_err(),
+            "declared {declared} / actual {actual} must be refused"
+        );
+    }
+}
+
+#[test]
+fn tampered_artifact_and_dangling_reference_packages_fail_closed() {
+    let dir = tempfile::tempdir().unwrap();
+    let root_a = dir.path().join("a");
+    let core_a = Core::with_storage_root(root_a.clone());
+    let rich = rich_fixture(&core_a);
+    let store_a = Storage::new(root_a.clone()).unwrap();
+    let (_job, artifact) = backup(&store_a, &rich.ws, false);
+    let original = package_bytes(&root_a, &rich.ws, &artifact);
+
+    // Control: the untouched package previews fine.
+    let fresh = Core::with_storage_root(dir.path().join("control"));
+    assert!(upload_preview(&fresh, &original).is_ok());
+
+    // (a) A flipped artifact body byte (hash no longer matches).
+    let mut members = tar_members(&original);
+    edit_catalog(&mut members, dir.path(), |conn| {
+        conn.execute(
+            "UPDATE artifact_versions SET body = body || 'x' WHERE artifact_type='idea'",
+            [],
+        )
+        .unwrap();
+    });
+    let fresh = Core::with_storage_root(dir.path().join("tamper-body"));
+    assert!(upload_preview(&fresh, &tar_build(&members)).is_err());
+
+    // (b) An evaluation pointing at an artifact that is not
+    // in the package (body edited, its row hash recomputed so
+    // only the reference check can catch it).
+    let mut members = tar_members(&original);
+    edit_catalog(&mut members, dir.path(), |conn| {
+        let body: String = conn
+            .query_row(
+                "SELECT body FROM artifact_versions WHERE artifact_type='evaluation' LIMIT 1",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        let mut doc: Value = serde_json::from_str(&body).unwrap();
+        doc["sourceArtifactId"] = json!("f".repeat(32));
+        let body = doc.to_string();
+        let hash = content::hash(body.as_bytes());
+        conn.execute(
+            "UPDATE artifact_versions SET body=?1, content_hash=?2 WHERE artifact_type='evaluation'",
+            rusqlite::params![body, hash],
+        )
+        .unwrap();
+    });
+    let fresh = Core::with_storage_root(dir.path().join("tamper-ref"));
+    assert!(upload_preview(&fresh, &tar_build(&members)).is_err());
+
+    // (c) A sealed artifact row in a plaintext package.
+    let mut members = tar_members(&original);
+    edit_catalog(&mut members, dir.path(), |conn| {
+        conn.execute(
+            "UPDATE artifact_versions SET privacy='sealed' WHERE artifact_type='note'",
+            [],
+        )
+        .unwrap();
+    });
+    let fresh = Core::with_storage_root(dir.path().join("tamper-sealed"));
+    assert!(upload_preview(&fresh, &tar_build(&members)).is_err());
+}
+
+#[test]
+fn repeat_restore_conflicts_and_failed_restore_imports_nothing() {
+    let dir = tempfile::tempdir().unwrap();
+    let root_a = dir.path().join("a");
+    let core_a = Core::with_storage_root(root_a.clone());
+    let rich = rich_fixture(&core_a);
+    let store_a = Storage::new(root_a.clone()).unwrap();
+    let (job, artifact) = backup(&store_a, &rich.ws, false);
+    let preview = core_a
+        .job_command(
+            "preview",
+            json!({"contractVersion":1,"workspaceId":rich.ws,"jobId":job,"artifactId":artifact}),
+        )
+        .unwrap();
+    let hash = preview["sha256"].as_str().unwrap().to_string();
+    let restored = store_a
+        .restore_snapshot(&rich.ws, &job, &artifact, "Recovered workspace", &hash)
+        .unwrap();
+    assert_eq!(restored.workspaces.len(), 1);
+    let count = |store: &Storage| store.list().unwrap().len();
+    let before = count(&store_a);
+    // Same name: refused. Different name: still refused - the
+    // backup was already restored from this artifact.
+    assert!(store_a
+        .restore_snapshot(&rich.ws, &job, &artifact, "Recovered workspace", &hash)
+        .is_err());
+    let retry = store_a.restore_snapshot(&rich.ws, &job, &artifact, "Another name", &hash);
+    let error = retry.err().expect("repeat restore must be refused");
+    assert!(
+        error.message.contains("already restored"),
+        "the refusal names the prior restore: {}",
+        error.message
+    );
+    assert_eq!(count(&store_a), before, "no duplicate import");
+
+    // A failed restore (name already taken by an unrelated
+    // workspace) imports nothing at all.
+    let root_b = dir.path().join("b");
+    let core_b = Core::with_storage_root(root_b.clone());
+    workspace(&core_b, "Taken name");
+    let bytes = package_bytes(&root_a, &rich.ws, &artifact);
+    let store_b = Storage::new(root_b.clone()).unwrap();
+    let landing = workspace(&core_b, "Landing");
+    let begin = core_b
+        .job_command(
+            "upload-begin",
+            json!({"contractVersion":1,"workspaceId":landing,"bytes":bytes.len(),
+                   "sha256":content::hash(&bytes),"plaintextConsent":true}),
+        )
+        .unwrap();
+    let mut job_b = Value::Null;
+    for (index, chunk) in bytes.chunks(65536).enumerate() {
+        let offset = index * 65536;
+        job_b = core_b
+            .job_command(
+                "upload-part",
+                json!({"contractVersion":1,"workspaceId":landing,"id":begin["id"],
+                       "offset":offset,"bytes":chunk,
+                       "finish":offset + chunk.len() == bytes.len()}),
+            )
+            .unwrap()["job"]
+            .clone();
+    }
+    let preview_b = core_b
+        .job_command(
+            "preview",
+            json!({"contractVersion":1,"workspaceId":landing,
+                   "jobId":job_b["id"],"artifactId":job_b["artifactId"]}),
+        )
+        .unwrap();
+    let before_b = count(&store_b);
+    let failed = core_b.job_command(
+        "restore",
+        json!({"contractVersion":1,"workspaceId":landing,
+               "jobId":job_b["id"],"artifactId":job_b["artifactId"],"name":"Taken name",
+               "expectedHash":preview_b["sha256"],"confirm":true}),
+    );
+    assert!(failed.is_err());
+    assert_eq!(count(&store_b), before_b, "failed restore imported nothing");
 }
