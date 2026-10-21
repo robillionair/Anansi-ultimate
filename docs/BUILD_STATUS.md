@@ -1,4 +1,40 @@
-## 2026-10-21 — M6 backup/recovery repair (this checkpoint)
+## 2026-10-21 — M6 R15 repair: eviction-test synchronization + strict clippy (this checkpoint)
+
+Repairs the two remaining findings from the owner's Windows
+review of R15, on branch `muse/m6-r15-repair` from `d56ed52`.
+Test files only — no production code changed; the R15
+recovery implementation is preserved byte-for-byte. The
+cap-eviction test's timing assumption (32 merely-slow streams
+could finish naturally before the evicting start on a slow
+machine) is replaced with server-gated synchronization: the
+synthetic provider holds streams behind a gate, observes
+client closes directly as socket EOF, and attributes
+connections to runs by topic marker; the test proves
+oldest + neighbour active (running + one ledger token hold
+each), eviction closes exactly the oldest connection, the
+evicted reservation is released (32 holds / 33 total
+requests), and cleanup drains every test-owned stream to
+zero reservations. A mutation check (eviction-cancel
+disabled, then reverted) fails the test immediately, so the
+backend behaviour is confirmed sound. Strict clippy on the
+`backup_artifacts` target is fixed at the cause (unused
+`legacy_package` parameter removed; one-element loop in
+`rich_fixture` inlined), no suppressions. Linux evidence:
+eviction test 10/10 repeats + 3/3 under CPU contention;
+focused suites `ideas_generation` 7/7, `backup_artifacts`
+5/5, `ideas_validation` 4/4, `evaluations` 3/3,
+`backup_restore` 7/7, `artifacts_registry` 6/6, lib 34/34;
+clippy `-D warnings` clean for lib, both touched test
+targets and `--all-targets`; fmt clean; full core suite
+193/199 with only the known failures (4 live-Ollama; 2
+`vault_increment2` ladder assertions, left unchanged for
+the vault owner). Full record:
+`docs/handoffs/M6-r15-repair-addendum.md`. Not merged, not
+pushed. Windows re-verification of the rewritten test,
+application acceptance and preview promotion remain
+pending; the vault assertions stay explicitly open.
+
+## 2026-10-21 — M6 backup/recovery repair (R15 checkpoint)
 
 Repairs the four independently reviewed backup/recovery
 defects (Antigravity R12-DEF-01..04) on branch
