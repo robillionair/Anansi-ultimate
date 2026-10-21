@@ -1,12 +1,12 @@
 #![recursion_limit = "512"]
 
-use anansi_core::ideas::{
-    IdeaConcept, IdeaSet, IdeasGenerateStartRequest, IdeasGenerateStartResponse, IdeasOptions,
-    IdeasPollResponse, IdeasRunRequest, IdeasSaveResponse,
-};
 use anansi_core::artifacts::{
     ArtifactDetails, ArtifactListRequest, ArtifactListResponse, ArtifactReadRequest,
     ArtifactRecord, ArtifactRegisterRequest, ArtifactReviseRequest, ArtifactVersionsResponse,
+};
+use anansi_core::ideas::{
+    IdeaConcept, IdeaSet, IdeasGenerateStartRequest, IdeasGenerateStartResponse, IdeasOptions,
+    IdeasPollResponse, IdeasRunRequest, IdeasSaveResponse,
 };
 use anansi_core::jobs::{
     ArtifactChunk, ControlJobRequest, EnqueueExportRequest, Job, JobDetails, JobList,

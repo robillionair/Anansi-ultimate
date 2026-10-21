@@ -913,7 +913,10 @@ impl Core {
                 };
                 if matches!(
                     operation,
-                    "providers-dispatch" | "providers-stream-start" | "providers-usage" | "ideas-generate-start"
+                    "providers-dispatch"
+                        | "providers-stream-start"
+                        | "providers-usage"
+                        | "ideas-generate-start"
                 ) && !crate::provider_dispatch::has_config(&scope)
                     && let (Ok(root), Some(wid)) = (self.storage_root(), &workspace_id)
                     && let Some(json) = crate::provider_dispatch::load_config_file(&root, wid)?

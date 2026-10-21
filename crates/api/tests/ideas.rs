@@ -27,7 +27,10 @@ async fn send(app: &axum::Router, request: Request<Body>) -> (StatusCode, serde_
     let bytes = axum::body::to_bytes(response.into_body(), 1024 * 1024)
         .await
         .unwrap();
-    (status, serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null))
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null),
+    )
 }
 
 fn preflight(path: &str) -> Request<Body> {
@@ -37,7 +40,10 @@ fn preflight(path: &str) -> Request<Body> {
         .header(header::ORIGIN, "http://127.0.0.1:1420")
         .header(header::HOST, "127.0.0.1:1451")
         .header("access-control-request-method", "POST")
-        .header("access-control-request-headers", "authorization, content-type")
+        .header(
+            "access-control-request-headers",
+            "authorization, content-type",
+        )
         .body(Body::empty())
         .unwrap()
 }
@@ -52,7 +58,11 @@ async fn ideas_paths_are_preflight_admitted_and_unknown_workspace_refuses_cleanl
         "/v1/ai/ideas-save",
     ] {
         let (status, _) = send(&app, preflight(path)).await;
-        assert_eq!(status, StatusCode::NO_CONTENT, "preflight must be admitted for {path}");
+        assert_eq!(
+            status,
+            StatusCode::NO_CONTENT,
+            "preflight must be admitted for {path}"
+        );
     }
     // A generation attempt against an unknown workspace is a
     // clean refusal through the real boundary (no panic, no

@@ -166,14 +166,20 @@ fn not_found() -> CommandError {
 
 const MAX_OUTPUT_CHARS: usize = 262_144;
 
-fn field<'a>(obj: &'a serde_json::Map<String, Value>, key: &str, max: usize) -> Result<&'a str, String> {
+fn field<'a>(
+    obj: &'a serde_json::Map<String, Value>,
+    key: &str,
+    max: usize,
+) -> Result<&'a str, String> {
     let value = obj
         .get(key)
         .and_then(|v| v.as_str())
         .ok_or_else(|| format!("a concept is missing its '{key}' field"))?;
     let value = value.trim();
     if value.is_empty() || value.chars().count() > max {
-        return Err(format!("a concept's '{key}' field is empty or over {max} characters"));
+        return Err(format!(
+            "a concept's '{key}' field is empty or over {max} characters"
+        ));
     }
     Ok(value)
 }
@@ -194,7 +200,9 @@ pub fn parse_idea_set(raw: &str, topic: &str) -> Result<IdeaSet, String> {
     let items = parsed
         .get("concepts")
         .and_then(|v| v.as_array())
-        .ok_or_else(|| "the model did not return a structured idea set (no concepts array)".to_string())?;
+        .ok_or_else(|| {
+            "the model did not return a structured idea set (no concepts array)".to_string()
+        })?;
     if items.len() < 5 {
         return Err(format!(
             "the model returned {} concepts, fewer than the required 5; try generating again",
@@ -224,7 +232,9 @@ pub fn parse_idea_set(raw: &str, topic: &str) -> Result<IdeaSet, String> {
                 }
                 let mut out = Vec::new();
                 for v in values {
-                    let s = v.as_str().ok_or_else(|| "a concept risk is not text".to_string())?;
+                    let s = v
+                        .as_str()
+                        .ok_or_else(|| "a concept risk is not text".to_string())?;
                     let s = s.trim();
                     if s.is_empty() || s.chars().count() > 240 {
                         return Err("a concept risk is empty or over 240 characters".to_string());
@@ -236,7 +246,9 @@ pub fn parse_idea_set(raw: &str, topic: &str) -> Result<IdeaSet, String> {
             Some(Value::String(s)) => {
                 let s = s.trim();
                 if s.is_empty() || s.chars().count() > 240 {
-                    return Err("a concept's 'keyRisks' is empty or over 240 characters".to_string());
+                    return Err(
+                        "a concept's 'keyRisks' is empty or over 240 characters".to_string()
+                    );
                 }
                 vec![s.to_string()]
             }
@@ -271,7 +283,13 @@ const INSTRUCTION: &str = "You are ANANSI's idea generation engine. Generate bet
 
 fn brief(req: &IdeasGenerateStartRequest) -> String {
     let o = req.options.as_ref();
-    let flag = |on: bool, label: &str| if on { format!("\n- {label}") } else { String::new() };
+    let flag = |on: bool, label: &str| {
+        if on {
+            format!("\n- {label}")
+        } else {
+            String::new()
+        }
+    };
     format!(
         "Brief:\n- Industry or topic: {}\n- Intended customer: {}\n- Available budget: {}\n- Preferred technology: {}\n- Objective: {}{}{}{}{}{}",
         req.topic.trim(),
@@ -279,11 +297,26 @@ fn brief(req: &IdeasGenerateStartRequest) -> String {
         req.budget.trim(),
         req.technology.trim(),
         req.objective.trim(),
-        flag(o.is_some_and(|o| o.explore_unrelated_domains), "Explore unrelated domains for cross-domain ideas."),
-        flag(o.is_some_and(|o| o.prefer_simple), "Prefer simple products."),
-        flag(o.is_some_and(|o| o.prefer_high_revenue), "Prefer high-revenue opportunities."),
-        flag(o.is_some_and(|o| o.prefer_local_first), "Prefer local-first AI products."),
-        flag(o.is_some_and(|o| o.prefer_software_only), "Prefer software-only products."),
+        flag(
+            o.is_some_and(|o| o.explore_unrelated_domains),
+            "Explore unrelated domains for cross-domain ideas."
+        ),
+        flag(
+            o.is_some_and(|o| o.prefer_simple),
+            "Prefer simple products."
+        ),
+        flag(
+            o.is_some_and(|o| o.prefer_high_revenue),
+            "Prefer high-revenue opportunities."
+        ),
+        flag(
+            o.is_some_and(|o| o.prefer_local_first),
+            "Prefer local-first AI products."
+        ),
+        flag(
+            o.is_some_and(|o| o.prefer_software_only),
+            "Prefer software-only products."
+        ),
     )
 }
 
@@ -371,10 +404,13 @@ fn logical(scope: &CallerScope) -> Result<String, CommandError> {
 }
 
 fn start(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
-    let req: IdeasGenerateStartRequest =
-        serde_json::from_value(value).map_err(|_| invalid("Use a supported idea generation request."))?;
+    let req: IdeasGenerateStartRequest = serde_json::from_value(value)
+        .map_err(|_| invalid("Use a supported idea generation request."))?;
     if req.contract_version != 1 {
-        return Err(CommandError::new(ErrorCode::UnsupportedContract, "Use contract version 1."));
+        return Err(CommandError::new(
+            ErrorCode::UnsupportedContract,
+            "Use contract version 1.",
+        ));
     }
     for (label, text) in [
         ("topic", &req.topic),
@@ -384,7 +420,9 @@ fn start(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
         ("objective", &req.objective),
     ] {
         if text.trim().is_empty() || text.chars().count() > 300 {
-            return Err(invalid(&format!("The {label} must be 1 to 300 characters.")));
+            return Err(invalid(&format!(
+                "The {label} must be 1 to 300 characters."
+            )));
         }
     }
     if req.context_memory_ids.len() > 16 {
@@ -406,7 +444,8 @@ fn start(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
         json!({ "text": brief(&req), "privacy": "standard" }),
     ];
     for id in &req.context_memory_ids {
-        crate::workspace::validate_id(id).map_err(|_| invalid("Context memory ids must use the ANANSI id format."))?;
+        crate::workspace::validate_id(id)
+            .map_err(|_| invalid("Context memory ids must use the ANANSI id format."))?;
         let details = storage
             .memory_read(crate::memory::MemoryReadRequest {
                 contract_version: 1,
@@ -427,7 +466,10 @@ fn start(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
     // first configured chat model in configuration order.
     let (provider, model) = match (&req.provider, &req.model) {
         (p, Some(m)) => (p.clone(), m.clone()),
-        (Some(p), None) => (Some(p.clone()), { let configured = crate::provider_dispatch::configured_chat_models(scope); configured.into_iter().find(|(cp, _)| cp == p).map(|(_, m)| m).ok_or_else(|| invalid("No chat model is configured for this workspace; configure a provider first."))? }),
+        (Some(p), None) => (Some(p.clone()), {
+            let configured = crate::provider_dispatch::configured_chat_models(scope);
+            configured.into_iter().find(|(cp, _)| cp == p).map(|(_, m)| m).ok_or_else(|| invalid("No chat model is configured for this workspace; configure a provider first."))?
+        }),
         _ => {
             let configured = crate::provider_dispatch::configured_chat_models(scope);
             configured
@@ -535,10 +577,7 @@ fn start(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
             .collect();
         if mine.len() >= MAX_RUNS_PER_WORKSPACE {
             // Evict the oldest run in this workspace.
-            if let Some(oldest) = mine
-                .iter()
-                .min_by_key(|k| map.get(*k).map(|r| r.created))
-            {
+            if let Some(oldest) = mine.iter().min_by_key(|k| map.get(*k).map(|r| r.created)) {
                 map.remove(oldest);
             }
         }
@@ -566,7 +605,10 @@ fn poll(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
             Some(run) => (
                 run.stream_run_id.clone(),
                 run.capability.clone(),
-                if matches!(run.status.as_str(), "complete" | "invalid" | "failed" | "cancelled") {
+                if matches!(
+                    run.status.as_str(),
+                    "complete" | "invalid" | "failed" | "cancelled"
+                ) {
                     Some(run.status.clone())
                 } else {
                     None
@@ -594,7 +636,10 @@ fn poll(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
             .and_then(|v| v.as_array())
             .cloned()
             .unwrap_or_default();
-        let done = polled.get("done").and_then(|v| v.as_bool()).unwrap_or(false);
+        let done = polled
+            .get("done")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
         if let Some(d) = polled.get("disclosure") {
             if let Ok(d) = serde_json::from_value::<DisclosureRecord>(d.clone()) {
                 with_runs(|map| {

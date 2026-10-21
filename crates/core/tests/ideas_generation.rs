@@ -266,7 +266,10 @@ fn generation_completes_with_provenance_context_discipline_and_idempotent_save()
     // Context discipline on the wire: the selected memory was
     // sent; the unselected one was not.
     let sent = fake.last_body.lock().unwrap().clone();
-    assert!(sent.contains("approved-context-phrase"), "selected context must be transmitted");
+    assert!(
+        sent.contains("approved-context-phrase"),
+        "selected context must be transmitted"
+    );
     assert!(
         !sent.contains("unselected-secret-phrase"),
         "unselected memories must never be transmitted"
@@ -288,10 +291,16 @@ fn generation_completes_with_provenance_context_discipline_and_idempotent_save()
     assert_eq!(first["artifact"]["generator"]["kind"], "model");
     assert_eq!(first["artifact"]["generator"]["provider"], "ollama");
     assert_eq!(first["artifact"]["generator"]["model"], "llama-x");
-    assert_eq!(first["artifact"]["sourceReferences"], json!([format!("memory://{}", f.context_memory)]));
+    assert_eq!(
+        first["artifact"]["sourceReferences"],
+        json!([format!("memory://{}", f.context_memory)])
+    );
     let second = save(&f);
     assert_eq!(second["alreadySaved"], true);
-    assert_eq!(second["artifact"]["artifactId"], first["artifact"]["artifactId"]);
+    assert_eq!(
+        second["artifact"]["artifactId"],
+        first["artifact"]["artifactId"]
+    );
     let list = f
         .core
         .artifacts_command(
@@ -299,7 +308,11 @@ fn generation_completes_with_provenance_context_discipline_and_idempotent_save()
             json!({ "contractVersion": 1, "workspaceId": f.ws, "projectId": f.project }),
         )
         .unwrap();
-    assert_eq!(list["artifacts"].as_array().unwrap().len(), 1, "exactly one artifact after duplicate saves");
+    assert_eq!(
+        list["artifacts"].as_array().unwrap().len(),
+        1,
+        "exactly one artifact after duplicate saves"
+    );
 }
 
 #[test]
@@ -336,25 +349,42 @@ fn provider_failure_and_malformed_output_are_terminal_and_unsavable() {
     let f = fixture(&fake);
     *fake.mode.lock().unwrap() = "fail".to_string();
     let started = start_run(&f, json!({}));
-    let done = poll_until(&f, started["runId"].as_str().unwrap(), Duration::from_secs(15));
+    let done = poll_until(
+        &f,
+        started["runId"].as_str().unwrap(),
+        Duration::from_secs(15),
+    );
     assert_eq!(done["status"], "failed", "{done}");
     assert!(done["error"].as_str().is_some_and(|e| !e.is_empty()));
 
     *fake.mode.lock().unwrap() = "malformed".to_string();
     let started = start_run(&f, json!({}));
-    let done = poll_until(&f, started["runId"].as_str().unwrap(), Duration::from_secs(15));
+    let done = poll_until(
+        &f,
+        started["runId"].as_str().unwrap(),
+        Duration::from_secs(15),
+    );
     assert_eq!(done["status"], "invalid", "{done}");
-    assert!(done["error"].as_str().unwrap().contains("did not return a structured idea set"));
+    assert!(
+        done["error"]
+            .as_str()
+            .unwrap()
+            .contains("did not return a structured idea set")
+    );
 
     *fake.mode.lock().unwrap() = "few".to_string();
     let started = start_run(&f, json!({}));
     let run_id = started["runId"].as_str().unwrap().to_string();
     let done = poll_until(&f, &run_id, Duration::from_secs(15));
     assert_eq!(done["status"], "invalid", "{done}");
-    assert!(f
-        .core
-        .ai_command("ideas-save", json!({ "contractVersion": 1, "workspaceId": f.ws, "runId": run_id }))
-        .is_err());
+    assert!(
+        f.core
+            .ai_command(
+                "ideas-save",
+                json!({ "contractVersion": 1, "workspaceId": f.ws, "runId": run_id })
+            )
+            .is_err()
+    );
 }
 
 #[test]
@@ -462,7 +492,13 @@ fn saved_set_survives_restart_as_a_registry_artifact() {
                 }),
             )
             .unwrap();
-            Fixture { _dir: tempfile::tempdir().unwrap(), core, ws, project, context_memory: String::new() }
+            Fixture {
+                _dir: tempfile::tempdir().unwrap(),
+                core,
+                ws,
+                project,
+                context_memory: String::new(),
+            }
         };
         let started = start_run(&f, json!({}));
         let run_id = started["runId"].as_str().unwrap().to_string();
@@ -470,12 +506,18 @@ fn saved_set_survives_restart_as_a_registry_artifact() {
         assert_eq!(done["status"], "complete");
         let saved = f
             .core
-            .ai_command("ideas-save", json!({ "contractVersion": 1, "workspaceId": f.ws, "runId": run_id }))
+            .ai_command(
+                "ideas-save",
+                json!({ "contractVersion": 1, "workspaceId": f.ws, "runId": run_id }),
+            )
             .unwrap();
         (
             f.ws.clone(),
             f.project.clone(),
-            saved["artifact"]["artifactId"].as_str().unwrap().to_string(),
+            saved["artifact"]["artifactId"]
+                .as_str()
+                .unwrap()
+                .to_string(),
         )
     };
     let core = Core::with_storage_root(root);
