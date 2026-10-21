@@ -668,7 +668,7 @@ impl Core {
     pub fn ai_command(
         &self,
         operation: &str,
-        value: serde_json::Value,
+        mut value: serde_json::Value,
     ) -> Result<serde_json::Value, CommandError> {
         match operation {
             "ask-start" => {
@@ -801,6 +801,119 @@ impl Core {
                     dimension,
                 };
                 serde_json::to_value(response).map_err(|_| crate::storage::unavailable())
+            }
+            "providers-catalog"
+            | "providers-configure"
+            | "providers-authorize"
+            | "providers-dispatch"
+            | "providers-stream-start"
+            | "providers-stream-poll"
+            | "providers-stream-cancel"
+            | "providers-usage"
+            | "providers-grant-session"
+            | "providers-revoke-session"
+            | "providers-credential-set"
+            | "providers-credential-remove"
+            | "providers-credential-status"
+            | "providers-session-access" => {
+                // The session scope arrives only via
+                // `callerContext`, which the API layer stamps from
+                // the authenticated token (overwriting client
+                // input); in-process host calls fall back to the
+                // host session.
+                let root_fingerprint = self
+                    .storage_root()
+                    .map(|root| crate::provider_dispatch::fingerprint(&root.to_string_lossy()))
+                    .unwrap_or_else(|_| "no-workspace".to_string());
+                // Provider state is scoped to a LOGICAL workspace,
+                // validated through the existing storage registry
+                // (several workspaces share one storage root; the
+                // root alone does not isolate them). The catalog
+                // needs no workspace; every other provider
+                // operation names one and an unknown id is refused
+                // before any provider state is touched.
+                let workspace = if operation == "providers-catalog" {
+                    root_fingerprint.clone()
+                } else {
+                    let workspace_id = value
+                        .get("workspaceId")
+                        .and_then(|v| v.as_str())
+                        .ok_or_else(|| {
+                            CommandError::new(
+                                ErrorCode::InvalidRequest,
+                                "A workspaceId is required.",
+                            )
+                        })?;
+                    if matches!(
+                        operation,
+                        "providers-stream-poll" | "providers-stream-cancel"
+                    ) {
+                        // Poll/cancel address state that a validated
+                        // stream-start created; the run record
+                        // (session + capability) is their
+                        // authorization, and skipping the registry
+                        // read keeps them responsive on platforms
+                        // where a storage open is expensive
+                        // (Windows permission verification spawns
+                        // powershell.exe per connection).
+                        crate::provider_dispatch::addressed_workspace_key(
+                            &root_fingerprint,
+                            workspace_id,
+                        )
+                    } else {
+                        crate::provider_dispatch::validated_workspace_key(
+                            &root_fingerprint,
+                            workspace_id,
+                            || {
+                                Ok(self
+                                    .storage()?
+                                    .list()?
+                                    .iter()
+                                    .map(|w| w.id.clone())
+                                    .collect())
+                            },
+                        )?
+                    }
+                };
+                let session = value
+                    .get("callerContext")
+                    .and_then(|c| c.get("session"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("host-session")
+                    .to_string();
+                // The stamp is transport metadata, not part of any
+                // provider contract: consume it so the strict DTOs
+                // (deny_unknown_fields) never see it.
+                if let Some(obj) = value.as_object_mut() {
+                    obj.remove("callerContext");
+                }
+                // Configuration persistence: a workspace's
+                // provider setup survives restarts (permits,
+                // grants, runs and usage deliberately do not).
+                // Configure persists transactionally inside the
+                // operation (see provider_dispatch); after a
+                // restart the persisted config is loaded lazily
+                // before the first operation that needs it.
+                let workspace_id = value
+                    .get("workspaceId")
+                    .and_then(|v| v.as_str())
+                    .map(str::to_string);
+                let scope = crate::provider_dispatch::CallerScope {
+                    session,
+                    workspace,
+                    storage_root: self.storage_root().ok(),
+                    logical_workspace: workspace_id.clone(),
+                };
+                if matches!(
+                    operation,
+                    "providers-dispatch" | "providers-stream-start" | "providers-usage"
+                ) && !crate::provider_dispatch::has_config(&scope)
+                    && let (Ok(root), Some(wid)) = (self.storage_root(), &workspace_id)
+                    && let Some(json) = crate::provider_dispatch::load_config_file(&root, wid)?
+                {
+                    crate::provider_dispatch::install_persisted_config(&scope, &json)?;
+                }
+                crate::provider_dispatch::providers_command(operation, value, &scope)
             }
             _ => Err(CommandError::new(
                 ErrorCode::InvalidRequest,

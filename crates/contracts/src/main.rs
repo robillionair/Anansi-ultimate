@@ -8,6 +8,14 @@ use anansi_core::memory::{
     MemoryDetails, MemoryDraft, MemoryList, MemoryListRequest, MemoryMetadata, MemoryReadRequest,
     MemoryWriteRequest,
 };
+use anansi_core::provider_dispatch::{
+    ProviderAuthorizeRequest, ProviderAuthorizeResponse, ProviderCatalogResponse,
+    ProviderConfigureRequest, ProviderConfigureResponse, ProviderCredentialRemoveResponse,
+    ProviderCredentialRequest, ProviderCredentialSetResponse, ProviderCredentialStatusResponse,
+    ProviderDispatchRequest, ProviderDispatchResponse, ProviderGrantRequest, ProviderPollResponse,
+    ProviderRunRequest, ProviderSessionAccessResponse, ProviderStreamStartResponse,
+    ProviderUsageResponse, ProviderWorkspaceRequest,
+};
 use anansi_core::relationships::{
     CreateRelationshipRequest, DeleteRelationshipRequest, ListRelationshipsRequest,
     RelationshipDetails, RelationshipDraft, RelationshipList, RelationshipRecord,
@@ -19,6 +27,24 @@ use anansi_core::workspace::{
 use anansi_core::{CommandError, Readiness, ReadinessRequest};
 fn main() {
     let schemas = serde_json::json!({
+        "ProviderConfigureRequest":schemars::schema_for!(ProviderConfigureRequest),
+        "ProviderConfigureResponse":schemars::schema_for!(ProviderConfigureResponse),
+        "ProviderAuthorizeRequest":schemars::schema_for!(ProviderAuthorizeRequest),
+        "ProviderAuthorizeResponse":schemars::schema_for!(ProviderAuthorizeResponse),
+        "ProviderDispatchRequest":schemars::schema_for!(ProviderDispatchRequest),
+        "ProviderDispatchResponse":schemars::schema_for!(ProviderDispatchResponse),
+        "ProviderStreamStartResponse":schemars::schema_for!(ProviderStreamStartResponse),
+        "ProviderRunRequest":schemars::schema_for!(ProviderRunRequest),
+        "ProviderPollResponse":schemars::schema_for!(ProviderPollResponse),
+        "ProviderUsageResponse":schemars::schema_for!(ProviderUsageResponse),
+        "ProviderGrantRequest":schemars::schema_for!(ProviderGrantRequest),
+        "ProviderCatalogResponse":schemars::schema_for!(ProviderCatalogResponse),
+        "ProviderCredentialRequest":schemars::schema_for!(ProviderCredentialRequest),
+        "ProviderCredentialSetResponse":schemars::schema_for!(ProviderCredentialSetResponse),
+        "ProviderCredentialRemoveResponse":schemars::schema_for!(ProviderCredentialRemoveResponse),
+        "ProviderCredentialStatusResponse":schemars::schema_for!(ProviderCredentialStatusResponse),
+        "ProviderSessionAccessResponse":schemars::schema_for!(ProviderSessionAccessResponse),
+        "ProviderWorkspaceRequest":schemars::schema_for!(ProviderWorkspaceRequest),
         "UploadBegin":schemars::schema_for!(anansi_core::backup_upload::UploadBegin),
         "UploadPart":schemars::schema_for!(anansi_core::backup_upload::UploadPart),
         "UploadStatus":schemars::schema_for!(anansi_core::backup_upload::UploadStatus),
