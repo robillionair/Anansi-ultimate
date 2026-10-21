@@ -1,9 +1,10 @@
 import { EntityHistory } from './EntityHistory';
 import { useEffect, useRef, useState } from 'react';
-import type { ArtifactDetails, ArtifactRecord, Client, IdeaConcept, IdeaSet, RubricDoc, MemoryDetails, MemoryDraft, MemoryMetadata, RelationshipRecord } from '@anansi/contracts';
+import type { ArtifactDetails, ArtifactRecord, Client, IdeaConcept, IdeaSet, OpportunityConcept, OpportunitySet, RubricDoc, MemoryDetails, MemoryDraft, MemoryMetadata, RelationshipRecord } from '@anansi/contracts';
 import type { DisclosureRecord } from '@anansi/contracts';
 import { DisclosurePanel } from './Providers';
 import { IdeaRunController } from './ideaRun';
+import { OpportunityRunController } from './opportunityRun';
 
 const blank = (): MemoryDraft => ({
   title: '',
@@ -55,6 +56,29 @@ export function Projects({ client, workspaceId }: { client: Client; workspaceId:
     return ideaControllerRef.current.controller;
   }
 
+  // M6 Slice 4: project-scoped opportunity discovery (§21).
+  // Sources are only what the user supplies here: typed or
+  // pasted texts and explicitly selected memories.
+  const [oppSources, setOppSources] = useState<{ kind: string; label: string; text: string }[]>([
+    { kind: 'problem', label: '', text: '' },
+  ]);
+  const [oppFocus, setOppFocus] = useState('');
+  const [oppSelectedMemories, setOppSelectedMemories] = useState<string[]>([]);
+  const [oppLock, setOppLock] = useState(true);
+  const [oppRun, setOppRun] = useState<{ runId: string; status: string; partialChars: number; error: string | null } | null>(null);
+  const [oppSet, setOppSet] = useState<OpportunitySet | null>(null);
+  const [oppDisclosure, setOppDisclosure] = useState<DisclosureRecord | null>(null);
+  const [savedOppArtifact, setSavedOppArtifact] = useState('');
+  const oppControllerRef = useRef<{ key: string; controller: OpportunityRunController } | null>(null);
+  function oppController(): OpportunityRunController {
+    if (!oppControllerRef.current || oppControllerRef.current.key !== workspaceId) {
+      const old = oppControllerRef.current?.controller;
+      if (old) void old.reset();
+      oppControllerRef.current = { key: workspaceId, controller: new OpportunityRunController(client, workspaceId) };
+    }
+    return oppControllerRef.current.controller;
+  }
+
   const [relTargetId, setRelTargetId] = useState('');
   const [relPredicate, setRelPredicate] = useState('relates_to');
 
@@ -81,6 +105,7 @@ export function Projects({ client, workspaceId }: { client: Client; workspaceId:
     // cancel it and invalidate its late responses (the run
     // controller's epoch does the invalidating).
     await ideaController().reset();
+    await oppController().reset();
     const proj = await client.readMemory(workspaceId, id);
     setCurrent(proj);
     setDraft({
@@ -114,6 +139,11 @@ export function Projects({ client, workspaceId }: { client: Client; workspaceId:
     setIdeaSet(null);
     setIdeaDisclosure(null);
     setSavedIdeaArtifact('');
+    setOppSelectedMemories([]);
+    setOppRun(null);
+    setOppSet(null);
+    setOppDisclosure(null);
+    setSavedOppArtifact('');
 
     // Load this project's artifacts (latest versions)
     const artList = await client.listProjectArtifacts(workspaceId, id);
@@ -149,6 +179,7 @@ export function Projects({ client, workspaceId }: { client: Client; workspaceId:
 
   useEffect(() => () => {
     void ideaControllerRef.current?.controller.reset();
+    void oppControllerRef.current?.controller.reset();
   }, []);
 
   async function generateIdeas() {
@@ -191,6 +222,66 @@ export function Projects({ client, workspaceId }: { client: Client; workspaceId:
       : `Idea set saved as artifact ${saved.artifact.artifactId}.`);
   }
 
+  // Poll the active opportunity-discovery run (same cadence
+  // and staleness discipline as idea generation).
+  useEffect(() => {
+    if (!oppRun || (oppRun.status !== 'running' && oppRun.status !== 'cancelling')) return;
+    const timer = setInterval(() => {
+      void (async () => {
+        try {
+          const polled = await oppController().pollOnce();
+          if (!polled) return;
+          setOppRun({ runId: polled.runId, status: polled.status, partialChars: polled.partialChars, error: polled.error ?? null });
+          if (polled.disclosure) setOppDisclosure(polled.disclosure);
+          if (polled.status === 'complete' && polled.opportunitySet) setOppSet(polled.opportunitySet);
+        } catch {
+          // Transient poll failures keep the run state; the
+          // next interval retries.
+        }
+      })();
+    }, 800);
+    return () => clearInterval(timer);
+  }, [oppRun?.runId, oppRun?.status, client, workspaceId]);
+
+  async function generateOpportunities() {
+    if (!current) return;
+    setError('');
+    setNotice('');
+    setOppSet(null);
+    setSavedOppArtifact('');
+    const sources = oppSources
+      .filter(s => s.text.trim() !== '')
+      .map(s => ({ kind: s.kind, label: s.label.trim() === '' ? null : s.label.trim(), text: s.text }));
+    const started = await oppController().start({
+      projectId: current.memory.id,
+      focus: oppFocus.trim() === '' ? null : oppFocus.trim(),
+      sources,
+      memoryIds: oppSelectedMemories,
+      zeroCostLock: oppLock,
+    });
+    if (!started) return; // superseded while the start was in flight
+    setOppRun({ runId: started.runId, status: 'running', partialChars: 0, error: null });
+    if (started.disclosure) setOppDisclosure(started.disclosure);
+  }
+
+  async function cancelOpportunities() {
+    if (!oppRun) return;
+    const polled = await oppController().cancel();
+    if (!polled) return;
+    setOppRun({ runId: polled.runId, status: polled.status, partialChars: polled.partialChars, error: polled.error ?? null });
+  }
+
+  async function saveOpportunities() {
+    if (!oppRun || !current) return;
+    const saved = await client.saveProjectOpportunities(workspaceId, oppRun.runId);
+    setSavedOppArtifact(saved.artifact.artifactId);
+    const artList = await client.listProjectArtifacts(workspaceId, current.memory.id);
+    setArtifacts(artList.artifacts);
+    setNotice(saved.alreadySaved
+      ? 'This opportunity set was already saved as an artifact; no duplicate was created.'
+      : `Opportunity set saved as artifact ${saved.artifact.artifactId}.`);
+  }
+
   async function openArtifact(artifactId: string) {
     const versions = await client.listProjectArtifactVersions(workspaceId, artifactId);
     setSelectedArtifact(artifactId);
@@ -225,10 +316,15 @@ export function Projects({ client, workspaceId }: { client: Client; workspaceId:
           disabled={busy}
           onClick={() => {
             void ideaController().reset();
+            void oppController().reset();
             setIdeaRun(null);
             setIdeaSet(null);
             setIdeaDisclosure(null);
             setSavedIdeaArtifact('');
+            setOppRun(null);
+            setOppSet(null);
+            setOppDisclosure(null);
+            setSavedOppArtifact('');
             setCurrent(null);
             setDraft(blank());
             setTasks([]);
@@ -392,6 +488,137 @@ export function Projects({ client, workspaceId }: { client: Client; workspaceId:
             )}
           </section>
 
+          <section aria-labelledby="project-opportunities-heading">
+            <h3 id="project-opportunities-heading">Opportunity discovery</h3>
+            <p className="help">
+              Opportunities are derived only from source material you supply below — nothing is scanned,
+              fetched or inferred automatically. The model treats supplied text as data, not instructions.
+              Results are hypotheses grounded in those sources, never researched facts or market evidence.
+            </p>
+            <form
+              onSubmit={e => {
+                e.preventDefault();
+                void run(generateOpportunities);
+              }}
+            >
+              <fieldset>
+                <legend>Supplied sources</legend>
+                {oppSources.map((source, i) => (
+                  <div key={i}>
+                    <label>
+                      Source kind{' '}
+                      <select
+                        value={source.kind}
+                        onChange={e => setOppSources(prev => prev.map((s, x) => (x === i ? { ...s, kind: e.target.value } : s)))}
+                      >
+                        <option value="problem">Problem statement</option>
+                        <option value="complaint">Customer complaint</option>
+                        <option value="observation">Observation</option>
+                        <option value="excerpt">Document excerpt</option>
+                      </select>
+                    </label>{' '}
+                    <label>
+                      Label (optional){' '}
+                      <input
+                        value={source.label}
+                        onChange={e => setOppSources(prev => prev.map((s, x) => (x === i ? { ...s, label: e.target.value } : s)))}
+                        autoComplete="off"
+                      />
+                    </label>
+                    <label htmlFor={`opp-source-text-${i}`}>Source text</label>
+                    <textarea
+                      id={`opp-source-text-${i}`}
+                      rows={3}
+                      value={source.text}
+                      onChange={e => setOppSources(prev => prev.map((s, x) => (x === i ? { ...s, text: e.target.value } : s)))}
+                    />
+                    {oppSources.length > 1 && (
+                      <button
+                        type="button"
+                        className="secondary"
+                        onClick={() => setOppSources(prev => prev.filter((_, x) => x !== i))}
+                      >
+                        Remove source
+                      </button>
+                    )}
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  className="secondary"
+                  disabled={oppSources.length >= 8}
+                  onClick={() => setOppSources(prev => [...prev, { kind: 'observation', label: '', text: '' }])}
+                >
+                  Add another source
+                </button>
+              </fieldset>
+              <fieldset>
+                <legend>Approved memory sources</legend>
+                <p className="help">Only the memories you tick are sent, each under its own privacy class; sealed memories cannot be sent.</p>
+                {contextMemories.length === 0 && <p className="help">No other memories in this workspace yet.</p>}
+                {contextMemories.map(m => (
+                  <label key={m.id}>
+                    <input
+                      type="checkbox"
+                      disabled={m.privacy === 'sealed'}
+                      checked={oppSelectedMemories.includes(m.id)}
+                      onChange={e => setOppSelectedMemories(prev => e.target.checked ? [...prev, m.id] : prev.filter(id => id !== m.id))}
+                    />{' '}
+                    {m.title} · {m.privacy}
+                  </label>
+                ))}
+              </fieldset>
+              <label htmlFor="opp-focus">Focus (optional)</label>
+              <input id="opp-focus" value={oppFocus} onChange={e => setOppFocus(e.target.value)} autoComplete="off" />
+              <div>
+                <p className="help">Review — exactly what will be sent to the configured provider:</p>
+                <ul aria-label="Sources that will be sent">
+                  {oppSources.filter(s => s.text.trim() !== '').map((s, i) => (
+                    <li key={i}>
+                      {s.kind === 'problem' ? 'Problem statement' : s.kind === 'complaint' ? 'Customer complaint' : s.kind === 'observation' ? 'Observation' : 'Document excerpt'}
+                      {s.label.trim() ? ` — ${s.label.trim()}` : ''}: “{s.text.trim().slice(0, 80)}{s.text.trim().length > 80 ? '…' : ''}”
+                    </li>
+                  ))}
+                  {oppSelectedMemories.map(id => {
+                    const memory = contextMemories.find(m => m.id === id);
+                    return <li key={id}>Memory: {memory ? `${memory.title} · ${memory.privacy}` : id}</li>;
+                  })}
+                  {oppSources.every(s => s.text.trim() === '') && oppSelectedMemories.length === 0 && (
+                    <li>Nothing yet — add a source above or tick a memory.</li>
+                  )}
+                </ul>
+              </div>
+              <label>
+                <input type="checkbox" checked={oppLock} onChange={e => setOppLock(e.target.checked)} /> Zero-Cost Lock (never spend)
+              </label>
+              <button type="submit" disabled={busy || oppRun?.status === 'running' || oppRun?.status === 'cancelling'}>
+                Discover opportunities
+              </button>
+              {(oppRun?.status === 'running' || oppRun?.status === 'cancelling') && (
+                <button type="button" className="secondary" disabled={oppRun.status === 'cancelling'} onClick={() => void run(cancelOpportunities)}>
+                  Cancel discovery
+                </button>
+              )}
+            </form>
+            {oppRun && oppRun.status === 'running' && <p role="status">Discovering… {oppRun.partialChars} characters received.</p>}
+            {oppRun && oppRun.status === 'cancelling' && <p role="status">Cancelling… waiting for the provider stream to stop.</p>}
+            {oppRun && oppRun.status === 'cancelled' && <p role="status">Discovery cancelled. Nothing was saved.</p>}
+            {oppRun && (oppRun.status === 'failed' || oppRun.status === 'invalid') && (
+              <p role="alert">Discovery {oppRun.status}: {oppRun.error ?? 'the provider did not produce a usable set.'} Nothing was saved; you can try again.</p>
+            )}
+            {oppDisclosure && <DisclosurePanel disclosure={oppDisclosure} />}
+            {oppSet && (
+              <div>
+                <OpportunitySetView opportunitySet={oppSet} />
+                {savedOppArtifact ? (
+                  <p role="status">Saved as artifact {savedOppArtifact} in this project.</p>
+                ) : (
+                  <button type="button" disabled={busy} onClick={() => void run(saveOpportunities)}>Save opportunity set as artifact</button>
+                )}
+              </div>
+            )}
+          </section>
+
           <section aria-labelledby="project-artifacts-heading">
             <h3 id="project-artifacts-heading">Artifacts</h3>
             <p className="help">Versioned registry (§9): every version is immutable — revising creates a new version; earlier versions stay readable exactly as written.</p>
@@ -473,6 +700,35 @@ export function Projects({ client, workspaceId }: { client: Client; workspaceId:
                         ? parseEvaluationBody(viewedArtifact.body)
                         : null;
                       if (parsedEvaluation) return <EvaluationView evaluation={parsedEvaluation} />;
+                      const parsedOpportunities = parseOpportunitySetBody(viewedArtifact.body);
+                      if (parsedOpportunities) {
+                        return (
+                          <div>
+                            <OpportunitySetView opportunitySet={parsedOpportunities} />
+                            {viewedArtifact.artifact.type === 'idea' && current && (
+                              <EvaluationPanel
+                                client={client}
+                                workspaceId={workspaceId}
+                                projectId={current.memory.id}
+                                source={viewedArtifact.artifact}
+                                ideaSet={{
+                                  concepts: parsedOpportunities.concepts,
+                                  topic: parsedOpportunities.topic,
+                                  note: parsedOpportunities.note ?? undefined,
+                                }}
+                                rubricArtifacts={artifacts.filter(a => a.type === 'rubric')}
+                                onSaved={() => {
+                                  void (async () => {
+                                    const artList = await client.listProjectArtifacts(workspaceId, current.memory.id);
+                                    setArtifacts(artList.artifacts);
+                                  })();
+                                }}
+                                notify={(message, isError) => { if (isError) setError(message); else setNotice(message); }}
+                              />
+                            )}
+                          </div>
+                        );
+                      }
                       const parsedSet = parseIdeaSetBody(viewedArtifact.body);
                       return parsedSet
                         ? (
@@ -654,6 +910,117 @@ function ConceptCard({ concept, index, compareHint }: { concept: IdeaConcept; in
         <button type="button" className="secondary" disabled title="Product projects arrive with the Build milestone (M9).">Start Building</button>
       </div>
     </article>
+  );
+}
+
+/** Parse a saved artifact body as an opportunity set, when it is one. */
+function parseOpportunitySetBody(body: string): OpportunitySet | null {
+  try {
+    const parsed = JSON.parse(body) as Partial<OpportunitySet>;
+    if (
+      parsed &&
+      parsed.format === 'anansi-opportunity-set' &&
+      Array.isArray(parsed.concepts) &&
+      Array.isArray(parsed.sources)
+    ) {
+      return parsed as OpportunitySet;
+    }
+  } catch {
+    // Not JSON: an ordinary text artifact.
+  }
+  return null;
+}
+
+const OPP_SOURCE_KIND_LABELS: Record<string, string> = {
+  problem: 'Problem statement',
+  complaint: 'Customer complaint',
+  observation: 'Observation',
+  excerpt: 'Document excerpt',
+  memory: 'Memory',
+};
+
+function oppSourceLabel(source: OpportunitySet['sources'][number]): string {
+  const kind = OPP_SOURCE_KIND_LABELS[source.kind] ?? source.kind;
+  return source.label ? `${kind}: ${source.label}` : kind;
+}
+
+function OpportunityCard({ concept, index, sources }: { concept: OpportunityConcept; index: number; sources: OpportunitySet['sources'] }) {
+  const [expanded, setExpanded] = useState(false);
+  const cited = concept.sourceReferences
+    .map(id => sources.find(s => s.sourceId === id))
+    .filter((s): s is OpportunitySet['sources'][number] => Boolean(s));
+  return (
+    <article className="card">
+      <h4>{index + 1}. {concept.name}</h4>
+      <p><strong>Problem:</strong> {concept.problem}</p>
+      <p><strong>Target customer:</strong> {concept.targetCustomer}</p>
+      <p><strong>Proposed solution:</strong> {concept.solution}</p>
+      <p>
+        <strong>Derived from:</strong>{' '}
+        {cited.length ? cited.map(s => oppSourceLabel(s)).join('; ') : concept.sourceReferences.join(', ')}
+      </p>
+      {expanded && (
+        <div>
+          <p><strong>Why it may be useful:</strong> {concept.whyUseful}</p>
+          <p><strong>Differentiation hypothesis:</strong> {concept.differentiationHypothesis}</p>
+          <p><strong>Potential revenue model:</strong> {concept.revenueModel}</p>
+          <p><strong>Engineering complexity:</strong> {concept.engineeringComplexity}</p>
+          <p><strong>Approximate implementation cost:</strong> {concept.implementationCost}</p>
+          <p><strong>Key risks:</strong></p>
+          <ul>{concept.keyRisks.map(r => <li key={r}>{r}</li>)}</ul>
+          {concept.assumptions.length > 0 && (
+            <>
+              <p><strong>Assumptions (unverified):</strong></p>
+              <ul>{concept.assumptions.map(a => <li key={a}>{a}</li>)}</ul>
+            </>
+          )}
+          <p><strong>Required validation:</strong> {concept.requiredValidation}</p>
+          <p><strong>Minimum viable version:</strong> {concept.minimumViableVersion}</p>
+        </div>
+      )}
+      <div>
+        <button type="button" className="secondary" onClick={() => setExpanded(v => !v)}>{expanded ? 'Close' : 'Explore'}</button>
+      </div>
+    </article>
+  );
+}
+
+/**
+ * A discovered opportunity set: the supplied sources it was
+ * derived from, then the opportunities in the model's order
+ * (no scoring here — assessment is the user's, via Compare
+ * & evaluate). First three visible, expansion for the rest.
+ */
+export function OpportunitySetView({ opportunitySet }: { opportunitySet: OpportunitySet }) {
+  const [showAll, setShowAll] = useState(false);
+  const visible = showAll ? opportunitySet.concepts : opportunitySet.concepts.slice(0, 3);
+  return (
+    <div>
+      <p className="help">
+        Model-generated opportunities for “{opportunitySet.topic}” — hypotheses derived only from the
+        sources below, not researched facts or market evidence.
+      </p>
+      {opportunitySet.note && <p className="help">{opportunitySet.note}</p>}
+      <h4>Supplied sources</h4>
+      <ul aria-label="Supplied sources for this set">
+        {opportunitySet.sources.map(source => (
+          <li key={source.sourceId}>
+            <strong>{oppSourceLabel(source)}</strong>
+            {source.kind === 'memory'
+              ? <> · memory {source.memoryId}</>
+              : <>: “{source.text && source.text.length > 300 ? `${source.text.slice(0, 300)}…` : source.text}”</>}
+          </li>
+        ))}
+      </ul>
+      {visible.map((concept, i) => (
+        <OpportunityCard key={concept.name + i} concept={concept} index={i} sources={opportunitySet.sources} />
+      ))}
+      {!showAll && opportunitySet.concepts.length > 3 && (
+        <button type="button" className="secondary" onClick={() => setShowAll(true)}>
+          Show all {opportunitySet.concepts.length} opportunities
+        </button>
+      )}
+    </div>
   );
 }
 
