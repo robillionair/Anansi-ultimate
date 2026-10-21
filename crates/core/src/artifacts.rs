@@ -35,7 +35,7 @@ use serde_json::Value;
 
 /// Manual artifact types for this slice, from §9's list of what
 /// a project may contain.
-pub const ARTIFACT_TYPES: [&str; 13] = [
+pub const ARTIFACT_TYPES: [&str; 15] = [
     "research",
     "source",
     "idea",
@@ -49,6 +49,10 @@ pub const ARTIFACT_TYPES: [&str; 13] = [
     "launch-material",
     "feedback",
     "note",
+    // M6 Slice 3: rubrics are versioned registry artifacts;
+    // evaluations are registered through the generated path.
+    "rubric",
+    "evaluation",
 ];
 
 fn invalid(message: &str) -> CommandError {
@@ -571,6 +575,19 @@ impl Core {
                     &req.artifact_id,
                     req.version,
                 )?)
+            }
+            // M6 Slice 3: transparent evaluation & comparison.
+            "evaluations-save" => {
+                let req: crate::evaluations::EvaluationsSaveRequest = parse(value)?;
+                to_value(&crate::evaluations::save_evaluation(storage, &req)?)
+            }
+            "evaluations-standard-rubric" => {
+                let req: ArtifactListRequest = parse(value)?;
+                require_v1(req.contract_version)?;
+                to_value(&serde_json::json!({
+                    "contractVersion": 1,
+                    "rubric": crate::evaluations::standard_rubric(),
+                }))
             }
             _ => Err(invalid("Use a supported artifact operation.")),
         }

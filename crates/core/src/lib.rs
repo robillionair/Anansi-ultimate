@@ -12,6 +12,7 @@ pub mod context;
 pub mod entities;
 pub mod export;
 pub mod hybrid;
+pub mod evaluations;
 pub mod ideas;
 pub mod jobs;
 pub mod lifecycle;
