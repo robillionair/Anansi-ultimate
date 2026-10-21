@@ -296,6 +296,15 @@ export interface SourceMemoryReference {
   kind: string;
   title: string;
 }
+export interface AssessmentInput {
+  conceptIndex: number;
+  dimension: string;
+  rationale?: string;
+  /**
+   * 1–5, or null/absent for "not assessed".
+   */
+  score?: number | null;
+}
 export interface BackupRequest {
   application: boolean;
   contractVersion: number;
@@ -360,6 +369,16 @@ export interface ContextChunk {
   sectionHeading?: string | null;
   title: string;
   tokenEstimate: number;
+}
+export interface ConceptSummary {
+  assessedDimensions: number;
+  conceptIndex: number;
+  totalDimensions: number;
+  /**
+   * Weighted mean over ASSESSED dimensions only; null when
+   * nothing was assessed (never zero-substituted).
+   */
+  weightedScore?: number | null;
 }
 export interface ContextChunk {
   chunkIndex: number;
@@ -456,6 +475,57 @@ export interface EnqueueExportRequest {
   contractVersion: number;
   selection: ExportSelection;
   workspaceId: string;
+}
+export interface EvaluationsSaveRequest {
+  assessments?: AssessmentInput[];
+  conceptIndices: number[];
+  contractVersion?: number;
+  projectId: string;
+  rubricArtifactId: string;
+  rubricVersion: number;
+  sourceArtifactId: string;
+  sourceVersion: number;
+  workspaceId: string;
+}
+export interface AssessmentInput {
+  conceptIndex: number;
+  dimension: string;
+  rationale?: string;
+  /**
+   * 1–5, or null/absent for "not assessed".
+   */
+  score?: number | null;
+}
+export interface EvaluationsSaveResponse {
+  alreadySaved: boolean;
+  artifact: ArtifactRecord;
+  body: string;
+  contractVersion: number;
+}
+/**
+ * One artifact version's metadata — the §9 field set.
+ */
+export interface ArtifactRecord {
+  artifactId: string;
+  contentHash: string;
+  /**
+   * Generator/model metadata: `{"kind":"manual"}` in this
+   * slice; generator slices record model provenance here.
+   */
+  generator?: {
+    [k: string]: unknown;
+  };
+  privacy: string;
+  projectId: string;
+  sourceReferences: string[];
+  /**
+   * The §9 timestamp: when this version was registered.
+   */
+  timestamp: string;
+  title: string;
+  type: string;
+  validationStatus: string;
+  version: number;
 }
 export interface GroundedCitation {
   index: number;
@@ -1596,6 +1666,22 @@ export interface Workspace {
   id: string;
   name: string;
 }
+export interface RubricDimension {
+  description: string;
+  key: string;
+  label: string;
+  weight: number;
+}
+export interface RubricDoc {
+  dimensions: RubricDimension[];
+  name: string;
+}
+export interface RubricDimension {
+  description: string;
+  key: string;
+  label: string;
+  weight: number;
+}
 export interface ScheduleReadRequest {
   contractVersion: number;
   workspaceId: string;
@@ -1629,6 +1715,20 @@ export interface SnapshotRequest {
   contractVersion: number;
   jobId: string;
   workspaceId: string;
+}
+export interface StandardRubricResponse {
+  contractVersion: number;
+  rubric: RubricDoc;
+}
+export interface RubricDoc {
+  dimensions: RubricDimension[];
+  name: string;
+}
+export interface RubricDimension {
+  description: string;
+  key: string;
+  label: string;
+  weight: number;
 }
 export type Intent = "second_memory" | "invent_product" | "build_application" | "connect_ai" | "explore";
 

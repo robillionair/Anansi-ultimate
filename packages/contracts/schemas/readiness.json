@@ -1179,6 +1179,41 @@
     "title": "AskRunResponse",
     "type": "object"
   },
+  "AssessmentInput": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "conceptIndex": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "dimension": {
+        "type": "string"
+      },
+      "rationale": {
+        "default": "",
+        "type": "string"
+      },
+      "score": {
+        "default": null,
+        "description": "1–5, or null/absent for \"not assessed\".",
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "conceptIndex",
+      "dimension"
+    ],
+    "title": "AssessmentInput",
+    "type": "object"
+  },
   "BackupRequest": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
@@ -1519,6 +1554,41 @@
       "totalTokens"
     ],
     "title": "CompiledContext",
+    "type": "object"
+  },
+  "ConceptSummary": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "assessedDimensions": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "conceptIndex": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "totalDimensions": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "weightedScore": {
+        "description": "Weighted mean over ASSESSED dimensions only; null when\nnothing was assessed (never zero-substituted).",
+        "format": "double",
+        "type": [
+          "number",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "conceptIndex",
+      "assessedDimensions",
+      "totalDimensions"
+    ],
+    "title": "ConceptSummary",
     "type": "object"
   },
   "ContextChunk": {
@@ -1990,6 +2060,189 @@
       "selection"
     ],
     "title": "EnqueueExportRequest",
+    "type": "object"
+  },
+  "EvaluationsSaveRequest": {
+    "$defs": {
+      "AssessmentInput": {
+        "additionalProperties": false,
+        "properties": {
+          "conceptIndex": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "dimension": {
+            "type": "string"
+          },
+          "rationale": {
+            "default": "",
+            "type": "string"
+          },
+          "score": {
+            "default": null,
+            "description": "1–5, or null/absent for \"not assessed\".",
+            "format": "uint8",
+            "maximum": 255,
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "conceptIndex",
+          "dimension"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "assessments": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/AssessmentInput"
+        },
+        "type": "array"
+      },
+      "conceptIndices": {
+        "items": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": "array"
+      },
+      "contractVersion": {
+        "default": 1,
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "projectId": {
+        "type": "string"
+      },
+      "rubricArtifactId": {
+        "type": "string"
+      },
+      "rubricVersion": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "sourceArtifactId": {
+        "type": "string"
+      },
+      "sourceVersion": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "workspaceId",
+      "projectId",
+      "sourceArtifactId",
+      "sourceVersion",
+      "rubricArtifactId",
+      "rubricVersion",
+      "conceptIndices"
+    ],
+    "title": "EvaluationsSaveRequest",
+    "type": "object"
+  },
+  "EvaluationsSaveResponse": {
+    "$defs": {
+      "ArtifactRecord": {
+        "description": "One artifact version's metadata — the §9 field set.",
+        "properties": {
+          "artifactId": {
+            "type": "string"
+          },
+          "contentHash": {
+            "type": "string"
+          },
+          "generator": {
+            "description": "Generator/model metadata: `{\"kind\":\"manual\"}` in this\nslice; generator slices record model provenance here."
+          },
+          "privacy": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "sourceReferences": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "timestamp": {
+            "description": "The §9 timestamp: when this version was registered.",
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "validationStatus": {
+            "type": "string"
+          },
+          "version": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "artifactId",
+          "projectId",
+          "type",
+          "version",
+          "title",
+          "timestamp",
+          "sourceReferences",
+          "validationStatus",
+          "privacy",
+          "contentHash"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "alreadySaved": {
+        "type": "boolean"
+      },
+      "artifact": {
+        "$ref": "#/$defs/ArtifactRecord"
+      },
+      "body": {
+        "type": "string"
+      },
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "artifact",
+      "body",
+      "alreadySaved"
+    ],
+    "title": "EvaluationsSaveResponse",
     "type": "object"
   },
   "GroundedCitation": {
@@ -7050,6 +7303,81 @@
     "title": "RestoreResult",
     "type": "object"
   },
+  "RubricDimension": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "description": {
+        "type": "string"
+      },
+      "key": {
+        "type": "string"
+      },
+      "label": {
+        "type": "string"
+      },
+      "weight": {
+        "format": "double",
+        "type": "number"
+      }
+    },
+    "required": [
+      "key",
+      "label",
+      "description",
+      "weight"
+    ],
+    "title": "RubricDimension",
+    "type": "object"
+  },
+  "RubricDoc": {
+    "$defs": {
+      "RubricDimension": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "weight": {
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "description",
+          "weight"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "dimensions": {
+        "items": {
+          "$ref": "#/$defs/RubricDimension"
+        },
+        "type": "array"
+      },
+      "name": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "name",
+      "dimensions"
+    ],
+    "title": "RubricDoc",
+    "type": "object"
+  },
   "ScheduleReadRequest": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
@@ -7220,6 +7548,72 @@
       "artifactId"
     ],
     "title": "SnapshotRequest",
+    "type": "object"
+  },
+  "StandardRubricResponse": {
+    "$defs": {
+      "RubricDimension": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "weight": {
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "description",
+          "weight"
+        ],
+        "type": "object"
+      },
+      "RubricDoc": {
+        "additionalProperties": false,
+        "properties": {
+          "dimensions": {
+            "items": {
+              "$ref": "#/$defs/RubricDimension"
+            },
+            "type": "array"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "dimensions"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "rubric": {
+        "$ref": "#/$defs/RubricDoc"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "rubric"
+    ],
+    "title": "StandardRubricResponse",
     "type": "object"
   },
   "UpdateSettingsRequest": {

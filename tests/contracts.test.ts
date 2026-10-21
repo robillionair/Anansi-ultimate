@@ -511,6 +511,28 @@ test('index embeddings HTTP/native operations use scoped routes and validated DT
   }finally{if(window)Object.defineProperty(globalThis,'window',window);else Reflect.deleteProperty(globalThis,'window');}
 });
 
-
-
-
+test('evaluation validators enforce the rubric and save shapes', async () => {
+  const { validRubricDoc, validEvaluationsSaveResponse } = await import('../packages/contracts/src/validators.mjs');
+  const rubric = {
+    name: 'Standard evaluation rubric',
+    dimensions: [
+      { key: 'problem-clarity', label: 'Problem clarity', description: 'How clear.', weight: 1 },
+      { key: 'mvp-feasibility', label: 'MVP feasibility', description: 'How feasible.', weight: 2 },
+    ],
+  };
+  assert.equal(validRubricDoc(rubric), true);
+  assert.equal(validRubricDoc({ ...rubric, dimensions: [{ key: 'x' }] }), false, 'incomplete dimensions fail');
+  const response = {
+    contractVersion: 1,
+    artifact: {
+      artifactId: 'a'.repeat(32), projectId: 'p'.repeat(32), type: 'evaluation', version: 1,
+      title: 'Evaluation: Idea set', timestamp: '2026-10-21T00:00:00Z',
+      sourceReferences: ['artifact://x@v1'], generator: { kind: 'manual' },
+      validationStatus: 'validated', privacy: 'private', contentHash: 'ab12',
+    },
+    body: '{}',
+    alreadySaved: false,
+  };
+  assert.equal(validEvaluationsSaveResponse(response), true);
+  assert.equal(validEvaluationsSaveResponse({ ...response, alreadySaved: 'no' }), false);
+});

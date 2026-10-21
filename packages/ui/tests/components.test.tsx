@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { IntentChoice, Onboarding, PrivacyReview, intents } from '../src/Onboarding';
 import { Navigation, plannedGroups } from '../src/Navigation';
 import { Settings } from '../src/Settings';
-import { Projects, IdeaSetView } from '../src/Projects';
+import { Projects, IdeaSetView, EvaluationView } from '../src/Projects';
 import { Tasks } from '../src/Tasks';
 import { People } from '../src/People';
 import { KnowledgeRecords } from '../src/KnowledgeRecords';
@@ -292,4 +292,41 @@ test('idea set view shows the first three hypotheses, honest labels and disabled
   assert.match(html, /Show all 5 concepts/);
   assert.match(html, /Compare/);
   assert.match(html, /disabled/);
+});
+
+test('evaluation view renders the rubric snapshot, provenance and not-assessed state', () => {
+  const evaluation = {
+    format: 'anansi-evaluation',
+    sourceArtifactId: 'src123',
+    sourceVersion: 2,
+    rubricArtifactId: 'rub456',
+    rubricVersion: 1,
+    rubric: {
+      name: 'Standard evaluation rubric',
+      dimensions: [
+        { key: 'problem-clarity', label: 'Problem clarity', description: 'How clear.', weight: 1 },
+        { key: 'mvp-feasibility', label: 'MVP feasibility', description: 'How feasible.', weight: 1 },
+      ],
+    },
+    concepts: [{
+      name: 'Alpha', problem: 'p', targetCustomer: 'c', solution: 's', whyUseful: 'w',
+      differentiationHypothesis: 'h', revenueModel: 'r', engineeringComplexity: 'low',
+      implementationCost: 'a week', keyRisks: ['risk'], requiredValidation: 'interviews',
+      minimumViableVersion: 'mvp',
+    }],
+    conceptIndices: [0],
+    assessments: [{ conceptIndex: 0, dimension: 'problem-clarity', score: 4, rationale: 'Sharp.' }],
+    summary: [{ conceptIndex: 0, weightedScore: 4, assessedDimensions: 1, totalDimensions: 2 }],
+    note: 'User-entered assessments. Not market evidence.',
+  };
+  const html = renderToStaticMarkup(<EvaluationView evaluation={evaluation} />);
+  assert.match(html, /src123/);
+  assert.match(html, /version 2/);
+  assert.match(html, /rub456/);
+  assert.match(html, /Standard evaluation rubric/);
+  assert.match(html, /do not change this evaluation/);
+  assert.match(html, /4 \/ 5/);
+  assert.match(html, /MVP feasibility: not assessed/);
+  assert.match(html, /assessed 1 of 2 dimensions/);
+  assert.match(html, /Not market evidence/);
 });

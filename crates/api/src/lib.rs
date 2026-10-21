@@ -118,6 +118,8 @@ pub fn command_path(path: &str) -> bool {
             | "/v1/artifacts/list"
             | "/v1/artifacts/versions"
             | "/v1/artifacts/read"
+            | "/v1/artifacts/evaluations-save"
+            | "/v1/artifacts/evaluations-standard-rubric"
             | "/v1/ai/providers-grant-session"
             | "/v1/ai/providers-revoke-session"
             | "/v1/ai/hybrid-search"

@@ -1,6 +1,6 @@
 import { EntityHistory } from './EntityHistory';
 import { useEffect, useRef, useState } from 'react';
-import type { ArtifactDetails, ArtifactRecord, Client, IdeaConcept, IdeaSet, MemoryDetails, MemoryDraft, MemoryMetadata, RelationshipRecord } from '@anansi/contracts';
+import type { ArtifactDetails, ArtifactRecord, Client, IdeaConcept, IdeaSet, RubricDoc, MemoryDetails, MemoryDraft, MemoryMetadata, RelationshipRecord } from '@anansi/contracts';
 import type { DisclosureRecord } from '@anansi/contracts';
 import { DisclosurePanel } from './Providers';
 import { IdeaRunController } from './ideaRun';
@@ -429,7 +429,7 @@ export function Projects({ client, workspaceId }: { client: Client; workspaceId:
               <h4>Register an artifact</h4>
               <label htmlFor="artifact-type">Artifact type</label>
               <select id="artifact-type" value={artifactForm.type} onChange={e => setArtifactForm(f => ({ ...f, type: e.target.value }))}>
-                {['research', 'source', 'idea', 'concept', 'experiment', 'prototype', 'generated-file', 'simulation', 'agent-test', 'decision', 'launch-material', 'feedback', 'note'].map(t => (
+                {['research', 'source', 'idea', 'concept', 'experiment', 'prototype', 'generated-file', 'simulation', 'agent-test', 'decision', 'launch-material', 'feedback', 'note', 'rubric', 'evaluation'].map(t => (
                   <option key={t} value={t}>{t}</option>
                 ))}
               </select>
@@ -469,9 +469,34 @@ export function Projects({ client, workspaceId }: { client: Client; workspaceId:
                         : 'an immutable earlier version (read-only).'}
                     </p>
                     {(() => {
+                      const parsedEvaluation = viewedArtifact.artifact.type === 'evaluation'
+                        ? parseEvaluationBody(viewedArtifact.body)
+                        : null;
+                      if (parsedEvaluation) return <EvaluationView evaluation={parsedEvaluation} />;
                       const parsedSet = parseIdeaSetBody(viewedArtifact.body);
                       return parsedSet
-                        ? <IdeaSetView ideaSet={parsedSet} />
+                        ? (
+                          <div>
+                            <IdeaSetView ideaSet={parsedSet} compareHint="Use Compare & evaluate below for this saved set." />
+                            {viewedArtifact.artifact.type === 'idea' && current && (
+                              <EvaluationPanel
+                                client={client}
+                                workspaceId={workspaceId}
+                                projectId={current.memory.id}
+                                source={viewedArtifact.artifact}
+                                ideaSet={parsedSet}
+                                rubricArtifacts={artifacts.filter(a => a.type === 'rubric')}
+                                onSaved={() => {
+                                  void (async () => {
+                                    const artList = await client.listProjectArtifacts(workspaceId, current.memory.id);
+                                    setArtifacts(artList.artifacts);
+                                  })();
+                                }}
+                                notify={(message, isError) => { if (isError) setError(message); else setNotice(message); }}
+                              />
+                            )}
+                          </div>
+                        )
                         : <pre className="provider-output">{viewedArtifact.body}</pre>;
                     })()}
                     <p className="help">
@@ -601,7 +626,7 @@ function parseIdeaSetBody(body: string): IdeaSet | null {
   return null;
 }
 
-function ConceptCard({ concept, index }: { concept: IdeaConcept; index: number }) {
+function ConceptCard({ concept, index, compareHint }: { concept: IdeaConcept; index: number; compareHint?: string }) {
   const [expanded, setExpanded] = useState(false);
   return (
     <article className="card">
@@ -624,7 +649,7 @@ function ConceptCard({ concept, index }: { concept: IdeaConcept; index: number }
       )}
       <div>
         <button type="button" className="secondary" onClick={() => setExpanded(v => !v)}>{expanded ? 'Close' : 'Explore'}</button>{' '}
-        <button type="button" className="secondary" disabled title="Compare arrives with the evaluation milestone (M7).">Compare</button>{' '}
+        <button type="button" className="secondary" disabled title={compareHint}>Compare</button>{' '}
         <button type="button" className="secondary" disabled title="The Lexi-Collider arrives in M8.">Send to Collider</button>{' '}
         <button type="button" className="secondary" disabled title="Product projects arrive with the Build milestone (M9).">Start Building</button>
       </div>
@@ -637,7 +662,7 @@ function ConceptCard({ concept, index }: { concept: IdeaConcept; index: number }
  * model's order (no scoring in this milestone), the first
  * three concepts visible with expansion for the rest (SS22).
  */
-export function IdeaSetView({ ideaSet }: { ideaSet: IdeaSet }) {
+export function IdeaSetView({ ideaSet, compareHint = 'Save the idea set as an artifact to compare and evaluate it.' }: { ideaSet: IdeaSet; compareHint?: string }) {
   const [showAll, setShowAll] = useState(false);
   const visible = showAll ? ideaSet.concepts : ideaSet.concepts.slice(0, 3);
   return (
@@ -647,12 +672,383 @@ export function IdeaSetView({ ideaSet }: { ideaSet: IdeaSet }) {
         order; scoring arrives with the evaluation milestone.
       </p>
       {ideaSet.note && <p className="help">{ideaSet.note}</p>}
-      {visible.map((concept, i) => <ConceptCard key={concept.name + i} concept={concept} index={i} />)}
+      {visible.map((concept, i) => <ConceptCard key={concept.name + i} concept={concept} index={i} compareHint={compareHint} />)}
       {!showAll && ideaSet.concepts.length > 3 && (
         <button type="button" className="secondary" onClick={() => setShowAll(true)}>
           Show all {ideaSet.concepts.length} concepts
         </button>
       )}
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------
+// M6 Slice 3: transparent evaluation & comparison.
+
+interface SavedEvaluation {
+  format: string;
+  sourceArtifactId: string;
+  sourceVersion: number;
+  rubricArtifactId: string;
+  rubricVersion: number;
+  rubric: RubricDoc;
+  concepts: IdeaConcept[];
+  conceptIndices: number[];
+  assessments: { conceptIndex: number; dimension: string; score: number | null; rationale: string }[];
+  summary: { conceptIndex: number; weightedScore: number | null; assessedDimensions: number; totalDimensions: number }[];
+  note: string;
+}
+
+function parseEvaluationBody(body: string): SavedEvaluation | null {
+  try {
+    const parsed = JSON.parse(body) as SavedEvaluation;
+    if (parsed && parsed.format === 'anansi-evaluation' && Array.isArray(parsed.concepts)) {
+      return parsed;
+    }
+  } catch {
+    // Not an evaluation document.
+  }
+  return null;
+}
+
+/** The read-only rendering of a saved evaluation, entirely
+ * from its own stored document: rubric snapshot as used,
+ * provenance, scores or "not assessed", and the summary. */
+export function EvaluationView({ evaluation }: { evaluation: SavedEvaluation }) {
+  const labelFor = (key: string) =>
+    evaluation.rubric.dimensions.find(d => d.key === key)?.label ?? key;
+  return (
+    <div>
+      <p className="help">
+        Evaluation of idea artifact {evaluation.sourceArtifactId} (version {evaluation.sourceVersion}) under
+        rubric artifact {evaluation.rubricArtifactId} (version {evaluation.rubricVersion}).
+      </p>
+      <p className="help">{evaluation.note}</p>
+      <h4>Rubric as used: {evaluation.rubric.name}</h4>
+      <ul>
+        {evaluation.rubric.dimensions.map(d => (
+          <li key={d.key}>{d.label} — weight {d.weight}. {d.description}</li>
+        ))}
+      </ul>
+      <p className="help">Later versions of that rubric do not change this evaluation.</p>
+      {evaluation.concepts.map((concept, position) => {
+        const conceptIndex = evaluation.conceptIndices[position];
+        const summary = evaluation.summary.find(s => s.conceptIndex === conceptIndex);
+        return (
+          <article key={conceptIndex} className="card">
+            <h4>{concept.name}</h4>
+            <p>
+              <strong>Weighted summary:</strong>{' '}
+              {summary && summary.weightedScore !== null
+                ? `${summary.weightedScore} (assessed ${summary.assessedDimensions} of ${summary.totalDimensions} dimensions)`
+                : 'not assessed'}
+            </p>
+            <p><strong>Problem:</strong> {concept.problem}</p>
+            <p><strong>Target customer:</strong> {concept.targetCustomer}</p>
+            <p><strong>Proposed solution:</strong> {concept.solution}</p>
+            <ul>
+              {evaluation.rubric.dimensions.map(d => {
+                const entry = evaluation.assessments.find(
+                  a => a.conceptIndex === conceptIndex && a.dimension === d.key,
+                );
+                return (
+                  <li key={d.key}>
+                    {labelFor(d.key)}:{' '}
+                    {entry && entry.score !== null ? `${entry.score} / 5` : 'not assessed'}
+                    {entry?.rationale ? ` — ${entry.rationale}` : ''}
+                  </li>
+                );
+              })}
+            </ul>
+          </article>
+        );
+      })}
+    </div>
+  );
+}
+
+interface EvalPanelProps {
+  client: Client;
+  workspaceId: string;
+  projectId: string;
+  source: ArtifactRecord;
+  ideaSet: IdeaSet;
+  rubricArtifacts: ArtifactRecord[];
+  onSaved: () => void;
+  notify: (message: string, isError: boolean) => void;
+}
+
+function EvaluationPanel(props: EvalPanelProps) {
+  const { client, workspaceId, projectId, source, ideaSet } = props;
+  const [standard, setStandard] = useState<RubricDoc | null>(null);
+  const [choice, setChoice] = useState<string>('standard');
+  const [doc, setDoc] = useState<RubricDoc | null>(null);
+  const [docVersion, setDocVersion] = useState(0);
+  const [selection, setSelection] = useState<number[]>([]);
+  const [scores, setScores] = useState<Record<string, { score: string; rationale: string }>>({});
+  const [panelError, setPanelError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const response = await client.getStandardRubric(workspaceId, projectId);
+        setStandard(response.rubric);
+        setDoc(current => current ?? response.rubric);
+      } catch (error) {
+        setPanelError(error instanceof Error ? error.message : 'The standard rubric could not be loaded.');
+      }
+    })();
+  }, [client, workspaceId, projectId]);
+
+  async function chooseRubric(value: string) {
+    setChoice(value);
+    setPanelError('');
+    if (value === 'standard') {
+      setDoc(standard);
+      setDocVersion(0);
+      return;
+    }
+    const record = props.rubricArtifacts.find(a => a.artifactId === value);
+    if (!record) return;
+    try {
+      const details = await client.readProjectArtifact(workspaceId, value, record.version);
+      setDoc(JSON.parse(details.body) as RubricDoc);
+      setDocVersion(record.version);
+    } catch (error) {
+      setPanelError(error instanceof Error ? error.message : 'That rubric could not be read.');
+    }
+  }
+
+  function patchDimension(index: number, patch: Partial<RubricDoc['dimensions'][number]>) {
+    setDoc(current => current && {
+      ...current,
+      dimensions: current.dimensions.map((d, i) => (i === index ? { ...d, ...patch } : d)),
+    });
+  }
+
+  async function saveRubric() {
+    if (!doc) return;
+    setBusy(true);
+    setPanelError('');
+    try {
+      const body = JSON.stringify(doc);
+      if (choice === 'standard') {
+        const details = await client.registerProjectArtifact(workspaceId, projectId, {
+          type: 'rubric', title: doc.name, body, sourceReferences: [], privacy: 'private',
+        });
+        setChoice(details.artifact.artifactId);
+        setDocVersion(1);
+        props.notify(`Rubric saved as project artifact ${details.artifact.artifactId} (version 1).`, false);
+      } else {
+        const details = await client.reviseProjectArtifact(workspaceId, choice, docVersion, {
+          title: doc.name, body, sourceReferences: [],
+        });
+        setDocVersion(details.artifact.version);
+        props.notify(`Rubric saved as version ${details.artifact.version}; earlier evaluations keep the rubric they used.`, false);
+      }
+      props.onSaved();
+    } catch (error) {
+      setPanelError(error instanceof Error ? error.message : 'The rubric could not be saved.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function preview(conceptIndex: number): { score: number | null; assessed: number; total: number } {
+    if (!doc) return { score: null, assessed: 0, total: 0 };
+    let weighted = 0;
+    let weights = 0;
+    let assessed = 0;
+    let total = 0;
+    for (const dim of doc.dimensions) {
+      if (dim.weight <= 0) continue;
+      total += 1;
+      const entry = scores[`${conceptIndex}:${dim.key}`];
+      if (entry && entry.score !== '') {
+        weighted += Number(entry.score) * dim.weight;
+        weights += dim.weight;
+        assessed += 1;
+      }
+    }
+    return {
+      score: weights > 0 ? Math.round((weighted / weights) * 100) / 100 : null,
+      assessed,
+      total,
+    };
+  }
+
+  async function saveEvaluation() {
+    if (!doc) return;
+    if (selection.length === 0) {
+      setPanelError('Select at least one concept to evaluate.');
+      return;
+    }
+    setBusy(true);
+    setPanelError('');
+    try {
+      // The evaluation must cite an exact rubric artifact
+      // version: a rubric that only exists as the standard
+      // definition is registered first, transparently.
+      let rubricArtifactId = choice;
+      let rubricVersion = docVersion;
+      if (choice === 'standard') {
+        const details = await client.registerProjectArtifact(workspaceId, projectId, {
+          type: 'rubric', title: doc.name, body: JSON.stringify(doc), sourceReferences: [], privacy: 'private',
+        });
+        rubricArtifactId = details.artifact.artifactId;
+        rubricVersion = 1;
+        setChoice(rubricArtifactId);
+        setDocVersion(1);
+      }
+      const assessments = [] as { conceptIndex: number; dimension: string; score: number | null; rationale: string }[];
+      for (const conceptIndex of [...selection].sort((a, b) => a - b)) {
+        for (const dim of doc.dimensions) {
+          const entry = scores[`${conceptIndex}:${dim.key}`];
+          if (entry && (entry.score !== '' || entry.rationale.trim() !== '')) {
+            assessments.push({
+              conceptIndex,
+              dimension: dim.key,
+              score: entry.score === '' ? null : Number(entry.score),
+              rationale: entry.rationale,
+            });
+          }
+        }
+      }
+      const saved = await client.saveProjectEvaluation(workspaceId, {
+        projectId,
+        sourceArtifactId: source.artifactId,
+        sourceVersion: source.version,
+        rubricArtifactId,
+        rubricVersion,
+        conceptIndices: [...selection].sort((a, b) => a - b),
+        assessments,
+      });
+      props.notify(
+        saved.alreadySaved
+          ? `An identical evaluation is already saved as artifact ${saved.artifact.artifactId}; no duplicate was created.`
+          : `Evaluation saved as artifact ${saved.artifact.artifactId}.`,
+        false,
+      );
+      props.onSaved();
+    } catch (error) {
+      setPanelError(error instanceof Error ? error.message : 'The evaluation could not be saved.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section aria-labelledby="evaluation-heading">
+      <h4 id="evaluation-heading">Compare &amp; evaluate</h4>
+      <p className="help">
+        Your own assessments under a rubric you can inspect and change. Scores are structured judgement —
+        not market evidence or a probability of success. Missing assessments stay “not assessed” and are
+        never counted as zero.
+      </p>
+      {panelError && <p role="alert" className="error">{panelError}</p>}
+      <fieldset>
+        <legend>Concepts to compare (up to 3)</legend>
+        {ideaSet.concepts.map((concept, i) => (
+          <label key={concept.name + i}>
+            <input
+              type="checkbox"
+              checked={selection.includes(i)}
+              disabled={!selection.includes(i) && selection.length >= 3}
+              onChange={e => setSelection(prev => e.target.checked ? [...prev, i] : prev.filter(x => x !== i))}
+            />{' '}
+            {i + 1}. {concept.name}
+          </label>
+        ))}
+      </fieldset>
+      <label htmlFor="eval-rubric-choice">Rubric</label>
+      <select id="eval-rubric-choice" value={choice} onChange={e => void chooseRubric(e.target.value)}>
+        <option value="standard">Standard rubric (owner-approved starting point)</option>
+        {props.rubricArtifacts.map(a => (
+          <option key={a.artifactId} value={a.artifactId}>{a.title} (v{a.version})</option>
+        ))}
+      </select>
+      {doc && (
+        <div>
+          <label htmlFor="eval-rubric-name">Rubric name</label>
+          <input id="eval-rubric-name" value={doc.name} onChange={e => setDoc({ ...doc, name: e.target.value })} />
+          {doc.dimensions.map((dim, i) => (
+            <div key={dim.key + i}>
+              <label>
+                Dimension label{' '}
+                <input value={dim.label} onChange={e => patchDimension(i, { label: e.target.value })} />
+              </label>{' '}
+              <label>
+                Weight{' '}
+                <input type="number" min="0" step="0.5" value={dim.weight}
+                  onChange={e => patchDimension(i, { weight: Number(e.target.value) })} />
+              </label>{' '}
+              <label>
+                Description{' '}
+                <input value={dim.description} onChange={e => patchDimension(i, { description: e.target.value })} />
+              </label>{' '}
+              <button type="button" className="secondary" disabled={doc.dimensions.length <= 1}
+                onClick={() => setDoc({ ...doc, dimensions: doc.dimensions.filter((_, x) => x !== i) })}>
+                Remove dimension
+              </button>
+              <span className="help"> key: {dim.key}</span>
+            </div>
+          ))}
+          <button type="button" className="secondary" disabled={doc.dimensions.length >= 8}
+            onClick={() => {
+              const n = doc.dimensions.length + 1;
+              setDoc({ ...doc, dimensions: [...doc.dimensions, { key: `dimension-${n}`, label: `Dimension ${n}`, description: '', weight: 1 }] });
+            }}>
+            Add dimension
+          </button>{' '}
+          <button type="button" className="secondary" disabled={busy} onClick={() => void saveRubric()}>
+            {choice === 'standard' ? 'Save rubric as artifact' : 'Save rubric as new version'}
+          </button>
+        </div>
+      )}
+      {doc && selection.map(conceptIndex => {
+        const concept = ideaSet.concepts[conceptIndex];
+        const summary = preview(conceptIndex);
+        return (
+          <article key={conceptIndex} className="card">
+            <h4>{concept.name}</h4>
+            <p><strong>Problem:</strong> {concept.problem}</p>
+            <p><strong>Target customer:</strong> {concept.targetCustomer}</p>
+            <p><strong>Proposed solution:</strong> {concept.solution}</p>
+            {doc.dimensions.map(dim => {
+              const key = `${conceptIndex}:${dim.key}`;
+              const entry = scores[key] ?? { score: '', rationale: '' };
+              return (
+                <div key={dim.key}>
+                  <label>
+                    {dim.label} score{' '}
+                    <select value={entry.score}
+                      onChange={e => setScores(prev => ({ ...prev, [key]: { ...entry, score: e.target.value } }))}>
+                      <option value="">not assessed</option>
+                      {[1, 2, 3, 4, 5].map(n => <option key={n} value={n}>{n}</option>)}
+                    </select>
+                  </label>{' '}
+                  <label>
+                    Rationale{' '}
+                    <input value={entry.rationale}
+                      onChange={e => setScores(prev => ({ ...prev, [key]: { ...entry, rationale: e.target.value } }))} />
+                  </label>
+                </div>
+              );
+            })}
+            <p role="status">
+              Preview summary:{' '}
+              {summary.score !== null
+                ? `${summary.score} (assessed ${summary.assessed} of ${summary.total} dimensions)`
+                : 'not assessed'}
+              {' '}— the saved value is recomputed by the core.
+            </p>
+          </article>
+        );
+      })}
+      <button type="button" disabled={busy || selection.length === 0} onClick={() => void saveEvaluation()}>
+        Save evaluation
+      </button>
+    </section>
   );
 }

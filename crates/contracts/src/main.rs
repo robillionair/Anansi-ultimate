@@ -4,6 +4,10 @@ use anansi_core::artifacts::{
     ArtifactDetails, ArtifactListRequest, ArtifactListResponse, ArtifactReadRequest,
     ArtifactRecord, ArtifactRegisterRequest, ArtifactReviseRequest, ArtifactVersionsResponse,
 };
+use anansi_core::evaluations::{
+    AssessmentInput, ConceptSummary, EvaluationsSaveRequest, EvaluationsSaveResponse, RubricDoc,
+    RubricDimension, StandardRubricResponse,
+};
 use anansi_core::ideas::{
     IdeaConcept, IdeaSet, IdeasGenerateStartRequest, IdeasGenerateStartResponse, IdeasOptions,
     IdeasPollResponse, IdeasRunRequest, IdeasSaveResponse,
@@ -65,6 +69,13 @@ fn main() {
         "IdeasGenerateStartResponse":schemars::schema_for!(IdeasGenerateStartResponse),
         "IdeasPollResponse":schemars::schema_for!(IdeasPollResponse),
         "IdeasSaveResponse":schemars::schema_for!(IdeasSaveResponse),
+        "RubricDimension":schemars::schema_for!(RubricDimension),
+        "RubricDoc":schemars::schema_for!(RubricDoc),
+        "AssessmentInput":schemars::schema_for!(AssessmentInput),
+        "ConceptSummary":schemars::schema_for!(ConceptSummary),
+        "EvaluationsSaveRequest":schemars::schema_for!(EvaluationsSaveRequest),
+        "EvaluationsSaveResponse":schemars::schema_for!(EvaluationsSaveResponse),
+        "StandardRubricResponse":schemars::schema_for!(StandardRubricResponse),
         "IdeaSet":schemars::schema_for!(IdeaSet),
         "IdeaConcept":schemars::schema_for!(IdeaConcept),
         "IdeasOptions":schemars::schema_for!(IdeasOptions),
