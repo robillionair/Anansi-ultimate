@@ -1,5 +1,45 @@
 # ANANSI Ultimate — Build Status
 
+## M6 Slices 2–3 + R13 reliability repair — 2026-10-21 (Linux evidence)
+
+Branch `muse/m6-slice3-evaluation` (over the R13 repair checkpoint on
+`muse/m6-slice2-idea-generation`; R11 preview ancestry `f6cecd2` preserved).
+Last verified commit: see the delivery addenda
+(`docs/handoffs/M6-r13-repair-addendum.md`, `M6-slice3-addendum.md`).
+
+- **R13 repair** of the independent Windows review's four findings:
+  atomic save idempotency (claim under lock, register outside it),
+  idea-run lifecycle controller (cancel on project switch, stale-response
+  guards, serialized polling), bounded ideas registry (expiry/eviction
+  cancels active provider streams outside the lock, with drain-to-terminal
+  settlement), strict clippy clean at the causes. New regressions for each.
+- **M6 Slice 3 — transparent concept evaluation & comparison** (the M6
+  plan's "Scoring rubric v1", with owner decision 1 settled): user-entered
+  1–5 assessments with rationales under a versioned rubric artifact
+  (owner-approved standard rubric: problem clarity, customer specificity,
+  MVP feasibility, budget/technology fit, validation readiness; equal
+  weights); the only computation is core's deterministic weighted summary
+  over assessed dimensions (missing = "not assessed", never zero);
+  evaluations are immutable artifacts citing exact source/rubric versions
+  with the rubric snapshot embedded; rubric revision never rewrites
+  history; saves are content-hash idempotent. No model calls in this slice.
+- Linux evidence: evaluations units 4/4 + integration 3/3; ideas 11/11 +
+  eviction units 2/2; providers 120/120; API 24/24; UI/contracts 47/47;
+  clippy `-D warnings` clean; fmt/tsc/contracts/docs clean; browser e2e
+  5/5 (checkpoint, artifacts, ideas, evaluations, providers).
+- Full anansi-core suite: 188 passed / 6 failed of 194 — the 4 known
+  live-Ollama semantic tests plus 2 `vault_increment2` tests whose harness
+  deadlines are load-sensitive on this VM; the identical failure was
+  reproduced on the pre-repair tip `cb8c1cb`, i.e. not a regression of
+  these changes. (Correction recorded in the R13 addendum: R11/R12 reports'
+  ~497/506 core pass totals were miscounted aggregates; the suite holds
+  187 tests pre-Slice-3, 194 now.)
+- Still open and unclaimed: Windows verification of the repair + Slice 3,
+  M5's native/manual acceptance, live-provider verification, G1 external
+  audit, remote CI. M6 Slice 4 (Opportunity Engine) awaits the owner's
+  remaining plan decisions; no further milestone work is started.
+
+
 ## Local integrated preview — 2026-10-21
 
 Branch `codex/local-testing-r11` contains Muse R11 (`07be39ca`, including integrated M2–M5 and model-free M6 Slice 1), with a local repair granting the main native window access to `artifact_command`. A normal embedded Windows development executable was built and launched with a responsive `ANANSI Ultimate` window and an isolated preview catalog. See [preview instructions](../PREVIEW.md). Six registry tests, 39 UI/contract tests, TypeScript, web build and documentation checks passed. This is build/launch evidence, not full native artifact workflow acceptance or release certification. Existing audit, manual credential, remote CI and source-publication deferrals remain. The primary checkout and protected master were not changed.
