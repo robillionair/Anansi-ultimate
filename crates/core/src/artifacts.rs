@@ -35,7 +35,7 @@ use serde_json::Value;
 
 /// Manual artifact types for this slice, from §9's list of what
 /// a project may contain.
-pub const ARTIFACT_TYPES: [&str; 15] = [
+pub const ARTIFACT_TYPES: [&str; 17] = [
     "research",
     "source",
     "idea",
@@ -53,6 +53,10 @@ pub const ARTIFACT_TYPES: [&str; 15] = [
     // evaluations are registered through the generated path.
     "rubric",
     "evaluation",
+    // M7 Slice 1: Product Forge specifications and source
+    // packages, registered through the generated path.
+    "specification",
+    "source-package",
 ];
 
 fn invalid(message: &str) -> CommandError {
