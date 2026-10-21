@@ -1,3 +1,34 @@
+## 2026-10-21 — M6 backup/recovery repair (this checkpoint)
+
+Repairs the four independently reviewed backup/recovery
+defects (Antigravity R12-DEF-01..04) on branch
+`muse/m6-backup-recovery` from the R14 tip `bb7cc24`
+(the R11 preview commit `f6cecd2` is an ancestor, not
+re-cherry-picked): workspace backups include
+`artifact_versions`; schema verification recognises the
+exact core/vault/FTS/embeddings object groups instead of
+one monolithic schema, so application backups of used
+databases verify; artifact rows are validated in the
+staged catalog (hashes, privacy, version contiguity,
+reference resolution incl. evaluation provenance);
+restore imports artifacts with ids and embedded references
+remapped (fail-closed on references outside the package),
+refuses duplicate restores of the same backup artifact,
+and rebuilds FTS from restored content; schema-8/9
+packages restore through a validated staging-copy
+migration. Linux evidence: new `backup_artifacts` suite
+5/5, focused backup/artifact/ideas/evaluation suites
+27/27, lib 34/34, providers 120/120, UI/contracts 47/47,
+browser e2e 5/5, full core suite 193/199 with only the
+known failures (4 live-Ollama; 2 `vault_increment2`
+assertions root-caused to the Slice 1 schema ladder -
+baseline `fc2540f` passes that suite 8/8 - left unchanged
+for the vault owner). Design and full evidence:
+`docs/handoffs/M6-backup-recovery-design.md`,
+`docs/handoffs/M6-backup-recovery-addendum.md`. Not
+merged, not pushed. Windows verification of this
+checkpoint and preview promotion remain pending.
+
 # ANANSI Ultimate — Build Status
 
 ## M6 Slices 2–3 + R13 reliability repair — 2026-10-21 (Linux evidence)
