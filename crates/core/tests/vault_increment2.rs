@@ -200,10 +200,65 @@ fn copy_fixture(source: &std::path::Path, target: &std::path::Path) {
     }
 }
 
-#[test]
-fn deterministic_process_crash_cutover_and_rollback_matrix() {
-    let _serial = SERIAL.lock().unwrap();
-    let f = fixture(&["note", "project"]);
+/// Rewind a Core-built fixture catalog to a genuine legacy
+/// schema-8 catalog: the artifact registry table (the only
+/// schema-10 ladder object over migrations 0001-0008) is
+/// dropped and the version counter set back, leaving the
+/// object set a schema-8 binary would have written, plus the
+/// lazily created derived tables (FTS, embeddings) a used
+/// legacy database can also carry. A seal that follows then
+/// exercises the vault's own explicit 8 -> 9 upgrade instead
+/// of arriving pre-migrated.
+fn rewind_to_legacy_8(root: &std::path::Path) {
+    let db = rusqlite::Connection::open(root.join(DATABASE_NAME)).unwrap();
+    db.execute_batch(
+        "PRAGMA wal_checkpoint(TRUNCATE); DROP TABLE artifact_versions; \
+         PRAGMA user_version=8; PRAGMA wal_checkpoint(TRUNCATE);",
+    )
+    .unwrap();
+    assert_eq!(
+        db.pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))
+            .unwrap(),
+        8
+    );
+    for table in ["artifact_versions", "vaults"] {
+        assert!(
+            !table_exists(&db, table),
+            "{table} must not exist in a legacy schema-8 catalog"
+        );
+    }
+}
+
+fn table_exists(db: &rusqlite::Connection, table: &str) -> bool {
+    db.query_row(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name=?1)",
+        [table],
+        |r| r.get(0),
+    )
+    .unwrap()
+}
+
+/// The artifact rows a schema-10 crash-matrix case must
+/// preserve exactly: (artifact_id, version, content_hash).
+fn artifact_rows(db: &rusqlite::Connection) -> Vec<(String, i64, String)> {
+    let mut stmt = db
+        .prepare(
+            "SELECT artifact_id, version, content_hash FROM artifact_versions \
+             ORDER BY artifact_id, version",
+        )
+        .unwrap();
+    stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap()
+}
+
+fn crash_matrix(
+    f: &Fixture,
+    start_version: i64,
+    sealed_version: i64,
+    artifacts: Option<&[(String, i64, String)]>,
+) {
     rusqlite::Connection::open(f.root.join(DATABASE_NAME))
         .unwrap()
         .execute_batch("PRAGMA wal_checkpoint(TRUNCATE);")
@@ -242,7 +297,29 @@ fn deterministic_process_crash_cutover_and_rollback_matrix() {
             .pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))
             .unwrap();
         let committed = !case.starts_with("seal/") || case.ends_with("PostSwitch");
-        assert_eq!(schema, if committed { 9 } else { 8 }, "{case}");
+        // A pre-switch crash retains the starting schema
+        // exactly; a committed generation change lands on the
+        // ladder's sealed version (9 from a legacy start, 10
+        // from a current one — the counter never moves
+        // backwards). The vault's own tables appear exactly
+        // when a generation change commits, never before it.
+        assert_eq!(
+            schema,
+            if committed {
+                sealed_version
+            } else {
+                start_version
+            },
+            "{case}"
+        );
+        assert_eq!(table_exists(&db, "vaults"), committed, "{case}");
+        if let Some(expected) = artifacts {
+            assert_eq!(
+                artifact_rows(&db),
+                expected,
+                "{case}: artifact data must survive every crash boundary"
+            );
+        }
         if committed {
             let store = VaultStore::new(root.clone(), f.host.clone()).unwrap();
             let c = caller(&store, &f.w);
@@ -300,6 +377,60 @@ fn deterministic_process_crash_cutover_and_rollback_matrix() {
             .unwrap(),
         2
     );
+}
+
+#[test]
+fn deterministic_process_crash_cutover_and_rollback_matrix() {
+    // The original matrix, on the ladder it was written for:
+    // a genuine legacy schema-8 workspace sealing onto the
+    // schema-9 barrier. The Core-built fixture is rewound to
+    // a real schema-8 catalog first (see rewind_to_legacy_8);
+    // snapshot verification no longer pre-migrates it, so the
+    // vault's explicit, transactional upgrade is what runs —
+    // and a pre-switch crash leaves the catalog at schema 8
+    // with its plaintext intact.
+    let _serial = SERIAL.lock().unwrap();
+    let f = fixture(&["note", "project"]);
+    rewind_to_legacy_8(&f.root);
+    crash_matrix(&f, 8, 9, None);
+}
+
+#[test]
+fn deterministic_process_crash_matrix_on_schema_10() {
+    // The current ladder: a schema-10 workspace (M6 artifact
+    // registry) sealing at schema 10 — the vault applies its
+    // tables without moving the counter backwards — with the
+    // workspace's artifact data preserved across every crash
+    // boundary, committed or not.
+    let _serial = SERIAL.lock().unwrap();
+    let f = fixture(&["note", "project"]);
+    let core = Core::with_storage_root(f.root.clone());
+    let memories = core
+        .memory_command(
+            "list",
+            json!({"contractVersion":1,"workspaceId":f.w,"limit":50}),
+        )
+        .unwrap();
+    let project = memories["memories"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|m| m["kind"] == "project")
+        .map(|m| m["id"].as_str().unwrap().to_string())
+        .unwrap();
+    core.artifacts_command(
+        "register",
+        json!({"contractVersion":1,"workspaceId":f.w,"projectId":project,
+               "type":"note","title":"Crash-matrix artifact",
+               "body":"artifact body that must survive sealing crashes",
+               "sourceReferences":[],"privacy":"private"}),
+    )
+    .unwrap();
+    let db = rusqlite::Connection::open(f.root.join(DATABASE_NAME)).unwrap();
+    let artifacts = artifact_rows(&db);
+    assert_eq!(artifacts.len(), 1);
+    drop(db);
+    crash_matrix(&f, 10, 10, Some(&artifacts));
 }
 struct Fixture {
     _temp: tempfile::TempDir,
@@ -471,7 +602,8 @@ fn canonical_history_graph_epoch_rotation_and_explicit_rollback() {
     let store = VaultStore::new(f.root.clone(), f.host.clone()).unwrap();
     let (ack, recovery) = setup(&store, &f.w);
     let stale_db = rusqlite::Connection::open(f.root.join(DATABASE_NAME)).unwrap();
-    // Prepare under schema 8; SQLite must recheck the schema-9 barrier later.
+    // Prepare a plaintext write before sealing; the vault's
+    // guard triggers must refuse it once the seal lands.
     let mut stale_write = stale_db
         .prepare("INSERT INTO memories(workspace_id,id,current_revision) VALUES(?1,?2,?3)")
         .unwrap();
@@ -550,10 +682,17 @@ fn canonical_history_graph_epoch_rotation_and_explicit_rollback() {
             0
         );
     }
+    // Sealing a current workspace keeps schema 10: since M6
+    // Slice 1 the workspace chain owns version 10 and the
+    // vault applies its tables at the current version without
+    // moving the counter backwards (vault::catalog::upgrade).
+    // A legacy schema-8 workspace still lands on the schema-9
+    // barrier — that ladder is covered by the legacy crash
+    // matrix above.
     assert_eq!(
         db.pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))
             .unwrap(),
-        9
+        10
     );
     let invalid_switch = db.unchecked_transaction().unwrap();
     invalid_switch
@@ -567,11 +706,32 @@ fn canonical_history_graph_epoch_rotation_and_explicit_rollback() {
         store.context(&f.w).unwrap().0.generation_id(),
         c.context.generation_id()
     );
+    // Ordinary Core coexists with the sealed catalog at the
+    // current schema — sealing is per-workspace — so the root
+    // still lists; what Core must never do is expose the
+    // sealed workspace's records as plaintext, and its
+    // memory list for that workspace is empty. (The original
+    // form of this check expected the list itself to fail:
+    // at the time, a sealed catalog was schema 9, newer than
+    // the schema-8 Core, and was refused as an unknown newer
+    // catalog. At schema 10 that refusal no longer applies;
+    // the protection is the absence of plaintext, asserted
+    // here and by the table counts above.)
+    let coexisting = Core::with_storage_root(f.root.clone());
+    let listed = coexisting
+        .workspace_command("list", json!({"contractVersion":1}))
+        .unwrap();
     assert!(
-        Core::with_storage_root(f.root.clone())
-            .workspace_command("list", json!({"contractVersion":1}))
-            .is_err()
+        listed["workspaces"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|w| w["id"] == f.w)
     );
+    let exposed = coexisting
+        .memory_command("list", json!({"contractVersion":1,"workspaceId":f.w}))
+        .unwrap();
+    assert_eq!(exposed["memories"].as_array().unwrap().len(), 0);
     assert!(
         stale_write
             .execute(rusqlite::params![f.w, "a".repeat(32), "b".repeat(32)])
