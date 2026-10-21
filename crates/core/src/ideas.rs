@@ -346,6 +346,11 @@ struct IdeaRun {
     error: Option<String>,
     saved_artifact: Option<crate::artifacts::ArtifactRecord>,
     saved_body: Option<String>,
+    /// A save registration is in flight (claimed under the
+    /// registry lock, executed outside it). Concurrent saves
+    /// wait for the claimed save to publish instead of
+    /// registering a second artifact.
+    saving: bool,
     created: Instant,
 }
 
@@ -523,6 +528,7 @@ fn start(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
                 error: Some(e.message.clone()),
                 saved_artifact: None,
                 saved_body: None,
+                saving: false,
                 created: Instant::now(),
             };
             with_runs(|map| {
@@ -566,6 +572,7 @@ fn start(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
         error: None,
         saved_artifact: None,
         saved_body: None,
+        saving: false,
         created: Instant::now(),
     };
     with_runs(|map| {
@@ -757,37 +764,79 @@ fn save(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
     let req: IdeasRunRequest =
         serde_json::from_value(value).map_err(|_| invalid("Use a supported idea run request."))?;
     let key = run_key(scope, &req.run_id);
-    let snapshot = with_runs(|map| {
-        map.get(&key)
-            .filter(|r| r.session == scope.session)
-            .map(|run| {
-                (
-                    run.status.clone(),
-                    run.project_id.clone(),
-                    run.idea_set.clone(),
-                    run.disclosure.clone(),
-                    run.saved_artifact.clone(),
-                    run.saved_body.clone(),
-                    run.context_ids.clone(),
-                )
-            })
-    });
-    let (status, project_id, idea_set, disclosure, saved, saved_body, context_ids) =
-        snapshot.ok_or_else(not_found)?;
-    if let (Some(artifact), Some(body)) = (saved, saved_body) {
-        return serde_json::to_value(IdeasSaveResponse {
-            contract_version: 1,
-            artifact,
-            body,
-            already_saved: true,
-        })
-        .map_err(|_| crate::storage::unavailable());
+    // Atomic idempotency: exactly one caller claims the save
+    // (under the registry lock), registers WITHOUT holding the
+    // lock, then publishes the artifact back. Concurrent saves
+    // wait for the publication and resolve to the same
+    // artifact; a failed registration releases the claim so a
+    // waiter can retry the save itself.
+    enum Claim {
+        Missing,
+        NotComplete,
+        Ready(crate::artifacts::ArtifactRecord, String),
+        Wait,
+        Claimed {
+            project_id: String,
+            idea_set: Option<IdeaSet>,
+            disclosure: Option<DisclosureRecord>,
+            context_ids: Vec<String>,
+        },
     }
-    if status != "complete" {
-        return Err(invalid(
-            "Only a completed idea generation can be saved; this run has not produced a validated set.",
-        ));
-    }
+    let deadline = Instant::now() + Duration::from_secs(30);
+    let (project_id, idea_set, disclosure, context_ids) = loop {
+        let step = with_runs(|map| {
+            let Some(run) = map.get_mut(&key).filter(|r| r.session == scope.session) else {
+                return Claim::Missing;
+            };
+            if let (Some(artifact), Some(body)) =
+                (run.saved_artifact.clone(), run.saved_body.clone())
+            {
+                return Claim::Ready(artifact, body);
+            }
+            if run.status != "complete" {
+                return Claim::NotComplete;
+            }
+            if run.saving {
+                return Claim::Wait;
+            }
+            run.saving = true;
+            Claim::Claimed {
+                project_id: run.project_id.clone(),
+                idea_set: run.idea_set.clone(),
+                disclosure: run.disclosure.clone(),
+                context_ids: run.context_ids.clone(),
+            }
+        });
+        match step {
+            Claim::Missing => return Err(not_found()),
+            Claim::NotComplete => {
+                return Err(invalid(
+                    "Only a completed idea generation can be saved; this run has not produced a validated set.",
+                ));
+            }
+            Claim::Ready(artifact, body) => {
+                return serde_json::to_value(IdeasSaveResponse {
+                    contract_version: 1,
+                    artifact,
+                    body,
+                    already_saved: true,
+                })
+                .map_err(|_| crate::storage::unavailable());
+            }
+            Claim::Wait => {
+                if Instant::now() > deadline {
+                    return Err(crate::storage::unavailable());
+                }
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            Claim::Claimed {
+                project_id,
+                idea_set,
+                disclosure,
+                context_ids,
+            } => break (project_id, idea_set, disclosure, context_ids),
+        }
+    };
     let set = idea_set.ok_or_else(crate::storage::unavailable)?;
     let storage = storage(scope)?;
     let workspace_id = logical(scope)?;
@@ -821,11 +870,19 @@ fn save(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
             "model": disclosure.model.clone(),
         }),
         "validated",
-    )?;
+    )
+    .inspect_err(|_| {
+        with_runs(|map| {
+            if let Some(run) = map.get_mut(&key) {
+                run.saving = false;
+            }
+        });
+    })?;
     with_runs(|map| {
         if let Some(run) = map.get_mut(&key) {
             run.saved_artifact = Some(details.artifact.clone());
             run.saved_body = Some(details.body.clone());
+            run.saving = false;
         }
     });
     serde_json::to_value(IdeasSaveResponse {

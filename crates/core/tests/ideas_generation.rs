@@ -532,3 +532,56 @@ fn saved_set_survives_restart_as_a_registry_artifact() {
     let set: Value = serde_json::from_str(read["body"].as_str().unwrap()).unwrap();
     assert_eq!(set["concepts"].as_array().unwrap().len(), 6);
 }
+
+#[test]
+fn concurrent_saves_resolve_to_exactly_one_artifact() {
+    let fake = start_fake();
+    let f = fixture(&fake);
+    let started = start_run(&f, json!({}));
+    let run_id = started["runId"].as_str().unwrap().to_string();
+    let done = poll_until(&f, &run_id, Duration::from_secs(15));
+    assert_eq!(done["status"], "complete");
+
+    // Two saves released at the same instant: the claim-and-wait
+    // protocol must produce one registration, one id, and
+    // exactly one alreadySaved=false across both callers.
+    let barrier = std::sync::Barrier::new(2);
+    let results: Vec<Value> = std::thread::scope(|scope| {
+        let handles: Vec<_> = (0..2)
+            .map(|_| {
+                scope.spawn(|| {
+                    barrier.wait();
+                    f.core
+                        .ai_command(
+                            "ideas-save",
+                            json!({ "contractVersion": 1, "workspaceId": f.ws, "runId": run_id }),
+                        )
+                        .unwrap()
+                })
+            })
+            .collect();
+        handles.into_iter().map(|h| h.join().unwrap()).collect()
+    });
+    assert_eq!(
+        results[0]["artifact"]["artifactId"],
+        results[1]["artifact"]["artifactId"],
+        "concurrent saves must resolve to the same artifact"
+    );
+    let fresh = results
+        .iter()
+        .filter(|r| r["alreadySaved"] == false)
+        .count();
+    assert_eq!(fresh, 1, "exactly one caller performs the registration");
+    let list = f
+        .core
+        .artifacts_command(
+            "list",
+            json!({ "contractVersion": 1, "workspaceId": f.ws, "projectId": f.project }),
+        )
+        .unwrap();
+    assert_eq!(
+        list["artifacts"].as_array().unwrap().len(),
+        1,
+        "exactly one stored artifact after concurrent saves"
+    );
+}
