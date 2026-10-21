@@ -306,10 +306,10 @@ fn refusals_bounds_isolation_archive_and_restart() {
                     "lifecycle": { "state": "archived", "confirmed": true, "successorId": null } }),
         )
         .unwrap();
-    let archived_code = code(save(&f2, json!({})));
-    assert!(
-        archived_code == ErrorCode::InvalidRequest || archived_code == ErrorCode::Conflict,
-        "archived project refuses the evaluation save, got {archived_code:?}"
+    assert_eq!(
+        code(save(&f2, json!({}))),
+        ErrorCode::InvalidRequest,
+        "archived project refuses the evaluation save"
     );
 
     // Restart: a fresh Core reopens the saved evaluation.
