@@ -1,5 +1,9 @@
 # ANANSI Ultimate — Build Status
 
+## Local integrated preview — 2026-10-21
+
+Branch `codex/local-testing-r11` contains Muse R11 (`07be39ca`, including integrated M2–M5 and model-free M6 Slice 1), with a local repair granting the main native window access to `artifact_command`. A normal embedded Windows development executable was built and launched with a responsive `ANANSI Ultimate` window and an isolated preview catalog. See [preview instructions](../PREVIEW.md). Six registry tests, 39 UI/contract tests, TypeScript, web build and documentation checks passed. This is build/launch evidence, not full native artifact workflow acceptance or release certification. Existing audit, manual credential, remote CI and source-publication deferrals remain. The primary checkout and protected master were not changed.
+
 ## Current authoritative summary — 2026-10-20
 
 Local M2–M4 integration and regression tasks on `codex/m2-m3-integration` are complete through implementation commits `ee92afb` and `b6d472c` (starting from `5dd40d3` / `b543c7b`, retained M2 checkpoint `bd2e2a9`). This summary supersedes historical completion/certification and stop instructions below. Integration owner/worktree and acceptance checklist: [handoff](handoffs/M2-M4-integration-owner.md).

@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-artifacts"
+description = "Manage project-scoped artifact versions through authorized domain operations"
+commands.allow = ["artifact_command"]
