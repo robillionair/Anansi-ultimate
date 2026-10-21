@@ -1,3 +1,40 @@
+## 2026-10-21 — M6 Slice 4: project-scoped Opportunity Discovery (this checkpoint)
+
+Branch `muse/m6-slice4-opportunity-discovery` over the
+integrated preview checkpoint `2665e22` (tip `4e24f02`).
+Owner-approved scope: discovery from **deliberately supplied
+information only** — typed/pasted problem, complaint or
+observation, a supplied document excerpt, and explicitly
+selected memories; no background scanning, web research,
+connectors or autonomous actions. New `opportunities-*`
+operations ride the existing M5 substrate and Slice 2 run
+discipline (no parallel system): supplied sources are
+run-identified, privacy-classed wire segments framed as data
+never instructions; parsing enforces grounding (citations
+to non-supplied ids dropped; a set citing nothing supplied
+is refused); saved sets are immutable `idea` artifacts in
+the `anansi-opportunity-set` format, directly evaluable by
+the Slice 3 rubric workflow; restore remaps body memory
+source ids to the restored memories (fail-closed) while
+supplied text passes through byte-identical. UI gains an
+Opportunity discovery section with a pre-send review of
+exactly what will be sent. Full record:
+`docs/handoffs/M6-slice4-addendum.md`; design + acceptance:
+`docs/handoffs/M6-slice4-design.md`.
+Linux evidence on the final tree: core **208/212** (only
+the 4 environmental live-Ollama `semantic_workflow` tests
+fail; new opportunities unit 5/5, generation 6/6, restore
+1/1; restore-change regressions artifacts 6/6,
+backup_artifacts 5/5, backup_restore 7/7, evaluations 3/3,
+ideas 7/7 + 4/4); providers+API **144/0**; node contracts+UI
+**51/51**; tsc/contracts clean; web build ok; browser e2e
+**9/9** sequential incl. the new `opportunities.spec.ts`
+(discover → save → evaluate → backup → fresh restore →
+restored sources resolve); clippy `--all-targets` + fmt
+clean. **Windows verification of Slice 4 is pending** — the
+owner's R16 preview pass and Windows `vault_increment2` 9/9
+do not cover it. M5 production gates remain open.
+
 ## 2026-10-21 — R16 integrated preview checkpoint + vault ladder reconciliation (this checkpoint)
 
 Branch `codex/local-testing-r16`, from the verified R16 tip
