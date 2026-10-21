@@ -352,9 +352,24 @@ pub fn parse_opportunity_set(
 /// fails closed: a restored set must never point back into
 /// the source workspace. Supplied-source markers
 /// (`supplied-N`) are run-local and pass through unchanged.
+///
+/// Exact-revision provenance is rewritten too: a memory
+/// source's `revisionId` is remapped through the same map,
+/// but map membership alone is not trusted — `revision_owners`
+/// (old revision id → (old memory id, old workspace id),
+/// read from the backup's own `memory_revisions` rows) must
+/// show the revision belongs to the referenced memory in the
+/// artifact's own workspace (`workspace`, the old id). A
+/// revision that is missing, belongs to another memory, or
+/// belongs to another workspace fails the rewrite closed.
+/// The original identities remain recoverable through the
+/// restore's `restore_origins` provenance rows, which cover
+/// every id in the map, revisions included.
 pub fn remap_opportunity_references(
     body: &str,
     ids: &BTreeMap<String, String>,
+    revision_owners: &BTreeMap<String, (String, String)>,
+    workspace: &str,
 ) -> Result<Option<String>, CommandError> {
     let mut doc: Value = match serde_json::from_str(body) {
         Ok(value) => value,
@@ -394,6 +409,32 @@ pub fn remap_opportunity_references(
             }
             if let Some(field) = source.get_mut("sourceId") {
                 *field = Value::String(new);
+            }
+            // Exact-revision provenance: when the source pins
+            // a revision, validate it against the backup's
+            // own revision rows and remap it with the memory.
+            if let Some(revision_field) = source.get_mut("revisionId")
+                && !revision_field.is_null()
+            {
+                let rev_fail = || {
+                    invalid(
+                        "The opportunity set references a memory revision outside the backup.",
+                    )
+                };
+                let old_revision = revision_field
+                    .as_str()
+                    .ok_or_else(rev_fail)?
+                    .to_string();
+                let (owner_memory, owner_workspace) =
+                    revision_owners.get(&old_revision).ok_or_else(rev_fail)?;
+                if owner_memory != &old || owner_workspace != workspace {
+                    return Err(rev_fail());
+                }
+                let new_revision = ids.get(&old_revision).ok_or_else(rev_fail)?.clone();
+                if new_revision != old_revision {
+                    changed = true;
+                }
+                *revision_field = Value::String(new_revision);
             }
         }
     }
@@ -1311,27 +1352,73 @@ mod tests {
         )
         .unwrap();
         set.sources[1].source_id = "mem-1".to_string();
+        set.sources[1].revision_id = Some("rev-1".to_string());
         let body = serde_json::to_string(&set).unwrap();
         let mut ids = BTreeMap::new();
         ids.insert("mem-1".to_string(), "mem-9".to_string());
-        let rewritten = remap_opportunity_references(&body, &ids)
+        ids.insert("rev-1".to_string(), "rev-9".to_string());
+        let mut revision_owners = BTreeMap::new();
+        revision_owners.insert(
+            "rev-1".to_string(),
+            ("mem-1".to_string(), "ws-1".to_string()),
+        );
+        let rewritten = remap_opportunity_references(&body, &ids, &revision_owners, "ws-1")
             .unwrap()
             .expect("memory ids changed");
         let parsed: Value = serde_json::from_str(&rewritten).unwrap();
         assert_eq!(parsed["sources"][1]["memoryId"], "mem-9");
         assert_eq!(parsed["sources"][1]["sourceId"], "mem-9");
+        // Exact-revision provenance is remapped with the memory.
+        assert_eq!(parsed["sources"][1]["revisionId"], "rev-9");
         assert_eq!(parsed["sources"][0]["sourceId"], "supplied-1");
         assert_eq!(
             parsed["concepts"][0]["sourceReferences"],
             json!(["supplied-1", "mem-9"])
         );
         // A memory missing from the map fails closed.
-        assert!(remap_opportunity_references(&body, &BTreeMap::new()).is_err());
+        assert!(
+            remap_opportunity_references(&body, &BTreeMap::new(), &revision_owners, "ws-1")
+                .is_err()
+        );
+        // A pinned revision missing from the id map fails closed.
+        let mut no_revision_map = BTreeMap::new();
+        no_revision_map.insert("mem-1".to_string(), "mem-9".to_string());
+        assert!(
+            remap_opportunity_references(&body, &no_revision_map, &revision_owners, "ws-1")
+                .is_err()
+        );
+        // A revision the package does not know fails closed.
+        assert!(
+            remap_opportunity_references(&body, &ids, &BTreeMap::new(), "ws-1").is_err()
+        );
+        // A revision belonging to a DIFFERENT memory fails closed.
+        let mut foreign_revision = BTreeMap::new();
+        foreign_revision.insert(
+            "rev-1".to_string(),
+            ("mem-2".to_string(), "ws-1".to_string()),
+        );
+        assert!(
+            remap_opportunity_references(&body, &ids, &foreign_revision, "ws-1").is_err()
+        );
+        // A revision from a different workspace fails closed.
+        let mut other_workspace = BTreeMap::new();
+        other_workspace.insert(
+            "rev-1".to_string(),
+            ("mem-1".to_string(), "ws-2".to_string()),
+        );
+        assert!(
+            remap_opportunity_references(&body, &ids, &other_workspace, "ws-1").is_err()
+        );
         // Non-opportunity bodies are untouched.
         assert!(
-            remap_opportunity_references("{\"format\":\"anansi-evaluation\"}", &ids)
-                .unwrap()
-                .is_none()
+            remap_opportunity_references(
+                "{\"format\":\"anansi-evaluation\"}",
+                &ids,
+                &revision_owners,
+                "ws-1"
+            )
+            .unwrap()
+            .is_none()
         );
     }
 }

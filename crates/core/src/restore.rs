@@ -53,14 +53,20 @@ fn remap_metadata(
 /// and rubric ids remapped with the content hash recomputed
 /// over the rewritten body. Opportunity set bodies (type
 /// `idea`) likewise have their embedded memory source ids
-/// remapped. A reference to an artifact that is not in the
-/// package fails closed - a restored artifact must never
-/// link back into the source workspace. Bodies of every
-/// other type are opaque and preserved exactly.
+/// remapped, and their pinned source revision ids are
+/// validated against the package's `memory_revisions` rows
+/// (the revision must belong to the referenced memory in
+/// the artifact's own workspace) and remapped with it. A
+/// reference to an artifact that is not in the package
+/// fails closed - a restored artifact must never link back
+/// into the source workspace. Bodies of every other type
+/// are opaque and preserved exactly.
 fn remap_artifact_row(
     names: &[String],
     columns: &mut [rusqlite::types::Value],
     ids: &std::collections::BTreeMap<String, String>,
+    revision_owners: &std::collections::BTreeMap<String, (String, String)>,
+    old_workspace: &str,
 ) -> Result<(), CommandError> {
     use rusqlite::types::Value;
     let index = |name: &str| -> Result<usize, CommandError> {
@@ -101,13 +107,20 @@ fn remap_artifact_row(
     // Opportunity sets (type `idea`, body format
     // `anansi-opportunity-set`) embed the memory ids of their
     // memory sources: those resolve to the restored memories,
-    // with the hash recomputed when the body changed.
+    // with the hash recomputed when the body changed. Their
+    // exact-revision provenance is validated against the
+    // package's revision rows and remapped with the memory.
     let is_idea = matches!(&columns[type_i], Value::Text(t) if t == "idea");
     if is_idea {
         let body_i = index("body")?;
         let hash_i = index("content_hash")?;
         if let Value::Text(body) = &columns[body_i]
-            && let Some(rewritten) = crate::opportunities::remap_opportunity_references(body, ids)?
+            && let Some(rewritten) = crate::opportunities::remap_opportunity_references(
+                body,
+                ids,
+                revision_owners,
+                old_workspace,
+            )?
         {
             columns[hash_i] = Value::Text(crate::content::hash(rewritten.as_bytes()));
             columns[body_i] = Value::Text(rewritten);
@@ -194,6 +207,31 @@ impl crate::storage::Storage {
                 }
             }
         }
+        // Revision ownership from the package's own rows:
+        // old revision id -> (old memory id, old workspace
+        // id). Body-level revision references (opportunity
+        // source provenance) are validated against this, not
+        // merely against map membership.
+        let mut revision_owners: std::collections::BTreeMap<String, (String, String)> =
+            std::collections::BTreeMap::new();
+        {
+            let mut q = source
+                .prepare("SELECT id,memory_id,workspace_id FROM memory_revisions")
+                .map_err(|_| crate::jobs::invalid())?;
+            for row in q
+                .query_map([], |r| {
+                    Ok((
+                        r.get::<_, String>(0)?,
+                        r.get::<_, String>(1)?,
+                        r.get::<_, String>(2)?,
+                    ))
+                })
+                .map_err(|_| crate::jobs::invalid())?
+            {
+                let (revision, memory, workspace) = row.map_err(|_| crate::jobs::invalid())?;
+                revision_owners.insert(revision, (memory, workspace));
+            }
+        }
         // Validate and prepare every mapped row before any managed content is written.
         let mut tables = vec![
             "workspaces",
@@ -230,6 +268,21 @@ impl crate::storage::Storage {
                     .map(|i| row.get::<_, rusqlite::types::Value>(i))
                     .collect::<rusqlite::Result<Vec<_>>>()
                     .map_err(|_| crate::jobs::invalid())?;
+                // Artifact bodies are validated against the
+                // row's ORIGINAL workspace; capture it before
+                // the generic id remap rewrites the column.
+                let artifact_workspace = if table == "artifact_versions" {
+                    let i = names
+                        .iter()
+                        .position(|n| n == "workspace_id")
+                        .ok_or_else(crate::jobs::invalid)?;
+                    match &columns[i] {
+                        rusqlite::types::Value::Text(t) => Some(t.clone()),
+                        _ => return Err(crate::jobs::invalid()),
+                    }
+                } else {
+                    None
+                };
                 for (column, value) in names.iter().zip(columns.iter_mut()) {
                     if let rusqlite::types::Value::Text(text) = value {
                         if [
@@ -289,7 +342,15 @@ impl crate::storage::Storage {
                     workspaces.push(crate::workspace::Workspace { id, name: renamed });
                 }
                 if table == "artifact_versions" {
-                    remap_artifact_row(&names, &mut columns, &ids)?;
+                    remap_artifact_row(
+                        &names,
+                        &mut columns,
+                        &ids,
+                        &revision_owners,
+                        artifact_workspace
+                            .as_deref()
+                            .ok_or_else(crate::jobs::invalid)?,
+                    )?;
                 }
                 if table == "memory_revisions" {
                     let id_i = names
