@@ -35,7 +35,7 @@ use serde_json::Value;
 
 /// Manual artifact types for this slice, from §9's list of what
 /// a project may contain.
-pub const ARTIFACT_TYPES: [&str; 17] = [
+pub const ARTIFACT_TYPES: [&str; 18] = [
     "research",
     "source",
     "idea",
@@ -53,6 +53,11 @@ pub const ARTIFACT_TYPES: [&str; 17] = [
     // evaluations are registered through the generated path.
     "rubric",
     "evaluation",
+    // M7 Slice 3: Product Forge deliverables, registered
+    // through the generated path; export re-validates
+    // every pinned reference, so a hand-registered body
+    // can never export mismatched content.
+    "deliverable",
     // M7 Slice 1: Product Forge specifications and source
     // packages, registered through the generated path.
     "specification",
@@ -728,6 +733,8 @@ impl Core {
             }
             // M7 Slice 1: source-package export-for-review.
             "forge-export" => crate::forge::export_package(storage, value),
+            // M7 Slice 3: version-pinned deliverable export.
+            "forge-deliverable-export" => crate::forge::export_deliverable(storage, value),
             _ => Err(invalid("Use a supported artifact operation.")),
         }
     }

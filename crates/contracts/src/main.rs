@@ -9,11 +9,13 @@ use anansi_core::evaluations::{
     RubricDimension, RubricDoc, StandardRubricResponse,
 };
 use anansi_core::forge::{
-    DevelopmentPlan, ForgeAnswers, ForgeBuildStartRequest, ForgeExportRequest, ForgeExportResponse,
-    ForgePollResponse, ForgeReviseStartRequest, ForgeRunRequest, ForgeSaveResponse,
-    ForgeSpecApprovalStatusRequest, ForgeSpecApprovalStatusResponse, ForgeSpecApproveRequest,
-    ForgeSpecApproveResponse, ForgeSpecStartRequest, ForgeStartResponse, ProductSpec,
-    ProductSpecDoc, RevisionDiff, SourceFile, SourcePackageDoc, SpecificationApprovalDoc,
+    DeliverableDoc, DeliverableDocument, DeliverableStatus, DevelopmentPlan, ForgeAnswers,
+    ForgeBuildStartRequest, ForgeDeliverableDraftStartRequest, ForgeDeliverableSaveRequest,
+    ForgeExportRequest, ForgeExportResponse, ForgePollResponse, ForgeReviseStartRequest,
+    ForgeRunRequest, ForgeSaveResponse, ForgeSpecApprovalStatusRequest,
+    ForgeSpecApprovalStatusResponse, ForgeSpecApproveRequest, ForgeSpecApproveResponse,
+    ForgeSpecStartRequest, ForgeStartResponse, ProductSpec, ProductSpecDoc, RevisionDiff,
+    SourceFile, SourcePackageDoc, SpecificationApprovalDoc,
 };
 use anansi_core::ideas::{
     IdeaConcept, IdeaSet, IdeasGenerateStartRequest, IdeasGenerateStartResponse, IdeasOptions,
@@ -98,6 +100,11 @@ fn main() {
         "SpecificationApprovalDoc":schemars::schema_for!(SpecificationApprovalDoc),
         "ForgeBuildStartRequest":schemars::schema_for!(ForgeBuildStartRequest),
         "ForgeReviseStartRequest":schemars::schema_for!(ForgeReviseStartRequest),
+        "ForgeDeliverableDraftStartRequest":schemars::schema_for!(ForgeDeliverableDraftStartRequest),
+        "ForgeDeliverableSaveRequest":schemars::schema_for!(ForgeDeliverableSaveRequest),
+        "DeliverableDoc":schemars::schema_for!(DeliverableDoc),
+        "DeliverableDocument":schemars::schema_for!(DeliverableDocument),
+        "DeliverableStatus":schemars::schema_for!(DeliverableStatus),
         "RevisionDiff":schemars::schema_for!(RevisionDiff),
         "ForgeRunRequest":schemars::schema_for!(ForgeRunRequest),
         "ForgeStartResponse":schemars::schema_for!(ForgeStartResponse),

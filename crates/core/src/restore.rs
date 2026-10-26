@@ -126,6 +126,96 @@ fn fix_approval_hashes(
     Ok(())
 }
 
+/// Fix-up pass over the prepared `artifact_versions`
+/// rows, after every row's references have been remapped:
+/// a restored deliverable must pin the restored package
+/// and specification versions' recomputed content hashes
+/// (their bodies changed when their own references were
+/// remapped), not the source workspace's hashes. A
+/// deliverable whose pinned package or specification
+/// version is absent from the package fails the restore
+/// closed. Verified-facts text needs no rewrite: it
+/// contains no artifact ids or body hashes by design.
+fn fix_deliverable_hashes(
+    names: &[String],
+    values: &mut [Vec<rusqlite::types::Value>],
+) -> Result<(), CommandError> {
+    use rusqlite::types::Value;
+    let index = |name: &str| -> Result<usize, CommandError> {
+        names
+            .iter()
+            .position(|n| n == name)
+            .ok_or_else(crate::jobs::invalid)
+    };
+    let type_i = index("artifact_type")?;
+    let body_i = index("body")?;
+    let hash_i = index("content_hash")?;
+    let id_i = index("artifact_id")?;
+    let version_i = index("version")?;
+    let mut row_hashes: std::collections::BTreeMap<(String, String, i64), String> =
+        std::collections::BTreeMap::new();
+    for row in values.iter() {
+        if let (Value::Text(kind), Value::Text(id), Value::Integer(version), Value::Text(hash)) = (
+            &row[type_i],
+            &row[id_i],
+            &row[version_i],
+            &row[hash_i],
+        ) && (kind == "source-package" || kind == "specification")
+        {
+            row_hashes.insert((kind.clone(), id.clone(), *version), hash.clone());
+        }
+    }
+    for row in values.iter_mut() {
+        if !matches!(&row[type_i], Value::Text(t) if t == "deliverable") {
+            continue;
+        }
+        let Value::Text(body) = &row[body_i].clone() else {
+            continue;
+        };
+        let mut doc: serde_json::Value =
+            serde_json::from_str(body).map_err(|_| crate::jobs::invalid())?;
+        if doc.get("format").and_then(|v| v.as_str()) != Some("anansi-deliverable") {
+            continue;
+        }
+        let package_id = doc
+            .get("packageArtifactId")
+            .and_then(|v| v.as_str())
+            .ok_or_else(crate::jobs::invalid)?;
+        let package_version = doc
+            .get("packageVersion")
+            .and_then(|v| v.as_u64())
+            .ok_or_else(crate::jobs::invalid)? as i64;
+        let spec_id = doc
+            .get("specArtifactId")
+            .and_then(|v| v.as_str())
+            .ok_or_else(crate::jobs::invalid)?;
+        let spec_version = doc
+            .get("specVersion")
+            .and_then(|v| v.as_u64())
+            .ok_or_else(crate::jobs::invalid)? as i64;
+        let package_hash = row_hashes
+            .get(&(
+                "source-package".to_string(),
+                package_id.to_string(),
+                package_version,
+            ))
+            .ok_or_else(crate::jobs::invalid)?;
+        let spec_hash = row_hashes
+            .get(&(
+                "specification".to_string(),
+                spec_id.to_string(),
+                spec_version,
+            ))
+            .ok_or_else(crate::jobs::invalid)?;
+        doc["packageContentHash"] = serde_json::Value::String(package_hash.clone());
+        doc["specContentHash"] = serde_json::Value::String(spec_hash.clone());
+        let rewritten = serde_json::to_string(&doc).map_err(|_| crate::jobs::invalid())?;
+        row[hash_i] = Value::Text(crate::content::hash(rewritten.as_bytes()));
+        row[body_i] = Value::Text(rewritten);
+    }
+    Ok(())
+}
+
 fn remap_artifact_row(
     names: &[String],
     columns: &mut [rusqlite::types::Value],
@@ -190,6 +280,24 @@ fn remap_artifact_row(
                 columns[hash_i] = Value::Text(crate::content::hash(rewritten.as_bytes()));
                 columns[body_i] = Value::Text(rewritten);
             }
+        }
+    }
+    // Slice 3 deliverables (type `deliverable`) pin a
+    // source package and a specification by id: both
+    // resolve to the restored artifacts, fail closed when
+    // either is not in the package, and the pinned hashes
+    // are rewritten afterwards (see the fix-up pass) to
+    // the restored rows' recomputed hashes.
+    let is_deliverable = matches!(&columns[type_i], Value::Text(t) if t == "deliverable");
+    if is_deliverable {
+        let body_i = index("body")?;
+        let hash_i = index("content_hash")?;
+        if let Value::Text(body) = &columns[body_i]
+            && let Some(rewritten) =
+                crate::forge::remap_deliverable_references(body, ids)?
+        {
+            columns[hash_i] = Value::Text(crate::content::hash(rewritten.as_bytes()));
+            columns[body_i] = Value::Text(rewritten);
         }
     }
     // Specification approvals (type
@@ -503,6 +611,7 @@ impl crate::storage::Storage {
             }
             if table == "artifact_versions" {
                 fix_approval_hashes(&names, &mut values)?;
+                fix_deliverable_hashes(&names, &mut values)?;
             }
             prepared.push((table, names, values));
         }
