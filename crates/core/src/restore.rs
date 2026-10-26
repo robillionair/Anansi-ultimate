@@ -213,6 +213,113 @@ fn fix_deliverable_hashes(
     Ok(())
 }
 
+/// Slice 3 repair: validate original deliverable
+/// bindings in the source catalog before any id or
+/// hash is changed. A deliverable's pinned package
+/// and specification must exist in the backup, be of
+/// the right types, live in the deliverable's own
+/// workspace and project, and carry the original
+/// pinned hashes — otherwise the hash fix-up pass
+/// would silently repair an invalid original binding
+/// into a valid restored one. This runs before the
+/// prepared-row loop and before any destination state
+/// is written, so a refusal publishes nothing.
+fn validate_original_deliverable_bindings(
+    source: &rusqlite::Connection,
+) -> Result<(), CommandError> {
+    struct Row {
+        workspace_id: String,
+        project_id: String,
+        kind: String,
+        body: String,
+        content_hash: String,
+    }
+    let mut pinned: std::collections::BTreeMap<(String, String, i64), Row> =
+        std::collections::BTreeMap::new();
+    let mut deliverables: Vec<Row> = Vec::new();
+    {
+        let mut q = source
+            .prepare(
+                "SELECT workspace_id, artifact_id, project_id, version, artifact_type, body, content_hash FROM artifact_versions",
+            )
+            .map_err(|_| crate::jobs::invalid())?;
+        let mut rows = q.query([]).map_err(|_| crate::jobs::invalid())?;
+        while let Some(row) = rows.next().map_err(|_| crate::jobs::invalid())? {
+            let workspace_id: String = row.get(0).map_err(|_| crate::jobs::invalid())?;
+            let artifact_id: String = row.get(1).map_err(|_| crate::jobs::invalid())?;
+            let project_id: String = row.get(2).map_err(|_| crate::jobs::invalid())?;
+            let version: i64 = row.get(3).map_err(|_| crate::jobs::invalid())?;
+            let kind: String = row.get(4).map_err(|_| crate::jobs::invalid())?;
+            let body: String = row.get(5).map_err(|_| crate::jobs::invalid())?;
+            let content_hash: String = row.get(6).map_err(|_| crate::jobs::invalid())?;
+            let entry = Row {
+                workspace_id,
+                project_id,
+                kind: kind.clone(),
+                body,
+                content_hash,
+            };
+            if kind == "deliverable" {
+                deliverables.push(entry);
+            } else if kind == "source-package" || kind == "specification" {
+                pinned.insert((entry.workspace_id.clone(), artifact_id, version), entry);
+            }
+        }
+    }
+    for deliverable in &deliverables {
+        let value: serde_json::Value =
+            serde_json::from_str(&deliverable.body).map_err(|_| crate::jobs::invalid())?;
+        if value.get("format").and_then(|v| v.as_str()) != Some("anansi-deliverable") {
+            continue;
+        }
+        let doc: crate::forge::DeliverableDoc =
+            serde_json::from_str(&deliverable.body).map_err(|_| crate::jobs::invalid())?;
+        if crate::content::hash(deliverable.body.as_bytes()) != deliverable.content_hash {
+            return Err(crate::jobs::invalid());
+        }
+        let package = pinned
+            .get(&(
+                deliverable.workspace_id.clone(),
+                doc.package_artifact_id.clone(),
+                doc.package_version as i64,
+            ))
+            .ok_or_else(crate::jobs::invalid)?;
+        if package.kind != "source-package"
+            || package.workspace_id != deliverable.workspace_id
+            || package.project_id != deliverable.project_id
+            || crate::content::hash(package.body.as_bytes()) != package.content_hash
+        {
+            return Err(crate::jobs::invalid());
+        }
+        let package_doc: crate::forge::SourcePackageDoc =
+            serde_json::from_str(&package.body).map_err(|_| crate::jobs::invalid())?;
+        if package_doc.format != "anansi-source-package" {
+            return Err(crate::jobs::invalid());
+        }
+        let spec = pinned
+            .get(&(
+                deliverable.workspace_id.clone(),
+                doc.spec_artifact_id.clone(),
+                doc.spec_version as i64,
+            ))
+            .ok_or_else(crate::jobs::invalid)?;
+        if spec.kind != "specification"
+            || spec.workspace_id != deliverable.workspace_id
+            || spec.project_id != deliverable.project_id
+            || crate::content::hash(spec.body.as_bytes()) != spec.content_hash
+        {
+            return Err(crate::jobs::invalid());
+        }
+        crate::forge::validate_deliverable_record(
+            &doc,
+            &package_doc,
+            &crate::content::hash(package.body.as_bytes()),
+            &spec.content_hash,
+        )?;
+    }
+    Ok(())
+}
+
 fn remap_artifact_row(
     names: &[String],
     columns: &mut [rusqlite::types::Value],
@@ -445,6 +552,10 @@ impl crate::storage::Storage {
                 revision_owners.insert(revision, (memory, workspace));
             }
         }
+        // Slice 3 repair: validate original deliverable
+        // bindings before any id or hash is changed.
+        // A refusal here publishes no destination state.
+        validate_original_deliverable_bindings(&source)?;
         // Validate and prepare every mapped row before any managed content is written.
         let mut tables = vec![
             "workspaces",

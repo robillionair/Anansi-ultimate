@@ -794,6 +794,7 @@ export function Projects({ client, workspaceId }: { client: Client; workspaceId:
                       if (parsedDeliverable) {
                         return (
                           <DeliverableView
+                            key={`deliverable:${workspaceId}:${current?.memory.id ?? ''}:${viewedArtifact.artifact.artifactId}:${viewedArtifact.artifact.version}`}
                             doc={parsedDeliverable}
                             artifact={viewedArtifact.artifact}
                             client={client}

@@ -1922,6 +1922,122 @@ fn validate_save_documents(
     Ok(out)
 }
 
+/// Slice 3 repair: validate a complete saved
+/// deliverable record against the backend-resolved
+/// provenance it claims. A registry hash only proves
+/// the body bytes are unchanged since they were
+/// written — it does not prove the body is a valid
+/// domain record, and the supported generic artifact
+/// revise path can write any body. Export (and restore
+/// pre-validation, which reuses this) must therefore
+/// refuse, never silently repair or relabel, when:
+/// the format/version is unsupported; the pinned
+/// specification identity, concept or hashes do not
+/// match the pinned package and specification rows;
+/// any unexecuted status flag is true; the document
+/// set is not exactly the five fixed names plus the
+/// backend verified facts, each once; an editable
+/// document has an origin other than `user`/`model`
+/// or breaks the save text bounds; or the verified
+/// facts document is not backend-origin. Verified
+/// facts text equality itself is checked by the
+/// caller against a fresh recomputation.
+pub(crate) fn validate_deliverable_record(
+    doc: &DeliverableDoc,
+    package_doc: &SourcePackageDoc,
+    package_body_hash: &str,
+    spec_content_hash: &str,
+) -> Result<(), CommandError> {
+    if doc.format != "anansi-deliverable" || doc.format_version != 1 {
+        return Err(invalid(
+            "The stored deliverable has an unsupported format or version.",
+        ));
+    }
+    if doc.package_version < 1 || doc.spec_version < 1 {
+        return Err(invalid(
+            "The stored deliverable pins an invalid package or specification version.",
+        ));
+    }
+    if doc.spec_artifact_id != package_doc.spec_artifact_id
+        || doc.spec_version != package_doc.spec_version
+    {
+        return Err(invalid(
+            "The stored deliverable's specification does not match its pinned package's specification.",
+        ));
+    }
+    if doc.concept_name != package_doc.concept_name {
+        return Err(invalid(
+            "The stored deliverable's concept does not match its pinned package.",
+        ));
+    }
+    if doc.package_content_hash != package_body_hash {
+        return Err(invalid(
+            "The stored deliverable's pinned package hash does not match its package version.",
+        ));
+    }
+    if doc.spec_content_hash != spec_content_hash {
+        return Err(invalid(
+            "The stored deliverable's pinned specification hash does not match its specification version.",
+        ));
+    }
+    if doc.status.executed
+        || doc.status.built
+        || doc.status.tested
+        || doc.status.published
+        || doc.status.production_ready
+    {
+        return Err(invalid(
+            "The stored deliverable claims an executed, built, tested, published or production-ready status; a deliverable is an unexecuted prototype prepared for review.",
+        ));
+    }
+    let mut seen: HashSet<&str> = HashSet::new();
+    for document in &doc.documents {
+        if !seen.insert(document.name.as_str()) {
+            return Err(invalid(&format!(
+                "The stored deliverable has a duplicate document: {}.",
+                document.name
+            )));
+        }
+        if document.name == VERIFIED_FACTS_NAME {
+            if document.origin != "verified" || document.content.trim().is_empty() {
+                return Err(invalid(
+                    "The stored deliverable's verified facts must be computed by ANANSI.",
+                ));
+            }
+        } else {
+            if !DELIVERABLE_DOC_NAMES.contains(&document.name.as_str()) {
+                return Err(invalid(&format!(
+                    "The stored deliverable has an unexpected document: {}.",
+                    document.name
+                )));
+            }
+            if document.origin != "user" && document.origin != "model" {
+                return Err(invalid(&format!(
+                    "Document {} has an unsupported origin.",
+                    document.name
+                )));
+            }
+            if document.content.trim().is_empty() || document.content.chars().count() > 12000 {
+                return Err(invalid(&format!(
+                    "Document {} must be 1 to 12000 characters.",
+                    document.name
+                )));
+            }
+        }
+    }
+    for name in DELIVERABLE_DOC_NAMES
+        .iter()
+        .chain(std::iter::once(&VERIFIED_FACTS_NAME))
+    {
+        if !seen.contains(name) {
+            return Err(invalid(&format!(
+                "The stored deliverable is missing document {name}."
+            )));
+        }
+    }
+    Ok(())
+}
+
 /// Slice 3: start a model draft of deliverable
 /// documentation. The pinned specification version must
 /// hold backend approval before any provider traffic;
@@ -2890,19 +3006,18 @@ pub fn export_deliverable(storage: &Storage, value: Value) -> Result<Value, Comm
         &doc.package_artifact_id,
         doc.package_version,
     )?;
-    // The pinned hashes must still match the stored rows:
-    // a deliverable never silently follows a changed
-    // package or specification.
-    if crate::content::hash(package.body.as_bytes()) != doc.package_content_hash {
-        return Err(invalid(
-            "The pinned package version no longer matches this deliverable; it cannot be exported.",
-        ));
-    }
-    if spec.artifact.content_hash != doc.spec_content_hash {
-        return Err(invalid(
-            "The pinned specification version no longer matches this deliverable; it cannot be exported.",
-        ));
-    }
+    // Validate the whole saved record against the
+    // backend-resolved provenance before any manifest
+    // or archive bytes are built: a deliverable never
+    // silently follows a changed package or
+    // specification, and an invalid stored record is
+    // refused rather than repaired or relabelled.
+    validate_deliverable_record(
+        &doc,
+        &package_doc,
+        &crate::content::hash(package.body.as_bytes()),
+        &spec.artifact.content_hash,
+    )?;
     if deliverable_docs_prefix_conflict(&package_doc.files) {
         return Err(invalid(
             "This package uses the deliverable-docs/ path namespace, so its documentation cannot be exported without moving source files.",

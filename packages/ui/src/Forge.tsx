@@ -933,6 +933,34 @@ export function DeliverableView(props: {
     }
     return next;
   });
+  // Slice 3 repair: the edit buffer must always track
+  // the exact viewed record/version. The parent keys
+  // this component by full identity (see Projects.tsx),
+  // which remounts it on a switch; this effect is the
+  // defence in depth for any unkeyed render, and
+  // cancelling resets the buffer, so a cancelled or
+  // superseded draft never carries into another
+  // version or record.
+  const viewIdentity = props.artifact
+    ? `${props.artifact.artifactId}:${props.artifact.version}`
+    : `${doc.packageArtifactId}:${doc.packageVersion}`;
+  useEffect(() => {
+    const next: Record<string, string> = {};
+    for (const d of doc.documents) {
+      if (d.name !== 'verified-facts.md') next[d.name] = d.content;
+    }
+    setDocs(next);
+    setEditing(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewIdentity]);
+  function cancelEditing() {
+    const next: Record<string, string> = {};
+    for (const d of doc.documents) {
+      if (d.name !== 'verified-facts.md') next[d.name] = d.content;
+    }
+    setDocs(next);
+    setEditing(false);
+  }
   const [exporting, setExporting] = useState(false);
   const verified = doc.documents.find(d => d.name === 'verified-facts.md');
   async function exportDeliverable() {
@@ -991,7 +1019,7 @@ export function DeliverableView(props: {
             </div>
           ))}
           <button type="button" onClick={() => void saveRevision()}>Save revised documentation as new version</button>{' '}
-          <button type="button" className="secondary" onClick={() => setEditing(false)}>Cancel editing</button>
+          <button type="button" className="secondary" onClick={() => cancelEditing()}>Cancel editing</button>
         </div>
       ) : (
         <div>
