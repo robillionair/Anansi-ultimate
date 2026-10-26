@@ -1,3 +1,44 @@
+## 2026-10-26 — M7 Slice 3: a complete, reviewable export deliverable
+
+Branch `muse/m7-slice3-deliverable` over the
+Windows-reviewed Slice 2 checkpoint `0f586f8`
+(review branch `codex/review-m7-slice2`). The §33
+deliverable workflow for an unexecuted prototype:
+open an exact source-package version, prepare five
+documents (architecture, usage, limitations, security,
+change summary) with user/model/verified origins,
+inspect and edit drafts before saving, save an
+immutable `deliverable` artifact pinning the exact
+package/specification versions and hashes, and export
+a deterministic archive of the exact source bytes plus
+approved documentation plus a version/hash manifest —
+with the unexecuted status stated throughout and no
+license, deployment or build claims. Documentation
+lives under `deliverable-docs/`; a package already
+using that namespace refuses save/export rather than
+moving source bytes. Editing documentation saves a new
+version; a saved deliverable never follows a newer
+package version. Restore remaps the pinned references
+fail-closed and rewrites the pinned hashes, so the
+restored deliverable still exports. Linux evidence:
+forge units 11/11, `forge_deliverable` 6/6,
+`forge_revision` 5/5, `forge_generation` 5/5,
+`forge_restore` 4/4, full core 241/245 (only the 4
+environmental live-Ollama failures), providers+API
+144/0, node contracts/UI 60/60, tsc clean, contracts
+check PASS, docs PASS, Clippy + fmt clean, e2e
+canonical 12/12 incl. the new
+`forge-deliverable.spec.ts` and the reviewed
+version-switch regression. Record:
+`docs/handoffs/M7-slice3-addendum.md`; design:
+`docs/handoffs/M7-slice3-deliverable-design.md`.
+**Pending: Windows verification of this slice;
+native desktop acceptance and preview promotion of
+Slices 2–3 (the preview branch is preserved as a
+separate ref, not promoted); the §32 execution
+sandbox as a later separately approved slice; M5
+production gates remain open.**
+
 ## 2026-10-26 — M7 Slice 2 independent Windows review and UI correction
 
 Delivery `9928bf5cb09f07cb90c911b7c5279ad69bc748cb` passed focused Windows
