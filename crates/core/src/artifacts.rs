@@ -420,6 +420,112 @@ impl Storage {
         self.artifact_read(&req.workspace_id, &req.artifact_id, Some(next))
     }
 
+    /// Register a specification approval record. This is
+    /// the ONLY way a `specification-approval` artifact
+    /// comes into being: the type is deliberately absent
+    /// from `ARTIFACT_TYPES`, so the generic manual
+    /// registration path refuses it, and a generic save or
+    /// revision can never mint approval. The caller (the
+    /// dedicated forge approve operation) has already read
+    /// the pinned specification version through
+    /// `artifact_read`, which re-verifies its stored hash,
+    /// so the hash recorded here binds to registry-checked
+    /// bytes, never to a client-supplied hash.
+    pub(crate) fn register_specification_approval(
+        &self,
+        workspace_id: &str,
+        project_id: &str,
+        spec_artifact_id: &str,
+        spec_version: u32,
+        spec_content_hash: &str,
+    ) -> Result<ArtifactDetails, CommandError> {
+        check_id(workspace_id)?;
+        check_id(project_id)?;
+        check_id(spec_artifact_id)?;
+        let title = format!("Specification approval: {spec_artifact_id} v{spec_version}");
+        let body = serde_json::to_string(&serde_json::json!({
+            "format": "anansi-specification-approval",
+            "formatVersion": 1,
+            "specArtifactId": spec_artifact_id,
+            "specVersion": spec_version,
+            "specContentHash": spec_content_hash,
+        }))
+        .map_err(|_| unavailable())?;
+        let refs = vec![format!("artifact://{spec_artifact_id}@v{spec_version}")];
+        validate_write(&title, &body, &refs)?;
+        let connection = self.connection(true)?.ok_or_else(unavailable)?;
+        require_project_writable(&connection, workspace_id, project_id)?;
+        let artifact_id = new_artifact_id();
+        let hash = content::hash(body.as_bytes());
+        connection
+            .execute(
+                "INSERT INTO artifact_versions (workspace_id, artifact_id, project_id, version, \
+                 artifact_type, title, body, content_hash, source_references, generator, \
+                 validation_status, privacy, created_at) \
+                 VALUES (?1, ?2, ?3, 1, 'specification-approval', ?4, ?5, ?6, ?7, ?8, 'validated', 'private', ?9)",
+                params![
+                    workspace_id,
+                    artifact_id,
+                    project_id,
+                    title,
+                    body,
+                    hash,
+                    serde_json::to_string(&refs).unwrap_or_default(),
+                    serde_json::json!({ "kind": "user-approval" }).to_string(),
+                    now_iso(),
+                ],
+            )
+            .map_err(|_| unavailable())?;
+        self.artifact_read(workspace_id, &artifact_id, Some(1))
+    }
+
+    /// Find the approval record for an exact specification
+    /// version and content hash, if one exists. Only the
+    /// version-1 record of an approval artifact confers
+    /// approval: revising an approval artifact creates a
+    /// later version that this lookup ignores, so editing an
+    /// approval record can neither create approval nor
+    /// transfer it to another specification version.
+    pub(crate) fn specification_approval(
+        &self,
+        workspace_id: &str,
+        project_id: &str,
+        spec_artifact_id: &str,
+        spec_version: u32,
+        spec_content_hash: &str,
+    ) -> Result<Option<ArtifactRecord>, CommandError> {
+        check_id(workspace_id)?;
+        check_id(project_id)?;
+        check_id(spec_artifact_id)?;
+        let connection = self.connection(false)?.ok_or_else(unavailable)?;
+        let mut stmt = connection
+            .prepare(&format!(
+                "SELECT {COLUMNS} FROM artifact_versions \
+                 WHERE workspace_id = ?1 AND project_id = ?2 \
+                 AND artifact_type = 'specification-approval' AND version = 1 \
+                 ORDER BY artifact_id"
+            ))
+            .map_err(|_| unavailable())?;
+        let rows = stmt
+            .query_map(params![workspace_id, project_id], row_from)
+            .map_err(|_| unavailable())?;
+        for row in rows {
+            let row = row.map_err(|_| unavailable())?;
+            let Ok(doc) = serde_json::from_str::<Value>(&row.body) else {
+                continue;
+            };
+            let matches = doc.get("format").and_then(|v| v.as_str())
+                == Some("anansi-specification-approval")
+                && doc.get("specArtifactId").and_then(|v| v.as_str()) == Some(spec_artifact_id)
+                && doc.get("specVersion").and_then(|v| v.as_u64()) == Some(u64::from(spec_version))
+                && doc.get("specContentHash").and_then(|v| v.as_str()) == Some(spec_content_hash);
+            if matches {
+                return Ok(Some(row.record));
+            }
+        }
+        Ok(None)
+    }
+
     fn latest_row(
         &self,
         connection: &Connection,

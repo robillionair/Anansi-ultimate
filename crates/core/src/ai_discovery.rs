@@ -828,6 +828,8 @@ impl Core {
             | "forge-spec-poll"
             | "forge-spec-cancel"
             | "forge-spec-save"
+            | "forge-spec-approve"
+            | "forge-spec-approval-status"
             | "forge-build-start"
             | "forge-build-poll"
             | "forge-build-cancel"

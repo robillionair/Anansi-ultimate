@@ -81,6 +81,68 @@ pub struct ForgeBuildStartRequest {
     pub permit_id: Option<String>,
 }
 
+/// Explicit approval of one specification version.
+/// There is deliberately no approval flag on
+/// `ForgeBuildStartRequest`: approval is this dedicated
+/// operation, recorded by the backend, never a client
+/// assertion carried on the build request.
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ForgeSpecApproveRequest {
+    #[serde(default = "one")]
+    pub contract_version: u8,
+    pub workspace_id: String,
+    pub project_id: String,
+    pub spec_artifact_id: String,
+    pub spec_version: u32,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ForgeSpecApprovalStatusRequest {
+    #[serde(default = "one")]
+    pub contract_version: u8,
+    pub workspace_id: String,
+    pub project_id: String,
+    pub spec_artifact_id: String,
+    pub spec_version: u32,
+}
+
+/// The body of a `specification-approval` artifact: the
+/// exact specification version and content hash it approves.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SpecificationApprovalDoc {
+    pub format: String,
+    pub format_version: u8,
+    pub spec_artifact_id: String,
+    pub spec_version: u32,
+    pub spec_content_hash: String,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ForgeSpecApproveResponse {
+    pub contract_version: u8,
+    pub approved: bool,
+    pub approval_artifact_id: String,
+    pub spec_artifact_id: String,
+    pub spec_version: u32,
+    pub spec_content_hash: String,
+    pub already_approved: bool,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ForgeSpecApprovalStatusResponse {
+    pub contract_version: u8,
+    pub approved: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub approval_artifact_id: Option<String>,
+    pub spec_artifact_id: String,
+    pub spec_version: u32,
+}
+
 #[derive(Debug, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ForgeRunRequest {
@@ -355,10 +417,21 @@ pub fn parse_product_spec(raw: &str) -> Result<ProductSpec, String> {
     })
 }
 
+/// Windows device/reserved names: the segment stem (the
+/// part before the first `.`) is reserved with or without
+/// an extension, case-insensitively, on Windows — so
+/// `CON.txt`, `con` and `Aux.js` are all unusable there.
+const WINDOWS_RESERVED_STEMS: [&str; 22] = [
+    "con", "prn", "aux", "nul", "com1", "com2", "com3", "com4", "com5", "com6", "com7", "com8",
+    "com9", "lpt1", "lpt2", "lpt3", "lpt4", "lpt5", "lpt6", "lpt7", "lpt8", "lpt9",
+];
+
 /// Validate one package-relative path: portable, relative,
 /// no traversal, no links or device-like names — a path the
-/// USTAR writer and any extractor can treat as a plain
-/// relative file name.
+/// USTAR writer and any extractor (including a Windows
+/// extractor, which normalizes trailing dots/spaces and
+/// reserves device names) can treat as a plain relative
+/// file name.
 pub fn validate_package_path(path: &str) -> Result<(), String> {
     let fail = |why: &str| format!("unsafe file path {path:?}: {why}");
     if path.is_empty() || path.chars().count() > MAX_PATH_CHARS {
@@ -379,6 +452,17 @@ pub fn validate_package_path(path: &str) -> Result<(), String> {
         }
         if segment.starts_with('.') {
             return Err(fail("hidden files are not allowed"));
+        }
+        // Windows strips trailing dots and spaces when a
+        // name is created, so a name ending in either
+        // collides with its stripped form on extraction.
+        // Leading spaces are the same normalization hole.
+        if segment.starts_with(' ') || segment.ends_with(' ') || segment.ends_with('.') {
+            return Err(fail("segments must not start or end with a space or dot"));
+        }
+        let stem = segment.split('.').next().unwrap_or("").to_lowercase();
+        if WINDOWS_RESERVED_STEMS.contains(&stem.as_str()) {
+            return Err(fail("Windows device/reserved names are not allowed"));
         }
         if !segment
             .chars()
@@ -412,6 +496,30 @@ pub fn validate_package_files(files: &[SourceFile]) -> Result<(), String> {
     }
     let mut seen: HashSet<String> = HashSet::new();
     let mut seen_folded: HashSet<String> = HashSet::new();
+    // Directory prefixes implied by the file set, keyed
+    // case-folded: a file that is also a directory prefix
+    // (`assets.js` + `assets.js/app.js`) cannot extract on
+    // any filesystem, and prefixes that differ only by case
+    // (`CSS/…` + `css/…`) collapse to one directory on a
+    // case-insensitive filesystem. Collected in a first
+    // pass so the conflict is caught regardless of order.
+    let mut dir_prefixes: HashMap<String, String> = HashMap::new();
+    for file in files {
+        validate_package_path(&file.path)?;
+        let segments: Vec<&str> = file.path.split('/').collect();
+        for end in 1..segments.len() {
+            let prefix = segments[..end].join("/");
+            let folded = prefix.to_lowercase();
+            if let Some(existing) = dir_prefixes.get(&folded)
+                && existing != &prefix
+            {
+                return Err(format!(
+                    "directory names that differ only by case are not allowed: {existing:?} and {prefix:?}"
+                ));
+            }
+            dir_prefixes.entry(folded).or_insert(prefix);
+        }
+    }
     let mut total = 0usize;
     let mut has_index = false;
     let mut has_readme = false;
@@ -423,6 +531,12 @@ pub fn validate_package_files(files: &[SourceFile]) -> Result<(), String> {
         if !seen_folded.insert(file.path.to_lowercase()) {
             return Err(format!(
                 "file paths that differ only by case are not allowed: {:?}",
+                file.path
+            ));
+        }
+        if dir_prefixes.contains_key(&file.path.to_lowercase()) {
+            return Err(format!(
+                "a file path that is also a directory prefix is not allowed: {:?}",
                 file.path
             ));
         }
@@ -677,6 +791,8 @@ pub fn forge_command(
     cancel_evicted(collect_evictions(None));
     match operation {
         "forge-spec-start" => start_spec(value, scope),
+        "forge-spec-approve" => approve_spec(value, scope),
+        "forge-spec-approval-status" => approval_status(value, scope),
         "forge-build-start" => start_build(value, scope),
         "forge-spec-poll" | "forge-build-poll" => poll(value, scope),
         "forge-spec-cancel" | "forge-build-cancel" => cancel(value, scope),
@@ -932,6 +1048,154 @@ fn start_spec(value: Value, scope: &CallerScope) -> Result<Value, CommandError> 
     )
 }
 
+/// Read and validate one pinned specification version,
+/// returning its registry record. Shared by approval,
+/// status and the build gate so all three agree on what
+/// counts as the specification being approved or built.
+fn read_specification(
+    storage: &Storage,
+    workspace_id: &str,
+    project_id: &str,
+    spec_artifact_id: &str,
+    spec_version: u32,
+) -> Result<crate::artifacts::ArtifactDetails, CommandError> {
+    let details = storage.artifact_read(workspace_id, spec_artifact_id, Some(spec_version))?;
+    if details.artifact.project_id != project_id {
+        return Err(invalid(
+            "The selected specification does not belong to this project.",
+        ));
+    }
+    if details.artifact.artifact_type != "specification" {
+        return Err(invalid(
+            "Product Forge builds from a saved product specification artifact.",
+        ));
+    }
+    let spec_doc: ProductSpecDoc = serde_json::from_str(&details.body)
+        .map_err(|_| invalid("The selected artifact is not a readable product specification."))?;
+    if spec_doc.format != "anansi-product-spec" {
+        return Err(invalid(
+            "The selected artifact is not a product specification.",
+        ));
+    }
+    Ok(details)
+}
+
+fn unapproved_message(spec_artifact_id: &str, spec_version: u32) -> String {
+    format!(
+        "Specification artifact {spec_artifact_id} version {spec_version} has not been approved for source generation. Approve that exact version explicitly (forge-spec-approve) before generating source; saving or revising a specification does not approve it."
+    )
+}
+
+/// Explicitly approve one specification version. The
+/// approval record is created by the backend from the
+/// registry-checked content hash; a generic artifact save
+/// or revision can never create one, and re-approving an
+/// already-approved version returns the existing record.
+fn approve_spec(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
+    let req: ForgeSpecApproveRequest = serde_json::from_value(value)
+        .map_err(|_| invalid("Use a supported Product Forge request."))?;
+    if req.contract_version != 1 {
+        return Err(CommandError::new(
+            ErrorCode::UnsupportedContract,
+            "Use contract version 1.",
+        ));
+    }
+    if req.spec_version < 1 {
+        return Err(invalid("Pin an exact specification version (1 or later)."));
+    }
+    let workspace_id = logical(scope)?;
+    let storage = storage(scope)?;
+    let connection = storage
+        .connection(false)?
+        .ok_or_else(crate::storage::unavailable)?;
+    crate::artifacts::require_project_writable(&connection, &workspace_id, &req.project_id)?;
+    drop(connection);
+    let details = read_specification(
+        &storage,
+        &workspace_id,
+        &req.project_id,
+        &req.spec_artifact_id,
+        req.spec_version,
+    )?;
+    let hash = details.artifact.content_hash.clone();
+    if let Some(existing) = storage.specification_approval(
+        &workspace_id,
+        &req.project_id,
+        &req.spec_artifact_id,
+        req.spec_version,
+        &hash,
+    )? {
+        return serde_json::to_value(ForgeSpecApproveResponse {
+            contract_version: 1,
+            approved: true,
+            approval_artifact_id: existing.artifact_id,
+            spec_artifact_id: req.spec_artifact_id,
+            spec_version: req.spec_version,
+            spec_content_hash: hash,
+            already_approved: true,
+        })
+        .map_err(|_| crate::storage::unavailable());
+    }
+    let created = storage.register_specification_approval(
+        &workspace_id,
+        &req.project_id,
+        &req.spec_artifact_id,
+        req.spec_version,
+        &hash,
+    )?;
+    serde_json::to_value(ForgeSpecApproveResponse {
+        contract_version: 1,
+        approved: true,
+        approval_artifact_id: created.artifact.artifact_id,
+        spec_artifact_id: req.spec_artifact_id,
+        spec_version: req.spec_version,
+        spec_content_hash: hash,
+        already_approved: false,
+    })
+    .map_err(|_| crate::storage::unavailable())
+}
+
+/// Report whether one specification version currently
+/// holds backend approval. Read-only: it creates nothing
+/// and confers nothing.
+fn approval_status(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
+    let req: ForgeSpecApprovalStatusRequest = serde_json::from_value(value)
+        .map_err(|_| invalid("Use a supported Product Forge request."))?;
+    if req.contract_version != 1 {
+        return Err(CommandError::new(
+            ErrorCode::UnsupportedContract,
+            "Use contract version 1.",
+        ));
+    }
+    if req.spec_version < 1 {
+        return Err(invalid("Pin an exact specification version (1 or later)."));
+    }
+    let workspace_id = logical(scope)?;
+    let storage = storage(scope)?;
+    let details = read_specification(
+        &storage,
+        &workspace_id,
+        &req.project_id,
+        &req.spec_artifact_id,
+        req.spec_version,
+    )?;
+    let found = storage.specification_approval(
+        &workspace_id,
+        &req.project_id,
+        &req.spec_artifact_id,
+        req.spec_version,
+        &details.artifact.content_hash,
+    )?;
+    serde_json::to_value(ForgeSpecApprovalStatusResponse {
+        contract_version: 1,
+        approved: found.is_some(),
+        approval_artifact_id: found.map(|r| r.artifact_id),
+        spec_artifact_id: req.spec_artifact_id,
+        spec_version: req.spec_version,
+    })
+    .map_err(|_| crate::storage::unavailable())
+}
+
 fn start_build(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
     let req: ForgeBuildStartRequest = serde_json::from_value(value)
         .map_err(|_| invalid("Use a supported Product Forge request."))?;
@@ -952,25 +1216,35 @@ fn start_build(value: Value, scope: &CallerScope) -> Result<Value, CommandError>
     crate::artifacts::require_project_writable(&connection, &workspace_id, &req.project_id)?;
     drop(connection);
 
-    // Pin the exact specification version.
-    let spec_artifact =
-        storage.artifact_read(&workspace_id, &req.spec_artifact_id, Some(req.spec_version))?;
-    if spec_artifact.artifact.project_id != req.project_id {
-        return Err(invalid(
-            "The selected specification does not belong to this project.",
-        ));
-    }
-    if spec_artifact.artifact.artifact_type != "specification" {
-        return Err(invalid(
-            "Product Forge builds from a saved product specification artifact.",
-        ));
-    }
+    // Pin the exact specification version, then enforce
+    // backend approval BEFORE any provider traffic: the
+    // version must hold an approval record bound to its
+    // exact content hash. Saving or revising a
+    // specification confers no approval, and a client flag
+    // cannot substitute for the record.
+    let spec_artifact = read_specification(
+        &storage,
+        &workspace_id,
+        &req.project_id,
+        &req.spec_artifact_id,
+        req.spec_version,
+    )?;
     let spec_doc: ProductSpecDoc = serde_json::from_str(&spec_artifact.body)
         .map_err(|_| invalid("The selected artifact is not a readable product specification."))?;
-    if spec_doc.format != "anansi-product-spec" {
-        return Err(invalid(
-            "The selected artifact is not a product specification.",
-        ));
+    if storage
+        .specification_approval(
+            &workspace_id,
+            &req.project_id,
+            &req.spec_artifact_id,
+            req.spec_version,
+            &spec_artifact.artifact.content_hash,
+        )?
+        .is_none()
+    {
+        return Err(invalid(&unapproved_message(
+            &req.spec_artifact_id,
+            req.spec_version,
+        )));
     }
     let concept_name = spec_doc
         .concept
@@ -1638,6 +1912,30 @@ pub fn remap_source_package_references(
     ))
 }
 
+/// Rewrite the pinned specification reference in an
+/// `anansi-specification-approval` body. Returns `None`
+/// for other bodies. A reference to a specification that
+/// is not in the backup fails closed. The caller (restore)
+/// rewrites `specContentHash` afterwards to the restored
+/// specification version's recomputed hash, so the approval
+/// transfers only to the restored equivalent of the same
+/// version.
+pub fn remap_specification_approval_references(
+    body: &str,
+    ids: &BTreeMap<String, String>,
+) -> Result<Option<String>, CommandError> {
+    let Ok(mut doc) = serde_json::from_str::<Value>(body) else {
+        return Ok(None);
+    };
+    if doc.get("format").and_then(|v| v.as_str()) != Some("anansi-specification-approval") {
+        return Ok(None);
+    }
+    remap_artifact_ref(&mut doc, "specArtifactId", ids, "specification approval")?;
+    Ok(Some(
+        serde_json::to_string(&doc).map_err(|_| crate::storage::unavailable())?,
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1672,6 +1970,25 @@ mod tests {
             "run.sh",
             "data.json",
             "",
+            // Windows device/reserved names, any segment,
+            // with or without an extension, any case.
+            "CON.txt",
+            "con",
+            "PRN.md",
+            "aux.js",
+            "COM1.html",
+            "com9.css",
+            "LPT9.txt",
+            "lpt1.html",
+            "NUL",
+            "foo/CON/bar.html",
+            "css/Aux.css",
+            // Trailing-dot/space normalization holes.
+            "app.js.",
+            "app.js ",
+            " app.js",
+            "foo./bar.html",
+            "foo/bar.txt ",
         ] {
             assert!(validate_package_path(bad).is_err(), "accepted {bad:?}");
         }
@@ -1706,6 +2023,61 @@ mod tests {
             many.push(file(&format!("f{i}.txt"), "x"));
         }
         assert!(validate_package_files(&many).is_err());
+    }
+
+    #[test]
+    fn package_validation_rejects_prefix_and_case_directory_conflicts() {
+        // File that is also a directory prefix, both orders.
+        let mut conflict = good_files();
+        conflict.push(file("assets.js", "console.log('dir?')"));
+        conflict.push(file("assets.js/app.js", "console.log('nested')"));
+        assert!(validate_package_files(&conflict).is_err());
+        let mut conflict_reversed = good_files();
+        conflict_reversed.push(file("assets.js/app.js", "console.log('nested')"));
+        conflict_reversed.push(file("assets.js", "console.log('dir?')"));
+        assert!(validate_package_files(&conflict_reversed).is_err());
+        // Case-folded file-vs-directory prefix.
+        let mut folded_prefix = good_files();
+        folded_prefix.push(file("ASSETS.JS/app.js", "console.log('nested')"));
+        folded_prefix.push(file("assets.js", "console.log('dir?')"));
+        assert!(validate_package_files(&folded_prefix).is_err());
+        // Directory prefixes differing only by case.
+        let mut folded_dirs = good_files();
+        folded_dirs.push(file("CSS/site.css", "body{}"));
+        folded_dirs.push(file("css/app.css", "body{}"));
+        assert!(validate_package_files(&folded_dirs).is_err());
+        // A genuinely nested, distinct set still passes.
+        let mut nested = good_files();
+        nested.push(file("css/site.css", "body{}"));
+        nested.push(file("js/app.js", "console.log('ok')"));
+        assert!(validate_package_files(&nested).is_ok());
+        // Reserved names and trailing normalization are
+        // refused inside a whole file set, not just alone.
+        let mut reserved = good_files();
+        reserved.push(file("CON.txt", "reserved"));
+        assert!(validate_package_files(&reserved).is_err());
+        let mut trailing = good_files();
+        trailing.push(file("notes.txt ", "trailing space"));
+        assert!(validate_package_files(&trailing).is_err());
+    }
+
+    #[test]
+    fn approval_remaps_rewrite_reference_and_fail_closed() {
+        let mut ids = BTreeMap::new();
+        ids.insert("old-spec".to_string(), "new-spec".to_string());
+        let approval = "{\"format\":\"anansi-specification-approval\",\"formatVersion\":1,\"specArtifactId\":\"old-spec\",\"specVersion\":2,\"specContentHash\":\"abc\"}";
+        let out = remap_specification_approval_references(approval, &ids)
+            .unwrap()
+            .unwrap();
+        assert!(out.contains("\"new-spec\""));
+        assert!(out.contains("\"specVersion\":2"));
+        let missing = "{\"format\":\"anansi-specification-approval\",\"formatVersion\":1,\"specArtifactId\":\"nope\",\"specVersion\":1,\"specContentHash\":\"abc\"}";
+        assert!(remap_specification_approval_references(missing, &ids).is_err());
+        assert!(
+            remap_specification_approval_references("{\"format\":\"other\"}", &ids)
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[test]

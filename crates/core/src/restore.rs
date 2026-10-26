@@ -61,6 +61,71 @@ fn remap_metadata(
 /// fails closed - a restored artifact must never link back
 /// into the source workspace. Bodies of every other type
 /// are opaque and preserved exactly.
+/// Fix-up pass over the prepared `artifact_versions`
+/// rows, after every row's references have been remapped:
+/// a restored specification approval must approve the
+/// restored specification version's recomputed content
+/// hash (its body changed when its own source reference
+/// was remapped), not the source workspace's hash. An
+/// approval whose specification version is absent from
+/// the package fails the restore closed.
+fn fix_approval_hashes(
+    names: &[String],
+    values: &mut [Vec<rusqlite::types::Value>],
+) -> Result<(), CommandError> {
+    use rusqlite::types::Value;
+    let index = |name: &str| -> Result<usize, CommandError> {
+        names
+            .iter()
+            .position(|n| n == name)
+            .ok_or_else(crate::jobs::invalid)
+    };
+    let type_i = index("artifact_type")?;
+    let body_i = index("body")?;
+    let hash_i = index("content_hash")?;
+    let id_i = index("artifact_id")?;
+    let version_i = index("version")?;
+    let mut spec_hashes: std::collections::BTreeMap<(String, i64), String> =
+        std::collections::BTreeMap::new();
+    for row in values.iter() {
+        if matches!(&row[type_i], Value::Text(t) if t == "specification")
+            && let (Value::Text(id), Value::Integer(version), Value::Text(hash)) =
+                (&row[id_i], &row[version_i], &row[hash_i])
+        {
+            spec_hashes.insert((id.clone(), *version), hash.clone());
+        }
+    }
+    for row in values.iter_mut() {
+        if !matches!(&row[type_i], Value::Text(t) if t == "specification-approval") {
+            continue;
+        }
+        let Value::Text(body) = &row[body_i].clone() else {
+            continue;
+        };
+        let mut doc: serde_json::Value =
+            serde_json::from_str(body).map_err(|_| crate::jobs::invalid())?;
+        if doc.get("format").and_then(|v| v.as_str()) != Some("anansi-specification-approval") {
+            continue;
+        }
+        let spec_id = doc
+            .get("specArtifactId")
+            .and_then(|v| v.as_str())
+            .ok_or_else(crate::jobs::invalid)?;
+        let spec_version = doc
+            .get("specVersion")
+            .and_then(|v| v.as_u64())
+            .ok_or_else(crate::jobs::invalid)? as i64;
+        let hash = spec_hashes
+            .get(&(spec_id.to_string(), spec_version))
+            .ok_or_else(crate::jobs::invalid)?;
+        doc["specContentHash"] = serde_json::Value::String(hash.clone());
+        let rewritten = serde_json::to_string(&doc).map_err(|_| crate::jobs::invalid())?;
+        row[hash_i] = Value::Text(crate::content::hash(rewritten.as_bytes()));
+        row[body_i] = Value::Text(rewritten);
+    }
+    Ok(())
+}
+
 fn remap_artifact_row(
     names: &[String],
     columns: &mut [rusqlite::types::Value],
@@ -125,6 +190,27 @@ fn remap_artifact_row(
                 columns[hash_i] = Value::Text(crate::content::hash(rewritten.as_bytes()));
                 columns[body_i] = Value::Text(rewritten);
             }
+        }
+    }
+    // Specification approvals (type
+    // `specification-approval`) pin a specification by id:
+    // that resolves to the restored specification, fail
+    // closed when it is not in the package. The approval's
+    // content hash is rewritten afterwards (see the
+    // fix-up pass over the prepared artifact rows) to the
+    // restored specification version's recomputed hash, so
+    // the approval transfers only to the restored
+    // equivalent of the same version.
+    let is_approval = matches!(&columns[type_i], Value::Text(t) if t == "specification-approval");
+    if is_approval {
+        let body_i = index("body")?;
+        let hash_i = index("content_hash")?;
+        if let Value::Text(body) = &columns[body_i]
+            && let Some(rewritten) =
+                crate::forge::remap_specification_approval_references(body, ids)?
+        {
+            columns[hash_i] = Value::Text(crate::content::hash(rewritten.as_bytes()));
+            columns[body_i] = Value::Text(rewritten);
         }
     }
     // Opportunity sets (type `idea`, body format
@@ -414,6 +500,9 @@ impl crate::storage::Storage {
                     ));
                 }
                 values.push(columns);
+            }
+            if table == "artifact_versions" {
+                fix_approval_hashes(&names, &mut values)?;
             }
             prepared.push((table, names, values));
         }
