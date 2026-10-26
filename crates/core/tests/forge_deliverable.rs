@@ -630,6 +630,76 @@ fn review_export_rejects_inconsistent_generic_edits() {
 }
 
 #[test]
+fn export_rejects_other_inconsistent_records() {
+    let fake = start_fake();
+    let f = fixture(&fake);
+    let (_, package_id) = spec_and_package(&f);
+    let saved = save_deliverable(&f, &package_id, 1, manual_docs()).unwrap();
+    let id = saved["artifact"]["artifactId"].as_str().unwrap();
+    let original: Value = serde_json::from_str(saved["body"].as_str().unwrap()).unwrap();
+    // Each defect is built from the original v1 body, not
+    // chained on a previous defect, so every refusal is
+    // attributable to that defect alone.
+    let mut current = 1u32;
+    for defect in [
+        "executed",
+        "built",
+        "tested",
+        "published",
+        "spec-version",
+        "missing-document",
+        "extra-document",
+        "invalid-origin",
+        "verified-origin-on-editable",
+        "empty-document",
+    ] {
+        let mut edited = original.clone();
+        match defect {
+            "executed" => edited["status"]["executed"] = json!(true),
+            "built" => edited["status"]["built"] = json!(true),
+            "tested" => edited["status"]["tested"] = json!(true),
+            "published" => edited["status"]["published"] = json!(true),
+            "spec-version" => edited["specVersion"] = json!(99),
+            "missing-document" => {
+                let docs = edited["documents"].as_array_mut().unwrap();
+                docs.retain(|d| d["name"] != "limitations.md");
+            }
+            "extra-document" => {
+                edited["documents"].as_array_mut().unwrap().push(json!({
+                    "name": "license.md", "content": "A licence nobody approved.", "origin": "user"
+                }));
+            }
+            "invalid-origin" => edited["documents"][1]["origin"] = json!("system"),
+            "verified-origin-on-editable" => edited["documents"][0]["origin"] = json!("verified"),
+            _ => edited["documents"][1]["content"] = json!(""),
+        }
+        let revised = f
+            .core
+            .artifacts_command(
+                "revise",
+                json!({
+                    "contractVersion": 1, "workspaceId": f.ws, "artifactId": id,
+                    "expectedVersion": current, "title": "Deliverable: review fixture",
+                    "body": edited.to_string(), "sourceReferences": []
+                }),
+            )
+            .unwrap();
+        current = revised["artifact"]["version"].as_u64().unwrap() as u32;
+        let result = f.core.artifacts_command(
+            "forge-deliverable-export",
+            json!({
+                "contractVersion": 1, "workspaceId": f.ws, "artifactId": id,
+                "version": current
+            }),
+        );
+        assert!(
+            result.is_err(),
+            "export accepted inconsistent record defect {defect}: {result:?}"
+        );
+    }
+}
+
+#[test]
 fn model_draft_edit_and_save() {
     let fake = start_fake();
     let f = fixture(&fake);
@@ -1183,5 +1253,57 @@ fn review_restore_rejects_mismatched_pinned_package_hash() {
     assert!(
         result.is_err(),
         "restore silently repaired an invalid original pin: {result:?}"
+    );
+    // No-mutation controls: the refusal must publish
+    // nothing in the destination, and the source must
+    // be untouched. A second attempt of the same backup
+    // refuses again, still without a restored workspace.
+    let no_restored_workspace =
+        |fresh: &Core| {
+            let listed = fresh
+                .workspace_command("list", json!({ "contractVersion": 1 }))
+                .unwrap();
+            !listed["workspaces"].as_array().unwrap().iter().any(|w| {
+                w["name"] == "Invalid pin review" || w["name"] == "Invalid pin review again"
+            })
+        };
+    assert!(
+        no_restored_workspace(&fresh),
+        "failed restore published a destination workspace"
+    );
+    // A second attempt needs its own landing workspace
+    // (upload names it from the tag), and must refuse
+    // again without publishing a restored workspace.
+    let second = try_upload_restore(&fresh, &bytes, "Invalid pin review again");
+    assert!(
+        second.is_err(),
+        "second restore attempt succeeded: {second:?}"
+    );
+    assert!(
+        no_restored_workspace(&fresh),
+        "second failed restore published a destination workspace"
+    );
+    let versions = f
+        .core
+        .artifacts_command(
+            "versions",
+            json!({ "contractVersion": 1, "workspaceId": f.ws, "artifactId": id }),
+        )
+        .unwrap();
+    assert_eq!(
+        versions["versions"].as_array().unwrap().len(),
+        2,
+        "source deliverable versions changed during the refused restore"
+    );
+    assert!(
+        f.core
+            .artifacts_command(
+                "forge-deliverable-export",
+                json!({
+                    "contractVersion": 1, "workspaceId": f.ws, "artifactId": id, "version": 2
+                })
+            )
+            .is_err(),
+        "source deliverable changed during the refused restore"
     );
 }
