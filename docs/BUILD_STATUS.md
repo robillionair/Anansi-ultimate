@@ -1,3 +1,20 @@
+## 2026-10-26 — M7 Slice 2 independent Windows review and UI correction
+
+Delivery `9928bf5cb09f07cb90c911b7c5279ad69bc748cb` passed focused Windows
+revision 5/5, generation 5/5, restore 4/4, Forge units 10/10, UI/contracts 57/57,
+TypeScript, contracts drift check, strict core all-target Clippy, web/API builds,
+formatting and docs validation. Review found a stale-proposal UI defect when
+switching package versions; the revision panel is now keyed by full parent
+identity. The expanded browser workflow failed on the delivered code and passed
+after the correction, including reject/accept, version switching, restart and
+backup/fresh restore. No timeout or backend approval rule was relaxed.
+Evidence: `docs/reviews/windows-m7-slice2-review.md`.
+
+Review branch: `codex/review-m7-slice2`. Native Slice 2 desktop acceptance and
+preview promotion remain pending. Existing preview `3335248b` and its data remain
+unchanged. Synthetic responses only; no generated software execution, paid
+inference, pushes, master merges or remote CI. Standing production gates remain open.
+
 ## 2026-10-26 — M7 Slice 2: revising an existing source package
 
 Branch `muse/m7-slice2-package-revision` over the

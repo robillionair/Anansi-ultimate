@@ -250,6 +250,19 @@ test('product forge revision: open package -> revise -> inspect diff -> reject -
     await expect(page.getByText(/Revision saved as version 2/).first()).toBeVisible();
     expect(await versionCount(workspaceId, pkgId)).toBe(2);
 
+    // A proposal belongs to the exact viewed parent. Switching versions must
+    // discard its UI state, rather than relabel an old proposal as the new parent.
+    await expect(page.getByText('Viewing version 2 of Source package: Bean Stock Log', { exact: false })).toBeVisible();
+    await page.getByLabel('Revision instructions — what should change?').fill('Review probe: update the heading again.');
+    await page.getByRole('button', { name: 'Request revision' }).click();
+    await expect(page.getByRole('heading', { name: 'Proposed changes (against version 2)' })).toBeVisible();
+    await page.getByRole('button', { name: 'View version 1', exact: true }).click();
+    await expect(page.getByText('Viewing version 1 of Source package: Bean Stock Log', { exact: false })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Accept revision — save as new version' })).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: /^Proposed changes/ })).toHaveCount(0);
+    await expect(page.getByLabel('Revision instructions — what should change?')).toHaveValue('');
+    expect(await versionCount(workspaceId, pkgId)).toBe(2);
+
     // Restart/reopen: the revised version is the current one.
     await stopApi();
     await startApi();

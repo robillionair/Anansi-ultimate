@@ -749,6 +749,7 @@ export function Projects({ client, workspaceId }: { client: Client; workspaceId:
                             />
                             {current && (
                               <ForgeRevisePanel
+                                key={`${workspaceId}:${current.memory.id}:${viewedArtifact.artifact.artifactId}:${viewedArtifact.artifact.version}`}
                                 client={client}
                                 workspaceId={workspaceId}
                                 projectId={current.memory.id}
