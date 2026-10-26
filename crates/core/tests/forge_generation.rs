@@ -307,6 +307,43 @@ fn run_spec_to_saved(f: &Fixture) -> (String, Value) {
     (spec_id, saved)
 }
 
+fn approve_spec(core: &Core, ws: &str, project: &str, spec_id: &str, version: u32) -> Value {
+    core.ai_command(
+        "forge-spec-approve",
+        json!({
+            "contractVersion": 1, "workspaceId": ws, "projectId": project,
+            "specArtifactId": spec_id, "specVersion": version
+        }),
+    )
+    .unwrap()
+}
+
+fn approval_status(core: &Core, ws: &str, project: &str, spec_id: &str, version: u32) -> Value {
+    core.ai_command(
+        "forge-spec-approval-status",
+        json!({
+            "contractVersion": 1, "workspaceId": ws, "projectId": project,
+            "specArtifactId": spec_id, "specVersion": version
+        }),
+    )
+    .unwrap()
+}
+
+fn build_to_complete(f: &Fixture, spec_id: &str, version: u32) -> Value {
+    let started = f
+        .core
+        .ai_command(
+            "forge-build-start",
+            json!({
+                "contractVersion": 1, "workspaceId": f.ws, "projectId": f.project,
+                "specArtifactId": spec_id, "specVersion": version, "zeroCostLock": true
+            }),
+        )
+        .unwrap();
+    let run_id = started["runId"].as_str().unwrap().to_string();
+    poll_until(f, "forge-build-poll", &run_id)
+}
+
 fn base64_decode(text: &str) -> Vec<u8> {
     fn val(c: u8) -> u8 {
         match c {
@@ -407,7 +444,12 @@ fn full_forge_workflow_with_exact_version_pinning() {
         1
     );
 
-    // Build from the pinned specification.
+    // Build from the pinned specification: v1 must be
+    // explicitly approved first (saving it does not
+    // approve it).
+    let approval = approve_spec(&f.core, &f.ws, &f.project, &spec_id, 1);
+    assert_eq!(approval["approved"], true);
+    assert_eq!(approval["alreadyApproved"], false);
     let started = f
         .core
         .ai_command(
@@ -483,7 +525,9 @@ fn full_forge_workflow_with_exact_version_pinning() {
     );
 
     // Revise the specification to v2; a build pinned to v2
-    // records specVersion 2.
+    // records specVersion 2 — but only after v2 itself is
+    // explicitly approved (the v1 approval does not carry
+    // over to the revised version).
     let mut revised_doc: Value = serde_json::from_str(saved["body"].as_str().unwrap()).unwrap();
     revised_doc["spec"]["title"] = json!("Bean Stock Log — counter edition");
     core2
@@ -498,6 +542,19 @@ fn full_forge_workflow_with_exact_version_pinning() {
             }),
         )
         .unwrap();
+    assert!(
+        core2
+            .ai_command(
+                "forge-build-start",
+                json!({
+                    "contractVersion": 1, "workspaceId": f.ws, "projectId": f.project,
+                    "specArtifactId": spec_id, "specVersion": 2, "zeroCostLock": true
+                }),
+            )
+            .is_err(),
+        "unapproved v2 must be refused"
+    );
+    approve_spec(&core2, &f.ws, &f.project, &spec_id, 2);
     // The fixture's core and core2 share the root; use core2
     // (provider config was persisted per workspace).
     let started2 = core2
@@ -551,6 +608,7 @@ fn invalid_outputs_and_provider_failure_save_nothing() {
     // Unsafe build output: traversal path.
     *fake.mode.lock().unwrap() = "valid".to_string();
     let (spec_id, _) = run_spec_to_saved(&f);
+    approve_spec(&f.core, &f.ws, &f.project, &spec_id, 1);
     *fake.mode.lock().unwrap() = "traversal".to_string();
     let started = f
         .core
@@ -593,7 +651,7 @@ fn invalid_outputs_and_provider_failure_save_nothing() {
         .map(|a| a["type"].as_str().unwrap())
         .collect();
     types.sort();
-    assert_eq!(types, ["idea", "specification"]);
+    assert_eq!(types, ["idea", "specification", "specification-approval"]);
 }
 
 #[test]
@@ -713,4 +771,233 @@ fn cancel_wrong_stage_isolation_and_archive() {
             )
             .is_err()
     );
+}
+
+#[test]
+fn specification_approval_is_backend_bound_per_version() {
+    let fake = start_fake();
+    let f = fixture(&fake);
+    let (spec_id, saved) = run_spec_to_saved(&f);
+
+    // 1. Unapproved build is refused and sends no provider
+    // traffic: the wire capture still holds only the spec
+    // drafting prompt, never a build ("product engineer")
+    // prompt.
+    let wire_before = fake.last_body.lock().unwrap().clone();
+    assert!(!wire_before.contains("product engineer"));
+    assert!(
+        f.core
+            .ai_command(
+                "forge-build-start",
+                json!({
+                    "contractVersion": 1, "workspaceId": f.ws, "projectId": f.project,
+                    "specArtifactId": spec_id, "specVersion": 1, "zeroCostLock": true
+                }),
+            )
+            .is_err(),
+        "unapproved v1 must be refused"
+    );
+    assert_eq!(*fake.last_body.lock().unwrap(), wire_before);
+
+    // 2. A client-supplied approval boolean is not
+    // authority: the build DTO denies unknown fields.
+    assert!(
+        f.core
+            .ai_command(
+                "forge-build-start",
+                json!({
+                    "contractVersion": 1, "workspaceId": f.ws, "projectId": f.project,
+                    "specArtifactId": spec_id, "specVersion": 1, "zeroCostLock": true,
+                    "approved": true
+                }),
+            )
+            .is_err(),
+        "an approved flag on the build request must be refused"
+    );
+
+    // 3. Explicit approval, idempotent, and visible in status.
+    let approval = approve_spec(&f.core, &f.ws, &f.project, &spec_id, 1);
+    assert_eq!(approval["approved"], true);
+    assert_eq!(approval["alreadyApproved"], false);
+    let approval_id = approval["approvalArtifactId"].as_str().unwrap().to_string();
+    let again = approve_spec(&f.core, &f.ws, &f.project, &spec_id, 1);
+    assert_eq!(again["alreadyApproved"], true);
+    assert_eq!(again["approvalArtifactId"], approval_id);
+    assert_eq!(
+        approval_status(&f.core, &f.ws, &f.project, &spec_id, 1)["approved"],
+        true
+    );
+
+    // 4. Approved v1 builds.
+    let polled = build_to_complete(&f, &spec_id, 1);
+    assert_eq!(polled["status"], "complete", "{polled}");
+    assert_eq!(polled["sourcePackage"]["specVersion"], 1);
+
+    // 5. Stale approval: revising the approval artifact's
+    // body to claim v2 does not approve v2, and the v1
+    // evidence still governs v1.
+    let approval_read = f
+        .core
+        .artifacts_command(
+            "read",
+            json!({ "contractVersion": 1, "workspaceId": f.ws, "artifactId": approval_id, "version": 1 }),
+        )
+        .unwrap();
+    f.core
+        .artifacts_command(
+            "revise",
+            json!({
+                "contractVersion": 1, "workspaceId": f.ws,
+                "artifactId": approval_id, "expectedVersion": 1,
+                "title": approval_read["artifact"]["title"],
+                "body": json!({
+                    "format": "anansi-specification-approval", "formatVersion": 1,
+                    "specArtifactId": spec_id, "specVersion": 2, "specContentHash": "tampered"
+                })
+                .to_string(),
+                "sourceReferences": [format!("artifact://{spec_id}@v2")]
+            }),
+        )
+        .unwrap();
+    let polled = build_to_complete(&f, &spec_id, 1);
+    assert_eq!(polled["status"], "complete", "{polled}");
+
+    // 6. Generic revise to v2 confers no approval.
+    let mut revised_doc: Value = serde_json::from_str(saved["body"].as_str().unwrap()).unwrap();
+    revised_doc["spec"]["title"] = json!("Bean Stock Log — counter edition");
+    f.core
+        .artifacts_command(
+            "revise",
+            json!({
+                "contractVersion": 1, "workspaceId": f.ws,
+                "artifactId": spec_id, "expectedVersion": 1,
+                "title": "Product specification: Bean Stock Log — counter edition",
+                "body": revised_doc.to_string(),
+                "sourceReferences": [format!("artifact://{}@v1", f.idea_artifact)]
+            }),
+        )
+        .unwrap();
+    assert_eq!(
+        approval_status(&f.core, &f.ws, &f.project, &spec_id, 2)["approved"],
+        false
+    );
+    let wire_before = fake.last_body.lock().unwrap().clone();
+    assert!(
+        f.core
+            .ai_command(
+                "forge-build-start",
+                json!({
+                    "contractVersion": 1, "workspaceId": f.ws, "projectId": f.project,
+                    "specArtifactId": spec_id, "specVersion": 2, "zeroCostLock": true
+                }),
+            )
+            .is_err(),
+        "unapproved v2 must be refused"
+    );
+    assert_eq!(*fake.last_body.lock().unwrap(), wire_before);
+
+    // 7. Explicit v2 approval, then v2 builds.
+    approve_spec(&f.core, &f.ws, &f.project, &spec_id, 2);
+    let polled = build_to_complete(&f, &spec_id, 2);
+    assert_eq!(polled["status"], "complete", "{polled}");
+    assert_eq!(polled["sourcePackage"]["specVersion"], 2);
+
+    // 8. Restart: approvals persist in the registry.
+    let dir_path = f._dir.path().to_path_buf();
+    let core2 = Core::with_storage_root(dir_path);
+    assert_eq!(
+        approval_status(&core2, &f.ws, &f.project, &spec_id, 1)["approved"],
+        true
+    );
+    assert_eq!(
+        approval_status(&core2, &f.ws, &f.project, &spec_id, 2)["approved"],
+        true
+    );
+    // A generic artifact save/revision created no approval
+    // records beyond the two explicit ones.
+    let list = core2
+        .artifacts_command(
+            "list",
+            json!({ "contractVersion": 1, "workspaceId": f.ws, "projectId": f.project }),
+        )
+        .unwrap();
+    assert_eq!(
+        list["artifacts"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|a| a["type"] == "specification-approval")
+            .count(),
+        2
+    );
+}
+
+#[test]
+fn export_refuses_nonportable_stored_packages_before_publishing() {
+    let fake = start_fake();
+    let f = fixture(&fake);
+    let bad_package = |files: Value| -> String {
+        json!({
+            "format": "anansi-source-package", "formatVersion": 1,
+            "template": "static-web-prototype",
+            "specArtifactId": "spec", "specVersion": 1,
+            "sourceArtifactId": f.idea_artifact, "sourceVersion": 1,
+            "conceptName": "Bean Stock Log",
+            "plan": { "summary": "s", "steps": ["a", "b"], "buildNotes": "open index.html", "testingNotes": "not run by ANANSI" },
+            "files": files,
+            "limitations": ["Prototype source package generated by a model from a user-approved specification. It has not been built, tested, executed or deployed by ANANSI."]
+        })
+        .to_string()
+    };
+    let register_package = |body: String| -> String {
+        f.core
+            .artifacts_command(
+                "register",
+                json!({
+                    "contractVersion": 1, "workspaceId": f.ws, "projectId": f.project,
+                    "type": "source-package", "title": "Source package: Bean Stock Log",
+                    "body": body, "sourceReferences": [], "privacy": "private"
+                }),
+            )
+            .unwrap()["artifact"]["artifactId"]
+            .as_str()
+            .unwrap()
+            .to_string()
+    };
+    let export_err = |id: &str| {
+        f.core
+            .artifacts_command(
+                "forge-export",
+                json!({ "contractVersion": 1, "workspaceId": f.ws, "artifactId": id, "version": 1 }),
+            )
+            .unwrap_err()
+    };
+    // Reserved Windows device name.
+    let reserved = register_package(bad_package(json!([
+        { "path": "index.html", "content": "<!doctype html><title>Bean</title>" },
+        { "path": "README.md", "content": "# Bean\n" },
+        { "path": "CON.txt", "content": "reserved" }
+    ])));
+    let err = export_err(&reserved);
+    assert!(
+        err.message.contains("CON") || err.message.contains("device"),
+        "{err:?}"
+    );
+    // File-versus-directory prefix conflict.
+    let conflict = register_package(bad_package(json!([
+        { "path": "index.html", "content": "<!doctype html><title>Bean</title>" },
+        { "path": "README.md", "content": "# Bean\n" },
+        { "path": "assets.js", "content": "console.log('x')" },
+        { "path": "assets.js/app.js", "content": "console.log('y')" }
+    ])));
+    let err = export_err(&conflict);
+    assert!(err.message.contains("directory prefix"), "{err:?}");
+    // Trailing-dot normalization.
+    let trailing = register_package(bad_package(json!([
+        { "path": "index.html", "content": "<!doctype html><title>Bean</title>" },
+        { "path": "README.md", "content": "# Bean\n" },
+        { "path": "notes.txt.", "content": "dot" }
+    ])));
+    let err = export_err(&trailing);
+    assert!(err.message.contains("space or dot"), "{err:?}");
 }

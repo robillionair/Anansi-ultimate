@@ -339,3 +339,107 @@ fn package_citing_an_absent_specification_fails_the_restore_closed() {
         .unwrap();
     assert_eq!(all["workspaces"].as_array().unwrap().len(), 1);
 }
+
+#[test]
+fn specification_approval_transfers_to_the_restored_version_only() {
+    let dir = tempfile::tempdir().unwrap();
+    let core = Core::with_storage_root(dir.path().to_path_buf());
+    let source = Storage::new(dir.path().to_path_buf()).unwrap();
+    let ws = workspace(&core, "Forge Approval Source");
+    let proj = project(&core, &ws);
+    let idea = register(
+        &core,
+        &ws,
+        &proj,
+        "idea",
+        "Idea set",
+        "{\"topic\":\"t\",\"concepts\":[]}".to_string(),
+        vec![],
+    );
+    let spec = register(
+        &core,
+        &ws,
+        &proj,
+        "specification",
+        "Product specification: Bean Stock Log",
+        spec_body(&idea),
+        vec![format!("artifact://{idea}@v1")],
+    );
+    let approval = core
+        .ai_command(
+            "forge-spec-approve",
+            json!({ "contractVersion": 1, "workspaceId": ws, "projectId": proj,
+                    "specArtifactId": spec, "specVersion": 1 }),
+        )
+        .unwrap();
+    assert_eq!(approval["approved"], true);
+    assert_eq!(approval["alreadyApproved"], false);
+    let bytes = backup_bytes(dir.path(), &source, &ws);
+
+    let fresh_dir = tempfile::tempdir().unwrap();
+    let fresh = Core::with_storage_root(fresh_dir.path().to_path_buf());
+    let restored = try_upload_restore(&fresh, &bytes, "Forge Approval Restored").unwrap();
+    let restored_ws = restored["workspaces"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let projects = fresh
+        .memory_command(
+            "list",
+            json!({ "contractVersion": 1, "workspaceId": restored_ws, "kind": "project" }),
+        )
+        .unwrap();
+    let restored_project = projects["memories"][0]["id"].as_str().unwrap().to_string();
+    let list = fresh
+        .artifacts_command(
+            "list",
+            json!({ "contractVersion": 1, "workspaceId": restored_ws, "projectId": restored_project }),
+        )
+        .unwrap();
+    let by_type = |ty: &str| {
+        list["artifacts"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|a| a["type"] == ty)
+            .unwrap()
+            .clone()
+    };
+    let r_spec = by_type("specification");
+    let r_spec_id = r_spec["artifactId"].as_str().unwrap().to_string();
+    let r_approval = by_type("specification-approval");
+    let r_approval_id = r_approval["artifactId"].as_str().unwrap().to_string();
+    assert_ne!(
+        r_approval_id,
+        approval["approvalArtifactId"].as_str().unwrap()
+    );
+    let approval_body: Value = serde_json::from_str(
+        fresh
+            .artifacts_command(
+                "read",
+                json!({ "contractVersion": 1, "workspaceId": restored_ws, "artifactId": r_approval_id, "version": 1 }),
+            )
+            .unwrap()["body"]
+            .as_str()
+            .unwrap(),
+    )
+    .unwrap();
+    // The approval now points at the restored specification
+    // version and approves its recomputed content hash —
+    // not the source workspace's id or hash.
+    assert_eq!(approval_body["specArtifactId"], r_spec_id);
+    assert_eq!(approval_body["specVersion"], 1);
+    assert_eq!(approval_body["specContentHash"], r_spec["contentHash"]);
+    assert_ne!(approval_body["specArtifactId"], spec);
+    // Status in the restored workspace agrees: v1 is
+    // approved there without any re-approval.
+    let status = fresh
+        .ai_command(
+            "forge-spec-approval-status",
+            json!({ "contractVersion": 1, "workspaceId": restored_ws, "projectId": restored_project,
+                    "specArtifactId": r_spec_id, "specVersion": 1 }),
+        )
+        .unwrap();
+    assert_eq!(status["approved"], true);
+    assert_eq!(status["approvalArtifactId"], r_approval_id);
+}
