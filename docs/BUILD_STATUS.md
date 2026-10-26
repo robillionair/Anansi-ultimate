@@ -1,3 +1,29 @@
+## 2026-10-26 — Independent Windows M7 Slice 3 repair verification
+
+Repair baseline `74c4196744e1623e368bda302c0cbc3c62a9e38c` passed Windows
+deliverable tests 9/9 (including both formerly failing review probes), Forge
+units 11/11, UI/contracts 60/60, TypeScript, contracts drift, strict core
+all-target Clippy, formatting, web/API builds and docs validation.
+
+The original browser assertion exposed a remaining post-save selection race on
+Windows. Local frontend corrections on `codex/review-m7-slice3-repair` guard
+late artifact reads/refreshes by selection generation and reset the document
+buffer whenever editing opens. The full deliverable browser workflow then passed
+1/1, including the original version-switch assertion, a strengthened Cancel-draft
+check, export, restart and fresh backup/restore. UI/contracts, TypeScript and web
+build passed again. Rust/backend code is unchanged from the repair baseline.
+Evidence: `docs/reviews/windows-m7-slice3-repair-acceptance.md`.
+
+Existing source-revision browser regression also passed 1/1 on the final tree,
+including its version-switch, restart and restore checks. Both browser workflows
+passed with unchanged timeouts. All three review findings are closed for this
+focused Windows backend/browser scope; preserve the local frontend corrections
+when integrating rather than reverting to the unmodified Muse tip.
+Native desktop acceptance and
+preview promotion of Slices 2–3 remain separate; existing preview/data preserved.
+Synthetic providers only; no generated-code execution, paid inference, pushes,
+master merge or remote CI. Production credential/provider/G1/CI gates remain open.
+
 ## 2026-10-26 — M7 Slice 3 acceptance repair
 
 Branch `muse/m7-slice3-repair` over the reviewed tip `bd72a4f`

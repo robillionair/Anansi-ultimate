@@ -44,6 +44,8 @@ export function Projects({ client, workspaceId }: { client: Client; workspaceId:
   const [artifactVersions, setArtifactVersions] = useState<ArtifactRecord[]>([]);
   const [selectedArtifact, setSelectedArtifact] = useState<string>('');
   const [viewedArtifact, setViewedArtifact] = useState<ArtifactDetails | null>(null);
+  const artifactViewEpoch = useRef(0);
+  const [viewedArtifactEpoch, setViewedArtifactEpoch] = useState(0);
   const [artifactForm, setArtifactForm] = useState({ type: 'note', title: '', body: '', privacy: 'private', sources: '' });
   const [reviseForm, setReviseForm] = useState({ title: '', body: '', sources: '' });
 
@@ -113,6 +115,7 @@ export function Projects({ client, workspaceId }: { client: Client; workspaceId:
   }
 
   async function open(id: string) {
+    artifactViewEpoch.current += 1;
     // Switching projects supersedes any generation in flight:
     // cancel it and invalidate its late responses (the run
     // controller's epoch does the invalidating).
@@ -295,24 +298,43 @@ export function Projects({ client, workspaceId }: { client: Client; workspaceId:
   }
 
   async function openArtifact(artifactId: string) {
+    const epoch = ++artifactViewEpoch.current;
     const versions = await client.listProjectArtifactVersions(workspaceId, artifactId);
+    if (epoch !== artifactViewEpoch.current) return;
     setSelectedArtifact(artifactId);
     setArtifactVersions(versions.versions);
     const latest = versions.versions[versions.versions.length - 1];
     if (latest) {
       const details = await client.readProjectArtifact(workspaceId, artifactId, latest.version);
+      if (epoch !== artifactViewEpoch.current) return;
       setViewedArtifact(details);
+      setViewedArtifactEpoch(epoch);
       setReviseForm({ title: details.artifact.title, body: details.body, sources: details.artifact.sourceReferences.join('\n') });
     }
   }
 
   async function viewArtifactVersion(artifactId: string, version: number) {
+    const epoch = ++artifactViewEpoch.current;
     const details = await client.readProjectArtifact(workspaceId, artifactId, version);
+    if (epoch !== artifactViewEpoch.current) return;
     setViewedArtifact(details);
+    setViewedArtifactEpoch(epoch);
+  }
+
+  // A late post-save refresh must not override a newer explicit selection.
+  // Callbacks capture the generation of the rendered view, not a pending read.
+  async function refreshSavedArtifact(projectId: string, artifactId: string, epoch: number) {
+    if (epoch !== artifactViewEpoch.current) return;
+    const artList = await client.listProjectArtifacts(workspaceId, projectId);
+    if (epoch !== artifactViewEpoch.current) return;
+    setArtifacts(artList.artifacts);
+    await openArtifact(artifactId);
   }
 
   useEffect(() => {
+    artifactViewEpoch.current += 1;
     void run(refresh);
+    return () => { artifactViewEpoch.current += 1; };
   }, [client, workspaceId]);
 
   return (
@@ -759,13 +781,7 @@ export function Projects({ client, workspaceId }: { client: Client; workspaceId:
                                 pkg={viewedArtifact.artifact}
                                 doc={parsedPackage}
                                 notify={(message, isError) => { if (isError) setError(message); else setNotice(message); }}
-                                onSaved={() => {
-                                  void (async () => {
-                                    const artList = await client.listProjectArtifacts(workspaceId, current.memory.id);
-                                    setArtifacts(artList.artifacts);
-                                    await openArtifact(viewedArtifact.artifact.artifactId);
-                                  })();
-                                }}
+                                onSaved={() => { void refreshSavedArtifact(current.memory.id, viewedArtifact.artifact.artifactId, viewedArtifactEpoch); }}
                               />
                             )}
                             {current && (
@@ -800,13 +816,7 @@ export function Projects({ client, workspaceId }: { client: Client; workspaceId:
                             client={client}
                             workspaceId={workspaceId}
                             notify={(message, isError) => { if (isError) setError(message); else setNotice(message); }}
-                            onSaved={() => {
-                              void (async () => {
-                                const artList = await client.listProjectArtifacts(workspaceId, current.memory.id);
-                                setArtifacts(artList.artifacts);
-                                await openArtifact(viewedArtifact.artifact.artifactId);
-                              })();
-                            }}
+                            onSaved={() => { void refreshSavedArtifact(current.memory.id, viewedArtifact.artifact.artifactId, viewedArtifactEpoch); }}
                           />
                         );
                       }

@@ -274,6 +274,10 @@ test('product forge deliverable: suggest -> edit -> save -> export -> revise -> 
     await expect(page.getByText('Viewing version 1 of Deliverable: Bean Stock Log', { exact: false })).toBeVisible();
     await page.getByRole('button', { name: 'Revise documentation' }).click();
     await expect(page.locator('#forge-deliverable-architecture')).toHaveValue('Model architecture: index.html loads app.js; state lives in localStorage.');
+    await page.locator('#forge-deliverable-architecture').fill('Discard this acceptance-test draft.');
+    await page.getByRole('button', { name: 'Cancel editing', exact: true }).click();
+    await page.getByRole('button', { name: 'Revise documentation' }).click();
+    await expect(page.locator('#forge-deliverable-architecture')).toHaveValue('Model architecture: index.html loads app.js; state lives in localStorage.');
     await page.getByRole('button', { name: 'Cancel editing', exact: true }).click();
 
     // Restart/reopen: the revised documentation is current.

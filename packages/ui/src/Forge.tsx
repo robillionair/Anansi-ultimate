@@ -961,6 +961,14 @@ export function DeliverableView(props: {
     setDocs(next);
     setEditing(false);
   }
+  function startEditing() {
+    const next: Record<string, string> = {};
+    for (const d of doc.documents) {
+      if (d.name !== 'verified-facts.md') next[d.name] = d.content;
+    }
+    setDocs(next);
+    setEditing(true);
+  }
   const [exporting, setExporting] = useState(false);
   const verified = doc.documents.find(d => d.name === 'verified-facts.md');
   async function exportDeliverable() {
@@ -1039,7 +1047,7 @@ export function DeliverableView(props: {
           <button type="button" disabled={exporting} onClick={() => void exportDeliverable()}>
             Export deliverable (.tar)
           </button>{' '}
-          <button type="button" className="secondary" onClick={() => setEditing(true)}>
+          <button type="button" className="secondary" onClick={() => startEditing()}>
             Revise documentation
           </button>
         </div>
