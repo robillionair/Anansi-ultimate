@@ -1,3 +1,23 @@
+## 2026-10-26 — M7 Slice 3 Windows review: three acceptance repairs required
+
+Delivery `cbb95a6960f0bb1379741bdc6a6a34e900611e18` passed supplied Windows
+deliverable tests 6/6, Forge units 11/11, UI/contracts 60/60, TypeScript,
+contracts drift check, strict core all-target Clippy, web/API builds and docs.
+Additional expected-success probes failed: export accepts inconsistent generic
+artifact edits (false production-ready status, wrong specification identity,
+duplicate documents and unsupported format); restore replaces an invalid original
+package pin instead of refusing it; the saved documentation editor retains a v2
+draft after switching to v1. Backend probes: 0 passed / 2 failed. Browser probe:
+1 failed on the new version-switch assertion, with the remaining original workflow
+assertions including restart/restore completing. No preview promotion is approved
+by this review. Application production code is unchanged; review adds tests and
+evidence on `codex/review-m7-slice3`.
+
+Evidence: `docs/reviews/windows-m7-slice3-review.md`; bounded repair assignment:
+`docs/reviews/M7-slice3-repair-assignment.md`. Existing preview and data preserved.
+No generated software execution, real-provider calls, pushes, master merge or CI.
+Standing native credential/live-provider/G1 audit/CI production gates remain open.
+
 ## 2026-10-26 — M7 Slice 3: a complete, reviewable export deliverable
 
 Branch `muse/m7-slice3-deliverable` over the

@@ -574,6 +574,62 @@ fn manual_save_and_deterministic_export() {
 }
 
 #[test]
+fn review_export_rejects_inconsistent_generic_edits() {
+    let fake = start_fake();
+    let f = fixture(&fake);
+    let (_, package_id) = spec_and_package(&f);
+    let saved = save_deliverable(&f, &package_id, 1, manual_docs()).unwrap();
+    let id = saved["artifact"]["artifactId"].as_str().unwrap();
+    let original: Value = serde_json::from_str(saved["body"].as_str().unwrap()).unwrap();
+    let mut accepted = Vec::new();
+    for (index, defect) in [
+        "status",
+        "specification",
+        "duplicate-document",
+        "unknown-format",
+    ]
+    .iter()
+    .enumerate()
+    {
+        let mut edited = original.clone();
+        match *defect {
+            "status" => edited["status"]["productionReady"] = json!(true),
+            "specification" => edited["specArtifactId"] = json!(package_id),
+            "duplicate-document" => {
+                let duplicate = edited["documents"][0].clone();
+                edited["documents"].as_array_mut().unwrap().push(duplicate);
+            }
+            _ => edited["formatVersion"] = json!(99),
+        }
+        let revised = f
+            .core
+            .artifacts_command(
+                "revise",
+                json!({
+                    "contractVersion": 1, "workspaceId": f.ws, "artifactId": id,
+                    "expectedVersion": index + 1, "title": "Deliverable: review fixture",
+                    "body": edited.to_string(), "sourceReferences": []
+                }),
+            )
+            .unwrap();
+        let result = f.core.artifacts_command(
+            "forge-deliverable-export",
+            json!({
+                "contractVersion": 1, "workspaceId": f.ws, "artifactId": id,
+                "version": revised["artifact"]["version"]
+            }),
+        );
+        if result.is_ok() {
+            accepted.push(*defect);
+        }
+    }
+    assert!(
+        accepted.is_empty(),
+        "export accepted inconsistent generic edits: {accepted:?}"
+    );
+}
+
+#[test]
 fn model_draft_edit_and_save() {
     let fake = start_fake();
     let f = fixture(&fake);
@@ -1084,4 +1140,48 @@ fn restart_and_fresh_restore_preserve_deliverable_and_export() {
         )
         .unwrap();
     assert_eq!(status["approved"], true);
+}
+
+#[test]
+fn review_restore_rejects_mismatched_pinned_package_hash() {
+    let fake = start_fake();
+    let f = fixture(&fake);
+    let (_, package_id) = spec_and_package(&f);
+    let saved = save_deliverable(&f, &package_id, 1, manual_docs()).unwrap();
+    let id = saved["artifact"]["artifactId"].as_str().unwrap();
+    let mut edited: Value = serde_json::from_str(saved["body"].as_str().unwrap()).unwrap();
+    edited["packageContentHash"] = json!("0".repeat(64));
+    f.core
+        .artifacts_command(
+            "revise",
+            json!({
+                "contractVersion": 1, "workspaceId": f.ws, "artifactId": id,
+                "expectedVersion": 1, "title": "Deliverable: mismatched pin",
+                "body": edited.to_string(), "sourceReferences": []
+            }),
+        )
+        .unwrap();
+    assert!(
+        f.core
+            .artifacts_command(
+                "forge-deliverable-export",
+                json!({
+                    "contractVersion": 1, "workspaceId": f.ws, "artifactId": id, "version": 2
+                })
+            )
+            .is_err(),
+        "control: the source deliverable is invalid before restore"
+    );
+    let bytes = backup_bytes(
+        f._dir.path(),
+        &Storage::new(f._dir.path().to_path_buf()).unwrap(),
+        &f.ws,
+    );
+    let fresh_dir = tempfile::tempdir().unwrap();
+    let fresh = Core::with_storage_root(fresh_dir.path().to_path_buf());
+    let result = try_upload_restore(&fresh, &bytes, "Invalid pin review");
+    assert!(
+        result.is_err(),
+        "restore silently repaired an invalid original pin: {result:?}"
+    );
 }
