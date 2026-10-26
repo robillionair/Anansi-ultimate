@@ -443,3 +443,115 @@ fn specification_approval_transfers_to_the_restored_version_only() {
     assert_eq!(status["approved"], true);
     assert_eq!(status["approvalArtifactId"], r_approval_id);
 }
+
+#[test]
+fn revised_package_version_restores_with_remapped_parent_reference() {
+    // A Slice 2 revised version (same artifact, v2, with
+    // parent fields) restores with its parent reference
+    // remapped to the restored package id.
+    let dir = tempfile::tempdir().unwrap();
+    let core = Core::with_storage_root(dir.path().to_path_buf());
+    let source = Storage::new(dir.path().to_path_buf()).unwrap();
+    let ws = workspace(&core, "Forge Revised Source");
+    let proj = project(&core, &ws);
+    let idea = register(
+        &core,
+        &ws,
+        &proj,
+        "idea",
+        "Idea set",
+        "{\"topic\":\"t\",\"concepts\":[]}".to_string(),
+        vec![],
+    );
+    let spec = register(
+        &core,
+        &ws,
+        &proj,
+        "specification",
+        "Product specification: Bean Stock Log",
+        spec_body(&idea),
+        vec![format!("artifact://{idea}@v1")],
+    );
+    let package = register(
+        &core,
+        &ws,
+        &proj,
+        "source-package",
+        "Source package: Bean Stock Log",
+        package_body(&spec, &idea),
+        vec![format!("artifact://{spec}@v1")],
+    );
+    let mut revised: Value = serde_json::from_str(&package_body(&spec, &idea)).unwrap();
+    revised["parentPackageArtifactId"] = json!(package);
+    revised["parentPackageVersion"] = json!(1);
+    revised["revisionInstructions"] = json!("Update the heading.");
+    revised["files"] = json!([
+        { "path": "index.html", "content": "<!doctype html><title>Bean — revised</title>" },
+        { "path": "README.md", "content": "# Bean Stock Log\nPrototype." }
+    ]);
+    core.artifacts_command(
+        "revise",
+        json!({
+            "contractVersion": 1, "workspaceId": ws,
+            "artifactId": package, "expectedVersion": 1,
+            "title": "Source package: Bean Stock Log", "body": revised.to_string(),
+            "sourceReferences": [format!("artifact://{spec}@v1")]
+        }),
+    )
+    .unwrap();
+    let bytes = backup_bytes(dir.path(), &source, &ws);
+
+    let fresh_dir = tempfile::tempdir().unwrap();
+    let fresh = Core::with_storage_root(fresh_dir.path().to_path_buf());
+    let restored = try_upload_restore(&fresh, &bytes, "Forge Revised Restored").unwrap();
+    let restored_ws = restored["workspaces"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let projects = fresh
+        .memory_command(
+            "list",
+            json!({ "contractVersion": 1, "workspaceId": restored_ws, "kind": "project" }),
+        )
+        .unwrap();
+    let restored_project = projects["memories"][0]["id"].as_str().unwrap().to_string();
+    let list = fresh
+        .artifacts_command(
+            "list",
+            json!({ "contractVersion": 1, "workspaceId": restored_ws, "projectId": restored_project }),
+        )
+        .unwrap();
+    let r_package = list["artifacts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["type"] == "source-package")
+        .unwrap();
+    let r_package_id = r_package["artifactId"].as_str().unwrap().to_string();
+    let r_spec = list["artifacts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["type"] == "specification")
+        .unwrap();
+    let r_spec_id = r_spec["artifactId"].as_str().unwrap().to_string();
+    let read = fresh
+        .artifacts_command(
+            "read",
+            json!({ "contractVersion": 1, "workspaceId": restored_ws, "artifactId": r_package_id, "version": 2 }),
+        )
+        .unwrap();
+    let doc: Value = serde_json::from_str(read["body"].as_str().unwrap()).unwrap();
+    assert_eq!(doc["parentPackageArtifactId"], r_package_id);
+    assert_eq!(doc["parentPackageVersion"], 1);
+    assert_eq!(doc["revisionInstructions"], "Update the heading.");
+    assert_eq!(doc["specArtifactId"], r_spec_id);
+    // The restored v2 still exports.
+    let export = fresh
+        .artifacts_command(
+            "forge-export",
+            json!({ "contractVersion": 1, "workspaceId": restored_ws, "artifactId": r_package_id, "version": 2 }),
+        )
+        .unwrap();
+    assert!(export["files"].as_array().unwrap().iter().any(|p| p == "index.html"));
+}

@@ -38,9 +38,11 @@ function pollResponse(runId: string, status: string): ForgePollResponse {
 class FakeClient implements ForgeClient {
   specStarts: Deferred<{ runId: string }>[] = [];
   buildStarts: Deferred<{ runId: string }>[] = [];
+  reviseStarts: Deferred<{ runId: string }>[] = [];
   polls: Deferred<ForgePollResponse>[] = [];
   specCancels: string[] = [];
   buildCancels: string[] = [];
+  reviseCancels: string[] = [];
 
   startForgeSpec() {
     const d = deferred<{ runId: string }>();
@@ -52,6 +54,11 @@ class FakeClient implements ForgeClient {
     this.buildStarts.push(d);
     return d.promise as ReturnType<ForgeClient['startForgeBuild']>;
   }
+  startForgeRevise() {
+    const d = deferred<{ runId: string }>();
+    this.reviseStarts.push(d);
+    return d.promise as ReturnType<ForgeClient['startForgeRevise']>;
+  }
   pollForgeSpec() {
     const d = deferred<ForgePollResponse>();
     this.polls.push(d);
@@ -61,6 +68,11 @@ class FakeClient implements ForgeClient {
     const d = deferred<ForgePollResponse>();
     this.polls.push(d);
     return d.promise as ReturnType<ForgeClient['pollForgeBuild']>;
+  }
+  pollForgeRevise() {
+    const d = deferred<ForgePollResponse>();
+    this.polls.push(d);
+    return d.promise as ReturnType<ForgeClient['pollForgeRevise']>;
   }
   cancelForgeSpec(_workspaceId: string, runId: string) {
     this.specCancels.push(runId);
@@ -72,6 +84,12 @@ class FakeClient implements ForgeClient {
     this.buildCancels.push(runId);
     return Promise.resolve(pollResponse(runId, 'cancelled')) as ReturnType<
       ForgeClient['cancelForgeBuild']
+    >;
+  }
+  cancelForgeRevise(_workspaceId: string, runId: string) {
+    this.reviseCancels.push(runId);
+    return Promise.resolve(pollResponse(runId, 'cancelled')) as ReturnType<
+      ForgeClient['cancelForgeRevise']
     >;
   }
 }
@@ -96,6 +114,27 @@ test('a spec controller drives only spec operations through completion', async (
   assert.equal(client.buildStarts.length, 0);
   const polling = controller.pollOnce();
   client.polls[0].resolve(pollResponse('run-1', 'complete'));
+  const polled = await polling;
+  assert.equal(polled?.status, 'complete');
+  assert.equal(controller.currentRunId, '');
+});
+
+test('a revise controller drives only revise operations through completion', async () => {
+  const client = new FakeClient();
+  const controller = new ForgeRunController(client, 'ws', 'revise');
+  const starting = controller.start({
+    projectId: 'p',
+    packageArtifactId: 'pkg',
+    packageVersion: 1,
+    instructions: 'Update the heading.',
+  });
+  client.reviseStarts[0].resolve({ runId: 'run-r' });
+  const started = await starting;
+  assert.equal(started?.runId, 'run-r');
+  assert.equal(client.specStarts.length, 0);
+  assert.equal(client.buildStarts.length, 0);
+  const polling = controller.pollOnce();
+  client.polls[0].resolve(pollResponse('run-r', 'complete'));
   const polled = await polling;
   assert.equal(polled?.status, 'complete');
   assert.equal(controller.currentRunId, '');
