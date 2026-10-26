@@ -1,3 +1,28 @@
+## 2026-10-26 — M7 Slice 3 acceptance repair
+
+Branch `muse/m7-slice3-repair` over the reviewed tip `bd72a4f`
+(`codex/review-m7-slice3`). All three review defects repaired
+with no new features: export validates the full saved
+deliverable record against backend-resolved provenance
+(format/version, spec identity, concept, pinned hashes,
+all-false status, exact unique document set, origins,
+bounds); restore validates original package/spec bindings,
+ownership, versions and pinned hashes before any id or hash
+remapping, refusing invalid originals with no destination
+state published; the saved-document editor is keyed by full
+record/version identity with cancel resetting its buffer.
+The review browser probe is consolidated into the canonical
+deliverable spec as a hard assertion; the review spec is
+deleted. Linux evidence: full core 244/248 (only the 4
+environmental live-Ollama failures), deliverable suite 9/9
+incl. both review tests, providers+API 144/0, node 60/60,
+TypeScript, contracts drift, strict Clippy, formatting,
+docs PASS, e2e canonical 12/12. Record:
+`docs/handoffs/M7-slice3-repair-addendum.md`; design:
+`docs/handoffs/M7-slice3-repair-design.md`. Windows
+verification of this repair remains pending; no preview
+promotion is claimed.
+
 ## 2026-10-26 — M7 Slice 3 Windows review: three acceptance repairs required
 
 Delivery `cbb95a6960f0bb1379741bdc6a6a34e900611e18` passed supplied Windows
