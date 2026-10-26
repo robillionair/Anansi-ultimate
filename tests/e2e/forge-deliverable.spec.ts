@@ -265,6 +265,17 @@ test('product forge deliverable: suggest -> edit -> save -> export -> revise -> 
     await expect(page.getByText(/Documentation revised as deliverable version 2/).first()).toBeVisible();
     expect(await versionCount(workspaceId, deliverableId)).toBe(2);
 
+    // Version switch: editing an earlier version must
+    // start from its own text, never a later version's
+    // draft, and cancelling must leave no draft behind.
+    // (Consolidated from the Slice 3 review probe; its
+    // soft assertion was diagnostic only.)
+    await page.getByRole('button', { name: 'View version 1', exact: true }).click();
+    await expect(page.getByText('Viewing version 1 of Deliverable: Bean Stock Log', { exact: false })).toBeVisible();
+    await page.getByRole('button', { name: 'Revise documentation' }).click();
+    await expect(page.locator('#forge-deliverable-architecture')).toHaveValue('Model architecture: index.html loads app.js; state lives in localStorage.');
+    await page.getByRole('button', { name: 'Cancel editing', exact: true }).click();
+
     // Restart/reopen: the revised documentation is current.
     await stopApi();
     await startApi();
