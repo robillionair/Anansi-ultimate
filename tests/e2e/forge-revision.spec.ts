@@ -292,12 +292,22 @@ test('product forge revision: open package -> revise -> inspect diff -> reject -
     const landingId = landing.body.workspace.id as string;
     const begin = await call('jobs', 'upload-begin', { workspaceId: landingId, bytes: tar.length, sha256, plaintextConsent: true });
     const uploadId = begin.body.id as string;
+    // The import job id and artifact id are published on
+    // the finished upload-part's job, not on upload-begin;
+    // preview/restore address that job, not the upload.
+    let uploadArtifactId = '';
+    let importJobId = '';
     for (let offset = 0; offset < tar.length; offset += 65536) {
       const end = Math.min(offset + 65536, tar.length);
-      await call('jobs', 'upload-part', { workspaceId: landingId, id: uploadId, offset, bytes: Array.from(tar.subarray(offset, end)), finish: end === tar.length });
+      const part = await call('jobs', 'upload-part', { workspaceId: landingId, id: uploadId, offset, bytes: Array.from(tar.subarray(offset, end)), finish: end === tar.length });
+      if (part.body.job?.artifactId) uploadArtifactId = part.body.job.artifactId as string;
+      if (part.body.job?.id) importJobId = part.body.job.id as string;
     }
-    const preview = await call('jobs', 'preview', { workspaceId: landingId, jobId: uploadId, artifactId: begin.body.artifactId });
-    const restored = await call('jobs', 'restore', { workspaceId: landingId, jobId: uploadId, artifactId: begin.body.artifactId, name: 'Forge Revised Restored', expectedHash: preview.body.sha256, confirm: true });
+    expect(uploadArtifactId).not.toBe('');
+    expect(importJobId).not.toBe('');
+    const preview = await call('jobs', 'preview', { workspaceId: landingId, jobId: importJobId, artifactId: uploadArtifactId });
+    expect(preview.status).toBe(200);
+    const restored = await call('jobs', 'restore', { workspaceId: landingId, jobId: importJobId, artifactId: uploadArtifactId, name: 'Forge Revised Restored', expectedHash: preview.body.sha256, confirm: true });
     expect(restored.status).toBe(200);
     const restoredWs = (restored.body.workspaces as Array<Record<string, any>>)[0].id as string;
     expect(restoredWs).not.toBe(workspaceId);
