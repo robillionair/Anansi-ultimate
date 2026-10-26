@@ -240,8 +240,8 @@ test('product forge deliverable: suggest -> edit -> save -> export -> revise -> 
     // The saved deliverable shows origins and verified facts.
     await artifacts.getByRole('button', { name: 'Deliverable: Bean Stock Log' }).click();
     await expect(page.getByRole('heading', { name: 'Deliverable: Bean Stock Log' })).toBeVisible();
-    await expect(page.getByText('Usage (edited by the user)')).toBeVisible();
-    await expect(page.getByText('(model)', { exact: false }).first()).toBeVisible();
+    await expect(page.locator('pre.provider-output').filter({ hasText: 'Usage (edited by the user)' }).first()).toBeVisible();
+    await expect(page.locator('h6', { hasText: '(model)' }).first()).toBeVisible();
     await expect(page.getByText('Verified facts above were computed by ANANSI')).toBeVisible();
 
     // Export via the API: deterministic archive contents.
@@ -270,7 +270,7 @@ test('product forge deliverable: suggest -> edit -> save -> export -> revise -> 
     await startApi();
     await pairAndOpen(workspaceId);
     await artifacts.getByRole('button', { name: 'Deliverable: Bean Stock Log' }).click();
-    await expect(page.getByText('Architecture (revised by the user)')).toBeVisible();
+    await expect(page.locator('pre.provider-output').filter({ hasText: 'Architecture (revised by the user)' }).first()).toBeVisible();
 
     // Backup the workspace and restore into a fresh workspace
     // through the same job routes the Backups UI uses, then
@@ -322,7 +322,7 @@ test('product forge deliverable: suggest -> edit -> save -> export -> revise -> 
 
     await pairAndOpen(restoredWs);
     await artifacts.getByRole('button', { name: 'Deliverable: Bean Stock Log' }).click();
-    await expect(page.getByText('Architecture (revised by the user)')).toBeVisible();
+    await expect(page.locator('pre.provider-output').filter({ hasText: 'Architecture (revised by the user)' }).first()).toBeVisible();
     // The restored deliverable still exports, and its
     // manifest names the restored package — not the
     // source workspace's.
