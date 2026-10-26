@@ -833,7 +833,11 @@ impl Core {
             | "forge-build-start"
             | "forge-build-poll"
             | "forge-build-cancel"
-            | "forge-build-save" => {
+            | "forge-build-save"
+            | "forge-revise-start"
+            | "forge-revise-poll"
+            | "forge-revise-cancel"
+            | "forge-revise-save" => {
                 // The session scope arrives only via
                 // `callerContext`, which the API layer stamps from
                 // the authenticated token (overwriting client
@@ -940,6 +944,7 @@ impl Core {
                         | "opportunities-generate-start"
                         | "forge-spec-start"
                         | "forge-build-start"
+                        | "forge-revise-start"
                 ) && !crate::provider_dispatch::has_config(&scope)
                     && let (Ok(root), Some(wid)) = (self.storage_root(), &workspace_id)
                     && let Some(json) = crate::provider_dispatch::load_config_file(&root, wid)?

@@ -10,6 +10,7 @@ use anansi_core::evaluations::{
 };
 use anansi_core::forge::{
     DevelopmentPlan, ForgeAnswers, ForgeBuildStartRequest, ForgeExportRequest, ForgeExportResponse,
+    ForgeReviseStartRequest, RevisionDiff,
     ForgePollResponse, ForgeRunRequest, ForgeSaveResponse, ForgeSpecApprovalStatusRequest,
     ForgeSpecApprovalStatusResponse, ForgeSpecApproveRequest, ForgeSpecApproveResponse,
     ForgeSpecStartRequest, ForgeStartResponse, ProductSpec, ProductSpecDoc, SourceFile,
@@ -97,6 +98,8 @@ fn main() {
         "ForgeSpecApprovalStatusResponse":schemars::schema_for!(ForgeSpecApprovalStatusResponse),
         "SpecificationApprovalDoc":schemars::schema_for!(SpecificationApprovalDoc),
         "ForgeBuildStartRequest":schemars::schema_for!(ForgeBuildStartRequest),
+        "ForgeReviseStartRequest":schemars::schema_for!(ForgeReviseStartRequest),
+        "RevisionDiff":schemars::schema_for!(RevisionDiff),
         "ForgeRunRequest":schemars::schema_for!(ForgeRunRequest),
         "ForgeStartResponse":schemars::schema_for!(ForgeStartResponse),
         "ForgePollResponse":schemars::schema_for!(ForgePollResponse),

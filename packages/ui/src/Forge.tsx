@@ -49,13 +49,21 @@ const UNAVAILABLE_STAGES: Array<[string, string]> = [
   ['Deployment', 'Unavailable — this prototype is not deployed anywhere; it is a local source package.'],
 ];
 
-export function PipelineStages({ savedStages }: { savedStages: string[] }) {
+export function PipelineStages(props: {
+  savedStages?: string[];
+  generatedStages?: string[];
+}) {
+  const savedStages = props.savedStages ?? [];
+  const generatedStages = props.generatedStages ?? [];
   return (
     <div>
       <h5>Pipeline (§30)</h5>
       <ul aria-label="Forge pipeline stages">
         {savedStages.map(stage => (
           <li key={stage}>{stage}: Completed — generated and saved as a project artifact.</li>
+        ))}
+        {generatedStages.map(stage => (
+          <li key={stage}>{stage}: Generated — not yet saved as a project artifact.</li>
         ))}
         {UNAVAILABLE_STAGES.map(([stage, reason]) => (
           <li key={stage}>{stage}: {reason}</li>
@@ -171,7 +179,11 @@ export function SourcePackageView(props: {
       )}
       <h5>Limitations</h5>
       <ul>{doc.limitations.map((l, i) => <li key={i}>{l}</li>)}</ul>
-      <PipelineStages savedStages={['Product specification', 'Development plan', 'Source generation']} />
+      {props.artifact ? (
+        <PipelineStages savedStages={['Product specification', 'Development plan', 'Source generation']} />
+      ) : (
+        <PipelineStages generatedStages={['Product specification', 'Development plan', 'Source generation']} />
+      )}
       {props.artifact && props.client && (
         <button type="button" disabled={exporting} onClick={() => void exportPackage()}>
           Export source package (.tar)
@@ -368,6 +380,7 @@ export function ForgeBuildPanel(props: {
   const [run, setRun] = useState<ForgePollResponse | null>(null);
   const [disclosure, setDisclosure] = useState<DisclosureRecord | null>(null);
   const [savedId, setSavedId] = useState('');
+  const [savedArtifact, setSavedArtifact] = useState<ArtifactRecord | null>(null);
   const [approval, setApproval] = useState<ForgeSpecApprovalStatusResponse | null>(null);
   const [approving, setApproving] = useState(false);
   const controllerRef = useRef<ForgeRunController | null>(null);
@@ -430,6 +443,7 @@ export function ForgeBuildPanel(props: {
   const running = run?.status === 'running' || run?.status === 'cancelling';
   async function start() {
     setSavedId('');
+    setSavedArtifact(null);
     setDisclosure(null);
     try {
       const started = await controller().start({
@@ -451,6 +465,7 @@ export function ForgeBuildPanel(props: {
     try {
       const saved = await client.saveForgeBuild(workspaceId, run.runId);
       setSavedId(saved.artifact.artifactId);
+      setSavedArtifact(saved.artifact);
       props.notify(
         saved.alreadySaved
           ? 'This source package was already saved as an artifact.'
@@ -519,11 +534,171 @@ export function ForgeBuildPanel(props: {
       {disclosure && <DisclosurePanel disclosure={disclosure} />}
       {run?.sourcePackage && (
         <div>
-          <SourcePackageView doc={run.sourcePackage} />
+          <SourcePackageView
+            doc={run.sourcePackage}
+            artifact={savedArtifact ?? undefined}
+            client={client}
+            workspaceId={workspaceId}
+            notify={props.notify}
+          />
           {savedId ? (
             <p role="status">Source package saved as artifact {savedId}. Open it from the Artifacts list to inspect and export it.</p>
           ) : (
             <button type="button" onClick={() => void save()}>Save source package as artifact</button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function ForgeRevisePanel(props: {
+  client: Client;
+  workspaceId: string;
+  projectId: string;
+  pkg: ArtifactRecord;
+  doc: SourcePackageDoc;
+  notify: Notify;
+  onSaved: () => void;
+}) {
+  const { client, workspaceId, pkg, doc } = props;
+  const [instructions, setInstructions] = useState('');
+  const [lock, setLock] = useState(true);
+  const [run, setRun] = useState<ForgePollResponse | null>(null);
+  const [disclosure, setDisclosure] = useState<DisclosureRecord | null>(null);
+  const [savedVersion, setSavedVersion] = useState(0);
+  const [rejected, setRejected] = useState(false);
+  const controllerRef = useRef<ForgeRunController | null>(null);
+  function controller(): ForgeRunController {
+    if (!controllerRef.current) {
+      controllerRef.current = new ForgeRunController(client, workspaceId, 'revise');
+    }
+    return controllerRef.current;
+  }
+  useEffect(() => () => {
+    void controllerRef.current?.reset();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pkg.artifactId, pkg.version]);
+  useForgePolling(controller, run, setRun, props.notify);
+  const running = run?.status === 'running' || run?.status === 'cancelling';
+  async function start(e: React.FormEvent) {
+    e.preventDefault();
+    setSavedVersion(0);
+    setRejected(false);
+    setDisclosure(null);
+    try {
+      const started = await controller().start({
+        projectId: props.projectId,
+        packageArtifactId: pkg.artifactId,
+        packageVersion: pkg.version,
+        instructions,
+        zeroCostLock: lock,
+      });
+      if (started) {
+        if (started.disclosure) setDisclosure(started.disclosure);
+        setRun({ contractVersion: 1, runId: started.runId, status: 'running', partialChars: 0 });
+      }
+    } catch (err) {
+      props.notify(err instanceof Error ? err.message : 'Could not start the package revision.', true);
+    }
+  }
+  async function accept() {
+    if (!run) return;
+    try {
+      const saved = await client.saveForgeRevise(workspaceId, run.runId);
+      setSavedVersion(saved.artifact.version);
+      props.notify(
+        saved.alreadySaved
+          ? 'This revision was already saved.'
+          : `Revision saved as version ${saved.artifact.version} of artifact ${saved.artifact.artifactId}.`,
+        false,
+      );
+      props.onSaved();
+    } catch (err) {
+      props.notify(err instanceof Error ? err.message : 'Could not save the revision.', true);
+    }
+  }
+  function reject() {
+    // Rejection saves nothing: no save call is made, so the
+    // parent package version is untouched by construction.
+    setRun(null);
+    setRejected(true);
+  }
+  const diff = run?.revisionDiff;
+  return (
+    <div>
+      <h4>Revise this source package</h4>
+      <p className="help">
+        Revising artifact {pkg.artifactId} version {pkg.version}, from specification artifact{' '}
+        {doc.specArtifactId} version {doc.specVersion}. The original version stays unchanged
+        until you explicitly accept a revision, which saves a new version of this artifact.
+        A revision never switches specifications and never creates specification approval:
+        the pinned specification version must already be approved, or the revision is refused
+        before any provider traffic. The proposed files are inert text — ANANSI does not run,
+        preview, build or test them.
+      </p>
+      <form onSubmit={e => void start(e)}>
+        <label htmlFor="forge-revision-instructions">Revision instructions — what should change?</label>
+        <textarea
+          id="forge-revision-instructions"
+          rows={3}
+          value={instructions}
+          onChange={e => setInstructions(e.target.value)}
+          required
+        />
+        <label>
+          <input type="checkbox" checked={lock} onChange={e => setLock(e.target.checked)} /> Zero-Cost Lock (never spend)
+        </label>
+        <button type="submit" disabled={running}>Request revision</button>
+        {running && (
+          <button
+            type="button"
+            className="secondary"
+            disabled={run?.status === 'cancelling'}
+            onClick={() => void (async () => {
+              const cancelled = await controller().cancel();
+              if (cancelled) setRun(cancelled);
+            })()}
+          >
+            Cancel
+          </button>
+        )}
+      </form>
+      {run?.status === 'running' && <p role="status">Revising… {run.partialChars} characters received.</p>}
+      {run?.status === 'cancelling' && <p role="status">Cancelling… waiting for the provider stream to stop.</p>}
+      {run?.status === 'cancelled' && <p role="status">Revision cancelled. Nothing was saved.</p>}
+      {run && (run.status === 'failed' || run.status === 'invalid') && (
+        <p role="alert">Revision {run.status}: {run.error ?? 'the provider did not produce a usable revised package.'} Nothing was saved; you can try again.</p>
+      )}
+      {rejected && <p role="status">Revision rejected. Nothing was saved; the original package version is unchanged.</p>}
+      {disclosure && <DisclosurePanel disclosure={disclosure} />}
+      {run?.sourcePackage && diff && (
+        <div>
+          <h5>Proposed changes (against version {pkg.version})</h5>
+          {diff.added.length > 0 && (
+            <p>Added: <span aria-label="Revision added files">{diff.added.join(', ')}</span></p>
+          )}
+          {diff.removed.length > 0 && (
+            <p>Removed: <span aria-label="Revision removed files">{diff.removed.join(', ')}</span></p>
+          )}
+          {diff.changed.length > 0 && (
+            <p>Changed: <span aria-label="Revision changed files">{diff.changed.join(', ')}</span></p>
+          )}
+          {diff.added.length === 0 && diff.removed.length === 0 && diff.changed.length === 0 && (
+            <p>No file changes proposed.</p>
+          )}
+          <SourcePackageView doc={run.sourcePackage} />
+          {savedVersion > 0 ? (
+            <p role="status">Revision saved as version {savedVersion}. Open the new version from the Artifacts list to inspect and export it.</p>
+          ) : (
+            <div>
+              <button type="button" onClick={() => void accept()}>
+                Accept revision — save as new version
+              </button>{' '}
+              <button type="button" className="secondary" onClick={() => reject()}>
+                Reject revision — save nothing
+              </button>
+            </div>
           )}
         </div>
       )}

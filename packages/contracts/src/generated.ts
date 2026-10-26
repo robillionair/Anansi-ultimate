@@ -596,6 +596,11 @@ export interface ForgePollResponse {
   disclosure?: DisclosureRecord | null;
   error?: string | null;
   partialChars: number;
+  /**
+   * Slice 2 only: diff of a proposed revision against
+   * its parent package, computed by the backend.
+   */
+  revisionDiff?: RevisionDiff | null;
   runId: string;
   sourcePackage?: SourcePackageDoc | null;
   spec?: ProductSpecDoc | null;
@@ -634,6 +639,17 @@ export interface Usage {
   outputTokens: number;
 }
 /**
+ * Server-computed diff between a parent package and a
+ * proposed revision, by path. A path present in both with
+ * different content counts as changed, never as
+ * added+removed. Each list is sorted by path.
+ */
+export interface RevisionDiff {
+  added: string[];
+  changed: string[];
+  removed: string[];
+}
+/**
  * A saved source package: pins the specification version
  * it was generated from, carries the plan and the bounded
  * file set, and states its limitations verbatim.
@@ -644,7 +660,19 @@ export interface SourcePackageDoc {
   format: string;
   formatVersion: number;
   limitations: string[];
+  /**
+   * Slice 2 revision provenance. Absent for Slice 1
+   * packages: the parent is the same artifact at
+   * `parent_package_version`, and the specification
+   * references above are unchanged by a revision.
+   */
+  parentPackageArtifactId?: string | null;
+  parentPackageVersion?: number | null;
   plan: DevelopmentPlan;
+  /**
+   * The user's revision instructions, verbatim.
+   */
+  revisionInstructions?: string | null;
   sourceArtifactId: string;
   sourceVersion: number;
   specArtifactId: string;
@@ -703,6 +731,28 @@ export interface ProductSpec {
   purpose: string;
   summary: string;
   title: string;
+}
+export interface ForgeReviseStartRequest {
+  contractVersion?: number;
+  /**
+   * The user's revision instructions, 1 to 2000 chars.
+   */
+  instructions: string;
+  mode?: string | null;
+  model?: string | null;
+  /**
+   * The saved source-package artifact to revise.
+   */
+  packageArtifactId: string;
+  /**
+   * The exact package version to revise (never "latest").
+   */
+  packageVersion: number;
+  permitId?: string | null;
+  projectId: string;
+  provider?: string | null;
+  workspaceId: string;
+  zeroCostLock?: boolean;
 }
 export interface ForgeRunRequest {
   contractVersion?: number;
@@ -2362,6 +2412,17 @@ export interface Workspace {
   id: string;
   name: string;
 }
+/**
+ * Server-computed diff between a parent package and a
+ * proposed revision, by path. A path present in both with
+ * different content counts as changed, never as
+ * added+removed. Each list is sorted by path.
+ */
+export interface RevisionDiff {
+  added: string[];
+  changed: string[];
+  removed: string[];
+}
 export interface RubricDimension {
   description: string;
   key: string;
@@ -2427,7 +2488,19 @@ export interface SourcePackageDoc {
   format: string;
   formatVersion: number;
   limitations: string[];
+  /**
+   * Slice 2 revision provenance. Absent for Slice 1
+   * packages: the parent is the same artifact at
+   * `parent_package_version`, and the specification
+   * references above are unchanged by a revision.
+   */
+  parentPackageArtifactId?: string | null;
+  parentPackageVersion?: number | null;
   plan: DevelopmentPlan;
+  /**
+   * The user's revision instructions, verbatim.
+   */
+  revisionInstructions?: string | null;
   sourceArtifactId: string;
   sourceVersion: number;
   specArtifactId: string;

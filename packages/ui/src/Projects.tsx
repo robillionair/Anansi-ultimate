@@ -7,6 +7,7 @@ import { IdeaRunController } from './ideaRun';
 import { OpportunityRunController } from './opportunityRun';
 import {
   ForgeBuildPanel,
+  ForgeRevisePanel,
   ForgeSpecPanel,
   SourcePackageView,
   SpecificationView,
@@ -738,13 +739,32 @@ export function Projects({ client, workspaceId }: { client: Client; workspaceId:
                         : null;
                       if (parsedPackage) {
                         return (
-                          <SourcePackageView
-                            doc={parsedPackage}
-                            artifact={viewedArtifact.artifact}
-                            client={client}
-                            workspaceId={workspaceId}
-                            notify={(message, isError) => { if (isError) setError(message); else setNotice(message); }}
-                          />
+                          <div>
+                            <SourcePackageView
+                              doc={parsedPackage}
+                              artifact={viewedArtifact.artifact}
+                              client={client}
+                              workspaceId={workspaceId}
+                              notify={(message, isError) => { if (isError) setError(message); else setNotice(message); }}
+                            />
+                            {current && (
+                              <ForgeRevisePanel
+                                client={client}
+                                workspaceId={workspaceId}
+                                projectId={current.memory.id}
+                                pkg={viewedArtifact.artifact}
+                                doc={parsedPackage}
+                                notify={(message, isError) => { if (isError) setError(message); else setNotice(message); }}
+                                onSaved={() => {
+                                  void (async () => {
+                                    const artList = await client.listProjectArtifacts(workspaceId, current.memory.id);
+                                    setArtifacts(artList.artifacts);
+                                    await openArtifact(viewedArtifact.artifact.artifactId);
+                                  })();
+                                }}
+                              />
+                            )}
+                          </div>
                         );
                       }
                       const parsedOpportunities = parseOpportunitySetBody(viewedArtifact.body);

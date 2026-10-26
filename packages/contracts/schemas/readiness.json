@@ -2696,6 +2696,35 @@
         ],
         "type": "object"
       },
+      "RevisionDiff": {
+        "description": "Server-computed diff between a parent package and a\nproposed revision, by path. A path present in both with\ndifferent content counts as changed, never as\nadded+removed. Each list is sorted by path.",
+        "properties": {
+          "added": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "changed": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "removed": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "added",
+          "removed",
+          "changed"
+        ],
+        "type": "object"
+      },
       "RoutingMode": {
         "description": "User-facing routing modes, verbatim from MASTER_SPEC §17.",
         "enum": [
@@ -2752,8 +2781,30 @@
             },
             "type": "array"
           },
+          "parentPackageArtifactId": {
+            "description": "Slice 2 revision provenance. Absent for Slice 1\npackages: the parent is the same artifact at\n`parent_package_version`, and the specification\nreferences above are unchanged by a revision.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "parentPackageVersion": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
           "plan": {
             "$ref": "#/$defs/DevelopmentPlan"
+          },
+          "revisionInstructions": {
+            "description": "The user's revision instructions, verbatim.",
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "sourceArtifactId": {
             "type": "string"
@@ -2839,6 +2890,17 @@
         "minimum": 0,
         "type": "integer"
       },
+      "revisionDiff": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/RevisionDiff"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "Slice 2 only: diff of a proposed revision against\nits parent package, computed by the backend."
+      },
       "runId": {
         "type": "string"
       },
@@ -2874,6 +2936,76 @@
       "partialChars"
     ],
     "title": "ForgePollResponse",
+    "type": "object"
+  },
+  "ForgeReviseStartRequest": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "contractVersion": {
+        "default": 1,
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "instructions": {
+        "description": "The user's revision instructions, 1 to 2000 chars.",
+        "type": "string"
+      },
+      "mode": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "model": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "packageArtifactId": {
+        "description": "The saved source-package artifact to revise.",
+        "type": "string"
+      },
+      "packageVersion": {
+        "description": "The exact package version to revise (never \"latest\").",
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "permitId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "projectId": {
+        "type": "string"
+      },
+      "provider": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "workspaceId": {
+        "type": "string"
+      },
+      "zeroCostLock": {
+        "default": false,
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "workspaceId",
+      "projectId",
+      "packageArtifactId",
+      "packageVersion",
+      "instructions"
+    ],
+    "title": "ForgeReviseStartRequest",
     "type": "object"
   },
   "ForgeRunRequest": {
@@ -9673,6 +9805,37 @@
     "title": "RestoreResult",
     "type": "object"
   },
+  "RevisionDiff": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "description": "Server-computed diff between a parent package and a\nproposed revision, by path. A path present in both with\ndifferent content counts as changed, never as\nadded+removed. Each list is sorted by path.",
+    "properties": {
+      "added": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "changed": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "removed": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "added",
+      "removed",
+      "changed"
+    ],
+    "title": "RevisionDiff",
+    "type": "object"
+  },
   "RubricDimension": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
@@ -10008,8 +10171,30 @@
         },
         "type": "array"
       },
+      "parentPackageArtifactId": {
+        "description": "Slice 2 revision provenance. Absent for Slice 1\npackages: the parent is the same artifact at\n`parent_package_version`, and the specification\nreferences above are unchanged by a revision.",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "parentPackageVersion": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
       "plan": {
         "$ref": "#/$defs/DevelopmentPlan"
+      },
+      "revisionInstructions": {
+        "description": "The user's revision instructions, verbatim.",
+        "type": [
+          "string",
+          "null"
+        ]
       },
       "sourceArtifactId": {
         "type": "string"

@@ -2,6 +2,7 @@ import type {
   Client,
   ForgeBuildStartInput,
   ForgePollResponse,
+  ForgeReviseStartInput,
   ForgeSpecStartInput,
 } from '@anansi/contracts';
 
@@ -14,9 +15,12 @@ export type ForgeClient = Pick<
   | 'startForgeBuild'
   | 'pollForgeBuild'
   | 'cancelForgeBuild'
+  | 'startForgeRevise'
+  | 'pollForgeRevise'
+  | 'cancelForgeRevise'
 >;
 
-export type ForgeStage = 'spec' | 'build';
+export type ForgeStage = 'spec' | 'build' | 'revise';
 
 /**
  * Owns one Product Forge run lifecycle (specification or
@@ -45,25 +49,37 @@ export class ForgeRunController {
     return this.activeRunId;
   }
 
-  private startCall(input: ForgeSpecStartInput | ForgeBuildStartInput) {
-    return this.stage === 'spec'
-      ? this.client.startForgeSpec(this.workspaceId, input as ForgeSpecStartInput)
-      : this.client.startForgeBuild(this.workspaceId, input as ForgeBuildStartInput);
+  private startCall(input: ForgeSpecStartInput | ForgeBuildStartInput | ForgeReviseStartInput) {
+    if (this.stage === 'spec') {
+      return this.client.startForgeSpec(this.workspaceId, input as ForgeSpecStartInput);
+    }
+    if (this.stage === 'revise') {
+      return this.client.startForgeRevise(this.workspaceId, input as ForgeReviseStartInput);
+    }
+    return this.client.startForgeBuild(this.workspaceId, input as ForgeBuildStartInput);
   }
 
   private pollCall(runId: string) {
-    return this.stage === 'spec'
-      ? this.client.pollForgeSpec(this.workspaceId, runId)
-      : this.client.pollForgeBuild(this.workspaceId, runId);
+    if (this.stage === 'spec') {
+      return this.client.pollForgeSpec(this.workspaceId, runId);
+    }
+    if (this.stage === 'revise') {
+      return this.client.pollForgeRevise(this.workspaceId, runId);
+    }
+    return this.client.pollForgeBuild(this.workspaceId, runId);
   }
 
   private cancelCall(runId: string) {
-    return this.stage === 'spec'
-      ? this.client.cancelForgeSpec(this.workspaceId, runId)
-      : this.client.cancelForgeBuild(this.workspaceId, runId);
+    if (this.stage === 'spec') {
+      return this.client.cancelForgeSpec(this.workspaceId, runId);
+    }
+    if (this.stage === 'revise') {
+      return this.client.cancelForgeRevise(this.workspaceId, runId);
+    }
+    return this.client.cancelForgeBuild(this.workspaceId, runId);
   }
 
-  async start(input: ForgeSpecStartInput | ForgeBuildStartInput) {
+  async start(input: ForgeSpecStartInput | ForgeBuildStartInput | ForgeReviseStartInput) {
     const epoch = ++this.epoch;
     const previous = this.activeRunId;
     this.activeRunId = '';
