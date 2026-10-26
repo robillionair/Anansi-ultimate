@@ -379,6 +379,33 @@ impl Storage {
         &self,
         req: &ArtifactReviseRequest,
     ) -> Result<ArtifactDetails, CommandError> {
+        // The generic revise keeps the latest version's
+        // generator and validation status.
+        let latest = {
+            let connection = self.connection(true)?.ok_or_else(unavailable)?;
+            self.latest_row(&connection, &req.workspace_id, &req.artifact_id)?
+                .ok_or_else(|| not_found("Artifact not found in this workspace."))?
+        };
+        self.artifact_revise_with_generator(
+            req,
+            latest
+                .record
+                .generator
+                .clone()
+                .unwrap_or(serde_json::Value::Null),
+            &latest.record.validation_status,
+        )
+    }
+
+    /// Revise with an explicit generator record (used by
+    /// Forge revise-save so the new version names the
+    /// run that produced it, not the original run).
+    pub(crate) fn artifact_revise_with_generator(
+        &self,
+        req: &ArtifactReviseRequest,
+        generator: Value,
+        validation_status: &str,
+    ) -> Result<ArtifactDetails, CommandError> {
         check_id(&req.workspace_id)?;
         check_id(&req.artifact_id)?;
         validate_write(&req.title, &req.body, &req.source_references)?;
@@ -410,8 +437,8 @@ impl Storage {
                     req.body,
                     hash,
                     serde_json::to_string(&req.source_references).unwrap_or_default(),
-                    latest.record.generator.as_ref().map(|g| g.to_string()),
-                    latest.record.validation_status,
+                    generator.to_string(),
+                    validation_status,
                     latest.record.privacy,
                     now_iso(),
                 ],
