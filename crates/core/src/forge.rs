@@ -3371,6 +3371,82 @@ mod tests {
     }
 
     #[test]
+    fn deliverable_draft_parses_strictly_and_facts_carry_no_ids() {
+        let draft = serde_json::json!({ "documents": [
+            { "name": "architecture.md", "content": "arch" },
+            { "name": "usage.md", "content": "use" },
+            { "name": "limitations.md", "content": "limits" },
+            { "name": "security.md", "content": "secure" },
+            { "name": "changes.md", "content": "first version" },
+        ] })
+        .to_string();
+        let docs = parse_deliverable_draft(&draft).unwrap();
+        assert_eq!(docs.len(), 5);
+        assert!(docs.iter().all(|d| d.origin == "model"));
+        assert_eq!(docs[0].name, "architecture.md");
+        // Missing, duplicate, unexpected and empty docs fail.
+        assert!(parse_deliverable_draft("{\"documents\": []}").is_err());
+        let mut extra = serde_json::from_str::<Value>(&draft).unwrap();
+        extra["documents"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!({ "name": "license.md", "content": "MIT" }));
+        assert!(parse_deliverable_draft(&extra.to_string()).is_err());
+        let mut empty = serde_json::from_str::<Value>(&draft).unwrap();
+        empty["documents"][0]["content"] = json!("   ");
+        assert!(parse_deliverable_draft(&empty.to_string()).is_err());
+        // Verified facts contain file hashes but no
+        // artifact ids or body hashes, so they survive a
+        // restore's reference remapping unchanged.
+        let doc = SourcePackageDoc {
+            format: "anansi-source-package".to_string(),
+            format_version: 1,
+            template: TEMPLATE.to_string(),
+            spec_artifact_id: "spec-id".to_string(),
+            spec_version: 1,
+            source_artifact_id: "src-id".to_string(),
+            source_version: 1,
+            concept_name: "Demo".to_string(),
+            plan: DevelopmentPlan {
+                summary: "s".to_string(),
+                steps: vec![],
+                build_notes: "b".to_string(),
+                testing_notes: "t".to_string(),
+            },
+            files: good_files(),
+            limitations: vec![],
+            parent_package_artifact_id: None,
+            parent_package_version: None,
+            revision_instructions: None,
+        };
+        let facts = verified_facts_text(&doc, &None);
+        assert!(facts.contains("index.html"));
+        assert!(facts.contains("unexecuted"));
+        assert!(!facts.contains("spec-id"));
+        assert!(!facts.contains("src-id"));
+        // The documentation namespace collides
+        // case-insensitively and only there.
+        assert!(deliverable_docs_prefix_conflict(&[
+            file("Deliverable-Docs/notes.md", "x")
+        ]));
+        assert!(!deliverable_docs_prefix_conflict(&good_files()));
+        // Deliverable reference remapping fails closed.
+        let mut ids = BTreeMap::new();
+        ids.insert("old-pkg".to_string(), "new-pkg".to_string());
+        ids.insert("old-spec".to_string(), "new-spec".to_string());
+        let body = "{\"format\":\"anansi-deliverable\",\"packageArtifactId\":\"old-pkg\",\"specArtifactId\":\"old-spec\"}";
+        let out = remap_deliverable_references(body, &ids).unwrap().unwrap();
+        assert!(out.contains("\"new-pkg\"") && out.contains("\"new-spec\""));
+        let missing = "{\"format\":\"anansi-deliverable\",\"packageArtifactId\":\"nope\",\"specArtifactId\":\"old-spec\"}";
+        assert!(remap_deliverable_references(missing, &ids).is_err());
+        assert!(
+            remap_deliverable_references("{\"format\":\"other\"}", &ids)
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[test]
     fn remaps_rewrite_pinned_references_and_fail_closed() {
         let mut ids = BTreeMap::new();
         ids.insert("old-src".to_string(), "new-src".to_string());
