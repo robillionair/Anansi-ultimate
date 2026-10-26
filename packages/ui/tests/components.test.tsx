@@ -9,6 +9,7 @@ import { Tasks } from '../src/Tasks';
 import { People } from '../src/People';
 import { KnowledgeRecords } from '../src/KnowledgeRecords';
 import { Jobs } from '../src/Jobs';
+import { ForgeBuildPanel } from '../src/Forge';
 import {Backups} from '../src/Backups';
 import {Search} from '../src/Search';
 import {LocalModels} from '../src/LocalModels';
@@ -329,4 +330,18 @@ test('evaluation view renders the rubric snapshot, provenance and not-assessed s
   assert.match(html, /MVP feasibility: not assessed/);
   assert.match(html, /assessed 1 of 2 dimensions/);
   assert.match(html, /Not market evidence/);
+});
+
+test('forge build panel exposes an explicit per-version approval action, not a save-as-approval claim',()=>{
+  const spec = {
+    artifactId: 'b'.repeat(32), projectId: 'c'.repeat(32), type: 'specification', version: 2,
+    title: 'Product specification: Bean Stock Log', timestamp: '2026-10-26T00:00:00.000Z',
+    sourceReferences: [], generator: null, validationStatus: 'validated', privacy: 'private',
+    contentHash: 'd'.repeat(64),
+  };
+  const html=renderToStaticMarkup(<ForgeBuildPanel client={{} as any} workspaceId={'a'.repeat(32)} projectId={'c'.repeat(32)} spec={spec as any} notify={()=>{}} onSaved={()=>{}} />);
+  assert.match(html,/Approve this specification version/);
+  assert.match(html,/Loading specification approval status/);
+  assert.match(html,/Generate development plan &amp; source/);
+  assert.doesNotMatch(html,/Specification approved and saved/);
 });

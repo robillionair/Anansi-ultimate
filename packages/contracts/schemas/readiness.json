@@ -2988,6 +2988,155 @@
     "title": "ForgeSaveResponse",
     "type": "object"
   },
+  "ForgeSpecApprovalStatusRequest": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "contractVersion": {
+        "default": 1,
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "projectId": {
+        "type": "string"
+      },
+      "specArtifactId": {
+        "type": "string"
+      },
+      "specVersion": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "workspaceId",
+      "projectId",
+      "specArtifactId",
+      "specVersion"
+    ],
+    "title": "ForgeSpecApprovalStatusRequest",
+    "type": "object"
+  },
+  "ForgeSpecApprovalStatusResponse": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "approvalArtifactId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "approved": {
+        "type": "boolean"
+      },
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "specArtifactId": {
+        "type": "string"
+      },
+      "specVersion": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "approved",
+      "specArtifactId",
+      "specVersion"
+    ],
+    "title": "ForgeSpecApprovalStatusResponse",
+    "type": "object"
+  },
+  "ForgeSpecApproveRequest": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "description": "Explicit approval of one specification version.\nThere is deliberately no approval flag on\n`ForgeBuildStartRequest`: approval is this dedicated\noperation, recorded by the backend, never a client\nassertion carried on the build request.",
+    "properties": {
+      "contractVersion": {
+        "default": 1,
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "projectId": {
+        "type": "string"
+      },
+      "specArtifactId": {
+        "type": "string"
+      },
+      "specVersion": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "workspaceId",
+      "projectId",
+      "specArtifactId",
+      "specVersion"
+    ],
+    "title": "ForgeSpecApproveRequest",
+    "type": "object"
+  },
+  "ForgeSpecApproveResponse": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "alreadyApproved": {
+        "type": "boolean"
+      },
+      "approvalArtifactId": {
+        "type": "string"
+      },
+      "approved": {
+        "type": "boolean"
+      },
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "specArtifactId": {
+        "type": "string"
+      },
+      "specContentHash": {
+        "type": "string"
+      },
+      "specVersion": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "approved",
+      "approvalArtifactId",
+      "specArtifactId",
+      "specVersion",
+      "specContentHash",
+      "alreadyApproved"
+    ],
+    "title": "ForgeSpecApproveResponse",
+    "type": "object"
+  },
   "ForgeSpecStartRequest": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
@@ -9896,6 +10045,41 @@
       "limitations"
     ],
     "title": "SourcePackageDoc",
+    "type": "object"
+  },
+  "SpecificationApprovalDoc": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "description": "The body of a `specification-approval` artifact: the\nexact specification version and content hash it approves.",
+    "properties": {
+      "format": {
+        "type": "string"
+      },
+      "formatVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "specArtifactId": {
+        "type": "string"
+      },
+      "specContentHash": {
+        "type": "string"
+      },
+      "specVersion": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "format",
+      "formatVersion",
+      "specArtifactId",
+      "specVersion",
+      "specContentHash"
+    ],
+    "title": "SpecificationApprovalDoc",
     "type": "object"
   },
   "StandardRubricResponse": {

@@ -3,6 +3,7 @@ import type {
   ArtifactRecord,
   Client,
   ForgePollResponse,
+  ForgeSpecApprovalStatusResponse,
   ProductSpecDoc,
   SourcePackageDoc,
 } from '@anansi/contracts';
@@ -289,7 +290,9 @@ export function ForgeSpecPanel(props: {
         Forge drafts a product specification for one concept from this set, pinned to this artifact
         version ({source.version}). Template: a small dependency-free static web application —
         a prototype, not SaaS: no authentication, database or deployment. Nothing is generated
-        until you submit, and the specification is only saved when you approve it below.
+        until you submit. Saving stores the draft; generating source requires explicitly
+        approving the saved specification version afterwards — saving or revising a
+        specification does not approve it.
       </p>
       <form onSubmit={e => void start(e)}>
         <label htmlFor="forge-concept">Concept to develop</label>
@@ -338,12 +341,12 @@ export function ForgeSpecPanel(props: {
           <SpecificationView doc={run.spec} />
           {savedId ? (
             <p role="status">
-              Specification approved and saved as artifact {savedId}. Open it from the Artifacts
-              list to generate the development plan and source package.
+              Specification draft saved as artifact {savedId}. Open it from the Artifacts
+              list to approve this version, then generate the development plan and source package.
             </p>
           ) : (
             <button type="button" onClick={() => void save()}>
-              Approve &amp; save specification
+              Save specification draft
             </button>
           )}
         </div>
@@ -365,6 +368,8 @@ export function ForgeBuildPanel(props: {
   const [run, setRun] = useState<ForgePollResponse | null>(null);
   const [disclosure, setDisclosure] = useState<DisclosureRecord | null>(null);
   const [savedId, setSavedId] = useState('');
+  const [approval, setApproval] = useState<ForgeSpecApprovalStatusResponse | null>(null);
+  const [approving, setApproving] = useState(false);
   const controllerRef = useRef<ForgeRunController | null>(null);
   function controller(): ForgeRunController {
     if (!controllerRef.current) {
@@ -376,6 +381,51 @@ export function ForgeBuildPanel(props: {
     void controllerRef.current?.reset();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [spec.artifactId, spec.version]);
+  // Approval is backend state bound to this exact version:
+  // it is loaded per version, and only the explicit approve
+  // action below creates it.
+  useEffect(() => {
+    setApproval(null);
+    void (async () => {
+      try {
+        setApproval(await client.specApprovalStatus(workspaceId, {
+          projectId: props.projectId,
+          specArtifactId: spec.artifactId,
+          specVersion: spec.version,
+        }));
+      } catch (e) {
+        props.notify(e instanceof Error ? e.message : 'Could not load specification approval status.', true);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spec.artifactId, spec.version]);
+  async function approve() {
+    setApproving(true);
+    try {
+      const result = await client.approveForgeSpec(workspaceId, {
+        projectId: props.projectId,
+        specArtifactId: spec.artifactId,
+        specVersion: spec.version,
+      });
+      setApproval({
+        contractVersion: 1,
+        approved: true,
+        approvalArtifactId: result.approvalArtifactId,
+        specArtifactId: spec.artifactId,
+        specVersion: spec.version,
+      });
+      props.notify(
+        result.alreadyApproved
+          ? 'This specification version was already approved.'
+          : `Specification version ${spec.version} approved for source generation.`,
+        false,
+      );
+    } catch (e) {
+      props.notify(e instanceof Error ? e.message : 'Could not approve this specification version.', true);
+    } finally {
+      setApproving(false);
+    }
+  }
   useForgePolling(controller, run, setRun, props.notify);
   const running = run?.status === 'running' || run?.status === 'cancelling';
   async function start() {
@@ -420,10 +470,31 @@ export function ForgeBuildPanel(props: {
         pinned to version {spec.version}. The files are shown as inert text and saved as an
         immutable source-package artifact; ANANSI never runs them (§32 — export is for review).
       </p>
+      {approval ? (
+        approval.approved ? (
+          <p role="status">
+            Specification version {spec.version}: approved (approval artifact {approval.approvalArtifactId}).
+            Source generation is allowed for this version only.
+          </p>
+        ) : (
+          <p role="status">
+            Specification version {spec.version}: not approved. Approve this version explicitly
+            before generating source. Saving or revising a specification does not approve it, and
+            approval of an earlier version does not carry over to this version.
+          </p>
+        )
+      ) : (
+        <p role="status">Loading specification approval status…</p>
+      )}
+      {!approval?.approved && (
+        <button type="button" disabled={approving} onClick={() => void approve()}>
+          Approve this specification version
+        </button>
+      )}
       <label>
         <input type="checkbox" checked={lock} onChange={e => setLock(e.target.checked)} /> Zero-Cost Lock (never spend)
       </label>
-      <button type="button" disabled={running} onClick={() => void start()}>
+      <button type="button" disabled={running || approval?.approved === false} onClick={() => void start()}>
         Generate development plan &amp; source
       </button>
       {running && (

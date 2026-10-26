@@ -740,6 +740,43 @@ export interface ArtifactRecord {
   validationStatus: string;
   version: number;
 }
+export interface ForgeSpecApprovalStatusRequest {
+  contractVersion?: number;
+  projectId: string;
+  specArtifactId: string;
+  specVersion: number;
+  workspaceId: string;
+}
+export interface ForgeSpecApprovalStatusResponse {
+  approvalArtifactId?: string | null;
+  approved: boolean;
+  contractVersion: number;
+  specArtifactId: string;
+  specVersion: number;
+}
+/**
+ * Explicit approval of one specification version.
+ * There is deliberately no approval flag on
+ * `ForgeBuildStartRequest`: approval is this dedicated
+ * operation, recorded by the backend, never a client
+ * assertion carried on the build request.
+ */
+export interface ForgeSpecApproveRequest {
+  contractVersion?: number;
+  projectId: string;
+  specArtifactId: string;
+  specVersion: number;
+  workspaceId: string;
+}
+export interface ForgeSpecApproveResponse {
+  alreadyApproved: boolean;
+  approvalArtifactId: string;
+  approved: boolean;
+  contractVersion: number;
+  specArtifactId: string;
+  specContentHash: string;
+  specVersion: number;
+}
 export interface ForgeSpecStartRequest {
   conceptIndex: number;
   contractVersion?: number;
@@ -2406,6 +2443,17 @@ export interface DevelopmentPlan {
   steps: string[];
   summary: string;
   testingNotes: string;
+}
+/**
+ * The body of a `specification-approval` artifact: the
+ * exact specification version and content hash it approves.
+ */
+export interface SpecificationApprovalDoc {
+  format: string;
+  formatVersion: number;
+  specArtifactId: string;
+  specContentHash: string;
+  specVersion: number;
 }
 export interface StandardRubricResponse {
   contractVersion: number;

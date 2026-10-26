@@ -121,6 +121,8 @@ pub fn command_path(path: &str) -> bool {
             | "/v1/ai/forge-spec-poll"
             | "/v1/ai/forge-spec-cancel"
             | "/v1/ai/forge-spec-save"
+            | "/v1/ai/forge-spec-approve"
+            | "/v1/ai/forge-spec-approval-status"
             | "/v1/ai/forge-build-start"
             | "/v1/ai/forge-build-poll"
             | "/v1/ai/forge-build-cancel"

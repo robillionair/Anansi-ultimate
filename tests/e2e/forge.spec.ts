@@ -9,8 +9,9 @@ import path from 'node:path';
  * M7 Slice 1 in the real browser application: Product
  * Forge (§§28–33) over the M5 substrate with a synthetic
  * loopback provider. Saved concept -> essential questions
- * -> generated specification -> approve & save -> pinned
- * build -> plan + source package inspected as inert text
+ * -> generated specification -> save draft -> explicit
+ * per-version approval -> pinned build -> plan + source
+ * package inspected as inert text
  * -> save -> export (.tar verified) -> restart -> reopen.
  * Build/test/preview/deployment must read Unavailable
  * (§32: no execution sandbox in this slice).
@@ -185,11 +186,16 @@ test('product forge: concept -> specification -> source package -> export -> res
     await page.getByLabel('Must-have behavior').fill('Add beans, record usage, warn when low.');
     await page.getByRole('button', { name: 'Generate product specification' }).click();
     await expect(page.getByRole('heading', { name: 'Product specification: Bean Stock Log' })).toBeVisible();
-    await page.getByRole('button', { name: 'Approve & save specification' }).click();
-    await expect(page.getByText('Specification approved and saved as artifact')).toBeVisible();
+    await page.getByRole('button', { name: 'Save specification draft' }).click();
+    await expect(page.getByText('Specification draft saved as artifact')).toBeVisible();
 
     await artifacts.getByRole('button', { name: 'Product specification: Bean Stock Log' }).click();
     await expect(page.getByRole('heading', { name: 'Product Forge — generate plan & source' })).toBeVisible();
+    // Generating source requires an explicit backend
+    // approval of this exact specification version.
+    await expect(page.getByText('Specification version 1: not approved.')).toBeVisible();
+    await page.getByRole('button', { name: 'Approve this specification version' }).click();
+    await expect(page.getByText('Specification version 1 approved for source generation.')).toBeVisible();
     await page.getByRole('button', { name: 'Generate development plan & source' }).click();
     await expect(page.getByRole('heading', { name: 'Source package: Bean Stock Log' })).toBeVisible();
     await page.getByRole('button', { name: 'Save source package as artifact' }).click();

@@ -10,8 +10,10 @@ use anansi_core::evaluations::{
 };
 use anansi_core::forge::{
     DevelopmentPlan, ForgeAnswers, ForgeBuildStartRequest, ForgeExportRequest, ForgeExportResponse,
-    ForgePollResponse, ForgeRunRequest, ForgeSaveResponse, ForgeSpecStartRequest,
-    ForgeStartResponse, ProductSpec, ProductSpecDoc, SourceFile, SourcePackageDoc,
+    ForgePollResponse, ForgeRunRequest, ForgeSaveResponse, ForgeSpecApprovalStatusRequest,
+    ForgeSpecApprovalStatusResponse, ForgeSpecApproveRequest, ForgeSpecApproveResponse,
+    ForgeSpecStartRequest, ForgeStartResponse, ProductSpec, ProductSpecDoc, SourceFile,
+    SourcePackageDoc, SpecificationApprovalDoc,
 };
 use anansi_core::ideas::{
     IdeaConcept, IdeaSet, IdeasGenerateStartRequest, IdeasGenerateStartResponse, IdeasOptions,
@@ -89,6 +91,11 @@ fn main() {
         "OpportunityConcept":schemars::schema_for!(OpportunityConcept),
         "OpportunitySourceRecord":schemars::schema_for!(OpportunitySourceRecord),
         "ForgeSpecStartRequest":schemars::schema_for!(ForgeSpecStartRequest),
+        "ForgeSpecApproveRequest":schemars::schema_for!(ForgeSpecApproveRequest),
+        "ForgeSpecApproveResponse":schemars::schema_for!(ForgeSpecApproveResponse),
+        "ForgeSpecApprovalStatusRequest":schemars::schema_for!(ForgeSpecApprovalStatusRequest),
+        "ForgeSpecApprovalStatusResponse":schemars::schema_for!(ForgeSpecApprovalStatusResponse),
+        "SpecificationApprovalDoc":schemars::schema_for!(SpecificationApprovalDoc),
         "ForgeBuildStartRequest":schemars::schema_for!(ForgeBuildStartRequest),
         "ForgeRunRequest":schemars::schema_for!(ForgeRunRequest),
         "ForgeStartResponse":schemars::schema_for!(ForgeStartResponse),
