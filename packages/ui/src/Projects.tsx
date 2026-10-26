@@ -6,9 +6,12 @@ import { DisclosurePanel } from './Providers';
 import { IdeaRunController } from './ideaRun';
 import { OpportunityRunController } from './opportunityRun';
 import {
+  DeliverablePanel,
+  DeliverableView,
   ForgeBuildPanel,
   ForgeRevisePanel,
   ForgeSpecPanel,
+  parseDeliverableBody,
   SourcePackageView,
   SpecificationView,
   parseProductSpecBody,
@@ -765,7 +768,45 @@ export function Projects({ client, workspaceId }: { client: Client; workspaceId:
                                 }}
                               />
                             )}
+                            {current && (
+                              <DeliverablePanel
+                                key={`deliverable:${workspaceId}:${current.memory.id}:${viewedArtifact.artifact.artifactId}:${viewedArtifact.artifact.version}`}
+                                client={client}
+                                workspaceId={workspaceId}
+                                projectId={current.memory.id}
+                                pkg={viewedArtifact.artifact}
+                                doc={parsedPackage}
+                                notify={(message, isError) => { if (isError) setError(message); else setNotice(message); }}
+                                onSaved={() => {
+                                  void (async () => {
+                                    const artList = await client.listProjectArtifacts(workspaceId, current.memory.id);
+                                    setArtifacts(artList.artifacts);
+                                  })();
+                                }}
+                              />
+                            )}
                           </div>
+                        );
+                      }
+                      const parsedDeliverable = viewedArtifact.artifact.type === 'deliverable'
+                        ? parseDeliverableBody(viewedArtifact.body)
+                        : null;
+                      if (parsedDeliverable) {
+                        return (
+                          <DeliverableView
+                            doc={parsedDeliverable}
+                            artifact={viewedArtifact.artifact}
+                            client={client}
+                            workspaceId={workspaceId}
+                            notify={(message, isError) => { if (isError) setError(message); else setNotice(message); }}
+                            onSaved={() => {
+                              void (async () => {
+                                const artList = await client.listProjectArtifacts(workspaceId, current.memory.id);
+                                setArtifacts(artList.artifacts);
+                                await openArtifact(viewedArtifact.artifact.artifactId);
+                              })();
+                            }}
+                          />
                         );
                       }
                       const parsedOpportunities = parseOpportunitySetBody(viewedArtifact.body);

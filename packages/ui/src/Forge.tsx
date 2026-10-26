@@ -705,3 +705,317 @@ export function ForgeRevisePanel(props: {
     </div>
   );
 }
+
+// ---------------------------------------------------------------------------
+// M7 Slice 3: version-pinned reviewable export deliverable.
+// A deliverable pins one package version and its
+// specification version, carries five approved documents
+// plus ANANSI-computed verified facts, and exports as
+// one deterministic archive. It is a review record:
+// nothing here is built, tested, published or
+// production-ready, and export never means publication.
+
+export const DELIVERABLE_DOC_NAMES = [
+  'architecture.md',
+  'usage.md',
+  'limitations.md',
+  'security.md',
+  'changes.md',
+] as const;
+
+export type DeliverableDocName = (typeof DELIVERABLE_DOC_NAMES)[number];
+
+export function parseDeliverableBody(body: string): import('@anansi/contracts').DeliverableDoc | null {
+  try {
+    const parsed = JSON.parse(body) as import('@anansi/contracts').DeliverableDoc;
+    return parsed && parsed.format === 'anansi-deliverable' && Array.isArray(parsed.documents)
+      ? parsed
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+const DELIVERABLE_BANNER =
+  'Unexecuted prototype — prepared for review. Export is not publication: ANANSI has not built, tested, deployed or certified this code, and it is not production-ready.';
+
+async function downloadTar(
+  result: import('@anansi/contracts').ForgeExportResponse,
+  notify: Notify,
+  what: string,
+) {
+  const bytes = Uint8Array.from(atob(result.tarBase64), c => c.charCodeAt(0));
+  const url = URL.createObjectURL(new Blob([bytes], { type: 'application/x-tar' }));
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = result.filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+  notify(
+    `Exported ${what} ${result.filename} (SHA-256 ${result.sha256.slice(0, 12)}…). Review the files before any use; ANANSI does not run them.`,
+    false,
+  );
+}
+
+function deliverableDocId(name: string): string {
+  return `forge-deliverable-${name.replace(/\.md$/, '')}`;
+}
+
+export function DeliverablePanel(props: {
+  client: Client;
+  workspaceId: string;
+  projectId: string;
+  pkg: ArtifactRecord;
+  doc: SourcePackageDoc;
+  notify: Notify;
+  onSaved: () => void;
+}) {
+  const { client, workspaceId, pkg } = props;
+  const [docs, setDocs] = useState<Record<string, string>>(() => Object.fromEntries(DELIVERABLE_DOC_NAMES.map(n => [n, ''])));
+  const [origins, setOrigins] = useState<Record<string, string>>(() => Object.fromEntries(DELIVERABLE_DOC_NAMES.map(n => [n, 'user'])));
+  const [lock, setLock] = useState(true);
+  const [run, setRun] = useState<ForgePollResponse | null>(null);
+  const [disclosure, setDisclosure] = useState<DisclosureRecord | null>(null);
+  const [saved, setSaved] = useState<ArtifactRecord | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const controllerRef = useRef<ForgeRunController | null>(null);
+  function controller(): ForgeRunController {
+    if (!controllerRef.current) {
+      controllerRef.current = new ForgeRunController(client, workspaceId, 'deliverable');
+    }
+    return controllerRef.current;
+  }
+  useEffect(() => () => {
+    void controllerRef.current?.reset();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pkg.artifactId, pkg.version]);
+  useForgePolling(controller, run, setRun, props.notify);
+  useEffect(() => {
+    if (run?.status === 'complete' && run.deliverableDraft) {
+      const nextDocs: Record<string, string> = {};
+      const nextOrigins: Record<string, string> = {};
+      for (const d of run.deliverableDraft) {
+        nextDocs[d.name] = d.content;
+        nextOrigins[d.name] = 'model';
+      }
+      setDocs(nextDocs);
+      setOrigins(nextOrigins);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [run?.status]);
+  const running = run?.status === 'running' || run?.status === 'cancelling';
+  async function suggest() {
+    setDisclosure(null);
+    try {
+      const started = await controller().start({
+        projectId: props.projectId,
+        packageArtifactId: pkg.artifactId,
+        packageVersion: pkg.version,
+        zeroCostLock: lock,
+      });
+      if (started) {
+        if (started.disclosure) setDisclosure(started.disclosure);
+        setRun({ contractVersion: 1, runId: started.runId, status: 'running', partialChars: 0 });
+      }
+    } catch (err) {
+      props.notify(err instanceof Error ? err.message : 'Could not start documentation suggestions.', true);
+    }
+  }
+  function edit(name: string, content: string) {
+    setDocs(prev => ({ ...prev, [name]: content }));
+    setOrigins(prev => ({ ...prev, [name]: 'user' }));
+  }
+  async function save() {
+    try {
+      const result = await client.saveForgeDeliverable(workspaceId, {
+        projectId: props.projectId,
+        packageArtifactId: pkg.artifactId,
+        packageVersion: pkg.version,
+        documents: DELIVERABLE_DOC_NAMES.map(name => ({ name, content: docs[name] ?? '', origin: origins[name] ?? 'user' })),
+      });
+      setSaved(result.artifact);
+      props.notify(
+        `Deliverable saved as version ${result.artifact.version} of artifact ${result.artifact.artifactId}, pinning package version ${pkg.version}.`,
+        false,
+      );
+      props.onSaved();
+    } catch (err) {
+      props.notify(err instanceof Error ? err.message : 'Could not save the deliverable.', true);
+    }
+  }
+  async function exportDeliverable() {
+    if (!saved) return;
+    setExporting(true);
+    try {
+      const result = await client.exportForgeDeliverable(workspaceId, saved.artifactId, saved.version);
+      await downloadTar(result, props.notify, 'deliverable');
+    } catch (err) {
+      props.notify(err instanceof Error ? err.message : 'Export failed.', true);
+    } finally {
+      setExporting(false);
+    }
+  }
+  return (
+    <div>
+      <h4>Prepare a reviewable deliverable</h4>
+      <p className="help">
+        For source package artifact {pkg.artifactId} version {pkg.version}, from specification artifact{' '}
+        {props.doc.specArtifactId} version {props.doc.specVersion}. {DELIVERABLE_BANNER} A saved
+        deliverable pins this exact package version: a newer package version never changes it.
+        Write the documentation yourself, or ask the model to suggest drafts you inspect and edit
+        before saving. Verified facts are computed by ANANSI when you save and cannot be edited here.
+      </p>
+      <label>
+        <input type="checkbox" checked={lock} onChange={e => setLock(e.target.checked)} /> Zero-Cost Lock (never spend)
+      </label>{' '}
+      <button type="button" disabled={running} onClick={() => void suggest()}>
+        Suggest documentation with model
+      </button>
+      {running && (
+        <button
+          type="button"
+          className="secondary"
+          disabled={run?.status === 'cancelling'}
+          onClick={() => void (async () => {
+            const cancelled = await controller().cancel();
+            if (cancelled) setRun(cancelled);
+          })()}
+        >
+          Cancel
+        </button>
+      )}
+      {run?.status === 'running' && <p role="status">Drafting documentation… {run.partialChars} characters received.</p>}
+      {run?.status === 'cancelling' && <p role="status">Cancelling… waiting for the provider stream to stop.</p>}
+      {run?.status === 'cancelled' && <p role="status">Draft cancelled. Nothing was saved.</p>}
+      {run && (run.status === 'failed' || run.status === 'invalid') && (
+        <p role="alert">Documentation draft {run.status}: {run.error ?? 'the provider did not produce usable documentation.'} Nothing was saved; you can write the sections yourself.</p>
+      )}
+      {disclosure && <DisclosurePanel disclosure={disclosure} />}
+      {DELIVERABLE_DOC_NAMES.map(name => (
+        <div key={name}>
+          <label htmlFor={deliverableDocId(name)}>
+            Deliverable — {name} <span>({origins[name] === 'model' ? 'model suggestion — edit to make it yours' : 'written by you'})</span>
+          </label>
+          <textarea
+            id={deliverableDocId(name)}
+            rows={4}
+            value={docs[name] ?? ''}
+            onChange={e => edit(name, e.target.value)}
+          />
+        </div>
+      ))}
+      <p className="help">Verified facts (file inventory, hashes, parent changes) are added by ANANSI at save time.</p>
+      <button type="button" onClick={() => void save()}>Save deliverable</button>{' '}
+      {saved && (
+        <button type="button" disabled={exporting} onClick={() => void exportDeliverable()}>
+          Export deliverable (.tar)
+        </button>
+      )}
+      {saved && <p role="status">Deliverable saved as version {saved.version}. Export it to review the exact package bytes with this documentation.</p>}
+    </div>
+  );
+}
+
+export function DeliverableView(props: {
+  doc: import('@anansi/contracts').DeliverableDoc;
+  artifact?: ArtifactRecord;
+  client?: Client;
+  workspaceId?: string;
+  notify?: Notify;
+  onSaved?: () => void;
+}) {
+  const { doc } = props;
+  const [editing, setEditing] = useState(false);
+  const [docs, setDocs] = useState<Record<string, string>>(() => {
+    const next: Record<string, string> = {};
+    for (const d of doc.documents) {
+      if (d.name !== 'verified-facts.md') next[d.name] = d.content;
+    }
+    return next;
+  });
+  const [exporting, setExporting] = useState(false);
+  const verified = doc.documents.find(d => d.name === 'verified-facts.md');
+  async function exportDeliverable() {
+    if (!props.client || !props.workspaceId || !props.artifact || !props.notify) return;
+    setExporting(true);
+    try {
+      const result = await props.client.exportForgeDeliverable(
+        props.workspaceId,
+        props.artifact.artifactId,
+        props.artifact.version,
+      );
+      await downloadTar(result, props.notify, 'deliverable');
+    } catch (err) {
+      props.notify(err instanceof Error ? err.message : 'Export failed.', true);
+    } finally {
+      setExporting(false);
+    }
+  }
+  async function saveRevision() {
+    if (!props.client || !props.workspaceId || !props.artifact || !props.notify) return;
+    try {
+      const result = await props.client.saveForgeDeliverable(props.workspaceId, {
+        projectId: props.artifact.projectId,
+        packageArtifactId: doc.packageArtifactId,
+        packageVersion: doc.packageVersion,
+        documents: DELIVERABLE_DOC_NAMES.map(name => ({ name, content: docs[name] ?? '', origin: 'user' })),
+        deliverableArtifactId: props.artifact.artifactId,
+        expectedVersion: props.artifact.version,
+      });
+      props.notify(`Documentation revised as deliverable version ${result.artifact.version}. The pinned package version is unchanged.`, false);
+      setEditing(false);
+      props.onSaved?.();
+    } catch (err) {
+      props.notify(err instanceof Error ? err.message : 'Could not revise the documentation.', true);
+    }
+  }
+  return (
+    <div>
+      <h4>Deliverable: {doc.conceptName}</h4>
+      <p className="help">
+        Pins source package artifact {doc.packageArtifactId} version {doc.packageVersion} and
+        specification artifact {doc.specArtifactId} version {doc.specVersion}. {DELIVERABLE_BANNER}
+      </p>
+      <h5>Documents</h5>
+      {editing ? (
+        <div>
+          {DELIVERABLE_DOC_NAMES.map(name => (
+            <div key={name}>
+              <label htmlFor={deliverableDocId(name)}>Deliverable — {name}</label>
+              <textarea
+                id={deliverableDocId(name)}
+                rows={4}
+                value={docs[name] ?? ''}
+                onChange={e => setDocs(prev => ({ ...prev, [name]: e.target.value }))}
+              />
+            </div>
+          ))}
+          <button type="button" onClick={() => void saveRevision()}>Save revised documentation as new version</button>{' '}
+          <button type="button" className="secondary" onClick={() => setEditing(false)}>Cancel editing</button>
+        </div>
+      ) : (
+        <div>
+          {doc.documents.map(d => (
+            <div key={d.name}>
+              <h6>{d.name} <span>({d.origin})</span></h6>
+              <pre className="provider-output">{d.content}</pre>
+            </div>
+          ))}
+        </div>
+      )}
+      {!editing && verified && (
+        <p className="help">Verified facts above were computed by ANANSI from the pinned package, not written by a person or a model.</p>
+      )}
+      {props.artifact && props.client && !editing && (
+        <div>
+          <button type="button" disabled={exporting} onClick={() => void exportDeliverable()}>
+            Export deliverable (.tar)
+          </button>{' '}
+          <button type="button" className="secondary" onClick={() => setEditing(true)}>
+            Revise documentation
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}

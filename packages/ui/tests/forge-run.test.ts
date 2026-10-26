@@ -39,10 +39,12 @@ class FakeClient implements ForgeClient {
   specStarts: Deferred<{ runId: string }>[] = [];
   buildStarts: Deferred<{ runId: string }>[] = [];
   reviseStarts: Deferred<{ runId: string }>[] = [];
+  deliverableStarts: Deferred<{ runId: string }>[] = [];
   polls: Deferred<ForgePollResponse>[] = [];
   specCancels: string[] = [];
   buildCancels: string[] = [];
   reviseCancels: string[] = [];
+  deliverableCancels: string[] = [];
 
   startForgeSpec() {
     const d = deferred<{ runId: string }>();
@@ -59,6 +61,11 @@ class FakeClient implements ForgeClient {
     this.reviseStarts.push(d);
     return d.promise as ReturnType<ForgeClient['startForgeRevise']>;
   }
+  startForgeDeliverableDraft() {
+    const d = deferred<{ runId: string }>();
+    this.deliverableStarts.push(d);
+    return d.promise as ReturnType<ForgeClient['startForgeDeliverableDraft']>;
+  }
   pollForgeSpec() {
     const d = deferred<ForgePollResponse>();
     this.polls.push(d);
@@ -73,6 +80,11 @@ class FakeClient implements ForgeClient {
     const d = deferred<ForgePollResponse>();
     this.polls.push(d);
     return d.promise as ReturnType<ForgeClient['pollForgeRevise']>;
+  }
+  pollForgeDeliverableDraft() {
+    const d = deferred<ForgePollResponse>();
+    this.polls.push(d);
+    return d.promise as ReturnType<ForgeClient['pollForgeDeliverableDraft']>;
   }
   cancelForgeSpec(_workspaceId: string, runId: string) {
     this.specCancels.push(runId);
@@ -90,6 +102,12 @@ class FakeClient implements ForgeClient {
     this.reviseCancels.push(runId);
     return Promise.resolve(pollResponse(runId, 'cancelled')) as ReturnType<
       ForgeClient['cancelForgeRevise']
+    >;
+  }
+  cancelForgeDeliverableDraft(_workspaceId: string, runId: string) {
+    this.deliverableCancels.push(runId);
+    return Promise.resolve(pollResponse(runId, 'cancelled')) as ReturnType<
+      ForgeClient['cancelForgeDeliverableDraft']
     >;
   }
 }
@@ -164,5 +182,26 @@ test('reset cancels the active run and invalidates in-flight polls', async () =>
   assert.deepEqual(client.specCancels, ['run-9']);
   client.polls[0].resolve(pollResponse('run-9', 'complete'));
   assert.equal(await polling, null);
+  assert.equal(controller.currentRunId, '');
+});
+
+test('a deliverable controller drives only deliverable operations through completion', async () => {
+  const client = new FakeClient();
+  const controller = new ForgeRunController(client, 'ws', 'deliverable');
+  const starting = controller.start({
+    projectId: 'p',
+    packageArtifactId: 'pkg',
+    packageVersion: 1,
+  });
+  client.deliverableStarts[0].resolve({ runId: 'run-d' });
+  const started = await starting;
+  assert.equal(started?.runId, 'run-d');
+  assert.equal(client.specStarts.length, 0);
+  assert.equal(client.buildStarts.length, 0);
+  assert.equal(client.reviseStarts.length, 0);
+  const polling = controller.pollOnce();
+  client.polls[0].resolve(pollResponse('run-d', 'complete'));
+  const polled = await polling;
+  assert.equal(polled?.status, 'complete');
   assert.equal(controller.currentRunId, '');
 });

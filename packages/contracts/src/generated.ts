@@ -431,6 +431,75 @@ export interface DeleteRelationshipRequest {
   id: string;
   workspaceId: string;
 }
+/**
+ * A saved deliverable: pins one package version and its
+ * specification version, with their content hashes, and
+ * carries the approved documentation plus the backend's
+ * verified facts. Editing the documentation saves a new
+ * version of this same artifact; the pinned package
+ * version never moves.
+ */
+export interface DeliverableDoc {
+  conceptName: string;
+  documents: DeliverableDocument[];
+  format: string;
+  formatVersion: number;
+  packageArtifactId: string;
+  packageContentHash: string;
+  packageVersion: number;
+  specArtifactId: string;
+  specContentHash: string;
+  specVersion: number;
+  status: DeliverableStatus;
+}
+/**
+ * One deliverable document. `origin` is `user` (written
+ * or edited by the user), `model` (a suggestion the
+ * user has not edited) or `verified` (computed by the
+ * backend; never accepted from a client).
+ */
+export interface DeliverableDocument {
+  content: string;
+  name: string;
+  origin: string;
+}
+/**
+ * Honest status of every deliverable. All false, always:
+ * a deliverable is a review record, never a claim that
+ * the prototype was built, tested, published or made
+ * production-ready.
+ */
+export interface DeliverableStatus {
+  built: boolean;
+  executed: boolean;
+  productionReady: boolean;
+  published: boolean;
+  tested: boolean;
+}
+/**
+ * One deliverable document. `origin` is `user` (written
+ * or edited by the user), `model` (a suggestion the
+ * user has not edited) or `verified` (computed by the
+ * backend; never accepted from a client).
+ */
+export interface DeliverableDocument {
+  content: string;
+  name: string;
+  origin: string;
+}
+/**
+ * Honest status of every deliverable. All false, always:
+ * a deliverable is a review record, never a claim that
+ * the prototype was built, tested, published or made
+ * production-ready.
+ */
+export interface DeliverableStatus {
+  built: boolean;
+  executed: boolean;
+  productionReady: boolean;
+  published: boolean;
+  tested: boolean;
+}
 export interface DevelopmentPlan {
   buildNotes: string;
   steps: string[];
@@ -559,6 +628,61 @@ export interface ForgeBuildStartRequest {
   workspaceId: string;
   zeroCostLock?: boolean;
 }
+export interface ForgeDeliverableDraftStartRequest {
+  contractVersion?: number;
+  mode?: string | null;
+  model?: string | null;
+  /**
+   * The saved source-package artifact to document.
+   */
+  packageArtifactId: string;
+  /**
+   * The exact package version to document (never "latest").
+   */
+  packageVersion: number;
+  permitId?: string | null;
+  projectId: string;
+  provider?: string | null;
+  workspaceId: string;
+  zeroCostLock?: boolean;
+}
+export interface ForgeDeliverableSaveRequest {
+  contractVersion?: number;
+  /**
+   * Present only when revising saved documentation:
+   * the deliverable artifact to revise, with
+   * `expected_version` as its current latest version.
+   */
+  deliverableArtifactId?: string | null;
+  /**
+   * The five documents; origins must be `user` or
+   * `model` — `verified` is computed by the backend
+   * and refused from a client.
+   */
+  documents: DeliverableDocument[];
+  expectedVersion?: number | null;
+  /**
+   * The saved source-package artifact this deliverable pins.
+   */
+  packageArtifactId: string;
+  /**
+   * The exact package version this deliverable pins.
+   */
+  packageVersion: number;
+  projectId: string;
+  workspaceId: string;
+}
+/**
+ * One deliverable document. `origin` is `user` (written
+ * or edited by the user), `model` (a suggestion the
+ * user has not edited) or `verified` (computed by the
+ * backend; never accepted from a client).
+ */
+export interface DeliverableDocument {
+  content: string;
+  name: string;
+  origin: string;
+}
 export interface ForgeExportRequest {
   artifactId: string;
   contractVersion?: number;
@@ -593,6 +717,11 @@ export type RoutingMode = "auto" | "autoFree" | "private" | "fast" | "deep" | "c
 
 export interface ForgePollResponse {
   contractVersion: number;
+  /**
+   * Slice 3 only: model-suggested deliverable documents
+   * for a completed draft run, origin `model`.
+   */
+  deliverableDraft?: DeliverableDocument[] | null;
   disclosure?: DisclosureRecord | null;
   error?: string | null;
   partialChars: number;
@@ -608,6 +737,17 @@ export interface ForgePollResponse {
    * running | cancelling | complete | invalid | failed | cancelled
    */
   status: string;
+}
+/**
+ * One deliverable document. `origin` is `user` (written
+ * or edited by the user), `model` (a suggestion the
+ * user has not edited) or `verified` (computed by the
+ * backend; never accepted from a client).
+ */
+export interface DeliverableDocument {
+  content: string;
+  name: string;
+  origin: string;
 }
 /**
  * "View What ANANSI Sent" at adapter level (§19): what was about to be

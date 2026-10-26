@@ -1840,6 +1840,172 @@
     "title": "DeleteRelationshipRequest",
     "type": "object"
   },
+  "DeliverableDoc": {
+    "$defs": {
+      "DeliverableDocument": {
+        "description": "One deliverable document. `origin` is `user` (written\nor edited by the user), `model` (a suggestion the\nuser has not edited) or `verified` (computed by the\nbackend; never accepted from a client).",
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "origin": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "content",
+          "origin"
+        ],
+        "type": "object"
+      },
+      "DeliverableStatus": {
+        "description": "Honest status of every deliverable. All false, always:\na deliverable is a review record, never a claim that\nthe prototype was built, tested, published or made\nproduction-ready.",
+        "properties": {
+          "built": {
+            "type": "boolean"
+          },
+          "executed": {
+            "type": "boolean"
+          },
+          "productionReady": {
+            "type": "boolean"
+          },
+          "published": {
+            "type": "boolean"
+          },
+          "tested": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "executed",
+          "built",
+          "tested",
+          "published",
+          "productionReady"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "description": "A saved deliverable: pins one package version and its\nspecification version, with their content hashes, and\ncarries the approved documentation plus the backend's\nverified facts. Editing the documentation saves a new\nversion of this same artifact; the pinned package\nversion never moves.",
+    "properties": {
+      "conceptName": {
+        "type": "string"
+      },
+      "documents": {
+        "items": {
+          "$ref": "#/$defs/DeliverableDocument"
+        },
+        "type": "array"
+      },
+      "format": {
+        "type": "string"
+      },
+      "formatVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "packageArtifactId": {
+        "type": "string"
+      },
+      "packageContentHash": {
+        "type": "string"
+      },
+      "packageVersion": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "specArtifactId": {
+        "type": "string"
+      },
+      "specContentHash": {
+        "type": "string"
+      },
+      "specVersion": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "status": {
+        "$ref": "#/$defs/DeliverableStatus"
+      }
+    },
+    "required": [
+      "format",
+      "formatVersion",
+      "packageArtifactId",
+      "packageVersion",
+      "packageContentHash",
+      "specArtifactId",
+      "specVersion",
+      "specContentHash",
+      "conceptName",
+      "documents",
+      "status"
+    ],
+    "title": "DeliverableDoc",
+    "type": "object"
+  },
+  "DeliverableDocument": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "description": "One deliverable document. `origin` is `user` (written\nor edited by the user), `model` (a suggestion the\nuser has not edited) or `verified` (computed by the\nbackend; never accepted from a client).",
+    "properties": {
+      "content": {
+        "type": "string"
+      },
+      "name": {
+        "type": "string"
+      },
+      "origin": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "name",
+      "content",
+      "origin"
+    ],
+    "title": "DeliverableDocument",
+    "type": "object"
+  },
+  "DeliverableStatus": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "description": "Honest status of every deliverable. All false, always:\na deliverable is a review record, never a claim that\nthe prototype was built, tested, published or made\nproduction-ready.",
+    "properties": {
+      "built": {
+        "type": "boolean"
+      },
+      "executed": {
+        "type": "boolean"
+      },
+      "productionReady": {
+        "type": "boolean"
+      },
+      "published": {
+        "type": "boolean"
+      },
+      "tested": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "executed",
+      "built",
+      "tested",
+      "published",
+      "productionReady"
+    ],
+    "title": "DeliverableStatus",
+    "type": "object"
+  },
   "DevelopmentPlan": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "properties": {
@@ -2360,6 +2526,153 @@
     "title": "ForgeBuildStartRequest",
     "type": "object"
   },
+  "ForgeDeliverableDraftStartRequest": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "contractVersion": {
+        "default": 1,
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "mode": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "model": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "packageArtifactId": {
+        "description": "The saved source-package artifact to document.",
+        "type": "string"
+      },
+      "packageVersion": {
+        "description": "The exact package version to document (never \"latest\").",
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "permitId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "projectId": {
+        "type": "string"
+      },
+      "provider": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "workspaceId": {
+        "type": "string"
+      },
+      "zeroCostLock": {
+        "default": false,
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "workspaceId",
+      "projectId",
+      "packageArtifactId",
+      "packageVersion"
+    ],
+    "title": "ForgeDeliverableDraftStartRequest",
+    "type": "object"
+  },
+  "ForgeDeliverableSaveRequest": {
+    "$defs": {
+      "DeliverableDocument": {
+        "description": "One deliverable document. `origin` is `user` (written\nor edited by the user), `model` (a suggestion the\nuser has not edited) or `verified` (computed by the\nbackend; never accepted from a client).",
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "origin": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "content",
+          "origin"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "contractVersion": {
+        "default": 1,
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "deliverableArtifactId": {
+        "description": "Present only when revising saved documentation:\nthe deliverable artifact to revise, with\n`expected_version` as its current latest version.",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "documents": {
+        "description": "The five documents; origins must be `user` or\n`model` — `verified` is computed by the backend\nand refused from a client.",
+        "items": {
+          "$ref": "#/$defs/DeliverableDocument"
+        },
+        "type": "array"
+      },
+      "expectedVersion": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "packageArtifactId": {
+        "description": "The saved source-package artifact this deliverable pins.",
+        "type": "string"
+      },
+      "packageVersion": {
+        "description": "The exact package version this deliverable pins.",
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "projectId": {
+        "type": "string"
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "workspaceId",
+      "projectId",
+      "packageArtifactId",
+      "packageVersion",
+      "documents"
+    ],
+    "title": "ForgeDeliverableSaveRequest",
+    "type": "object"
+  },
   "ForgeExportRequest": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
@@ -2458,6 +2771,26 @@
           "unknown"
         ],
         "type": "string"
+      },
+      "DeliverableDocument": {
+        "description": "One deliverable document. `origin` is `user` (written\nor edited by the user), `model` (a suggestion the\nuser has not edited) or `verified` (computed by the\nbackend; never accepted from a client).",
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "origin": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "content",
+          "origin"
+        ],
+        "type": "object"
       },
       "DevelopmentPlan": {
         "properties": {
@@ -2868,6 +3201,16 @@
         "maximum": 255,
         "minimum": 0,
         "type": "integer"
+      },
+      "deliverableDraft": {
+        "description": "Slice 3 only: model-suggested deliverable documents\nfor a completed draft run, origin `model`.",
+        "items": {
+          "$ref": "#/$defs/DeliverableDocument"
+        },
+        "type": [
+          "array",
+          "null"
+        ]
       },
       "disclosure": {
         "anyOf": [

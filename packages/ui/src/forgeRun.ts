@@ -1,6 +1,7 @@
 import type {
   Client,
   ForgeBuildStartInput,
+  ForgeDeliverableDraftStartInput,
   ForgePollResponse,
   ForgeReviseStartInput,
   ForgeSpecStartInput,
@@ -18,9 +19,12 @@ export type ForgeClient = Pick<
   | 'startForgeRevise'
   | 'pollForgeRevise'
   | 'cancelForgeRevise'
+  | 'startForgeDeliverableDraft'
+  | 'pollForgeDeliverableDraft'
+  | 'cancelForgeDeliverableDraft'
 >;
 
-export type ForgeStage = 'spec' | 'build' | 'revise';
+export type ForgeStage = 'spec' | 'build' | 'revise' | 'deliverable';
 
 /**
  * Owns one Product Forge run lifecycle (specification or
@@ -49,12 +53,15 @@ export class ForgeRunController {
     return this.activeRunId;
   }
 
-  private startCall(input: ForgeSpecStartInput | ForgeBuildStartInput | ForgeReviseStartInput) {
+  private startCall(input: ForgeSpecStartInput | ForgeBuildStartInput | ForgeReviseStartInput | ForgeDeliverableDraftStartInput) {
     if (this.stage === 'spec') {
       return this.client.startForgeSpec(this.workspaceId, input as ForgeSpecStartInput);
     }
     if (this.stage === 'revise') {
       return this.client.startForgeRevise(this.workspaceId, input as ForgeReviseStartInput);
+    }
+    if (this.stage === 'deliverable') {
+      return this.client.startForgeDeliverableDraft(this.workspaceId, input as ForgeDeliverableDraftStartInput);
     }
     return this.client.startForgeBuild(this.workspaceId, input as ForgeBuildStartInput);
   }
@@ -66,6 +73,9 @@ export class ForgeRunController {
     if (this.stage === 'revise') {
       return this.client.pollForgeRevise(this.workspaceId, runId);
     }
+    if (this.stage === 'deliverable') {
+      return this.client.pollForgeDeliverableDraft(this.workspaceId, runId);
+    }
     return this.client.pollForgeBuild(this.workspaceId, runId);
   }
 
@@ -76,10 +86,13 @@ export class ForgeRunController {
     if (this.stage === 'revise') {
       return this.client.cancelForgeRevise(this.workspaceId, runId);
     }
+    if (this.stage === 'deliverable') {
+      return this.client.cancelForgeDeliverableDraft(this.workspaceId, runId);
+    }
     return this.client.cancelForgeBuild(this.workspaceId, runId);
   }
 
-  async start(input: ForgeSpecStartInput | ForgeBuildStartInput | ForgeReviseStartInput) {
+  async start(input: ForgeSpecStartInput | ForgeBuildStartInput | ForgeReviseStartInput | ForgeDeliverableDraftStartInput) {
     const epoch = ++this.epoch;
     const previous = this.activeRunId;
     this.activeRunId = '';
