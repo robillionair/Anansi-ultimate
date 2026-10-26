@@ -1,3 +1,37 @@
+## 2026-10-26 — M7 Slice 2: revising an existing source package
+
+Branch `muse/m7-slice2-package-revision` over the
+Windows-verified M7 Slice 1 repair tip `518418b6`.
+The §30 Revision stage, non-executing: open a saved
+source package at an exact version, request a bounded
+revision, inspect the backend-computed diff (added/
+removed/changed) as inert text, reject (nothing saved)
+or accept as a new version of the same artifact with
+exact parent and specification references. The pinned
+specification version must hold backend approval before
+any provider traffic; a revision creates no approval and
+switches no specification. Restore remaps the parent
+reference fail-closed; approval travels as in the repair.
+Also fixes the observed status-copy issue: pipeline
+stages now read "Generated — not yet saved as a project
+artifact." until persistence succeeds (previously the
+draft was shown as saved). Linux evidence: forge units
+10/10, `forge_revision` 5/5, `forge_generation` 5/5,
+`forge_restore` 4/4, full core 234/238 (only the 4
+environmental live-Ollama failures), providers+API 144/0,
+node contracts/UI 57/57, tsc clean, contracts check PASS,
+docs PASS, Clippy + fmt clean, e2e canonical 11/11 incl.
+the new `forge-revision.spec.ts` (reject → retry →
+accept → restart → backup/fresh restore → reopen).
+Record: `docs/handoffs/M7-slice2-addendum.md`; design:
+`docs/handoffs/M7-slice2-package-revision-design.md`.
+**Pending: Windows verification of this slice; Windows
+preview promotion (the preview branch
+`codex/local-preview-m7` @ `3335248` is not in this
+bundle's history — see the addendum's integration note);
+the §32 execution sandbox as a later separately approved
+slice; M5 production gates remain open.**
+
 ## 2026-10-26 — M7 Slice 1 repair: specification approval + portable export paths
 
 Branch `muse/m7-slice1-repair` over M7 Slice 1 tip
