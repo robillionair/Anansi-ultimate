@@ -885,7 +885,9 @@ pub fn forge_command(
         "forge-revise-start" => start_revise(value, scope),
         "forge-spec-poll" | "forge-build-poll" | "forge-revise-poll" => poll(value, scope),
         "forge-spec-cancel" | "forge-build-cancel" | "forge-revise-cancel" => cancel(value, scope),
-        "forge-spec-save" | "forge-build-save" | "forge-revise-save" => save(value, scope, operation),
+        "forge-spec-save" | "forge-build-save" | "forge-revise-save" => {
+            save(value, scope, operation)
+        }
         _ => Err(invalid("Use a supported Product Forge operation.")),
     }
 }
@@ -1387,7 +1389,8 @@ fn read_package(
     package_artifact_id: &str,
     package_version: u32,
 ) -> Result<crate::artifacts::ArtifactDetails, CommandError> {
-    let details = storage.artifact_read(workspace_id, package_artifact_id, Some(package_version))?;
+    let details =
+        storage.artifact_read(workspace_id, package_artifact_id, Some(package_version))?;
     if details.artifact.project_id != project_id {
         return Err(invalid(
             "The selected source package does not belong to this project.",
@@ -1401,9 +1404,7 @@ fn read_package(
     let doc: SourcePackageDoc = serde_json::from_str(&details.body)
         .map_err(|_| invalid("The selected artifact is not a readable source package."))?;
     if doc.format != "anansi-source-package" {
-        return Err(invalid(
-            "The selected artifact is not a source package.",
-        ));
+        return Err(invalid("The selected artifact is not a source package."));
     }
     Ok(details)
 }
@@ -1726,10 +1727,8 @@ fn poll(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
                                             doc.revision_instructions =
                                                 run.revision_instructions.clone();
                                             if let Some(parent) = &run.parent_package_doc {
-                                                run.revision_diff = Some(package_diff(
-                                                    &parent.files,
-                                                    &doc.files,
-                                                ));
+                                                run.revision_diff =
+                                                    Some(package_diff(&parent.files, &doc.files));
                                             }
                                         }
                                         run.package_doc = Some(doc);
@@ -1970,7 +1969,17 @@ fn save(value: Value, scope: &CallerScope, operation: &str) -> Result<Value, Com
                 refs,
                 disclosure,
                 revise,
-            } => break (project_id, doc_json, artifact_type, title, refs, disclosure, revise),
+            } => {
+                break (
+                    project_id,
+                    doc_json,
+                    artifact_type,
+                    title,
+                    refs,
+                    disclosure,
+                    revise,
+                );
+            }
         }
     };
     let storage = storage(scope)?;
@@ -2009,30 +2018,30 @@ fn save(value: Value, scope: &CallerScope, operation: &str) -> Result<Value, Com
     } else {
         storage
             .artifact_register_generated(
-            &ArtifactRegisterRequest {
-                contract_version: 1,
-                workspace_id: workspace_id.clone(),
-                project_id: project_id.clone(),
-                artifact_type: artifact_type.to_string(),
-                title,
-                body: doc_json.clone(),
-                source_references: refs,
-                privacy: "private".to_string(),
-            },
-            json!({
-                "kind": "model",
-                "provider": disclosure.provider.clone(),
-                "model": disclosure.model.clone(),
-            }),
-            "validated",
-        )
-        .inspect_err(|_| {
-            with_runs(|map| {
-                if let Some(run) = map.get_mut(&key) {
-                    run.saving = false;
-                }
-            });
-        })?
+                &ArtifactRegisterRequest {
+                    contract_version: 1,
+                    workspace_id: workspace_id.clone(),
+                    project_id: project_id.clone(),
+                    artifact_type: artifact_type.to_string(),
+                    title,
+                    body: doc_json.clone(),
+                    source_references: refs,
+                    privacy: "private".to_string(),
+                },
+                json!({
+                    "kind": "model",
+                    "provider": disclosure.provider.clone(),
+                    "model": disclosure.model.clone(),
+                }),
+                "validated",
+            )
+            .inspect_err(|_| {
+                with_runs(|map| {
+                    if let Some(run) = map.get_mut(&key) {
+                        run.saving = false;
+                    }
+                });
+            })?
     };
     with_runs(|map| {
         if let Some(run) = map.get_mut(&key) {
@@ -2506,7 +2515,9 @@ mod tests {
         ids.insert("spec".to_string(), "restored-spec".to_string());
         ids.insert("src".to_string(), "restored-src".to_string());
         let body = serde_json::to_string(&doc).unwrap();
-        let out = remap_source_package_references(&body, &ids).unwrap().unwrap();
+        let out = remap_source_package_references(&body, &ids)
+            .unwrap()
+            .unwrap();
         assert!(out.contains("restored-pkg") && out.contains("restored-spec"));
         let mut ids_missing = BTreeMap::new();
         ids_missing.insert("spec".to_string(), "restored-spec".to_string());

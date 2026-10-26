@@ -79,12 +79,14 @@ fn bad_package_json(kind: &str) -> String {
     let mut doc: Value = serde_json::from_str(&package_json()).unwrap();
     match kind {
         "traversal" => doc["files"][0]["path"] = json!("../evil.html"),
-        "reserved" => doc["files"].as_array_mut().unwrap().push(
-            json!({ "path": "CON.txt", "content": "device name" }),
-        ),
-        "prefix" => doc["files"].as_array_mut().unwrap().push(
-            json!({ "path": "app.js/extra.js", "content": "prefix conflict" }),
-        ),
+        "reserved" => doc["files"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!({ "path": "CON.txt", "content": "device name" })),
+        "prefix" => doc["files"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!({ "path": "app.js/extra.js", "content": "prefix conflict" })),
         "huge" => doc["files"][1]["content"] = json!("x".repeat(40_000)),
         _ => {}
     }
@@ -347,7 +349,10 @@ fn spec_and_package(f: &Fixture) -> (String, String) {
             json!({ "contractVersion": 1, "workspaceId": f.ws, "runId": run_id }),
         )
         .unwrap();
-    let spec_id = saved["artifact"]["artifactId"].as_str().unwrap().to_string();
+    let spec_id = saved["artifact"]["artifactId"]
+        .as_str()
+        .unwrap()
+        .to_string();
     f.core
         .ai_command(
             "forge-spec-approve",
@@ -375,7 +380,10 @@ fn spec_and_package(f: &Fixture) -> (String, String) {
             json!({ "contractVersion": 1, "workspaceId": f.ws, "runId": run_id }),
         )
         .unwrap();
-    let package_id = saved["artifact"]["artifactId"].as_str().unwrap().to_string();
+    let package_id = saved["artifact"]["artifactId"]
+        .as_str()
+        .unwrap()
+        .to_string();
     (spec_id, package_id)
 }
 
@@ -395,7 +403,12 @@ fn revise_start(
     )
 }
 
-fn revise_to_complete(f: &Fixture, package_id: &str, version: u32, instructions: &str) -> (String, Value) {
+fn revise_to_complete(
+    f: &Fixture,
+    package_id: &str,
+    version: u32,
+    instructions: &str,
+) -> (String, Value) {
     let started = revise_start(f, package_id, version, instructions).unwrap();
     let run_id = started["runId"].as_str().unwrap().to_string();
     let polled = poll_until(f, "forge-revise-poll", &run_id);
@@ -445,7 +458,12 @@ fn revision_accept_saves_new_version_with_diff_and_parent_refs() {
     let v1_body = v1["body"].as_str().unwrap().to_string();
 
     // Reject first: nothing is saved, v1 is byte-identical.
-    let (run_id, polled) = revise_to_complete(&f, &package_id, 1, "Update the heading and add a notes file.");
+    let (run_id, polled) = revise_to_complete(
+        &f,
+        &package_id,
+        1,
+        "Update the heading and add a notes file.",
+    );
     assert_eq!(polled["status"], "complete", "{polled}");
     assert_eq!(
         polled["revisionDiff"],
@@ -455,11 +473,25 @@ fn revision_accept_saves_new_version_with_diff_and_parent_refs() {
     assert_eq!(polled["sourcePackage"]["specVersion"], 1);
     // Deliberately no save call here: rejection saves nothing.
     let _ = run_id;
-    assert_eq!(versions(&f, &package_id)["versions"].as_array().unwrap().len(), 1);
-    assert_eq!(read_version(&f, &package_id, 1)["body"].as_str().unwrap(), v1_body);
+    assert_eq!(
+        versions(&f, &package_id)["versions"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    assert_eq!(
+        read_version(&f, &package_id, 1)["body"].as_str().unwrap(),
+        v1_body
+    );
 
     // Retry with the same instructions and accept.
-    let (run_id, polled) = revise_to_complete(&f, &package_id, 1, "Update the heading and add a notes file.");
+    let (run_id, polled) = revise_to_complete(
+        &f,
+        &package_id,
+        1,
+        "Update the heading and add a notes file.",
+    );
     assert_eq!(polled["status"], "complete", "{polled}");
     let saved = f
         .core
@@ -474,7 +506,10 @@ fn revision_accept_saves_new_version_with_diff_and_parent_refs() {
     let v2: Value = serde_json::from_str(saved["body"].as_str().unwrap()).unwrap();
     assert_eq!(v2["parentPackageArtifactId"], package_id);
     assert_eq!(v2["parentPackageVersion"], 1);
-    assert_eq!(v2["revisionInstructions"], "Update the heading and add a notes file.");
+    assert_eq!(
+        v2["revisionInstructions"],
+        "Update the heading and add a notes file."
+    );
     // The specification is not switched: same id and version.
     assert_eq!(v2["specArtifactId"], spec_id);
     assert_eq!(v2["specVersion"], 1);
@@ -486,7 +521,10 @@ fn revision_accept_saves_new_version_with_diff_and_parent_refs() {
         .collect();
     assert!(files.contains(&"notes.txt"));
     // v1 is still the original, byte-identical.
-    assert_eq!(read_version(&f, &package_id, 1)["body"].as_str().unwrap(), v1_body);
+    assert_eq!(
+        read_version(&f, &package_id, 1)["body"].as_str().unwrap(),
+        v1_body
+    );
     // Duplicate save is idempotent.
     let again = f
         .core
@@ -505,7 +543,13 @@ fn revision_accept_saves_new_version_with_diff_and_parent_refs() {
             json!({ "contractVersion": 1, "workspaceId": f.ws, "artifactId": package_id, "version": 2 }),
         )
         .unwrap();
-    assert!(export["files"].as_array().unwrap().iter().any(|p| p == "notes.txt"));
+    assert!(
+        export["files"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|p| p == "notes.txt")
+    );
 
     // Restart: both versions reopen exactly.
     let dir_path = f._dir.path().to_path_buf();
@@ -532,8 +576,7 @@ fn revision_requires_pinned_spec_approval_and_creates_none() {
     // pinned to v1; the revision still pins v1 and creates
     // no new approval record.
     let spec_v1 = read_version(&f, &spec_id, 1);
-    let mut spec_doc: Value =
-        serde_json::from_str(spec_v1["body"].as_str().unwrap()).unwrap();
+    let mut spec_doc: Value = serde_json::from_str(spec_v1["body"].as_str().unwrap()).unwrap();
     spec_doc["spec"]["title"] = json!("Bean Stock Log — counter edition");
     f.core
         .artifacts_command(
@@ -588,9 +631,15 @@ fn revision_requires_pinned_spec_approval_and_creates_none() {
             }),
         )
         .unwrap();
-    let manual_id = manual["artifact"]["artifactId"].as_str().unwrap().to_string();
+    let manual_id = manual["artifact"]["artifactId"]
+        .as_str()
+        .unwrap()
+        .to_string();
     let result = revise_start(&f, &manual_id, 1, "Change something.");
-    assert!(result.is_err(), "unapproved pinned spec must be refused: {result:?}");
+    assert!(
+        result.is_err(),
+        "unapproved pinned spec must be refused: {result:?}"
+    );
     assert_eq!(*fake.last_body.lock().unwrap(), wire_before);
 
     // Empty and over-long instructions are refused at start.
@@ -632,11 +681,20 @@ fn revision_invalid_outputs_and_cancellation_save_nothing() {
     ] {
         set_mode(&fake, mode);
         let (_run_id, polled) = revise_to_complete(&f, &package_id, 1, "Change something.");
-        assert_eq!(polled["status"], "invalid", "{mode} ({what}) must be invalid: {polled}");
+        assert_eq!(
+            polled["status"], "invalid",
+            "{mode} ({what}) must be invalid: {polled}"
+        );
         assert!(polled["error"].is_string());
     }
     set_mode(&fake, "valid");
-    assert_eq!(versions(&f, &package_id)["versions"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        versions(&f, &package_id)["versions"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
 
     // Cancellation during streaming saves nothing.
     set_mode(&fake, "valid-slow");
@@ -663,7 +721,13 @@ fn revision_invalid_outputs_and_cancellation_save_nothing() {
         json!({ "contractVersion": 1, "workspaceId": f.ws, "runId": run_id }),
     );
     assert!(result.is_err(), "a cancelled run must not save");
-    assert_eq!(versions(&f, &package_id)["versions"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        versions(&f, &package_id)["versions"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
 }
 
 #[test]
@@ -689,8 +753,17 @@ fn revision_stale_parent_save_conflicts() {
         "forge-revise-save",
         json!({ "contractVersion": 1, "workspaceId": f.ws, "runId": run_a }),
     );
-    assert!(result.is_err(), "stale parent save must conflict: {result:?}");
-    assert_eq!(versions(&f, &package_id)["versions"].as_array().unwrap().len(), 2);
+    assert!(
+        result.is_err(),
+        "stale parent save must conflict: {result:?}"
+    );
+    assert_eq!(
+        versions(&f, &package_id)["versions"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
 }
 
 fn backup_bytes(root: &Path, store: &Storage, ws: &str) -> Vec<u8> {
@@ -711,7 +784,10 @@ fn backup_bytes(root: &Path, store: &Storage, ws: &str) -> Vec<u8> {
 
 fn upload_once(fresh: &Core, bytes: &[u8], tag: &str) -> (String, String, String, String) {
     let landing = fresh
-        .workspace_command("create", json!({ "contractVersion": 1, "name": format!("Landing for {tag}") }))
+        .workspace_command(
+            "create",
+            json!({ "contractVersion": 1, "name": format!("Landing for {tag}") }),
+        )
         .unwrap()["workspace"]["id"]
         .as_str()
         .unwrap()
@@ -766,7 +842,12 @@ fn revised_package_restores_with_remapped_parent_spec_and_approval() {
     let fake = start_fake();
     let f = fixture(&fake);
     let (spec_id, package_id) = spec_and_package(&f);
-    let (run_id, polled) = revise_to_complete(&f, &package_id, 1, "Update the heading and add a notes file.");
+    let (run_id, polled) = revise_to_complete(
+        &f,
+        &package_id,
+        1,
+        "Update the heading and add a notes file.",
+    );
     assert_eq!(polled["status"], "complete", "{polled}");
     let saved = f
         .core
@@ -777,7 +858,11 @@ fn revised_package_restores_with_remapped_parent_spec_and_approval() {
         .unwrap();
     assert_eq!(saved["artifact"]["version"], 2);
 
-    let bytes = backup_bytes(f._dir.path(), &Storage::new(f._dir.path().to_path_buf()).unwrap(), &f.ws);
+    let bytes = backup_bytes(
+        f._dir.path(),
+        &Storage::new(f._dir.path().to_path_buf()).unwrap(),
+        &f.ws,
+    );
     let fresh_dir = tempfile::tempdir().unwrap();
     let fresh = Core::with_storage_root(fresh_dir.path().to_path_buf());
     let restored = try_upload_restore(&fresh, &bytes, "Forge Revised Restored").unwrap();

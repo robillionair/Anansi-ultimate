@@ -553,5 +553,11 @@ fn revised_package_version_restores_with_remapped_parent_reference() {
             json!({ "contractVersion": 1, "workspaceId": restored_ws, "artifactId": r_package_id, "version": 2 }),
         )
         .unwrap();
-    assert!(export["files"].as_array().unwrap().iter().any(|p| p == "index.html"));
+    assert!(
+        export["files"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|p| p == "index.html")
+    );
 }
