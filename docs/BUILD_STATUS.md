@@ -1,3 +1,42 @@
+## 2026-10-26 — M7 Slice 1 repair: specification approval + portable export paths
+
+Branch `muse/m7-slice1-repair` over M7 Slice 1 tip
+`a439bf0`. Two owner-diagnosed acceptance gaps, both
+fixed in the backend with no new features: (1)
+`forge-build-start` accepted a revised specification
+version with no new approval — now approval is a
+backend `specification-approval` artifact created only
+by `forge-spec-approve`, bound to the exact workspace,
+project, specification identity, version and
+registry-checked content hash, and enforced in
+`forge-build-start` before any provider traffic (a
+client approval flag is refused; saving/revising never
+confers approval; only an approval artifact's v1 record
+counts; restore transfers approval only to the restored
+equivalent of the same version); (2) export paths were
+not fully portable — the shared validator now refuses
+Windows reserved stems in any segment, trailing
+dot/space segments, file-versus-directory prefix
+conflicts and case-folded directory collisions, in both
+generated-output parsing and `forge-export` (before any
+tar is built), with all prior protections kept. UI: the
+spec panel saves a draft (no longer claims approval)
+and the build panel shows per-version approval status
+with an explicit approve action and a disabled Generate
+button while unapproved. Linux evidence: forge units
+8/8, `forge_generation` 5/5, `forge_restore` 3/3, full
+core 226/230 (only the 4 environmental live-Ollama
+failures), providers+API 144/0, node contracts/UI
+55/55, tsc clean, contracts check PASS, docs PASS (106
+files), Clippy + fmt clean, Forge e2e 1/1 with the
+approval step exercised. Record:
+`docs/handoffs/M7-slice1-repair-addendum.md`; design:
+`docs/handoffs/M7-slice1-repair-design.md`.
+**Pending: Windows preview promotion of this repair
+(owner review); Windows verification of M7 Slice 1; the
+§32 execution sandbox as a later separately approved
+slice; M5 production gates remain open.**
+
 ## 2026-10-21 — M7 Slice 1: Product Forge (concept → specification → source package)
 
 Branch `muse/m7-slice1-product-forge` over the verified
