@@ -155,12 +155,9 @@ fn fix_deliverable_hashes(
     let mut row_hashes: std::collections::BTreeMap<(String, String, i64), String> =
         std::collections::BTreeMap::new();
     for row in values.iter() {
-        if let (Value::Text(kind), Value::Text(id), Value::Integer(version), Value::Text(hash)) = (
-            &row[type_i],
-            &row[id_i],
-            &row[version_i],
-            &row[hash_i],
-        ) && (kind == "source-package" || kind == "specification")
+        if let (Value::Text(kind), Value::Text(id), Value::Integer(version), Value::Text(hash)) =
+            (&row[type_i], &row[id_i], &row[version_i], &row[hash_i])
+            && (kind == "source-package" || kind == "specification")
         {
             row_hashes.insert((kind.clone(), id.clone(), *version), hash.clone());
         }
@@ -293,8 +290,7 @@ fn remap_artifact_row(
         let body_i = index("body")?;
         let hash_i = index("content_hash")?;
         if let Value::Text(body) = &columns[body_i]
-            && let Some(rewritten) =
-                crate::forge::remap_deliverable_references(body, ids)?
+            && let Some(rewritten) = crate::forge::remap_deliverable_references(body, ids)?
         {
             columns[hash_i] = Value::Text(crate::content::hash(rewritten.as_bytes()));
             columns[body_i] = Value::Text(rewritten);

@@ -461,10 +461,7 @@ fn parse_tar(bytes: &[u8]) -> Vec<(String, Vec<u8>)> {
         if header.iter().all(|b| *b == 0) {
             break;
         }
-        let name_end = header[..100]
-            .iter()
-            .position(|b| *b == 0)
-            .unwrap_or(100);
+        let name_end = header[..100].iter().position(|b| *b == 0).unwrap_or(100);
         let name = String::from_utf8_lossy(&header[..name_end]).to_string();
         let size_str = String::from_utf8_lossy(&header[124..136])
             .trim_matches(|c| c == '\0' || c == ' ')
@@ -496,7 +493,10 @@ fn manual_save_and_deterministic_export() {
     assert_eq!(doc["format"], "anansi-deliverable");
     assert_eq!(doc["packageArtifactId"], package_id);
     assert_eq!(doc["packageVersion"], 1);
-    assert_eq!(doc["packageContentHash"], content::hash(package_body.as_bytes()));
+    assert_eq!(
+        doc["packageContentHash"],
+        content::hash(package_body.as_bytes())
+    );
     assert_eq!(doc["specArtifactId"], spec_id);
     assert_eq!(doc["specVersion"], 1);
     assert_eq!(
@@ -536,14 +536,7 @@ fn manual_save_and_deterministic_export() {
             "deliverable-docs/verified-facts.md",
         ]
     );
-    let by_name = |name: &str| {
-        entries
-            .iter()
-            .find(|(n, _)| n == name)
-            .unwrap()
-            .1
-            .clone()
-    };
+    let by_name = |name: &str| entries.iter().find(|(n, _)| n == name).unwrap().1.clone();
     // Source bytes are byte-identical to the package.
     let package_doc: Value = serde_json::from_str(&package_body).unwrap();
     for file in package_doc["files"].as_array().unwrap() {
@@ -559,8 +552,7 @@ fn manual_save_and_deterministic_export() {
     // The manifest hashes match the archive entries and
     // claim nothing about builds, tests, deployment or a
     // license.
-    let manifest: Value =
-        serde_json::from_slice(&by_name("ANANSI-DELIVERABLE.json")).unwrap();
+    let manifest: Value = serde_json::from_slice(&by_name("ANANSI-DELIVERABLE.json")).unwrap();
     assert_eq!(manifest["format"], "anansi-deliverable-export");
     assert_eq!(manifest["packageArtifactId"], package_id);
     assert_eq!(manifest["packageVersion"], 1);
@@ -603,13 +595,8 @@ fn model_draft_edit_and_save() {
     assert_eq!(draft_docs.len(), 5);
     assert!(draft_docs.iter().all(|d| d["origin"] == "model"));
     assert!(
-        draft_docs
-            .iter()
-            .any(|d| d["name"] == "architecture.md"
-                && d["content"]
-                    .as_str()
-                    .unwrap()
-                    .contains("index.html"))
+        draft_docs.iter().any(|d| d["name"] == "architecture.md"
+            && d["content"].as_str().unwrap().contains("index.html"))
     );
     // Editing one suggestion flips its origin to user.
     let mut docs: Vec<Value> = draft_docs.to_vec();
@@ -628,7 +615,12 @@ fn model_draft_edit_and_save() {
         .find(|d| d["name"] == "usage.md")
         .unwrap();
     assert_eq!(usage["origin"], "user");
-    assert!(usage["content"].as_str().unwrap().contains("edited by the user"));
+    assert!(
+        usage["content"]
+            .as_str()
+            .unwrap()
+            .contains("edited by the user")
+    );
     let architecture = saved_doc["documents"]
         .as_array()
         .unwrap()
@@ -725,9 +717,15 @@ fn approval_gate_refuses_draft_and_save_without_provider_traffic() {
             "packageArtifactId": manual_id, "packageVersion": 1, "zeroCostLock": true
         }),
     );
-    assert!(draft.is_err(), "unapproved spec must refuse draft: {draft:?}");
+    assert!(
+        draft.is_err(),
+        "unapproved spec must refuse draft: {draft:?}"
+    );
     let saved = save_deliverable(&f, &manual_id, 1, manual_docs());
-    assert!(saved.is_err(), "unapproved spec must refuse save: {saved:?}");
+    assert!(
+        saved.is_err(),
+        "unapproved spec must refuse save: {saved:?}"
+    );
     assert_eq!(*fake.last_body.lock().unwrap(), wire_before);
 }
 
@@ -769,7 +767,10 @@ fn collision_missing_and_revision_conflict_fail_closed() {
         .unwrap()
         .to_string();
     let refused = save_deliverable(&f, &colliding_id, 1, manual_docs());
-    assert!(refused.is_err(), "namespace collision must refuse: {refused:?}");
+    assert!(
+        refused.is_err(),
+        "namespace collision must refuse: {refused:?}"
+    );
     assert_eq!(
         versions(&f.core, &f.ws, &colliding_id)["versions"]
             .as_array()
@@ -823,8 +824,7 @@ fn collision_missing_and_revision_conflict_fail_closed() {
         )
         .unwrap();
     assert_eq!(revised["artifact"]["version"], 2);
-    let revised_doc: Value =
-        serde_json::from_str(revised["body"].as_str().unwrap()).unwrap();
+    let revised_doc: Value = serde_json::from_str(revised["body"].as_str().unwrap()).unwrap();
     assert_eq!(revised_doc["packageArtifactId"], package_id);
     assert_eq!(revised_doc["packageVersion"], 1);
     assert_eq!(
@@ -993,8 +993,7 @@ fn restart_and_fresh_restore_preserve_deliverable_and_export() {
     let dir_path = f._dir.path().to_path_buf();
     let core2 = Core::with_storage_root(dir_path.clone());
     let reopened = read_version(&core2, &f.ws, &deliverable_id, 1);
-    let reopened_doc: Value =
-        serde_json::from_str(reopened["body"].as_str().unwrap()).unwrap();
+    let reopened_doc: Value = serde_json::from_str(reopened["body"].as_str().unwrap()).unwrap();
     assert_eq!(reopened_doc["packageArtifactId"], package_id);
     let exported = core2
         .artifacts_command(
