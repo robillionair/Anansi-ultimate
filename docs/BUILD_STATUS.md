@@ -160,6 +160,23 @@ preview promotion (the preview branch
 bundle's history — see the addendum's integration note);
 the §32 execution sandbox as a later separately approved
 slice; M5 production gates remain open.**
+## 2026-10-26 — Windows M7 repaired preview available locally
+
+Application checkpoint `518418b6a955feaadcc6212eab0a3f3fd1e1bcb9` passed focused
+Windows Forge generation/restore/unit checks, UI/contracts, TypeScript and strict
+core all-target Clippy. The normal embedded desktop/API build succeeded on E:.
+Actual native synthetic-provider acceptance passed draft generation, explicit
+version approval, source generation/save, inert text inspection, TAR export with
+manifest/hash verification, and restart/reopen with the provider stopped.
+No generated code was executed. Evidence and precise limitations:
+`docs/reviews/windows-m7-518418b-acceptance.md`.
+
+Local branch `codex/local-preview-m7` adds preview materials only. Launch
+`E:\Anansi\Start ANANSI Preview M7.cmd`; guide: `M7-PREVIEW.md`.
+Separate personal data root: `%LOCALAPPDATA%\ANANSI-Preview\m7`.
+R17 and personal data are preserved. Native UI backup/restore was not repeated;
+backend restore checks passed. Real-provider/native credential, G1 audit and
+remote-CI gates remain open. No push or master merge.
 
 ## 2026-10-26 — M7 Slice 1 repair: specification approval + portable export paths
 
