@@ -1,7 +1,11 @@
 # ANANSI M7 Slices 1–3 Windows preview
 
-Application baseline: `cc25155ffe758dbab68b40e9576381738055b2ee`.
-Local integration branch: `codex/preview-m7-slices2-3`.
+Forge/backend baseline: `cc25155ffe758dbab68b40e9576381738055b2ee`.
+Initial local integration branch: `codex/preview-m7-slices2-3`.
+Current usability update: `codex/m7-preview-discovery`, implementation `a67487d8a`.
+Choose **Ideas & Product Forge** after opening a workspace to enter the existing
+Projects workflow. AI setup remains optional; a configured provider is needed
+for generation. The welcome copy now describes these implemented tools.
 
 Launch **Start ANANSI Preview M7 Slices 2-3.cmd** after the Windows build.
 The integrator also places a copy under `E:\Anansi` and a named desktop shortcut.
@@ -51,7 +55,9 @@ not the reported preview-integration ZIP. Muse's `bed0dc2` was unavailable local
 The Windows integrator composed this branch from verified `cc25155ff` and
 cherry-picked preview-material commit `3335248b`, preserving both build-status
 sections. This is a local equivalent integration, not verification of `bed0dc2`.
-Application code is unchanged from `cc25155ff`.
+That initial integration's application code was unchanged from `cc25155ff`.
+The later discovery update changes shared UI navigation and wording only;
+backend, contracts, approval and execution boundaries are unchanged.
 
 Acceptance plan/evidence: `docs/handoffs/M7-local-native-preview.md`.
 Native tests use disposable E: data and a synthetic provider; setup/API operations

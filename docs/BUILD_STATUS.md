@@ -1,3 +1,22 @@
+## 2026-10-27 — M7 preview workflow discovery correction
+
+Implementation `a67487d8a` on `codex/m7-preview-discovery` corrects obsolete
+first-run claims that AI/providers/Forge are unavailable and adds Ideas & Product
+Forge navigation into existing Projects. No domain, transport, consent or execution
+capabilities changed. Generated products remain unexecuted and uncertified.
+
+UI/contracts 60/60, TypeScript, contracts drift, web build and docs passed.
+Browser onboarding 3/3 includes shortcut activation, keyboard/focus/reload and
+narrow-layout checks. Source-revision workflow passed 1/1; deliverable initially
+failed at approval-screen loading during the build, then passed the unchanged
+idle rerun 1/1 through restart/fresh restore. Initial diagnostic retained; no
+timeout/assertion weakened and cause not conclusively established.
+Windows embedded desktop build passed; new personal preview startup/copy observed
+and left open. Previous executable preserved for rollback. Scope, commands and
+hash: [discovery evidence](handoffs/M7-preview-discovery.md). Production gates
+remain open; no paid/cloud inference, model downloads, generated execution,
+pushes, master merge or remote CI.
+
 ## 2026-10-27 — Local combined native preview verified
 
 The owner requested continuing the Windows preview build and verification.

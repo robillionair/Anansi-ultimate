@@ -46,3 +46,21 @@ No timeout/assertion was changed. Original diagnostic preserved outside source:
 `E:\Anansi\deliveries\m7-preview-discovery-evidence\initial-deliverable-diagnostic.md`.
 An idle deliverable-only rerun is recorded separately below; the first failure
 is retained rather than silently counted as a pass.
+
+Idle deliverable-only rerun passed 1/1 in 3.0 minutes with the exact original
+8-second action timeout and 240-second test limit, no code/assertion changes.
+It covered specification approval, documentation generation/edit/save/export,
+version switching and Cancel/reopen, API restart and fresh backup/restore.
+Thus the initial failure did not reproduce in the idle run; resource contention
+is a plausible contributor, not an established root cause. No retry was hidden
+and no backend behavior was changed to obtain the pass.
+
+Rebuilt personal desktop launched successfully with the existing separate root.
+Actual native welcome inspection confirmed the CREATE shortcut (disabled until a
+workspace is ready), updated idea/source-review descriptions and generic
+Development preview label. It was left open for the owner. Shortcut activation
+after onboarding is browser-verified; this native check does not claim a new
+privacy-consent/onboarding interaction. Prior full synthetic native Forge evidence
+remains in the baseline record. No new native acceptance of real inference or
+credentials is claimed. Source, tests and guide are recoverable on
+`codex/m7-preview-discovery`; implementation checkpoint `a67487d8a`.
