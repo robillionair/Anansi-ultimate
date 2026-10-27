@@ -2431,11 +2431,8 @@ fn validate_review_findings(
             findings.len()
         )));
     }
-    let package_paths: std::collections::BTreeSet<&str> = package_doc
-        .files
-        .iter()
-        .map(|f| f.path.as_str())
-        .collect();
+    let package_paths: std::collections::BTreeSet<&str> =
+        package_doc.files.iter().map(|f| f.path.as_str()).collect();
     for (index, finding) in findings.iter().enumerate() {
         if finding.criterion_index != index {
             return Err(invalid(&format!(
@@ -2544,10 +2541,8 @@ pub(crate) fn validate_review_record(
             "The stored review's pinned specification hash does not match its specification version.",
         ));
     }
-    let expected_limitations: Vec<String> = REVIEW_LIMITATIONS
-        .iter()
-        .map(|s| s.to_string())
-        .collect();
+    let expected_limitations: Vec<String> =
+        REVIEW_LIMITATIONS.iter().map(|s| s.to_string()).collect();
     if doc.limitations != expected_limitations {
         return Err(invalid(
             "The stored review's limitations do not match the fixed review limitations.",
@@ -2573,10 +2568,8 @@ fn save_review(value: Value, scope: &CallerScope) -> Result<Value, CommandError>
     if req.package_version < 1 {
         return Err(invalid("Pin an exact package version (1 or later)."));
     }
-    let (review_id, expected_version) = match (
-        req.review_artifact_id.clone(),
-        req.expected_version,
-    ) {
+    let (review_id, expected_version) = match (req.review_artifact_id.clone(), req.expected_version)
+    {
         (None, None) => (None, None),
         (Some(id), Some(version)) => (Some(id), Some(version)),
         _ => {

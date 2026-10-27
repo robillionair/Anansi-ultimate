@@ -418,9 +418,7 @@ fn validate_original_deliverable_bindings(
 /// restored one. This runs before the prepared-row
 /// loop and before any destination state is written,
 /// so a refusal publishes nothing.
-fn validate_original_review_bindings(
-    source: &rusqlite::Connection,
-) -> Result<(), CommandError> {
+fn validate_original_review_bindings(source: &rusqlite::Connection) -> Result<(), CommandError> {
     struct Row {
         workspace_id: String,
         project_id: String,

@@ -552,7 +552,10 @@ fn manual_save_pins_exact_versions_and_reopens() {
     let f = fixture(&fake);
     let (spec_id, package_id) = spec_and_package(&f, true);
     let saved = save_review(&f.core, &f.ws, &f.project, &package_id, 1, base_findings()).unwrap();
-    let review_id = saved["artifact"]["artifactId"].as_str().unwrap().to_string();
+    let review_id = saved["artifact"]["artifactId"]
+        .as_str()
+        .unwrap()
+        .to_string();
     assert_eq!(saved["artifact"]["type"], "source-review");
     let body: Value = serde_json::from_str(saved["body"].as_str().unwrap()).unwrap();
     assert_eq!(body["format"], "anansi-source-review");
@@ -562,7 +565,10 @@ fn manual_save_pins_exact_versions_and_reopens() {
     assert_eq!(body["specArtifactId"], spec_id);
     assert_eq!(body["specVersion"], 1);
     assert_eq!(body["conceptName"], "Bean Stock Log");
-    assert_eq!(body["findings"], serde_json::to_value(base_findings()).unwrap());
+    assert_eq!(
+        body["findings"],
+        serde_json::to_value(base_findings()).unwrap()
+    );
     assert_eq!(
         body["limitations"],
         json!([
@@ -651,7 +657,17 @@ fn findings_validation_fails_closed() {
 fn references_fail_closed() {
     let m = manual_fixture();
     // Nonexistent package version.
-    assert!(save_review(&m.core, &m.ws, &m.project, &m.package_id, 99, base_findings()).is_err());
+    assert!(
+        save_review(
+            &m.core,
+            &m.ws,
+            &m.project,
+            &m.package_id,
+            99,
+            base_findings()
+        )
+        .is_err()
+    );
     // Package from another project.
     let other_project = m
         .core
@@ -680,7 +696,15 @@ fn references_fail_closed() {
         .unwrap()
         .to_string();
     assert!(
-        save_review(&m.core, &m.ws, &m.project, &other_package_id, 1, base_findings()).is_err(),
+        save_review(
+            &m.core,
+            &m.ws,
+            &m.project,
+            &other_package_id,
+            1,
+            base_findings()
+        )
+        .is_err(),
         "cross-project package must be refused"
     );
     // Package whose pinned specification belongs to another project.
@@ -717,7 +741,15 @@ fn references_fail_closed() {
         .unwrap()
         .to_string();
     assert!(
-        save_review(&m.core, &m.ws, &m.project, &cross_package_id, 1, base_findings()).is_err(),
+        save_review(
+            &m.core,
+            &m.ws,
+            &m.project,
+            &cross_package_id,
+            1,
+            base_findings()
+        )
+        .is_err(),
         "cross-project specification must be refused"
     );
     // Archived projects refuse.
@@ -739,7 +771,15 @@ fn references_fail_closed() {
         )
         .unwrap();
     assert!(
-        save_review(&m.core, &m.ws, &m.project, &m.package_id, 1, base_findings()).is_err(),
+        save_review(
+            &m.core,
+            &m.ws,
+            &m.project,
+            &m.package_id,
+            1,
+            base_findings()
+        )
+        .is_err(),
         "archived project must refuse the review save"
     );
 }
@@ -747,7 +787,15 @@ fn references_fail_closed() {
 #[test]
 fn save_without_approval_or_provider_creates_nothing() {
     let m = manual_fixture();
-    let saved = save_review(&m.core, &m.ws, &m.project, &m.package_id, 1, base_findings()).unwrap();
+    let saved = save_review(
+        &m.core,
+        &m.ws,
+        &m.project,
+        &m.package_id,
+        1,
+        base_findings(),
+    )
+    .unwrap();
     assert_eq!(saved["artifact"]["type"], "source-review");
     // No specification approval was created or required.
     let status = m
@@ -782,7 +830,10 @@ fn review_revision_and_stale_conflict_fail_closed() {
     let f = fixture(&fake);
     let (_, package_id) = spec_and_package(&f, true);
     let saved = save_review(&f.core, &f.ws, &f.project, &package_id, 1, base_findings()).unwrap();
-    let review_id = saved["artifact"]["artifactId"].as_str().unwrap().to_string();
+    let review_id = saved["artifact"]["artifactId"]
+        .as_str()
+        .unwrap()
+        .to_string();
     let mut revised_findings = base_findings();
     revised_findings[0]["status"] = json!("satisfied");
     revised_findings[0]["note"] = json!("Add flow works when opened from the filesystem.");
@@ -813,7 +864,10 @@ fn review_revision_and_stale_conflict_fail_closed() {
             "reviewArtifactId": review_id, "expectedVersion": 2
         }),
     );
-    assert!(switched.is_err(), "review revision switched packages: {switched:?}");
+    assert!(
+        switched.is_err(),
+        "review revision switched packages: {switched:?}"
+    );
     // A stale expected version conflicts.
     let stale = f.core.ai_command(
         "forge-review-save",
@@ -824,7 +878,10 @@ fn review_revision_and_stale_conflict_fail_closed() {
             "reviewArtifactId": review_id, "expectedVersion": 1
         }),
     );
-    assert!(stale.is_err(), "stale review revision must conflict: {stale:?}");
+    assert!(
+        stale.is_err(),
+        "stale review revision must conflict: {stale:?}"
+    );
     assert_eq!(
         versions(&f.core, &f.ws, &review_id)["versions"]
             .as_array()
@@ -841,7 +898,10 @@ fn review_does_not_follow_newer_package_version() {
     let f = fixture(&fake);
     let (_, package_id) = spec_and_package(&f, true);
     let saved = save_review(&f.core, &f.ws, &f.project, &package_id, 1, base_findings()).unwrap();
-    let review_id = saved["artifact"]["artifactId"].as_str().unwrap().to_string();
+    let review_id = saved["artifact"]["artifactId"]
+        .as_str()
+        .unwrap()
+        .to_string();
     // A new package version, via the generic revise path.
     let v1 = read_version(&f.core, &f.ws, &package_id, 1);
     let mut v2_body: Value = serde_json::from_str(v1["body"].as_str().unwrap()).unwrap();
@@ -861,7 +921,8 @@ fn review_does_not_follow_newer_package_version() {
     assert_eq!(doc["packageVersion"], 1);
     assert_eq!(doc["packageArtifactId"], package_id);
     // A review of v2 pins v2 independently.
-    let saved_v2 = save_review(&f.core, &f.ws, &f.project, &package_id, 2, base_findings()).unwrap();
+    let saved_v2 =
+        save_review(&f.core, &f.ws, &f.project, &package_id, 2, base_findings()).unwrap();
     let doc_v2: Value = serde_json::from_str(saved_v2["body"].as_str().unwrap()).unwrap();
     assert_eq!(doc_v2["packageVersion"], 2);
 }
@@ -872,7 +933,10 @@ fn findings_to_revision_accept_and_unapproved_gate() {
     let f = fixture(&fake);
     let (_, package_id) = spec_and_package(&f, true);
     let saved = save_review(&f.core, &f.ws, &f.project, &package_id, 1, base_findings()).unwrap();
-    let _review_id = saved["artifact"]["artifactId"].as_str().unwrap().to_string();
+    let _review_id = saved["artifact"]["artifactId"]
+        .as_str()
+        .unwrap()
+        .to_string();
     // Instructions composed from the selected finding,
     // as the panel composes them; submission uses the
     // unchanged revision flow.
@@ -891,7 +955,10 @@ fn findings_to_revision_accept_and_unapproved_gate() {
     let run_id = started["runId"].as_str().unwrap().to_string();
     let polled = poll_until(&f, "forge-revise-poll", &run_id);
     assert_eq!(polled["status"], "complete", "{polled}");
-    assert!(polled["revisionDiff"].is_object(), "no server-computed diff: {polled}");
+    assert!(
+        polled["revisionDiff"].is_object(),
+        "no server-computed diff: {polled}"
+    );
     let saved_rev = f
         .core
         .ai_command(
@@ -939,7 +1006,10 @@ fn findings_to_revision_accept_and_unapproved_gate() {
             "instructions": instructions, "zeroCostLock": true
         }),
     );
-    assert!(refused.is_err(), "unapproved revision must be refused: {refused:?}");
+    assert!(
+        refused.is_err(),
+        "unapproved revision must be refused: {refused:?}"
+    );
     assert!(
         !fake.last_body.lock().unwrap().contains("Revision request"),
         "refused revision sent provider traffic"
@@ -952,7 +1022,10 @@ fn restart_and_fresh_restore_preserve_review() {
     let f = fixture(&fake);
     let (spec_id, package_id) = spec_and_package(&f, true);
     let saved = save_review(&f.core, &f.ws, &f.project, &package_id, 1, base_findings()).unwrap();
-    let review_id = saved["artifact"]["artifactId"].as_str().unwrap().to_string();
+    let review_id = saved["artifact"]["artifactId"]
+        .as_str()
+        .unwrap()
+        .to_string();
     // Restart reopens the review at its pinned version.
     let core2 = Core::with_storage_root(f._dir.path().to_path_buf());
     let reopened = read_version(&core2, &f.ws, &review_id, 1);
@@ -991,9 +1064,18 @@ fn restart_and_fresh_restore_preserve_review() {
             .unwrap()
             .clone()
     };
-    let r_spec_id = by_type("specification")["artifactId"].as_str().unwrap().to_string();
-    let r_package_id = by_type("source-package")["artifactId"].as_str().unwrap().to_string();
-    let r_review_id = by_type("source-review")["artifactId"].as_str().unwrap().to_string();
+    let r_spec_id = by_type("specification")["artifactId"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let r_package_id = by_type("source-package")["artifactId"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let r_review_id = by_type("source-review")["artifactId"]
+        .as_str()
+        .unwrap()
+        .to_string();
     assert_ne!(r_spec_id, spec_id);
     assert_ne!(r_package_id, package_id);
     assert_ne!(r_review_id, review_id);
@@ -1012,7 +1094,10 @@ fn restart_and_fresh_restore_preserve_review() {
     let r_spec = read_version(&fresh, &restored_ws, &r_spec_id, 1);
     assert_eq!(r_doc["specContentHash"], r_spec["artifact"]["contentHash"]);
     // Findings survived the remap unchanged.
-    assert_eq!(r_doc["findings"], serde_json::to_value(base_findings()).unwrap());
+    assert_eq!(
+        r_doc["findings"],
+        serde_json::to_value(base_findings()).unwrap()
+    );
 }
 
 #[test]
@@ -1046,14 +1131,15 @@ fn restore_refuses_tampered_pinned_hash() {
         result.is_err(),
         "restore silently repaired an invalid original pin: {result:?}"
     );
-    let no_restored_workspace = |fresh: &Core| {
-        let listed = fresh
-            .workspace_command("list", json!({ "contractVersion": 1 }))
-            .unwrap();
-        !listed["workspaces"].as_array().unwrap().iter().any(|w| {
-            w["name"] == "Invalid pin review" || w["name"] == "Invalid pin review again"
-        })
-    };
+    let no_restored_workspace =
+        |fresh: &Core| {
+            let listed = fresh
+                .workspace_command("list", json!({ "contractVersion": 1 }))
+                .unwrap();
+            !listed["workspaces"].as_array().unwrap().iter().any(|w| {
+                w["name"] == "Invalid pin review" || w["name"] == "Invalid pin review again"
+            })
+        };
     assert!(
         no_restored_workspace(&fresh),
         "failed restore published a destination workspace"
@@ -1083,7 +1169,10 @@ fn restore_refuses_cross_workspace_spec() {
     let f = fixture(&fake);
     let (_, package_id) = spec_and_package(&f, true);
     let saved = save_review(&f.core, &f.ws, &f.project, &package_id, 1, base_findings()).unwrap();
-    let id = saved["artifact"]["artifactId"].as_str().unwrap().to_string();
+    let id = saved["artifact"]["artifactId"]
+        .as_str()
+        .unwrap()
+        .to_string();
     // A specification in a different workspace.
     let other_dir = tempfile::tempdir().unwrap();
     let other = Core::with_storage_root(other_dir.path().to_path_buf());
