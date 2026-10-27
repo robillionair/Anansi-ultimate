@@ -29,6 +29,54 @@ scope, commands/case names and limitations. Linux delivery evidence below remain
 historical and is not relabelled Windows certification. Running preview/data
 untouched; execution and production gates stay open; no paid inference or CI.
 
+## 2026-10-27 — M8 acceptance repair (Linux verification)
+
+Acceptance repair on branch `muse/m8-acceptance-repair`,
+from the independent Windows review tip
+`codex/review-m8-slices1-2` @ `c50de23b` (Slice 2 tip
+`ffbeee40` verified as an ancestor; the review
+commit changed tests and docs only). A version-1
+`transfer-approval` receipt now pins the full
+approved snapshot, and Forge admits a transferred
+concept only when that receipt (generator kind
+`transfer`, which manual registration can never
+produce) matches the requested concept body and the
+pinned experiment in the same workspace/project —
+generic revisions mint no approval and all denials
+happen before provider traffic. Restore
+pre-validation compares every model-derived field
+plus receipt rows, with remap and fix-up carrying
+valid receipts to restored equivalents. Idempotency
+is one SQLite `IMMEDIATE` transaction around a
+receipt-bounded scan plus both inserts (no
+process-local mutex, no latest-version scan, no
+schema change). Beams and briefs stay verbatim
+through wire, save, transfer, reopen and restore,
+and the transfer/Forge panels are keyed by full
+source identity with snapshot-bound responses.
+
+Linux verification, sequential on an idle machine:
+review probes pass unmodified (transfer suite
+16/16, collider 13/13); full core 285/289 with only
+the 4 known environmental live-Ollama
+semantic_workflow failures; providers 120/0 + API
+24/0 (144/0); node UI/contracts 78/78; TypeScript,
+contracts drift, docs, strict Clippy and formatting
+clean; API+web builds passed. Browser canonical
+battery 16/16 including the strengthened transfer
+spec, the new independent transfer-identity spec
+and the new cross-process transfer-concurrency spec
+(two real API processes, one synthetic root, same
+concept id, exactly one concept). Design:
+[Acceptance repair design](handoffs/M8-acceptance-repair-design.md);
+record:
+[Acceptance repair addendum](handoffs/M8-acceptance-repair-addendum.md).
+Windows rerun of Slices 1–2 as repaired, M7 native
+acceptance, preview promotion, the §32 sandbox and
+the M5 production gates remain open. Synthetic only,
+no generated-code execution, credentials, paid
+inference, downloads, pushes or remote CI.
+
 ## 2026-10-27 — M8 Slice 2: collider → Forge transfer (Linux verification)
 
 Explicitly approved transfer on branch
