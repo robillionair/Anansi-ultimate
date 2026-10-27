@@ -1,3 +1,28 @@
+## 2026-10-27 — Independent Windows source-review acceptance and corrections
+
+Incoming `7607dc7cf17f5763c5311241835211cc14c6af71` ZIP/bundle hashes,
+independent scratch clone, all 8 refs and `e6d22f711` ancestry verified.
+Local application correction `befc66f11` on `codex/review-m7-source-review`
+keeps review-to-package viewer/history/editor selection coherent, guards malformed
+review rendering, names assessments Satisfied by inspection, and rejects an
+invalid typed-review format during restore pre-validation. No new feature or
+execution capability. Initial probes and their limitations are retained in
+[the Windows review](reviews/windows-m7-source-review.md).
+
+Windows: all 10 delivered review backend cases passed; corrected additional
+valid-control/invalid-format restore regression passed 1/1; UI/contracts 64/64;
+TypeScript, contracts drift, strict focused core-library/review-test Clippy,
+formatting, docs and API/web builds passed. New source-review browser flow 1/1
+includes history/editor identity and captured generic-save package target;
+existing deliverable and source-revision browser regressions passed 2/2, with
+their restart/restore/version/Cancel coverage retained. Actual browser screenshot
+reviewed. This is not a new full Windows core/provider/API suite or native run.
+
+Use the corrected review branch as the next integration baseline. Running
+preview/data untouched; source-review native desktop acceptance/promotion remain
+pending. M7 and production gates remain open. Synthetic only, no generated-code
+execution, credentials, paid inference, downloads, pushes or remote CI.
+
 ## 2026-10-27 — M7 Slice 4: source review (Linux verification)
 
 Model-free source review on branch `muse/m7-source-review`, from the owner's

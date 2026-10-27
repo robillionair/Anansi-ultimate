@@ -9,6 +9,12 @@ Windows synthetic native evidence at `bf6f1fd9c` in
 generated execution, other product templates or production certification.
 The [discovery correction](handoffs/M7-preview-discovery.md) makes the implemented
 project workflow visible without changing capability or consent boundaries.
+Source review additionally has focused Windows backend/browser evidence on the
+reviewed `befc66f11` application tree in
+[the independent review](reviews/windows-m7-source-review.md), including exact
+package handoff/editor identity and restored review provenance. Source-review
+native desktop acceptance/promotion remain pending; the prior Slices 1–3 native
+evidence is preserved. AN-012 and production/execution gates remain in progress.
 
 ## Current acceptance correction — 2026-10-20
 
