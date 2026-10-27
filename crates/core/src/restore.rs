@@ -555,8 +555,7 @@ fn validate_original_experiment_bindings(
         }
         let doc: crate::collider::ColliderExperimentDoc =
             serde_json::from_str(&body).map_err(|_| crate::jobs::invalid())?;
-        crate::collider::validate_experiment_doc(&doc)
-            .map_err(|_| crate::jobs::invalid())?;
+        crate::collider::validate_experiment_doc(&doc).map_err(|_| crate::jobs::invalid())?;
     }
     Ok(())
 }

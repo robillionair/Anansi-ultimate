@@ -88,8 +88,7 @@ fn start_fake() -> Fake {
     std::thread::spawn(move || {
         for stream in listener.incoming() {
             let Ok(mut stream) = stream else { continue };
-            let (mode, last_body, dripped, hits) =
-                (m2.clone(), b2.clone(), d2.clone(), h2.clone());
+            let (mode, last_body, dripped, hits) = (m2.clone(), b2.clone(), d2.clone(), h2.clone());
             std::thread::spawn(move || {
                 let mut reader = BufReader::new(stream.try_clone().unwrap());
                 let mut content_length = 0usize;
@@ -124,18 +123,14 @@ fn start_fake() -> Fake {
                 }
                 let mut text = collision_json();
                 match mode.as_str() {
-                    "malformed" => {
-                        text = "I have thoughts but no JSON for you.".to_string()
-                    }
+                    "malformed" => text = "I have thoughts but no JSON for you.".to_string(),
                     "missing-section" => {
-                        let mut doc: Value =
-                            serde_json::from_str(&collision_json()).unwrap();
+                        let mut doc: Value = serde_json::from_str(&collision_json()).unwrap();
                         doc.as_object_mut().unwrap().remove("productization");
                         text = doc.to_string();
                     }
                     "too-few-combinations" => {
-                        let mut doc: Value =
-                            serde_json::from_str(&collision_json()).unwrap();
+                        let mut doc: Value = serde_json::from_str(&collision_json()).unwrap();
                         doc["combinations"] = json!([{
                             "name": "Only one",
                             "description": "A single combination is below the required minimum."
@@ -143,14 +138,12 @@ fn start_fake() -> Fake {
                         text = doc.to_string();
                     }
                     "unknown-field" => {
-                        let mut doc: Value =
-                            serde_json::from_str(&collision_json()).unwrap();
+                        let mut doc: Value = serde_json::from_str(&collision_json()).unwrap();
                         doc["surprise"] = json!("not part of the contract");
                         text = doc.to_string();
                     }
                     "over-bounds" => {
-                        let mut doc: Value =
-                            serde_json::from_str(&collision_json()).unwrap();
+                        let mut doc: Value = serde_json::from_str(&collision_json()).unwrap();
                         doc["sourceUnderstanding"] = json!("x".repeat(6001));
                         text = doc.to_string();
                     }
@@ -213,7 +206,10 @@ fn fixture(fake: &Fake, cost: &str) -> Fixture {
     let dir = tempfile::tempdir().unwrap();
     let core = Core::with_storage_root(dir.path().to_path_buf());
     let ws = core
-        .workspace_command("create", json!({ "contractVersion": 1, "name": "Collider" }))
+        .workspace_command(
+            "create",
+            json!({ "contractVersion": 1, "name": "Collider" }),
+        )
         .unwrap()["workspace"]["id"]
         .as_str()
         .unwrap()
@@ -511,7 +507,10 @@ fn unconfigured_provider_and_archived_project_refuse() {
             json!({ "contractVersion": 1, "workspaceId": f.ws, "id": f.project }),
         )
         .unwrap();
-    let revision = current["memory"]["revisionId"].as_str().unwrap().to_string();
+    let revision = current["memory"]["revisionId"]
+        .as_str()
+        .unwrap()
+        .to_string();
     f.core
         .memory_command(
             "revise",
@@ -555,7 +554,10 @@ fn privacy_and_cost_refusals_make_zero_provider_hits() {
     let polled = poll_until(&f, &run_id);
     assert_eq!(polled["status"], "failed", "{polled}");
     assert!(
-        polled["error"].as_str().unwrap().contains("cost constraints"),
+        polled["error"]
+            .as_str()
+            .unwrap()
+            .contains("cost constraints"),
         "refusal must name the cost constraint: {polled}"
     );
     assert!(polled["result"].is_null());
@@ -685,7 +687,10 @@ fn workspace_isolation_and_stale_polls() {
         "collider-poll",
         json!({ "contractVersion": 1, "workspaceId": ws2, "runId": run_id }),
     );
-    assert!(result.is_err(), "a run must not poll from another workspace");
+    assert!(
+        result.is_err(),
+        "a run must not poll from another workspace"
+    );
     // Polling a completed run again returns the same completion.
     let again = f
         .core
@@ -718,7 +723,8 @@ fn save_is_idempotent_under_repeats() {
         .unwrap();
     assert_eq!(second["alreadySaved"], true);
     assert_eq!(
-        first["artifact"]["artifactId"], second["artifact"]["artifactId"]
+        first["artifact"]["artifactId"],
+        second["artifact"]["artifactId"]
     );
     let artifact_id = first["artifact"]["artifactId"].as_str().unwrap();
     assert_eq!(
@@ -740,7 +746,10 @@ fn embedded_instructions_stay_data() {
     // The beam travelled as a labelled data segment after
     // the collider instruction — it did not replace it.
     let wire = fake.last_body.lock().unwrap().clone();
-    assert!(wire.contains("LEXI-COLLIDER"), "instruction segment missing");
+    assert!(
+        wire.contains("LEXI-COLLIDER"),
+        "instruction segment missing"
+    );
     assert!(wire.contains("Beam A (data):"), "beam data label missing");
     assert!(wire.contains(injected), "beam text missing from request");
     assert!(wire.find("LEXI-COLLIDER").unwrap() < wire.find("Beam A (data):").unwrap());
@@ -780,10 +789,7 @@ fn restart_and_fresh_restore_preserve_experiment() {
             json!({ "contractVersion": 1, "workspaceId": restored_ws, "kind": "project" }),
         )
         .unwrap();
-    let restored_project = projects["memories"][0]["id"]
-        .as_str()
-        .unwrap()
-        .to_string();
+    let restored_project = projects["memories"][0]["id"].as_str().unwrap().to_string();
     let list = fresh
         .artifacts_command(
             "list",
@@ -870,7 +876,10 @@ fn restore_refuses_tampered_collider_experiment() {
     let fresh_dir2 = tempfile::tempdir().unwrap();
     let fresh2 = Core::with_storage_root(fresh_dir2.path().to_path_buf());
     let refused = try_upload_restore(&fresh2, &bad_bytes, "tampered");
-    assert!(refused.is_err(), "tampered collider body must refuse restore");
+    assert!(
+        refused.is_err(),
+        "tampered collider body must refuse restore"
+    );
     // A second attempt also refuses; the source still has
     // both versions (nothing was published or destroyed).
     let refused2 = try_upload_restore(&fresh2, &bad_bytes, "tampered-again");
@@ -888,9 +897,11 @@ fn restore_refuses_tampered_collider_experiment() {
         .workspace_command("list", json!({ "contractVersion": 1 }))
         .unwrap();
     assert!(
-        !listed["workspaces"].as_array().unwrap().iter().any(|w| {
-            w["name"] == "tampered" || w["name"] == "tampered-again"
-        }),
+        !listed["workspaces"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|w| { w["name"] == "tampered" || w["name"] == "tampered-again" }),
         "failed restore published a destination workspace"
     );
 

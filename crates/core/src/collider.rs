@@ -119,7 +119,11 @@ impl Default for ColliderControls {
 
 fn check_controls(controls: &ColliderControls) -> Result<(), CommandError> {
     for (label, value, allowed) in [
-        ("creativity", &controls.creativity, &["low", "balanced", "high"][..]),
+        (
+            "creativity",
+            &controls.creativity,
+            &["low", "balanced", "high"][..],
+        ),
         (
             "technical depth",
             &controls.technical_depth,
@@ -321,11 +325,7 @@ fn check_list(
 /// bounds, shared by the parse path and by restore
 /// pre-validation of saved experiment bodies.
 pub fn validate_collider_result(result: &ColliderResult) -> Result<(), String> {
-    check_text(
-        &result.source_understanding,
-        "sourceUnderstanding",
-        6000,
-    )?;
+    check_text(&result.source_understanding, "sourceUnderstanding", 6000)?;
     check_list(
         &result.conceptual_primitives,
         "conceptualPrimitives",
@@ -428,13 +428,10 @@ pub fn parse_collider_output(raw: &str) -> Result<ColliderResult, String> {
     let parsed: Value = serde_json::from_str(text)
         .map_err(|_| "the model did not return a structured collision (not JSON)".to_string())?;
     if !parsed.is_object() {
-        return Err(
-            "the model did not return a structured collision (not an object)".to_string(),
-        );
+        return Err("the model did not return a structured collision (not an object)".to_string());
     }
-    let result: ColliderResult = serde_json::from_value(parsed).map_err(|e| {
-        format!("the model did not return a structured collision ({e})")
-    })?;
+    let result: ColliderResult = serde_json::from_value(parsed)
+        .map_err(|e| format!("the model did not return a structured collision ({e})"))?;
     validate_collider_result(&result)?;
     Ok(result)
 }
@@ -451,10 +448,7 @@ pub fn validate_experiment_doc(doc: &ColliderExperimentDoc) -> Result<(), String
         ));
     }
     if doc.version != 1 {
-        return Err(format!(
-            "experiment version must be 1, got {}",
-            doc.version
-        ));
+        return Err(format!("experiment version must be 1, got {}", doc.version));
     }
     check_text(&doc.beam_a, "beamA", MAX_BEAM_CHARS)?;
     check_text(&doc.beam_b, "beamB", MAX_BEAM_CHARS)?;
@@ -697,8 +691,8 @@ fn logical(scope: &CallerScope) -> Result<String, CommandError> {
 }
 
 fn start(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
-    let req: ColliderStartRequest = serde_json::from_value(value)
-        .map_err(|_| invalid("Use a supported collider request."))?;
+    let req: ColliderStartRequest =
+        serde_json::from_value(value).map_err(|_| invalid("Use a supported collider request."))?;
     if req.contract_version != 1 {
         return Err(CommandError::new(
             ErrorCode::UnsupportedContract,
@@ -863,8 +857,8 @@ fn start(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
 }
 
 fn poll(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
-    let req: ColliderRunRequest =
-        serde_json::from_value(value).map_err(|_| invalid("Use a supported collider run request."))?;
+    let req: ColliderRunRequest = serde_json::from_value(value)
+        .map_err(|_| invalid("Use a supported collider run request."))?;
     let key = run_key(scope, &req.run_id);
     // Snapshot what the drain needs, then release the lock for
     // the provider poll (which does network I/O via the reader
@@ -989,8 +983,8 @@ fn poll(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
 }
 
 fn cancel(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
-    let req: ColliderRunRequest =
-        serde_json::from_value(value).map_err(|_| invalid("Use a supported collider run request."))?;
+    let req: ColliderRunRequest = serde_json::from_value(value)
+        .map_err(|_| invalid("Use a supported collider run request."))?;
     let key = run_key(scope, &req.run_id);
     let (stream_run_id, capability) = with_runs(|map| {
         let run = map.get_mut(&key).filter(|r| r.session == scope.session);
@@ -1025,8 +1019,8 @@ fn cancel(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
 }
 
 fn save(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
-    let req: ColliderRunRequest =
-        serde_json::from_value(value).map_err(|_| invalid("Use a supported collider run request."))?;
+    let req: ColliderRunRequest = serde_json::from_value(value)
+        .map_err(|_| invalid("Use a supported collider run request."))?;
     let key = run_key(scope, &req.run_id);
     // Atomic idempotency: exactly one caller claims the save
     // (under the registry lock), registers WITHOUT holding the
@@ -1044,7 +1038,9 @@ fn save(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
             beam_a: String,
             beam_b: String,
             controls: ColliderControls,
-            result: Option<ColliderResult>,
+            // Boxed: the result struct is large by value
+            // and would otherwise trip large-enum-variant.
+            result: Option<Box<ColliderResult>>,
             disclosure: Option<DisclosureRecord>,
         },
     }
@@ -1071,7 +1067,7 @@ fn save(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
                 beam_a: run.beam_a.clone(),
                 beam_b: run.beam_b.clone(),
                 controls: run.controls.clone(),
-                result: run.result.clone(),
+                result: run.result.clone().map(Box::new),
                 disclosure: run.disclosure.clone(),
             }
         });
@@ -1107,7 +1103,7 @@ fn save(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
             } => break (project_id, beam_a, beam_b, controls, result, disclosure),
         }
     };
-    let result = result.ok_or_else(crate::storage::unavailable)?;
+    let result = *result.ok_or_else(crate::storage::unavailable)?;
     let disclosure = disclosure.ok_or_else(crate::storage::unavailable)?;
     let storage = storage(scope)?;
     let workspace_id = logical(scope)?;
@@ -1193,7 +1189,12 @@ mod eviction_tests {
         }
     }
 
-    fn fabricated_run(scope: &CallerScope, age: Duration, status: &str, stream: &str) -> ColliderRun {
+    fn fabricated_run(
+        scope: &CallerScope,
+        age: Duration,
+        status: &str,
+        stream: &str,
+    ) -> ColliderRun {
         ColliderRun {
             session: scope.session.clone(),
             scope: scope.clone(),
@@ -1244,8 +1245,16 @@ mod eviction_tests {
         });
         let victims = collect_evictions(None);
         assert_eq!(victims.len(), 2);
-        assert!(victims.iter().any(|v| v.active && v.stream_run_id == "stream-old"));
-        assert!(victims.iter().any(|v| !v.active && v.stream_run_id == "stream-done"));
+        assert!(
+            victims
+                .iter()
+                .any(|v| v.active && v.stream_run_id == "stream-old")
+        );
+        assert!(
+            victims
+                .iter()
+                .any(|v| !v.active && v.stream_run_id == "stream-done")
+        );
         with_runs(|map| {
             assert!(map.contains_key(&run_key(&scope, "fresh")));
             assert!(!map.contains_key(&run_key(&scope, "old-active")));
