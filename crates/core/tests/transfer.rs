@@ -28,8 +28,8 @@ use serde_json::{Value, json};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpListener;
 use std::path::Path;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
 fn collision_json() -> Value {
@@ -355,13 +355,19 @@ fn transfer_creates_concept_with_exact_pins_and_provenance() {
     let fake = start_fake();
     let f = fixture(&fake);
     let experiment = register_experiment(&f, &experiment_body());
-    assert!(list_concepts(&f).is_empty(), "no concept exists before approval");
+    assert!(
+        list_concepts(&f).is_empty(),
+        "no concept exists before approval"
+    );
     assert_eq!(fake.hits.load(Ordering::SeqCst), 0);
 
     let brief = "Mycelial order router, edited by the user: score venues by local congestion, reroute on stall.";
     let transferred = transfer(&f, &experiment, 1, 1, brief);
     assert_eq!(transferred["alreadyTransferred"], false);
-    let concept_id = transferred["artifact"]["artifactId"].as_str().unwrap().to_string();
+    let concept_id = transferred["artifact"]["artifactId"]
+        .as_str()
+        .unwrap()
+        .to_string();
     let body: Value = serde_json::from_str(transferred["body"].as_str().unwrap()).unwrap();
     assert_eq!(body["format"], "anansi-forge-concept");
     assert_eq!(body["version"], 1);
@@ -372,7 +378,10 @@ fn transfer_creates_concept_with_exact_pins_and_provenance() {
         content::hash(experiment_body().as_bytes())
     );
     assert_eq!(body["selectedCombinationIndex"], 1);
-    assert_eq!(body["selectedCombination"]["name"], "Graceful-degradation mesh");
+    assert_eq!(
+        body["selectedCombination"]["name"],
+        "Graceful-degradation mesh"
+    );
     assert_eq!(
         body["selectedCombination"]["description"],
         "A trade mesh that reroutes through redundant paths when a venue stalls, accepting slower fills to avoid total outages. Hypothesis only."
@@ -380,11 +389,19 @@ fn transfer_creates_concept_with_exact_pins_and_provenance() {
     assert_eq!(body["approvedBrief"], brief);
     assert_eq!(
         body["assumptions"],
-        json!(["Local congestion signals can rank venues without a central coordinator.", "Redundancy costs are bounded by capping parallel routes."])
+        json!([
+            "Local congestion signals can rank venues without a central coordinator.",
+            "Redundancy costs are bounded by capping parallel routes."
+        ])
     );
     assert_eq!(
         body["unknowns"],
-        json!(["Exchange fees under rerouting are unknown.", "Compute cost of continuous signal scoring is unknown.", "A venue feed with latency and fill data", "A simulator for routing policies"])
+        json!([
+            "Exchange fees under rerouting are unknown.",
+            "Compute cost of continuous signal scoring is unknown.",
+            "A venue feed with latency and fill data",
+            "A simulator for routing policies"
+        ])
     );
     assert_eq!(
         body["productizationBrief"],
@@ -393,12 +410,19 @@ fn transfer_creates_concept_with_exact_pins_and_provenance() {
     assert_eq!(body["provider"], "ollama");
     assert_eq!(body["model"], "llama-x");
     assert_eq!(transferred["artifact"]["type"], "concept");
-    assert_eq!(fake.hits.load(Ordering::SeqCst), 0, "transfer contacts no provider");
+    assert_eq!(
+        fake.hits.load(Ordering::SeqCst),
+        0,
+        "transfer contacts no provider"
+    );
 
     // The stored row matches the returned body exactly.
     let stored = read_artifact(&f, &concept_id, 1);
     assert_eq!(stored["body"], transferred["body"]);
-    assert_eq!(stored["artifact"]["contentHash"], content::hash(transferred["body"].as_str().unwrap().as_bytes()));
+    assert_eq!(
+        stored["artifact"]["contentHash"],
+        content::hash(transferred["body"].as_str().unwrap().as_bytes())
+    );
 }
 
 #[test]
@@ -434,7 +458,9 @@ fn forged_stale_and_cross_project_sources_are_refused() {
     // Tampered experiment: a generic revise breaks the collider format.
     let mut tampered: Value = serde_json::from_str(&experiment_body()).unwrap();
     tampered["result"]["combinations"] = json!([]);
-    let revision = read_artifact(&f, &experiment, 1)["artifact"]["version"].as_u64().unwrap() as u32;
+    let revision = read_artifact(&f, &experiment, 1)["artifact"]["version"]
+        .as_u64()
+        .unwrap() as u32;
     f.core.artifacts_command(
         "revise",
         json!({ "contractVersion": 1, "workspaceId": f.ws, "artifactId": experiment, "expectedVersion": revision, "title": "Collider experiment: Trading signals", "body": tampered.to_string(), "sourceReferences": [] }),
@@ -484,7 +510,10 @@ fn duplicate_concurrent_and_restart_retry_create_no_duplicates() {
     let experiment = register_experiment(&f, &experiment_body());
     let brief = "The same approved brief.";
     let first = transfer(&f, &experiment, 1, 0, brief);
-    let first_id = first["artifact"]["artifactId"].as_str().unwrap().to_string();
+    let first_id = first["artifact"]["artifactId"]
+        .as_str()
+        .unwrap()
+        .to_string();
     // Sequential repeat.
     let second = transfer(&f, &experiment, 1, 0, brief);
     assert_eq!(second["alreadyTransferred"], true);
@@ -535,7 +564,10 @@ fn newer_experiment_version_neither_changes_nor_inherits_approval() {
     let f = fixture(&fake);
     let experiment = register_experiment(&f, &experiment_body());
     let transferred = transfer(&f, &experiment, 1, 0, "Brief for v1.");
-    let concept_id = transferred["artifact"]["artifactId"].as_str().unwrap().to_string();
+    let concept_id = transferred["artifact"]["artifactId"]
+        .as_str()
+        .unwrap()
+        .to_string();
     // Revise the experiment to v2 with a changed combination.
     let mut v2: Value = serde_json::from_str(&experiment_body()).unwrap();
     v2["result"]["combinations"][0]["name"] = json!("Renamed router");
@@ -552,8 +584,7 @@ fn newer_experiment_version_neither_changes_nor_inherits_approval() {
     let v2_transfer = transfer(&f, &experiment, 2, 0, "Brief for v2.");
     assert_eq!(v2_transfer["alreadyTransferred"], false);
     assert_ne!(v2_transfer["artifact"]["artifactId"], concept_id);
-    let v2_body: Value =
-        serde_json::from_str(v2_transfer["body"].as_str().unwrap()).unwrap();
+    let v2_body: Value = serde_json::from_str(v2_transfer["body"].as_str().unwrap()).unwrap();
     assert_eq!(v2_body["sourceExperimentVersion"], 2);
     assert_eq!(v2_body["selectedCombination"]["name"], "Renamed router");
     assert_eq!(list_concepts(&f).len(), 2);
@@ -565,12 +596,18 @@ fn transferred_concept_enters_forge_spec_workflow_without_spec_approval() {
     let f = fixture(&fake);
     let experiment = register_experiment(&f, &experiment_body());
     let transferred = transfer(&f, &experiment, 1, 0, "Route venues by local congestion.");
-    let concept_id = transferred["artifact"]["artifactId"].as_str().unwrap().to_string();
+    let concept_id = transferred["artifact"]["artifactId"]
+        .as_str()
+        .unwrap()
+        .to_string();
     // No specification approval exists after transfer alone.
-    let approvals = f.core.artifacts_command(
-        "list",
-        json!({ "contractVersion": 1, "workspaceId": f.ws, "projectId": f.project }),
-    ).unwrap()["artifacts"]
+    let approvals = f
+        .core
+        .artifacts_command(
+            "list",
+            json!({ "contractVersion": 1, "workspaceId": f.ws, "projectId": f.project }),
+        )
+        .unwrap()["artifacts"]
         .as_array()
         .unwrap()
         .iter()
@@ -590,40 +627,57 @@ fn transferred_concept_enters_forge_spec_workflow_without_spec_approval() {
     let run_id = started["runId"].as_str().unwrap().to_string();
     let deadline = Instant::now() + Duration::from_secs(30);
     let polled = loop {
-        let polled = f.core.ai_command(
-            "forge-spec-poll",
-            json!({ "contractVersion": 1, "workspaceId": f.ws, "runId": run_id }),
-        ).unwrap();
+        let polled = f
+            .core
+            .ai_command(
+                "forge-spec-poll",
+                json!({ "contractVersion": 1, "workspaceId": f.ws, "runId": run_id }),
+            )
+            .unwrap();
         let status = polled["status"].as_str().unwrap().to_string();
-        if matches!(status.as_str(), "complete" | "invalid" | "failed" | "cancelled")
-            || Instant::now() > deadline
+        if matches!(
+            status.as_str(),
+            "complete" | "invalid" | "failed" | "cancelled"
+        ) || Instant::now() > deadline
         {
             break polled;
         }
         std::thread::sleep(Duration::from_millis(25));
     };
     assert_eq!(polled["status"], "complete", "{polled}");
-    let saved = f.core.ai_command(
-        "forge-spec-save",
-        json!({ "contractVersion": 1, "workspaceId": f.ws, "runId": run_id }),
-    ).unwrap();
-    let spec_id = saved["artifact"]["artifactId"].as_str().unwrap().to_string();
+    let saved = f
+        .core
+        .ai_command(
+            "forge-spec-save",
+            json!({ "contractVersion": 1, "workspaceId": f.ws, "runId": run_id }),
+        )
+        .unwrap();
+    let spec_id = saved["artifact"]["artifactId"]
+        .as_str()
+        .unwrap()
+        .to_string();
     let spec = read_artifact(&f, &spec_id, 1);
     let spec_body: Value = serde_json::from_str(spec["body"].as_str().unwrap()).unwrap();
     assert_eq!(spec_body["sourceArtifactId"], concept_id);
     assert_eq!(spec_body["sourceVersion"], 1);
     // Saving a spec still does not approve it.
-    let approvals = f.core.artifacts_command(
-        "list",
-        json!({ "contractVersion": 1, "workspaceId": f.ws, "projectId": f.project }),
-    ).unwrap()["artifacts"]
+    let approvals = f
+        .core
+        .artifacts_command(
+            "list",
+            json!({ "contractVersion": 1, "workspaceId": f.ws, "projectId": f.project }),
+        )
+        .unwrap()["artifacts"]
         .as_array()
         .unwrap()
         .iter()
         .filter(|a| a["type"] == "specification-approval")
         .count();
     assert_eq!(approvals, 0);
-    assert!(fake.hits.load(Ordering::SeqCst) >= 1, "spec generation used the provider");
+    assert!(
+        fake.hits.load(Ordering::SeqCst) >= 1,
+        "spec generation used the provider"
+    );
 }
 
 #[test]
@@ -632,7 +686,10 @@ fn restart_and_fresh_restore_preserve_transfer() {
     let f = fixture(&fake);
     let experiment = register_experiment(&f, &experiment_body());
     let transferred = transfer(&f, &experiment, 1, 0, "Route venues by local congestion.");
-    let concept_id = transferred["artifact"]["artifactId"].as_str().unwrap().to_string();
+    let concept_id = transferred["artifact"]["artifactId"]
+        .as_str()
+        .unwrap()
+        .to_string();
     // Restart: a fresh Core handle reopens the concept unchanged.
     let root = f._dir.path().to_path_buf();
     let reopened = Core::with_storage_root(root.clone());
@@ -647,19 +704,27 @@ fn restart_and_fresh_restore_preserve_transfer() {
     let dir2 = tempfile::tempdir().unwrap();
     let fresh = Core::with_storage_root(dir2.path().to_path_buf());
     let restored = try_upload_restore(&fresh, &bytes, "transfer").unwrap();
-    let restored_ws = restored["workspaces"][0]["id"].as_str().unwrap().to_string();
+    let restored_ws = restored["workspaces"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
     assert_ne!(restored_ws, f.ws);
-    let projects = fresh.memory_command(
-        "list",
-        json!({ "contractVersion": 1, "workspaceId": restored_ws, "kind": "project" }),
-    ).unwrap();
+    let projects = fresh
+        .memory_command(
+            "list",
+            json!({ "contractVersion": 1, "workspaceId": restored_ws, "kind": "project" }),
+        )
+        .unwrap();
     let restored_project = projects["memories"][0]["id"].as_str().unwrap().to_string();
     let list = fresh.artifacts_command(
         "list",
         json!({ "contractVersion": 1, "workspaceId": restored_ws, "projectId": restored_project }),
     ).unwrap();
     let artifacts = list["artifacts"].as_array().unwrap();
-    let restored_experiment = artifacts.iter().find(|a| a["type"] == "experiment").unwrap();
+    let restored_experiment = artifacts
+        .iter()
+        .find(|a| a["type"] == "experiment")
+        .unwrap();
     let restored_concept = artifacts.iter().find(|a| a["type"] == "concept").unwrap();
     assert_ne!(restored_experiment["artifactId"], experiment);
     assert_ne!(restored_concept["artifactId"], concept_id);
@@ -678,8 +743,14 @@ fn restart_and_fresh_restore_preserve_transfer() {
         concept_body["sourceExperimentContentHash"],
         content::hash(experiment_body().as_bytes())
     );
-    assert_eq!(concept_body["approvedBrief"], "Route venues by local congestion.");
-    assert_eq!(concept_body["selectedCombination"]["name"], "Mycelial order router");
+    assert_eq!(
+        concept_body["approvedBrief"],
+        "Route venues by local congestion."
+    );
+    assert_eq!(
+        concept_body["selectedCombination"]["name"],
+        "Mycelial order router"
+    );
 }
 
 #[test]
@@ -688,7 +759,10 @@ fn restore_refuses_tampered_transfer_without_destination_mutation() {
     let f = fixture(&fake);
     let experiment = register_experiment(&f, &experiment_body());
     let transferred = transfer(&f, &experiment, 1, 0, "Route venues by local congestion.");
-    let concept_id = transferred["artifact"]["artifactId"].as_str().unwrap().to_string();
+    let concept_id = transferred["artifact"]["artifactId"]
+        .as_str()
+        .unwrap()
+        .to_string();
     let root = f._dir.path().to_path_buf();
     let store = Storage::new(root.clone()).unwrap();
     let good_bytes = backup_bytes(&root, &store, &f.ws);

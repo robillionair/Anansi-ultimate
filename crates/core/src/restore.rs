@@ -533,9 +533,7 @@ fn validate_original_review_bindings(source: &rusqlite::Connection) -> Result<()
 /// published. Generic `concept` rows (manual artifacts
 /// with other bodies) restore untouched: only
 /// format-matching rows are gated.
-fn validate_original_transfer_bindings(
-    source: &rusqlite::Connection,
-) -> Result<(), CommandError> {
+fn validate_original_transfer_bindings(source: &rusqlite::Connection) -> Result<(), CommandError> {
     struct Row {
         workspace_id: String,
         project_id: String,

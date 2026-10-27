@@ -1323,11 +1323,12 @@ fn start_spec(value: Value, scope: &CallerScope) -> Result<Value, CommandError> 
     // fabricated to satisfy the idea-set count rule.
     // Every other source still takes the idea-set path.
     let (concept, concept_name) = if source.artifact.artifact_type == "concept" {
-        let transferred = crate::transfer::validate_transfer_concept(&source.body).map_err(|e| {
-            invalid(&format!(
-                "The selected artifact is not a valid transferred concept: {e}"
-            ))
-        })?;
+        let transferred =
+            crate::transfer::validate_transfer_concept(&source.body).map_err(|e| {
+                invalid(&format!(
+                    "The selected artifact is not a valid transferred concept: {e}"
+                ))
+            })?;
         if req.concept_index != 0 {
             return Err(invalid(
                 "A transferred concept has exactly one concept; use concept index 0.",

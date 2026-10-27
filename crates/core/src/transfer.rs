@@ -36,9 +36,7 @@
 //!   different transfer, never a silent merge.
 
 use crate::artifacts::{ArtifactListRequest, ArtifactRegisterRequest};
-use crate::collider::{
-    ColliderCombination, ColliderExperimentDoc, validate_experiment_doc,
-};
+use crate::collider::{ColliderCombination, ColliderExperimentDoc, validate_experiment_doc};
 use crate::provider_dispatch::CallerScope;
 use crate::readiness::{CommandError, ErrorCode};
 use crate::storage::Storage;
@@ -186,11 +184,7 @@ pub fn validate_transfer_concept(raw: &str) -> Result<TransferConceptDoc, String
     check_text(&doc.approved_brief, "approvedBrief", MAX_BRIEF_CHARS)?;
     check_list(&doc.assumptions, "assumptions", 1, 8, 600)?;
     check_list(&doc.unknowns, "unknowns", 0, 16, 300)?;
-    check_text(
-        &doc.productization_brief,
-        "productizationBrief",
-        2000,
-    )?;
+    check_text(&doc.productization_brief, "productizationBrief", 2000)?;
     Ok(doc)
 }
 
@@ -228,12 +222,9 @@ pub fn transfer(value: Value, scope: &CallerScope) -> Result<Value, CommandError
             "Use contract version 1.",
         ));
     }
-    if req.approved_brief.trim().is_empty()
-        || req.approved_brief.chars().count() > MAX_BRIEF_CHARS
+    if req.approved_brief.trim().is_empty() || req.approved_brief.chars().count() > MAX_BRIEF_CHARS
     {
-        return Err(invalid(
-            "The approved brief must be 1 to 4000 characters.",
-        ));
+        return Err(invalid("The approved brief must be 1 to 4000 characters."));
     }
     let workspace_id = logical(scope)?;
     let storage = storage(scope)?;
@@ -266,9 +257,8 @@ pub fn transfer(value: Value, scope: &CallerScope) -> Result<Value, CommandError
             "A transfer starts from a saved collider experiment.",
         ));
     }
-    let experiment: ColliderExperimentDoc = serde_json::from_str(&source.body).map_err(|_| {
-        invalid("The selected experiment is not a readable collider experiment.")
-    })?;
+    let experiment: ColliderExperimentDoc = serde_json::from_str(&source.body)
+        .map_err(|_| invalid("The selected experiment is not a readable collider experiment."))?;
     validate_experiment_doc(&experiment).map_err(|e| {
         invalid(&format!(
             "The selected experiment is not a valid collider experiment: {e}"
@@ -302,11 +292,7 @@ pub fn transfer(value: Value, scope: &CallerScope) -> Result<Value, CommandError
         approved_brief: req.approved_brief.trim().to_string(),
         assumptions: experiment.result.feasibility.hypotheses.clone(),
         unknowns,
-        productization_brief: experiment
-            .result
-            .productization
-            .concept_brief
-            .clone(),
+        productization_brief: experiment.result.productization.concept_brief.clone(),
         provider: experiment.provider.clone(),
         model: experiment.model.clone(),
     };
@@ -320,7 +306,9 @@ pub fn transfer(value: Value, scope: &CallerScope) -> Result<Value, CommandError
         format!("Concept: {name}")
     };
 
-    let _guard = TRANSFER_LOCK.lock().map_err(|_| crate::storage::unavailable())?;
+    let _guard = TRANSFER_LOCK
+        .lock()
+        .map_err(|_| crate::storage::unavailable())?;
     // Idempotency: the same (experiment, version,
     // combination, approved brief) returns the same
     // concept, whether the second submission is a
