@@ -729,8 +729,12 @@ fn start(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
     let segments = vec![
         json!({ "text": INSTRUCTION, "privacy": "standard" }),
         json!({ "text": controls_text(&req.controls), "privacy": "standard" }),
-        json!({ "text": format!("Beam A (data):\n{}", req.beam_a.trim()), "privacy": "private" }),
-        json!({ "text": format!("Beam B (data):\n{}", req.beam_b.trim()), "privacy": "private" }),
+        // Beams are sent verbatim: validation rejects
+        // whitespace-only and overlong beams, but
+        // accepted text keeps its indentation, tabs
+        // and terminal newlines on the wire.
+        json!({ "text": format!("Beam A (data):\n{}", req.beam_a), "privacy": "private" }),
+        json!({ "text": format!("Beam B (data):\n{}", req.beam_b), "privacy": "private" }),
     ];
 
     // Resolve the target model from the trusted configuration:
@@ -790,8 +794,8 @@ fn start(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
                 session: scope.session.clone(),
                 scope: scope.clone(),
                 project_id: req.project_id.clone(),
-                beam_a: req.beam_a.trim().to_string(),
-                beam_b: req.beam_b.trim().to_string(),
+                beam_a: req.beam_a.clone(),
+                beam_b: req.beam_b.clone(),
                 controls: req.controls.clone(),
                 stream_run_id: String::new(),
                 capability: String::new(),
@@ -826,8 +830,8 @@ fn start(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
         session: scope.session.clone(),
         scope: scope.clone(),
         project_id: req.project_id.clone(),
-        beam_a: req.beam_a.trim().to_string(),
-        beam_b: req.beam_b.trim().to_string(),
+        beam_a: req.beam_a.clone(),
+        beam_b: req.beam_b.clone(),
         controls: req.controls.clone(),
         stream_run_id: started
             .get("runId")

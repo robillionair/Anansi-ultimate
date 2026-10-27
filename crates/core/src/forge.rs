@@ -1334,6 +1334,22 @@ fn start_spec(value: Value, scope: &CallerScope) -> Result<Value, CommandError> 
                 "A transferred concept has exactly one concept; use concept index 0.",
             ));
         }
+        // M8 acceptance repair: a transferred concept is
+        // admitted only with its version-1 transfer
+        // receipt pinning the same approved snapshot,
+        // and only when that snapshot matches the pinned
+        // experiment. A generic registration or revision
+        // cannot mint approval, and this check runs
+        // before any provider traffic.
+        crate::transfer::validate_transfer_approval(
+            &storage,
+            &workspace_id,
+            &req.project_id,
+            &req.source_artifact_id,
+            req.source_version,
+            &source.artifact.content_hash,
+            &transferred,
+        )?;
         let concept = json!({
             "name": transferred.selected_combination.name,
             "description": transferred.selected_combination.description,

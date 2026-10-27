@@ -221,6 +221,73 @@ fn fix_deliverable_hashes(
 /// remapped), not the source workspace's hashes. A review
 /// whose pinned package or specification version is
 /// absent from the package fails the restore closed.
+/// Rewrite each transfer-approval row's pinned
+/// concept content hash to the restored concept row's
+/// recomputed hash, mirroring the specification
+/// approval fix-up. The concept body changes on remap
+/// (its experiment id is rewritten), so the original
+/// pinned hash would no longer match; the fix-up
+/// transfers approval only to the restored equivalent
+/// of the same concept version, never to a different
+/// version or a fabricated body (pre-validation has
+/// already refused those).
+fn fix_transfer_receipt_hashes(
+    names: &[String],
+    values: &mut [Vec<rusqlite::types::Value>],
+) -> Result<(), CommandError> {
+    use rusqlite::types::Value;
+    let index = |name: &str| -> Result<usize, CommandError> {
+        names
+            .iter()
+            .position(|n| n == name)
+            .ok_or_else(crate::jobs::invalid)
+    };
+    let type_i = index("artifact_type")?;
+    let body_i = index("body")?;
+    let hash_i = index("content_hash")?;
+    let id_i = index("artifact_id")?;
+    let version_i = index("version")?;
+    let mut concept_hashes: std::collections::BTreeMap<(String, i64), String> =
+        std::collections::BTreeMap::new();
+    for row in values.iter() {
+        if matches!(&row[type_i], Value::Text(t) if t == "concept")
+            && let (Value::Text(id), Value::Integer(version), Value::Text(hash)) =
+                (&row[id_i], &row[version_i], &row[hash_i])
+        {
+            concept_hashes.insert((id.clone(), *version), hash.clone());
+        }
+    }
+    for row in values.iter_mut() {
+        if !matches!(&row[type_i], Value::Text(t) if t == "transfer-approval") {
+            continue;
+        }
+        let Value::Text(body) = &row[body_i].clone() else {
+            continue;
+        };
+        let mut doc: serde_json::Value =
+            serde_json::from_str(body).map_err(|_| crate::jobs::invalid())?;
+        if doc.get("format").and_then(|v| v.as_str()) != Some("anansi-transfer-approval") {
+            continue;
+        }
+        let concept_id = doc
+            .get("conceptArtifactId")
+            .and_then(|v| v.as_str())
+            .ok_or_else(crate::jobs::invalid)?;
+        let concept_version = doc
+            .get("conceptVersion")
+            .and_then(|v| v.as_u64())
+            .ok_or_else(crate::jobs::invalid)? as i64;
+        let hash = concept_hashes
+            .get(&(concept_id.to_string(), concept_version))
+            .ok_or_else(crate::jobs::invalid)?;
+        doc["conceptContentHash"] = serde_json::Value::String(hash.clone());
+        let rewritten = serde_json::to_string(&doc).map_err(|_| crate::jobs::invalid())?;
+        row[hash_i] = Value::Text(crate::content::hash(rewritten.as_bytes()));
+        row[body_i] = Value::Text(rewritten);
+    }
+    Ok(())
+}
+
 fn fix_review_hashes(
     names: &[String],
     values: &mut [Vec<rusqlite::types::Value>],
@@ -520,19 +587,25 @@ fn validate_original_review_bindings(source: &rusqlite::Connection) -> Result<()
     Ok(())
 }
 
-/// M8 Slice 2: a transferred concept must validate its
-/// original experiment binding before any destination
-/// write. The pinned experiment row must exist in the
-/// backup in the same workspace and project, be a
-/// collider experiment, and recompute to both its row
-/// hash and the pinned source hash; the selected
-/// combination must exist in that experiment's pinned
-/// version and the brief must satisfy its bounds. A
-/// transfer whose experiment is absent, tampered or
-/// mismatched refuses the whole restore with nothing
-/// published. Generic `concept` rows (manual artifacts
-/// with other bodies) restore untouched: only
-/// format-matching rows are gated.
+/// M8 Slice 2, acceptance repair: a transferred concept
+/// must validate its original experiment binding before
+/// any destination write. The pinned experiment row
+/// must exist in the backup in the same workspace and
+/// project, be a collider experiment, and recompute to
+/// both its row hash and the pinned source hash; every
+/// model-derived field — selected combination,
+/// assumptions, ordered unknowns, productization brief,
+/// provider and model — must match the pinned
+/// experiment version. A transfer whose experiment is
+/// absent, tampered or mismatched refuses the whole
+/// restore with nothing published, and a fabricated
+/// original is never repaired by recomputing hashes.
+/// The transfer's version-1 approval receipt is
+/// validated the same way: its pinned concept row must
+/// exist with a matching hash, and every receipt field
+/// must equal the concept body. Generic `concept` rows
+/// (manual artifacts with other bodies) restore
+/// untouched: only format-matching rows are gated.
 fn validate_original_transfer_bindings(source: &rusqlite::Connection) -> Result<(), CommandError> {
     struct Row {
         workspace_id: String,
@@ -542,7 +615,8 @@ fn validate_original_transfer_bindings(source: &rusqlite::Connection) -> Result<
     }
     let mut experiments: std::collections::BTreeMap<(String, String, i64), Row> =
         std::collections::BTreeMap::new();
-    let mut transfers: Vec<Row> = Vec::new();
+    let mut transfers: Vec<(String, i64, Row)> = Vec::new();
+    let mut receipts: Vec<Row> = Vec::new();
     {
         let mut q = source
             .prepare(
@@ -565,35 +639,39 @@ fn validate_original_transfer_bindings(source: &rusqlite::Connection) -> Result<
                 content_hash,
             };
             if kind == "concept" {
-                transfers.push(entry);
+                transfers.push((artifact_id, version, entry));
             } else if kind == "experiment" {
                 experiments.insert((workspace_id, artifact_id, version), entry);
+            } else if kind == "transfer-approval" {
+                receipts.push(entry);
             }
         }
     }
+    let mut concepts: std::collections::BTreeMap<(String, i64), &Row> =
+        std::collections::BTreeMap::new();
     for transfer in &transfers {
-        let Ok(value) = serde_json::from_str::<serde_json::Value>(&transfer.body) else {
+        let Ok(value) = serde_json::from_str::<serde_json::Value>(&transfer.2.body) else {
             continue;
         };
         if value.get("format").and_then(|v| v.as_str()) != Some("anansi-forge-concept") {
             continue;
         }
-        if crate::content::hash(transfer.body.as_bytes()) != transfer.content_hash {
+        if crate::content::hash(transfer.2.body.as_bytes()) != transfer.2.content_hash {
             return Err(crate::jobs::invalid());
         }
         let doc: crate::transfer::TransferConceptDoc =
-            serde_json::from_str(&transfer.body).map_err(|_| crate::jobs::invalid())?;
-        crate::transfer::validate_transfer_concept(&transfer.body)
+            serde_json::from_str(&transfer.2.body).map_err(|_| crate::jobs::invalid())?;
+        crate::transfer::validate_transfer_concept(&transfer.2.body)
             .map_err(|_| crate::jobs::invalid())?;
         let experiment = experiments
             .get(&(
-                transfer.workspace_id.clone(),
+                transfer.2.workspace_id.clone(),
                 doc.source_experiment_artifact_id.clone(),
                 doc.source_experiment_version as i64,
             ))
             .ok_or_else(crate::jobs::invalid)?;
-        if experiment.workspace_id != transfer.workspace_id
-            || experiment.project_id != transfer.project_id
+        if experiment.workspace_id != transfer.2.workspace_id
+            || experiment.project_id != transfer.2.project_id
             || crate::content::hash(experiment.body.as_bytes()) != experiment.content_hash
             || experiment.content_hash != doc.source_experiment_content_hash
         {
@@ -603,13 +681,64 @@ fn validate_original_transfer_bindings(source: &rusqlite::Connection) -> Result<
             serde_json::from_str(&experiment.body).map_err(|_| crate::jobs::invalid())?;
         crate::collider::validate_experiment_doc(&experiment_doc)
             .map_err(|_| crate::jobs::invalid())?;
-        let combination = experiment_doc
-            .result
-            .combinations
-            .get(doc.selected_combination_index)
-            .ok_or_else(crate::jobs::invalid)?;
+        let (combination, assumptions, unknowns, productization_brief, provider, model) =
+            crate::transfer::expected_transfer_fields(
+                &experiment_doc,
+                doc.selected_combination_index,
+            )
+            .map_err(|_| crate::jobs::invalid())?;
         if combination.name != doc.selected_combination.name
             || combination.description != doc.selected_combination.description
+            || assumptions != doc.assumptions
+            || unknowns != doc.unknowns
+            || productization_brief != doc.productization_brief
+            || provider != doc.provider
+            || model != doc.model
+        {
+            return Err(crate::jobs::invalid());
+        }
+        concepts.insert((transfer.0.clone(), transfer.1), &transfer.2);
+    }
+    for receipt in &receipts {
+        let Ok(value) = serde_json::from_str::<serde_json::Value>(&receipt.body) else {
+            continue;
+        };
+        if value.get("format").and_then(|v| v.as_str()) != Some("anansi-transfer-approval") {
+            continue;
+        }
+        if crate::content::hash(receipt.body.as_bytes()) != receipt.content_hash {
+            return Err(crate::jobs::invalid());
+        }
+        let approval: crate::transfer::TransferApprovalDoc =
+            serde_json::from_str(&receipt.body).map_err(|_| crate::jobs::invalid())?;
+        crate::transfer::validate_transfer_approval_doc(&receipt.body)
+            .map_err(|_| crate::jobs::invalid())?;
+        let concept = concepts
+            .get(&(
+                approval.concept_artifact_id.clone(),
+                approval.concept_version as i64,
+            ))
+            .ok_or_else(crate::jobs::invalid)?;
+        if concept.content_hash != approval.concept_content_hash
+            || receipt.workspace_id != concept.workspace_id
+            || receipt.project_id != concept.project_id
+        {
+            return Err(crate::jobs::invalid());
+        }
+        let doc: crate::transfer::TransferConceptDoc =
+            serde_json::from_str(&concept.body).map_err(|_| crate::jobs::invalid())?;
+        if approval.approved_brief != doc.approved_brief
+            || approval.source_experiment_artifact_id != doc.source_experiment_artifact_id
+            || approval.source_experiment_version != doc.source_experiment_version
+            || approval.source_experiment_content_hash != doc.source_experiment_content_hash
+            || approval.selected_combination_index != doc.selected_combination_index
+            || approval.selected_combination.name != doc.selected_combination.name
+            || approval.selected_combination.description != doc.selected_combination.description
+            || approval.assumptions != doc.assumptions
+            || approval.unknowns != doc.unknowns
+            || approval.productization_brief != doc.productization_brief
+            || approval.provider != doc.provider
+            || approval.model != doc.model
         {
             return Err(crate::jobs::invalid());
         }
@@ -772,6 +901,26 @@ fn remap_artifact_row(
         let hash_i = index("content_hash")?;
         if let Value::Text(body) = &columns[body_i]
             && let Some(rewritten) = crate::transfer::remap_transfer_references(body, ids)?
+        {
+            columns[hash_i] = Value::Text(crate::content::hash(rewritten.as_bytes()));
+            columns[body_i] = Value::Text(rewritten);
+        }
+    }
+    // Transfer approvals (type `transfer-approval`)
+    // pin a concept and an experiment by id: both
+    // resolve to their restored equivalents, fail
+    // closed when either is not in the package. The
+    // pinned concept content hash is rewritten
+    // afterwards (see the fix-up pass) because the
+    // concept body changes on remap; the row hash is
+    // recomputed here because the body changed.
+    let is_receipt = matches!(&columns[type_i], Value::Text(t) if t == "transfer-approval");
+    if is_receipt {
+        let body_i = index("body")?;
+        let hash_i = index("content_hash")?;
+        if let Value::Text(body) = &columns[body_i]
+            && let Some(rewritten) =
+                crate::transfer::remap_transfer_approval_references(body, ids)?
         {
             columns[hash_i] = Value::Text(crate::content::hash(rewritten.as_bytes()));
             columns[body_i] = Value::Text(rewritten);
@@ -1097,6 +1246,7 @@ impl crate::storage::Storage {
                 fix_approval_hashes(&names, &mut values)?;
                 fix_deliverable_hashes(&names, &mut values)?;
                 fix_review_hashes(&names, &mut values)?;
+                fix_transfer_receipt_hashes(&names, &mut values)?;
             }
             prepared.push((table, names, values));
         }

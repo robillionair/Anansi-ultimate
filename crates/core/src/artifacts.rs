@@ -28,7 +28,7 @@ use crate::lifecycle::MemoryState;
 use crate::readiness::{CommandError, Core, ErrorCode};
 use crate::storage::Storage;
 use chrono::{SecondsFormat, Utc};
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -514,6 +514,193 @@ impl Storage {
             )
             .map_err(|_| unavailable())?;
         self.artifact_read(workspace_id, &artifact_id, Some(1))
+    }
+
+    /// Scan a project's version-1 transfer-approval rows.
+    /// Only version-1 rows are returned: revising a
+    /// receipt creates a later version that lookups
+    /// ignore, so editing a receipt can neither create
+    /// approval nor transfer it. The scan is bounded by
+    /// the project's receipt count, never the registry.
+    fn transfer_receipt_rows(
+        connection: &Connection,
+        workspace_id: &str,
+        project_id: &str,
+    ) -> Result<Vec<Row>, CommandError> {
+        let mut stmt = connection
+            .prepare(&format!(
+                "SELECT {COLUMNS} FROM artifact_versions \
+                 WHERE workspace_id = ?1 AND project_id = ?2 \
+                 AND artifact_type = 'transfer-approval' AND version = 1 \
+                 ORDER BY artifact_id"
+            ))
+            .map_err(|_| unavailable())?;
+        let rows = stmt
+            .query_map(params![workspace_id, project_id], row_from)
+            .map_err(|_| unavailable())?;
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row.map_err(|_| unavailable())?);
+        }
+        Ok(out)
+    }
+
+    /// Find the version-1 transfer-approval receipt for
+    /// an exact concept version and content hash, if one
+    /// exists. Returns the receipt record and body; the
+    /// caller checks the generator kind and the pinned
+    /// fields against the requested concept.
+    pub(crate) fn find_transfer_receipt(
+        &self,
+        workspace_id: &str,
+        project_id: &str,
+        concept_artifact_id: &str,
+        concept_version: u32,
+        concept_content_hash: &str,
+    ) -> Result<Option<(ArtifactRecord, String)>, CommandError> {
+        check_id(workspace_id)?;
+        check_id(project_id)?;
+        check_id(concept_artifact_id)?;
+        let connection = self.connection(false)?.ok_or_else(unavailable)?;
+        for row in Self::transfer_receipt_rows(&connection, workspace_id, project_id)? {
+            let Ok(doc) = serde_json::from_str::<Value>(&row.body) else {
+                continue;
+            };
+            let matches = doc.get("format").and_then(|v| v.as_str())
+                == Some("anansi-transfer-approval")
+                && doc.get("conceptArtifactId").and_then(|v| v.as_str())
+                    == Some(concept_artifact_id)
+                && doc.get("conceptVersion").and_then(|v| v.as_u64())
+                    == Some(u64::from(concept_version))
+                && doc.get("conceptContentHash").and_then(|v| v.as_str())
+                    == Some(concept_content_hash);
+            if matches {
+                return Ok(Some((row.record, row.body)));
+            }
+        }
+        Ok(None)
+    }
+
+    /// Register a transferred concept together with its
+    /// approval receipt, atomically. The receipt scan
+    /// and both inserts run in one SQLite IMMEDIATE
+    /// transaction: a second process sharing this
+    /// storage root blocks on the database write lock
+    /// until the first transaction commits, then finds
+    /// the receipt and returns the original concept
+    /// instead of duplicating it. On a receipt hit the
+    /// transaction rolls back and the original concept
+    /// is returned read at the receipt's pinned version
+    /// — the approved snapshot, not the latest generic
+    /// revision. No application-wide mutex is held and
+    /// no schema change is involved: receipts are
+    /// ordinary `artifact_versions` rows, and the lock
+    /// is SQLite's per-database write lock held only
+    /// for this receipt-bounded scan plus two inserts.
+    pub(crate) fn register_concept_with_receipt(
+        &self,
+        workspace_id: &str,
+        project_id: &str,
+        concept: &ArtifactRegisterRequest,
+        concept_generator: Value,
+        concept_validation_status: &str,
+        mut receipt: crate::transfer::TransferApprovalDoc,
+    ) -> Result<(ArtifactDetails, bool), CommandError> {
+        check_id(workspace_id)?;
+        check_id(project_id)?;
+        validate_registration(concept)?;
+        let mut connection = self.connection(true)?.ok_or_else(unavailable)?;
+        require_project_writable(&connection, workspace_id, project_id)?;
+        let tx = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|_| unavailable())?;
+        for row in Self::transfer_receipt_rows(&tx, workspace_id, project_id)? {
+            let Ok(doc) = serde_json::from_str::<Value>(&row.body) else {
+                continue;
+            };
+            let matches = doc.get("format").and_then(|v| v.as_str())
+                == Some("anansi-transfer-approval")
+                && doc.get("sourceExperimentArtifactId").and_then(|v| v.as_str())
+                    == Some(receipt.source_experiment_artifact_id.as_str())
+                && doc.get("sourceExperimentVersion").and_then(|v| v.as_u64())
+                    == Some(u64::from(receipt.source_experiment_version))
+                && doc.get("selectedCombinationIndex").and_then(|v| v.as_u64())
+                    == Some(receipt.selected_combination_index as u64)
+                && doc.get("approvedBrief").and_then(|v| v.as_str())
+                    == Some(receipt.approved_brief.as_str());
+            if matches {
+                let pinned: crate::transfer::TransferApprovalDoc =
+                    serde_json::from_str(&row.body).map_err(|_| unavailable())?;
+                let concept_id = pinned.concept_artifact_id.clone();
+                let concept_version = pinned.concept_version;
+                drop(tx);
+                let details = self.artifact_read(workspace_id, &concept_id, Some(concept_version))?;
+                return Ok((details, true));
+            }
+        }
+        let concept_id = new_artifact_id();
+        let concept_hash = content::hash(concept.body.as_bytes());
+        tx.execute(
+            "INSERT INTO artifact_versions (workspace_id, artifact_id, project_id, version, \
+             artifact_type, title, body, content_hash, source_references, generator, \
+             validation_status, privacy, created_at) \
+             VALUES (?1, ?2, ?3, 1, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+            params![
+                workspace_id,
+                concept_id,
+                project_id,
+                concept.artifact_type,
+                concept.title,
+                concept.body,
+                concept_hash,
+                serde_json::to_string(&concept.source_references).unwrap_or_default(),
+                concept_generator.to_string(),
+                concept_validation_status,
+                concept.privacy,
+                now_iso(),
+            ],
+        )
+        .map_err(|_| unavailable())?;
+        receipt.concept_artifact_id = concept_id.clone();
+        receipt.concept_version = 1;
+        receipt.concept_content_hash = concept_hash;
+        let receipt_body =
+            serde_json::to_string(&receipt).map_err(|_| unavailable())?;
+        let receipt_hash = content::hash(receipt_body.as_bytes());
+        let receipt_id = new_artifact_id();
+        let receipt_refs = vec![
+            format!(
+                "artifact://{}@v{}",
+                receipt.source_experiment_artifact_id, receipt.source_experiment_version
+            ),
+            format!("artifact://{concept_id}@v1"),
+        ];
+        tx.execute(
+            "INSERT INTO artifact_versions (workspace_id, artifact_id, project_id, version, \
+             artifact_type, title, body, content_hash, source_references, generator, \
+             validation_status, privacy, created_at) \
+             VALUES (?1, ?2, ?3, 1, 'transfer-approval', ?4, ?5, ?6, ?7, ?8, 'validated', 'private', ?9)",
+            params![
+                workspace_id,
+                receipt_id,
+                project_id,
+                format!("Transfer approval: {concept_id} v1"),
+                receipt_body,
+                receipt_hash,
+                serde_json::to_string(&receipt_refs).unwrap_or_default(),
+                serde_json::json!({
+                    "kind": "transfer",
+                    "provider": receipt.provider,
+                    "model": receipt.model,
+                })
+                .to_string(),
+                now_iso(),
+            ],
+        )
+        .map_err(|_| unavailable())?;
+        tx.commit().map_err(|_| unavailable())?;
+        let details = self.artifact_read(workspace_id, &concept_id, Some(1))?;
+        Ok((details, false))
     }
 
     /// Find the approval record for an exact specification

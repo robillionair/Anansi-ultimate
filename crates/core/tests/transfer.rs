@@ -591,6 +591,123 @@ fn acceptance_retry_after_generic_revision_keeps_original_transfer_identity() {
 }
 
 #[test]
+fn receipt_revision_leaves_original_approval_intact() {
+    // Only the version-1 receipt confers approval: a
+    // generic revision of the receipt creates a later
+    // version the Forge lookup ignores, so editing a
+    // receipt can neither revoke the original approval
+    // nor transfer it to another concept version.
+    let fake = start_fake();
+    let f = fixture(&fake);
+    let experiment = register_experiment(&f, &experiment_body());
+    let saved = transfer(&f, &experiment, 1, 0, "Use the approved combination.");
+    let concept_id = saved["artifact"]["artifactId"].as_str().unwrap();
+    let list = f
+        .core
+        .artifacts_command(
+            "list",
+            json!({ "contractVersion": 1, "workspaceId": f.ws, "projectId": f.project }),
+        )
+        .unwrap();
+    let receipt = list["artifacts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["type"] == "transfer-approval")
+        .expect("transfer creates a receipt");
+    let receipt_id = receipt["artifactId"].as_str().unwrap();
+    let read = f
+        .core
+        .artifacts_command(
+            "read",
+            json!({ "contractVersion": 1, "workspaceId": f.ws, "artifactId": receipt_id, "version": 1 }),
+        )
+        .unwrap();
+    let mut edited: Value = serde_json::from_str(read["body"].as_str().unwrap()).unwrap();
+    edited["approvedBrief"] = json!("Edited receipt text that must not matter.");
+    f.core
+        .artifacts_command(
+            "revise",
+            json!({
+                "contractVersion": 1, "workspaceId": f.ws, "artifactId": receipt_id,
+                "expectedVersion": 1, "title": "Transfer approval: edited",
+                "body": edited.to_string(), "sourceReferences": []
+            }),
+        )
+        .unwrap();
+    let started = f.core.ai_command(
+        "forge-spec-start",
+        json!({
+            "contractVersion": 1, "workspaceId": f.ws, "projectId": f.project,
+            "sourceArtifactId": concept_id, "sourceVersion": 1, "conceptIndex": 0,
+            "purpose": "Route flow.", "intendedUsers": "Desks.",
+            "mustHave": "Score venues.", "zeroCostLock": true
+        }),
+    );
+    assert!(
+        started.is_ok(),
+        "revising a receipt must not revoke the original approval: {started:?}"
+    );
+}
+
+#[test]
+fn generic_registration_of_receipt_type_is_refused() {
+    // Receipts are backend rows, not a registrable
+    // type: the type list deliberately excludes them,
+    // so no hand-written row can mint approval.
+    let fake = start_fake();
+    let f = fixture(&fake);
+    let registered = f.core.artifacts_command(
+        "register",
+        json!({
+            "contractVersion": 1, "workspaceId": f.ws, "projectId": f.project,
+            "type": "transfer-approval", "title": "Forged receipt",
+            "body": "{\"format\":\"anansi-transfer-approval\"}",
+            "sourceReferences": [], "privacy": "private"
+        }),
+    );
+    assert!(
+        registered.is_err(),
+        "generic registration must not create a receipt: {registered:?}"
+    );
+}
+
+#[test]
+fn retry_after_generic_revision_returns_original_snapshot() {
+    // Stronger than identity alone: the retry must
+    // return the original approved snapshot, not the
+    // latest generic revision's altered content
+    // presented as the original approval.
+    let fake = start_fake();
+    let f = fixture(&fake);
+    let experiment = register_experiment(&f, &experiment_body());
+    let brief = "Original approved brief.";
+    let first = transfer(&f, &experiment, 1, 0, brief);
+    let id = first["artifact"]["artifactId"].as_str().unwrap();
+    let mut edited: Value = serde_json::from_str(first["body"].as_str().unwrap()).unwrap();
+    edited["approvedBrief"] = json!("Different text in a supported generic revision.");
+    f.core
+        .artifacts_command(
+            "revise",
+            json!({
+                "contractVersion": 1, "workspaceId": f.ws, "artifactId": id,
+                "expectedVersion": 1, "title": "Concept: edited brief",
+                "body": edited.to_string(), "sourceReferences": []
+            }),
+        )
+        .unwrap();
+    let retried = transfer(&f, &experiment, 1, 0, brief);
+    assert_eq!(retried["artifact"]["artifactId"], id);
+    assert_eq!(retried["alreadyTransferred"], true);
+    let body: Value = serde_json::from_str(retried["body"].as_str().unwrap()).unwrap();
+    assert_eq!(
+        body["approvedBrief"], brief,
+        "retry must return the original approved snapshot"
+    );
+    assert_eq!(list_concepts(&f).len(), 1);
+}
+
+#[test]
 fn forged_stale_and_cross_project_sources_are_refused() {
     let fake = start_fake();
     let f = fixture(&fake);
