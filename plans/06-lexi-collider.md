@@ -1,12 +1,18 @@
 # M8 — LEXI-COLLIDER
 
-Current independent Windows review of `ffbeee40a` requires acceptance repair
-before promotion or Slice 3: six backend probes and one source-identity browser
-probe fail. See [Windows evidence](../docs/reviews/windows-m8-slices1-2.md) and
-[the bounded repair task](../docs/handoffs/M8-slices1-2-Windows-repair.md).
-Positive delivered tests and Linux history below do not waive these failures.
+Focused Windows acceptance of the repair is passed, including the local receipt
+integrity correction `5b3cf958f`: incoming transfer 16/16 and exact-beam 1/1,
+new corruption probe refuses with zero provider hits, final browser 4/4 covering
+identity, two-process atomicity, Forge, restart and restore. See
+[current Windows evidence](../docs/reviews/windows-m8-acceptance-repair.md).
+Use `codex/review-m8-acceptance-repair` including that correction as the next
+baseline. The earlier [red review](../docs/reviews/windows-m8-slices1-2.md) and
+[repair assignment](../docs/handoffs/M8-slices1-2-Windows-repair.md) are historical.
+Native acceptance/promotion remains pending; no Slice 3 is approved by this review.
 
-Status: tracked planning task; detailed implementation design and acceptance approval required before coding. This is not an implemented feature or a complete technical design.
+Status: Slices 1–2 implemented and accepted in the focused Windows scope above;
+the complete milestone remains in progress. Further slices require bounded design
+and acceptance criteria before implementation.
 
 Slice 1 (text-first, owner-authorized 2026-10-27, branch `muse/m8-slice1-collider`, tip `8718df8a`): delivered — two text beams, six-section validated output, immutable experiment save and restore on the M5 substrate; Linux verification complete (core 268/272, providers+API 144/0, node 73/73, browser 13/13); Windows verification pending. URL fetching, document ingestion, saved-project/memory selection, 3D visualization and approved Forge transfer remained deferred. Design: `docs/handoffs/M8-slice1-collider-design.md`; record: `docs/handoffs/M8-slice1-collider-addendum.md`.
 
@@ -20,4 +26,4 @@ Required scope: Six-stage pipeline, versioned outputs, approved Forge transfer, 
 
 Dependencies: complete the preceding milestone and verify relevant shared contracts. Before implementation, inventory every bullet in the cited sections, define task-sized vertical slices, exact files, security boundaries, migrations, tests, observable workflow evidence, rollback and acceptance criteria. Record unresolved design choices in decisions; do not invent integrations or claim mocks are live verification.
 
-Planning completion requires requirement-level traceability, explicit deferred sub-slices with rationale, current official dependency/provider verification where relevant, executable verification commands and reviewable Definition of Done. Stop at each approved task boundary. M0 is the current implementation phase; do not start this milestone during reconciliation.
+Planning completion requires requirement-level traceability, explicit deferred sub-slices with rationale, current official dependency/provider verification where relevant, executable verification commands and reviewable Definition of Done. Stop at each approved task boundary. Earlier reconciliation-era restrictions describe their historical checkpoint; the current authorized scope is the bounded M8 Slices 1–2 repair review above.

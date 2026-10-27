@@ -1,5 +1,20 @@
 # ANANSI Ultimate — Recovery Guide
 
+## Current M8 review resume authority — 2026-10-27
+
+Use `E:/Anansi/worktrees/review-m8-acceptance-repair`, branch
+`codex/review-m8-acceptance-repair`. Incoming repair `1ccda62d` plus local
+receipt-integrity correction `5b3cf958f` is the reviewed implementation; read
+[the exact Windows evidence](reviews/windows-m8-acceptance-repair.md) and the
+latest BUILD_STATUS before continuing. Focused backend/browser acceptance is
+passed; native promotion and whole-milestone/production completion are not implied.
+Preserve existing previews/data and other worktrees. Use E: for builds and temporary
+fixtures and the shared application-test lease for application tests. No new
+feature slice, push, CI or generated execution is authorized by this review.
+The owner's instruction to turn off the audit monitor remains in force; historical
+monitoring language below does not authorize restarting it. Earlier M2/M3 resume
+restrictions are historical and do not replace this current checkpoint.
+
 ## Current resume authority — 2026-10-20
 
 Resume M2–M4 reconciliation in `C:/Users/robin/Documents/ChatGPT/Anansi ultimate`, branch `codex/m2-m3-integration`. Preserve the separate M2 checkout at `bd2e2a9`. [Ownership and acceptance](handoffs/M2-M4-integration-owner.md) supersede older isolation/stop instructions below within the Owner's new task scope. Read actual HEAD/status before resuming. Do not downgrade schema, reset user data or infer production acceptance from synthetic providers. [Readiness](evidence/M5-READINESS.md) tracks unfinished work. Audit monitoring is paused; CI/protected publication remain deferred. No M5 code until readiness requirements pass.

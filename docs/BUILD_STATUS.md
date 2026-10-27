@@ -1,4 +1,31 @@
-## 2026-10-27 — Independent Windows M8 acceptance requires repair
+## 2026-10-27 — M8 repair accepted in focused Windows checks, with local integrity correction
+
+Incoming `1ccda62d92ae800b6730ee01aee9e8eac3a17b68` passed all 16 transfer
+cases and the retained exact-beam probe on Windows. All six earlier backend
+acceptance probes remained unchanged. A new receipt-checksum corruption probe
+then exposed an extra integrity gap (ordinary read refused, retry/Forge accepted,
+one synthetic provider hit). Local implementation
+`5b3cf958f9c35e45c9226d3988ae82b414b72d13` verifies receipt body hashes in the
+shared SQL reader before retry or admission; the same probe now passes with zero
+hits. No schema/contract/approval semantics changed and no stored data was repaired.
+
+Final implementation browser checks passed 4/4 under the shared lease, using the
+canonical Windows config and unchanged assertions/limits: Collider cancellation,
+save/restart/restore; independent experiment/draft identity; two-process atomic
+transfer; complete transfer/Forge/restart/restore. UI/contracts 78/78, TypeScript,
+contracts drift, web/API builds, strict core all-target Clippy, formatting and docs
+passed. The full 16-case transfer suite was run before the local correction, not
+relabeled a final-tree 17-case run. Exact scope and commands:
+[Windows repair review](reviews/windows-m8-acceptance-repair.md).
+
+Use branch `codex/review-m8-acceptance-repair`, including the local correction, as
+the next M8 source baseline. This supersedes the focused acceptance hold below;
+AN-013 remains in progress and no Slice 3 is implemented/authorized by this review.
+Native acceptance/preview promotion and standing execution/production gates remain
+open. Existing preview/data untouched; all new work/cache/temp is on E:; no pushes,
+remote CI, real credentials, paid inference or generated execution.
+
+## 2026-10-27 — Independent Windows M8 acceptance requires repair (historical, superseded above)
 
 Incoming `ffbeee40a4dd3be189e2516d38cbde22b65167ce`, Slice 1 `8718df8a`
 and reviewed `08465172a` ancestry, ZIP/bundle hashes, all 5 refs and an independent
