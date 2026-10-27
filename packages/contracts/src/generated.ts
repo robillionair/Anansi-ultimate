@@ -3171,6 +3171,80 @@ export interface SuppliedSourceInput {
   label?: string | null;
   text: string;
 }
+/**
+ * A durable Forge-compatible concept: one approved
+ * collider combination plus its provenance. The
+ * `format` discriminator is what separates this body
+ * from any other `concept` artifact a user registers
+ * by hand.
+ */
+export interface TransferConceptDoc {
+  approvedBrief: string;
+  assumptions: string[];
+  format: string;
+  model: string;
+  productizationBrief: string;
+  provider: string;
+  selectedCombination: ColliderCombination;
+  selectedCombinationIndex: number;
+  sourceExperimentArtifactId: string;
+  sourceExperimentContentHash: string;
+  sourceExperimentVersion: number;
+  unknowns: string[];
+  version: number;
+}
+/**
+ * One proposed combination or architecture (§25 stage 4).
+ */
+export interface ColliderCombination {
+  description: string;
+  name: string;
+}
+/**
+ * The transfer request: an exact experiment version,
+ * one selected combination from it, and the brief the
+ * user approved. Unknown fields are refused.
+ */
+export interface TransferRequest {
+  approvedBrief: string;
+  combinationIndex?: number;
+  contractVersion?: number;
+  experimentArtifactId: string;
+  experimentVersion: number;
+  projectId: string;
+  workspaceId: string;
+}
+export interface TransferResponse {
+  alreadyTransferred: boolean;
+  artifact: ArtifactRecord;
+  body: string;
+  contractVersion: number;
+}
+/**
+ * One artifact version's metadata — the §9 field set.
+ */
+export interface ArtifactRecord {
+  artifactId: string;
+  contentHash: string;
+  /**
+   * Generator/model metadata: `{"kind":"manual"}` in this
+   * slice; generator slices record model provenance here.
+   */
+  generator?: {
+    [k: string]: unknown;
+  };
+  privacy: string;
+  projectId: string;
+  sourceReferences: string[];
+  /**
+   * The §9 timestamp: when this version was registered.
+   */
+  timestamp: string;
+  title: string;
+  type: string;
+  validationStatus: string;
+  version: number;
+}
 export type Intent = "second_memory" | "invent_product" | "build_application" | "connect_ai" | "explore";
 
 export interface UpdateSettingsRequest {

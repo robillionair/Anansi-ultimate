@@ -9,6 +9,11 @@ import {
   ColliderPanel,
   parseColliderExperimentBody,
 } from './Collider';
+import {
+  ColliderTransferPanel,
+  TransferConceptView,
+  parseTransferConceptBody,
+} from './Transfer';
 import { OpportunityRunController } from './opportunityRun';
 import {
   DeliverablePanel,
@@ -952,10 +957,56 @@ export function Projects({ client, workspaceId }: { client: Client; workspaceId:
                         : null;
                       if (parsedExperiment) {
                         return (
-                          <ColliderExperimentView
-                            key={`collider:${workspaceId}:${current?.memory.id ?? ''}:${viewedArtifact.artifact.artifactId}:${viewedArtifact.artifact.version}`}
-                            doc={parsedExperiment}
-                          />
+                          <div>
+                            <ColliderExperimentView
+                              key={`collider:${workspaceId}:${current?.memory.id ?? ''}:${viewedArtifact.artifact.artifactId}:${viewedArtifact.artifact.version}`}
+                              doc={parsedExperiment}
+                            />
+                            {current && (
+                              <ColliderTransferPanel
+                                client={client}
+                                workspaceId={workspaceId}
+                                projectId={current.memory.id}
+                                experiment={parsedExperiment}
+                                experimentArtifact={viewedArtifact.artifact}
+                                notify={(message, isError) => { if (isError) setError(message); else setNotice(message); }}
+                                onTransferred={conceptId => {
+                                  void (async () => {
+                                    const artList = await client.listProjectArtifacts(workspaceId, current.memory.id);
+                                    setArtifacts(artList.artifacts);
+                                    await openArtifact(conceptId);
+                                  })();
+                                }}
+                                busy={busy}
+                              />
+                            )}
+                          </div>
+                        );
+                      }
+                      const parsedTransfer = viewedArtifact.artifact.type === 'concept'
+                        ? parseTransferConceptBody(viewedArtifact.body)
+                        : null;
+                      if (parsedTransfer) {
+                        return (
+                          <div>
+                            <TransferConceptView doc={parsedTransfer} />
+                            {current && (
+                              <ForgeSpecPanel
+                                client={client}
+                                workspaceId={workspaceId}
+                                projectId={current.memory.id}
+                                source={viewedArtifact.artifact}
+                                concepts={[{ name: parsedTransfer.selectedCombination.name }]}
+                                notify={(message, isError) => { if (isError) setError(message); else setNotice(message); }}
+                                onSaved={() => {
+                                  void (async () => {
+                                    const artList = await client.listProjectArtifacts(workspaceId, current.memory.id);
+                                    setArtifacts(artList.artifacts);
+                                  })();
+                                }}
+                              />
+                            )}
+                          </div>
                         );
                       }
                       const parsedSet = parseIdeaSetBody(viewedArtifact.body);

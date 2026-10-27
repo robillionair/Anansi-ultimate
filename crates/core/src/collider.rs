@@ -671,6 +671,8 @@ pub fn collider_command(
         "collider-poll" => poll(value, scope),
         "collider-cancel" => cancel(value, scope),
         "collider-save" => save(value, scope),
+        // M8 Slice 2: model-free transfer, no run.
+        "collider-transfer" => crate::transfer::transfer(value, scope),
         _ => Err(invalid("Use a supported collider operation.")),
     }
 }

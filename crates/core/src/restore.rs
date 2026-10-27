@@ -520,6 +520,105 @@ fn validate_original_review_bindings(source: &rusqlite::Connection) -> Result<()
     Ok(())
 }
 
+/// M8 Slice 2: a transferred concept must validate its
+/// original experiment binding before any destination
+/// write. The pinned experiment row must exist in the
+/// backup in the same workspace and project, be a
+/// collider experiment, and recompute to both its row
+/// hash and the pinned source hash; the selected
+/// combination must exist in that experiment's pinned
+/// version and the brief must satisfy its bounds. A
+/// transfer whose experiment is absent, tampered or
+/// mismatched refuses the whole restore with nothing
+/// published. Generic `concept` rows (manual artifacts
+/// with other bodies) restore untouched: only
+/// format-matching rows are gated.
+fn validate_original_transfer_bindings(
+    source: &rusqlite::Connection,
+) -> Result<(), CommandError> {
+    struct Row {
+        workspace_id: String,
+        project_id: String,
+        body: String,
+        content_hash: String,
+    }
+    let mut experiments: std::collections::BTreeMap<(String, String, i64), Row> =
+        std::collections::BTreeMap::new();
+    let mut transfers: Vec<Row> = Vec::new();
+    {
+        let mut q = source
+            .prepare(
+                "SELECT workspace_id, artifact_id, project_id, version, artifact_type, body, content_hash FROM artifact_versions",
+            )
+            .map_err(|_| crate::jobs::invalid())?;
+        let mut rows = q.query([]).map_err(|_| crate::jobs::invalid())?;
+        while let Some(row) = rows.next().map_err(|_| crate::jobs::invalid())? {
+            let workspace_id: String = row.get(0).map_err(|_| crate::jobs::invalid())?;
+            let artifact_id: String = row.get(1).map_err(|_| crate::jobs::invalid())?;
+            let project_id: String = row.get(2).map_err(|_| crate::jobs::invalid())?;
+            let version: i64 = row.get(3).map_err(|_| crate::jobs::invalid())?;
+            let kind: String = row.get(4).map_err(|_| crate::jobs::invalid())?;
+            let body: String = row.get(5).map_err(|_| crate::jobs::invalid())?;
+            let content_hash: String = row.get(6).map_err(|_| crate::jobs::invalid())?;
+            let entry = Row {
+                workspace_id: workspace_id.clone(),
+                project_id,
+                body,
+                content_hash,
+            };
+            if kind == "concept" {
+                transfers.push(entry);
+            } else if kind == "experiment" {
+                experiments.insert((workspace_id, artifact_id, version), entry);
+            }
+        }
+    }
+    for transfer in &transfers {
+        let Ok(value) = serde_json::from_str::<serde_json::Value>(&transfer.body) else {
+            continue;
+        };
+        if value.get("format").and_then(|v| v.as_str()) != Some("anansi-forge-concept") {
+            continue;
+        }
+        if crate::content::hash(transfer.body.as_bytes()) != transfer.content_hash {
+            return Err(crate::jobs::invalid());
+        }
+        let doc: crate::transfer::TransferConceptDoc =
+            serde_json::from_str(&transfer.body).map_err(|_| crate::jobs::invalid())?;
+        crate::transfer::validate_transfer_concept(&transfer.body)
+            .map_err(|_| crate::jobs::invalid())?;
+        let experiment = experiments
+            .get(&(
+                transfer.workspace_id.clone(),
+                doc.source_experiment_artifact_id.clone(),
+                doc.source_experiment_version as i64,
+            ))
+            .ok_or_else(crate::jobs::invalid)?;
+        if experiment.workspace_id != transfer.workspace_id
+            || experiment.project_id != transfer.project_id
+            || crate::content::hash(experiment.body.as_bytes()) != experiment.content_hash
+            || experiment.content_hash != doc.source_experiment_content_hash
+        {
+            return Err(crate::jobs::invalid());
+        }
+        let experiment_doc: crate::collider::ColliderExperimentDoc =
+            serde_json::from_str(&experiment.body).map_err(|_| crate::jobs::invalid())?;
+        crate::collider::validate_experiment_doc(&experiment_doc)
+            .map_err(|_| crate::jobs::invalid())?;
+        let combination = experiment_doc
+            .result
+            .combinations
+            .get(doc.selected_combination_index)
+            .ok_or_else(crate::jobs::invalid)?;
+        if combination.name != doc.selected_combination.name
+            || combination.description != doc.selected_combination.description
+        {
+            return Err(crate::jobs::invalid());
+        }
+    }
+    Ok(())
+}
+
 /// M8 Slice 1: a saved collider experiment whose body
 /// declares the collider format must fully validate
 /// before any destination write, mirroring the review
@@ -655,6 +754,26 @@ fn remap_artifact_row(
         let hash_i = index("content_hash")?;
         if let Value::Text(body) = &columns[body_i]
             && let Some(rewritten) = crate::forge::remap_review_references(body, ids)?
+        {
+            columns[hash_i] = Value::Text(crate::content::hash(rewritten.as_bytes()));
+            columns[body_i] = Value::Text(rewritten);
+        }
+    }
+    // M8 Slice 2 transferred concepts (type `concept`,
+    // body format `anansi-forge-concept`) pin a collider
+    // experiment by id: it resolves to the restored
+    // experiment, fail closed when it is not in the
+    // package. The experiment's own content hash is
+    // unchanged by restore (its body carries no self-id),
+    // so the pinned source hash stays valid after remap;
+    // the row hash is recomputed here because the body
+    // changed.
+    let is_transfer = matches!(&columns[type_i], Value::Text(t) if t == "concept");
+    if is_transfer {
+        let body_i = index("body")?;
+        let hash_i = index("content_hash")?;
+        if let Value::Text(body) = &columns[body_i]
+            && let Some(rewritten) = crate::transfer::remap_transfer_references(body, ids)?
         {
             columns[hash_i] = Value::Text(crate::content::hash(rewritten.as_bytes()));
             columns[body_i] = Value::Text(rewritten);
@@ -815,6 +934,7 @@ impl crate::storage::Storage {
         validate_original_deliverable_bindings(&source)?;
         validate_original_review_bindings(&source)?;
         validate_original_experiment_bindings(&source)?;
+        validate_original_transfer_bindings(&source)?;
         // Validate and prepare every mapped row before any managed content is written.
         let mut tables = vec![
             "workspaces",

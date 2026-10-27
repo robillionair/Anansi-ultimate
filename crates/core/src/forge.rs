@@ -1316,31 +1316,64 @@ fn start_spec(value: Value, scope: &CallerScope) -> Result<Value, CommandError> 
             "The selected artifact does not belong to this project.",
         ));
     }
-    if source.artifact.artifact_type != "idea" {
+    // M8 Slice 2: a transferred concept is a single
+    // approved concept, not an idea set. It is admitted
+    // by its format discriminator, validated strictly,
+    // and only at index 0 — no filler concepts are
+    // fabricated to satisfy the idea-set count rule.
+    // Every other source still takes the idea-set path.
+    let (concept, concept_name) = if source.artifact.artifact_type == "concept" {
+        let transferred = crate::transfer::validate_transfer_concept(&source.body).map_err(|e| {
+            invalid(&format!(
+                "The selected artifact is not a valid transferred concept: {e}"
+            ))
+        })?;
+        if req.concept_index != 0 {
+            return Err(invalid(
+                "A transferred concept has exactly one concept; use concept index 0.",
+            ));
+        }
+        let concept = json!({
+            "name": transferred.selected_combination.name,
+            "description": transferred.selected_combination.description,
+            "approvedBrief": transferred.approved_brief,
+            "assumptions": transferred.assumptions,
+            "unknowns": transferred.unknowns,
+            "productizationBrief": transferred.productization_brief,
+            "sourceExperimentArtifactId": transferred.source_experiment_artifact_id,
+            "sourceExperimentVersion": transferred.source_experiment_version,
+            "provider": transferred.provider,
+            "model": transferred.model,
+        });
+        let name = transferred.selected_combination.name.clone();
+        (concept, name)
+    } else if source.artifact.artifact_type == "idea" {
+        let body_json: Value = serde_json::from_str(&source.body)
+            .map_err(|_| invalid("The selected artifact is not a readable idea set."))?;
+        crate::ideas::parse_idea_set(&source.body, "forge").map_err(|e| {
+            invalid(&format!(
+                "The selected artifact is not a valid idea set: {e}"
+            ))
+        })?;
+        let concepts = body_json
+            .get("concepts")
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_default();
+        let concept = concepts.get(req.concept_index).cloned().ok_or_else(|| {
+            invalid("The selected concept does not exist in the pinned artifact version.")
+        })?;
+        let name = concept
+            .get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("Concept")
+            .to_string();
+        (concept, name)
+    } else {
         return Err(invalid(
-            "Product Forge develops a saved idea or opportunity set artifact.",
+            "Product Forge develops a saved idea or opportunity set artifact, or a transferred concept.",
         ));
-    }
-    let body_json: Value = serde_json::from_str(&source.body)
-        .map_err(|_| invalid("The selected artifact is not a readable idea set."))?;
-    crate::ideas::parse_idea_set(&source.body, "forge").map_err(|e| {
-        invalid(&format!(
-            "The selected artifact is not a valid idea set: {e}"
-        ))
-    })?;
-    let concepts = body_json
-        .get("concepts")
-        .and_then(|v| v.as_array())
-        .cloned()
-        .unwrap_or_default();
-    let concept = concepts.get(req.concept_index).cloned().ok_or_else(|| {
-        invalid("The selected concept does not exist in the pinned artifact version.")
-    })?;
-    let concept_name = concept
-        .get("name")
-        .and_then(|v| v.as_str())
-        .unwrap_or("Concept")
-        .to_string();
+    };
     let concept_text =
         serde_json::to_string_pretty(&concept).map_err(|_| crate::storage::unavailable())?;
     let answers_text = format!(

@@ -9,6 +9,7 @@ use anansi_core::collider::{
     ColliderPollResponse, ColliderProductization, ColliderResult, ColliderRunRequest,
     ColliderSaveResponse, ColliderStartRequest, ColliderStartResponse,
 };
+use anansi_core::transfer::{TransferConceptDoc, TransferRequest, TransferResponse};
 use anansi_core::evaluations::{
     AssessmentInput, ConceptSummary, EvaluationsSaveRequest, EvaluationsSaveResponse,
     RubricDimension, RubricDoc, StandardRubricResponse,
@@ -94,6 +95,9 @@ fn main() {
         "ColliderFeasibility":schemars::schema_for!(ColliderFeasibility),
         "ColliderProductization":schemars::schema_for!(ColliderProductization),
         "ColliderExperimentDoc":schemars::schema_for!(ColliderExperimentDoc),
+        "TransferRequest":schemars::schema_for!(TransferRequest),
+        "TransferResponse":schemars::schema_for!(TransferResponse),
+        "TransferConceptDoc":schemars::schema_for!(TransferConceptDoc),
         "IdeasGenerateStartRequest":schemars::schema_for!(IdeasGenerateStartRequest),
         "IdeasRunRequest":schemars::schema_for!(IdeasRunRequest),
         "IdeasGenerateStartResponse":schemars::schema_for!(IdeasGenerateStartResponse),

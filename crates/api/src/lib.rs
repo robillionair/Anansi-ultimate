@@ -117,6 +117,7 @@ pub fn command_path(path: &str) -> bool {
             | "/v1/ai/collider-poll"
             | "/v1/ai/collider-cancel"
             | "/v1/ai/collider-save"
+            | "/v1/ai/collider-transfer"
             | "/v1/ai/opportunities-generate-start"
             | "/v1/ai/opportunities-generate-poll"
             | "/v1/ai/opportunities-generate-cancel"

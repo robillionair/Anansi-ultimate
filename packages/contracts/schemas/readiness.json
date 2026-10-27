@@ -12254,6 +12254,233 @@
     "title": "SuppliedSourceInput",
     "type": "object"
   },
+  "TransferConceptDoc": {
+    "$defs": {
+      "ColliderCombination": {
+        "additionalProperties": false,
+        "description": "One proposed combination or architecture (§25 stage 4).",
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "description"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "description": "A durable Forge-compatible concept: one approved\ncollider combination plus its provenance. The\n`format` discriminator is what separates this body\nfrom any other `concept` artifact a user registers\nby hand.",
+    "properties": {
+      "approvedBrief": {
+        "type": "string"
+      },
+      "assumptions": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "format": {
+        "type": "string"
+      },
+      "model": {
+        "type": "string"
+      },
+      "productizationBrief": {
+        "type": "string"
+      },
+      "provider": {
+        "type": "string"
+      },
+      "selectedCombination": {
+        "$ref": "#/$defs/ColliderCombination"
+      },
+      "selectedCombinationIndex": {
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "sourceExperimentArtifactId": {
+        "type": "string"
+      },
+      "sourceExperimentContentHash": {
+        "type": "string"
+      },
+      "sourceExperimentVersion": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "unknowns": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "version": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "format",
+      "version",
+      "sourceExperimentArtifactId",
+      "sourceExperimentVersion",
+      "sourceExperimentContentHash",
+      "selectedCombinationIndex",
+      "selectedCombination",
+      "approvedBrief",
+      "assumptions",
+      "unknowns",
+      "productizationBrief",
+      "provider",
+      "model"
+    ],
+    "title": "TransferConceptDoc",
+    "type": "object"
+  },
+  "TransferRequest": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "description": "The transfer request: an exact experiment version,\none selected combination from it, and the brief the\nuser approved. Unknown fields are refused.",
+    "properties": {
+      "approvedBrief": {
+        "type": "string"
+      },
+      "combinationIndex": {
+        "default": 0,
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "contractVersion": {
+        "default": 1,
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "experimentArtifactId": {
+        "type": "string"
+      },
+      "experimentVersion": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "projectId": {
+        "type": "string"
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "workspaceId",
+      "projectId",
+      "experimentArtifactId",
+      "experimentVersion",
+      "approvedBrief"
+    ],
+    "title": "TransferRequest",
+    "type": "object"
+  },
+  "TransferResponse": {
+    "$defs": {
+      "ArtifactRecord": {
+        "description": "One artifact version's metadata — the §9 field set.",
+        "properties": {
+          "artifactId": {
+            "type": "string"
+          },
+          "contentHash": {
+            "type": "string"
+          },
+          "generator": {
+            "description": "Generator/model metadata: `{\"kind\":\"manual\"}` in this\nslice; generator slices record model provenance here."
+          },
+          "privacy": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "sourceReferences": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "timestamp": {
+            "description": "The §9 timestamp: when this version was registered.",
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "validationStatus": {
+            "type": "string"
+          },
+          "version": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "artifactId",
+          "projectId",
+          "type",
+          "version",
+          "title",
+          "timestamp",
+          "sourceReferences",
+          "validationStatus",
+          "privacy",
+          "contentHash"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "alreadyTransferred": {
+        "type": "boolean"
+      },
+      "artifact": {
+        "$ref": "#/$defs/ArtifactRecord"
+      },
+      "body": {
+        "type": "string"
+      },
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "artifact",
+      "body",
+      "alreadyTransferred"
+    ],
+    "title": "TransferResponse",
+    "type": "object"
+  },
   "UpdateSettingsRequest": {
     "$defs": {
       "Intent": {
