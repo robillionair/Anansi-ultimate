@@ -1,3 +1,62 @@
+## 2026-10-27 — M8 Slice 2: collider → Forge transfer (Linux verification)
+
+Explicitly approved transfer on branch
+`muse/m8-slice2-forge-transfer`, from the Slice 1
+delivery `muse/m8-slice1-collider` @ `8718df8a`
+(ZIP/bundle hashes and `08465172a` ancestry
+re-verified in a scratch repo before import).
+Model-free direct op `collider-transfer` binds an
+exact experiment version + recomputed content hash
++ one selected combination + the user's approved
+brief into a durable `concept` artifact (existing
+registry type, format `anansi-forge-concept` v1),
+with verbatim model-derived fields labeled apart
+from the user-authored brief and nothing
+fabricated. Idempotency is structural (same
+experiment/version/combination/brief returns the
+same artifact, concurrent or after restart);
+`forge-spec-start` admits transferred concepts at
+index 0 only while the idea-set path is unchanged;
+restore pre-validates transfer bindings and remaps
+the experiment reference fail-closed. The transfer
+panel under the experiment view saves nothing and
+contacts no provider before explicit approval, and
+the concept branch opens the existing Forge spec
+panel with one concept, so spec generation stays a
+separate explicit action and no specification
+approval, paid authorization or execution
+permission is created by transfer.
+
+Linux verification, sequential on an idle machine:
+backend transfer suite 8/8; full core 276/280 with
+only the 4 known environmental live-Ollama
+semantic_workflow failures; providers 120/0 + API
+24/0 (144/0); node UI/contracts 76/76 including 3
+new transfer tests; TypeScript, contracts drift,
+docs (128 Markdown files after this slice), strict
+Clippy and formatting clean; API+web builds passed.
+Browser canonical battery 14/14 across
+app_checkpoint, artifacts, backups, collider,
+evaluations, forge, forge-revision,
+forge-deliverable, forge-review, ideas,
+opportunities, providers, vault and the new
+transfer spec. The first battery run failed 2/14
+(the transfer spec's raw-JSON assertion trap,
+fixed by scoping, and a one-off forge-review
+findings-step failure that passed alone and in
+the rerun battery — recorded as intermittent, not
+root-caused; only the complete rerun is cited).
+Design:
+[Slice 2 design](handoffs/M8-slice2-forge-transfer-design.md);
+record:
+[Slice 2 addendum](handoffs/M8-slice2-forge-transfer-addendum.md).
+Windows verification of Slices 1–2, M7 native
+acceptance, preview promotion, the §32 sandbox
+and the M5 production gates remain open.
+Synthetic only, no generated-code execution,
+credentials, paid inference, downloads, pushes or
+remote CI.
+
 ## 2026-10-27 — M8 Slice 1: text-first LEXI-COLLIDER (Linux verification)
 
 Text-first collision on branch `muse/m8-slice1-collider`, from the independently
