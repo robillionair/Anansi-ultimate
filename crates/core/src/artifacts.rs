@@ -540,7 +540,11 @@ impl Storage {
             .map_err(|_| unavailable())?;
         let mut out = Vec::new();
         for row in rows {
-            out.push(row.map_err(|_| unavailable())?);
+            let row = row.map_err(|_| unavailable())?;
+            if content::hash(row.body.as_bytes()) != row.record.content_hash {
+                return Err(content::integrity());
+            }
+            out.push(row);
         }
         Ok(out)
     }

@@ -673,6 +673,66 @@ fn generic_registration_of_receipt_type_is_refused() {
 }
 
 #[test]
+fn corrupt_receipt_hash_refuses_retry_and_forge_before_provider_traffic() {
+    let fake = start_fake();
+    let f = fixture(&fake);
+    let experiment = register_experiment(&f, &experiment_body());
+    let brief = "Use the approved combination.";
+    let saved = transfer(&f, &experiment, 1, 0, brief);
+    let concept_id = saved["artifact"]["artifactId"].as_str().unwrap();
+    let list = f
+        .core
+        .artifacts_command(
+            "list",
+            json!({
+                "contractVersion": 1, "workspaceId": f.ws, "projectId": f.project
+            }),
+        )
+        .unwrap();
+    let receipt_id = list["artifacts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["type"] == "transfer-approval")
+        .unwrap()["artifactId"]
+        .as_str()
+        .unwrap();
+    // Synthetic catalog corruption: leave the body and all approval bindings
+    // intact but invalidate the receipt's own stored checksum.
+    let db = rusqlite::Connection::open(f._dir.path().join("workspaces.sqlite3")).unwrap();
+    assert_eq!(db.execute(
+        "UPDATE artifact_versions SET content_hash = ?1 WHERE workspace_id = ?2 AND artifact_id = ?3 AND version = 1",
+        rusqlite::params!["0".repeat(64), f.ws, receipt_id],
+    ).unwrap(), 1);
+    drop(db);
+    assert!(f.core.artifacts_command("read", json!({
+        "contractVersion": 1, "workspaceId": f.ws, "artifactId": receipt_id, "version": 1
+    })).is_err(), "ordinary reads must detect the invalid checksum");
+    let retried = f.core.ai_command(
+        "collider-transfer",
+        json!({
+            "contractVersion": 1, "workspaceId": f.ws, "projectId": f.project,
+            "experimentArtifactId": experiment, "experimentVersion": 1,
+            "combinationIndex": 0, "approvedBrief": brief
+        }),
+    );
+    let started = f.core.ai_command(
+        "forge-spec-start",
+        json!({
+            "contractVersion": 1, "workspaceId": f.ws, "projectId": f.project,
+            "sourceArtifactId": concept_id, "sourceVersion": 1, "conceptIndex": 0,
+            "purpose": "Route flow.", "intendedUsers": "Desks.",
+            "mustHave": "Score venues.", "zeroCostLock": true
+        }),
+    );
+    let hits = fake.hits.load(Ordering::SeqCst);
+    assert!(
+        retried.is_err() && started.is_err() && hits == 0,
+        "invalid receipt checksum was trusted: retry={retried:?}; start={started:?}; hits={hits}"
+    );
+}
+
+#[test]
 fn retry_after_generic_revision_returns_original_snapshot() {
     // Stronger than identity alone: the retry must
     // return the original approved snapshot, not the
