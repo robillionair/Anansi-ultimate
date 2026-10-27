@@ -119,7 +119,7 @@ export function parseTransferConceptBody(
 
 export function TransferConceptView({ doc }: { doc: TransferConceptDoc }) {
   return (
-    <div>
+    <section aria-label="Transferred concept">
       <p>
         Transferred concept — pinned to collider experiment{' '}
         {doc.sourceExperimentArtifactId} version {doc.sourceExperimentVersion}
@@ -158,7 +158,7 @@ export function TransferConceptView({ doc }: { doc: TransferConceptDoc }) {
         specification below is a separate explicit action, and nothing here
         authorizes paid inference or runs generated code.
       </p>
-    </div>
+    </section>
   );
 }
 

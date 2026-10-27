@@ -251,7 +251,7 @@ test('collider transfer: preview and edit save nothing -> approve creates one co
     // Opening the concept shows the Forge spec workflow with one concept.
     await page.getByRole('button', { name: 'Open in Product Forge' }).click();
     await expect(page.getByText('Transferred concept — pinned to collider experiment')).toBeVisible();
-    await expect(page.locator('p').filter({ hasText: 'Mycelial order router, user-edited: score venues by local congestion.' }).first()).toBeVisible();
+    await expect(page.locator('section[aria-label="Transferred concept"]').locator('pre').filter({ hasText: 'Mycelial order router, user-edited: score venues by local congestion.' }).first()).toBeVisible();
     const conceptSelect = page.getByLabel('Concept to develop');
     await expect(conceptSelect).toBeVisible();
     expect(await conceptSelect.locator('option').count()).toBe(1);
@@ -273,7 +273,7 @@ test('collider transfer: preview and edit save nothing -> approve creates one co
     await pairAndOpen(workspaceId);
     await artifacts.getByRole('button', { name: 'Concept: Mycelial order router' }).click();
     await expect(page.getByText('Transferred concept — pinned to collider experiment')).toBeVisible();
-    await expect(page.locator('p').filter({ hasText: 'Mycelial order router, user-edited: score venues by local congestion.' }).first()).toBeVisible();
+    await expect(page.locator('section[aria-label="Transferred concept"]').locator('pre').filter({ hasText: 'Mycelial order router, user-edited: score venues by local congestion.' }).first()).toBeVisible();
 
     // Backup and restore into a fresh workspace, then reopen the concept.
     const backup = await call('jobs', 'backup', { workspaceId, application: false, plaintextConsent: true });
@@ -324,7 +324,7 @@ test('collider transfer: preview and edit save nothing -> approve creates one co
     await pairAndOpen(restoredWs);
     await artifacts.getByRole('button', { name: 'Concept: Mycelial order router' }).click();
     await expect(page.getByText('Transferred concept — pinned to collider experiment')).toBeVisible();
-    await expect(page.locator('p').filter({ hasText: 'Mycelial order router, user-edited: score venues by local congestion.' }).first()).toBeVisible();
+    await expect(page.locator('section[aria-label="Transferred concept"]').locator('pre').filter({ hasText: 'Mycelial order router, user-edited: score venues by local congestion.' }).first()).toBeVisible();
     const restoredProjects = await call('memories', 'list', { workspaceId: restoredWs, kind: 'project' });
     const restoredProjectId = (restoredProjects.body.memories as Array<Record<string, any>>)[0].id as string;
     const restoredConcept = await artifactByType(restoredWs, restoredProjectId, 'concept');

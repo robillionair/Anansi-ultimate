@@ -26,7 +26,7 @@ function experimentBody(firstCombination: string): string {
     result: {
       sourceUnderstanding: 'Both beams describe decentralized coordination systems with local feedback.',
       conceptualPrimitives: ['Distributed signaling', 'Adaptive routing', 'Local feedback'],
-      crossDomainMappings: ['Order-book depth resembles nutrient gradients.'],
+      crossDomainMappings: ['Order-book depth resembles nutrient gradients.', 'Redundant hyphal paths transfer to redundant trade routes that degrade gracefully.'],
       combinations: [
         { name: firstCombination, description: 'A routing layer that scores venues by local congestion signals. Hypothesis only.' },
         { name: 'Graceful-degradation mesh', description: 'A trade mesh that reroutes through redundant paths when a venue stalls. Hypothesis only.' },
