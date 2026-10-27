@@ -1,5 +1,15 @@
 # ANANSI Ultimate — Requirements Matrix
 
+## M7 bounded acceptance update — 2026-10-27
+
+AN-012 remains in progress: specification/source generation, explicit exact-version
+approval, revision, documented exports, restart and restored reopening have
+Windows synthetic native evidence at `bf6f1fd9c` in
+[the preview record](handoffs/M7-local-native-preview.md). This does not claim
+generated execution, other product templates or production certification.
+The [discovery correction](handoffs/M7-preview-discovery.md) makes the implemented
+project workflow visible without changing capability or consent boundaries.
+
 ## Current acceptance correction — 2026-10-20
 
 M2–M4 remain **in progress**. AN-005 and AN-010 verified labels in the historical table below are superseded: application embedding population/query generation, semantic context/Ask integration, reranking, production privacy/error behavior and real-model acceptance are incomplete. AN-006/009 additionally have real small-model browser and desktop streaming, cited-answer/disclosure and cancellation evidence; restart/timeout and broader acceptance remain pending; AN-011 is design-only. AN-018/019/031/033 require real native/browser vault and encrypted recovery workflows. [M5 readiness](evidence/M5-READINESS.md) and [ownership checklist](handoffs/M2-M4-integration-owner.md) control current acceptance. Historical evidence is preserved, never expanded into unexecuted tests. All master requirement owners remain represented; audit monitor paused, external audit pending, CI/publication deferred.

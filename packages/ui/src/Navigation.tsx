@@ -2,7 +2,7 @@ export type View = 'workspace'|'settings'|'connection'|'memory'|'notes'|'project
 export const plannedGroups = [
   {name:'HOME',items:['Dashboard']},
   {name:'KNOWLEDGE',items:['Files','Big Brain']},
-  {name:'CREATE',items:['Innovation Studio','My Ideas','Product Forge','My Products']},
+  {name:'CREATE',items:['My Products']},
   {name:'VALIDATE',items:['SwarmTank','SOMNIA','Experiments']},
   {name:'WORK',items:['Team Workspace','Automations']},
   {name:'SYSTEM',items:['AI Matrix','Integrations','MCP']},
@@ -12,6 +12,8 @@ export function Navigation({view,hasWorkspace,onNavigate}:{view:View;hasWorkspac
     <p className="nav-group">HOME</p>
     <button aria-current={view==='workspace'?'page':undefined} onClick={()=>onNavigate('workspace')}>Workspace</button>
     <button disabled={!hasWorkspace} aria-current={view==='ask'?'page':undefined} onClick={()=>onNavigate('ask')}>Ask ANANSI</button>
+    <p className="nav-group">CREATE</p>
+    <button disabled={!hasWorkspace} onClick={()=>onNavigate('projects')}>Ideas &amp; Product Forge</button>
     <p className="nav-group">WORK</p>
     <button disabled={!hasWorkspace} aria-current={view==='projects'?'page':undefined} onClick={()=>onNavigate('projects')}>Projects</button>
     <button disabled={!hasWorkspace} aria-current={view==='tasks'?'page':undefined} onClick={()=>onNavigate('tasks')}>Tasks</button>

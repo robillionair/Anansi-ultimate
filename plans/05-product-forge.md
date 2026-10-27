@@ -1,5 +1,15 @@
 # M7 — Product Forge
 
+Current acceptance update (2026-10-27): Slices 2–3 backend/browser Windows
+verification is recorded at `cc25155ff`; combined synthetic native acceptance
+and local preview promotion are recorded at `bf6f1fd9c` in
+[the native record](../docs/handoffs/M7-local-native-preview.md). These supersede
+the older pending-native/promotion wording below for this bounded workflow only.
+Current M7 polish: [preview discovery](../docs/handoffs/M7-preview-discovery.md).
+Execution remains disabled pending its separately approved isolation design;
+M5 production gates and remaining product templates remain open. The final
+M0 reconciliation sentence below is historical boilerplate, not current phase.
+
 Status (2026-10-26): **first bounded vertical slice implemented** under the owner's M7 assignment — saved concept → product specification → development plan → generated source package → inert inspection → versioned save → export-for-review, one static-web prototype template, on branch `muse/m7-slice1-product-forge` (design: `docs/handoffs/M7-slice1-design.md`; record: `docs/handoffs/M7-slice1-addendum.md`), plus the Slice 1 repair (backend specification approval, portable export paths, branch `muse/m7-slice1-repair`) and **Slice 2: revising an existing source package** — bounded revision with server-computed diff, reject-saves-nothing, accept as a new artifact version with exact parent/specification references, on branch `muse/m7-slice2-package-revision` (design: `docs/handoffs/M7-slice2-package-revision-design.md`; record: `docs/handoffs/M7-slice2-addendum.md`) — and **Slice 3: a complete, reviewable export deliverable** — version-pinned package + specification, five approved documents with user/model/verified origins, deterministic archive with version/hash manifest, unexecuted status throughout, on branch `muse/m7-slice3-deliverable` (design: `docs/handoffs/M7-slice3-deliverable-design.md`; record: `docs/handoffs/M7-slice3-addendum.md`). **Not implemented and not claimed:** the §32 execution sandbox and with it build/test/preview/deployment stages, the remaining §28 product types, and production certification — each remains planned for later separately approved slices. Windows verification of Slices 2–3 and preview promotion remain pending (the preview branch is preserved as a separate ref in the Slice 3 bundle, not promoted; see the addendum).
 
 Authority: [master specification](../docs/MASTER_SPEC.md), sections 28–33, 66–67, 79–80; [canonical roadmap](../docs/ROADMAP.md).

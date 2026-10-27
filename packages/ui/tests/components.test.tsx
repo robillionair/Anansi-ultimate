@@ -122,8 +122,11 @@ test('navigation has a small active set, complete grouped unavailable tools and 
   assert.ok(html.includes('aria-label="Main navigation"'));
   assert.ok(html.includes('aria-current="page"'));
   assert.ok(html.includes('disabled=""'));
-  assert.equal((html.match(/<button/g) || []).length, 15);
+  assert.equal((html.match(/<button/g) || []).length, 16);
   assert.ok(!plannedGroups.some(group=>group.items.includes('Search')));
+  assert.ok(!plannedGroups.some(group=>group.items.includes('Product Forge')));
+  assert.match(html,/disabled=""[^>]*>Ideas &amp; Product Forge<\/button>/);
+  assert.doesNotMatch(renderToStaticMarkup(<Navigation view="projects" hasWorkspace={true} onNavigate={()=>{}}/>),/disabled=""[^>]*>Ideas &amp; Product Forge<\/button>/);
   assert.ok(!plannedGroups.some(group=>group.items.includes('Local Models')));
   assert.ok(!plannedGroups.some(group=>group.items.includes('Ask ANANSI')));
   assert.match(renderToStaticMarkup(<Navigation view="search" hasWorkspace={true} onNavigate={()=>{}}/>),/aria-current="page"[^>]*>Search<\/button>/);
@@ -143,6 +146,13 @@ test('onboarding explains actual privacy limits and cannot bypass review using i
   const privacy = renderToStaticMarkup(<PrivacyReview />);
   assert.ok(privacy.includes('not an encrypted vault'));
   assert.ok(privacy.includes('does not authorize future cloud sharing'));
+  assert.match(privacy,/Onboarding makes no AI or cloud requests/);
+  assert.match(privacy,/Optional AI tasks send their inputs and selected context/);
+  assert.match(privacy,/requires separate native setup and authorization/);
+  assert.doesNotMatch(privacy,/This edition makes no AI|vault are not available yet/);
+  const choices=renderToStaticMarkup(<IntentChoice value="explore" onChange={()=>{}}/>);
+  assert.match(choices,/Generated code does not run here/);
+  assert.doesNotMatch(choices,/connections are not available yet|Forge is still in development/);
 });
 
 test('settings exposes saved intent and meaningful motion action with privacy disclosure', () => {
