@@ -1,5 +1,13 @@
 # ANANSI Ultimate — Requirements Matrix
 
+## M8 Windows acceptance hold — 2026-10-27
+
+AN-013 remains in progress. Independent checks of Slices 1–2 reproduced transfer
+approval/provenance, retry identity, exact-input preservation and UI source-state
+failures. [Windows evidence](reviews/windows-m8-slices1-2.md) distinguishes positive
+checks from failing acceptance probes; the [repair task](handoffs/M8-slices1-2-Windows-repair.md)
+must complete before promotion. No production completion or native pass is claimed.
+
 ## M7 bounded acceptance update — 2026-10-27
 
 AN-012 remains in progress: specification/source generation, explicit exact-version

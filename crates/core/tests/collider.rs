@@ -469,6 +469,45 @@ fn required_inputs_and_bounds_fail_before_provider_traffic() {
 }
 
 #[test]
+fn acceptance_exact_beams_are_preserved_on_wire_and_save() {
+    let fake = start_fake();
+    let f = fixture(&fake, "free");
+    let a = "  def route():\n    return 'local'\n";
+    let b = "\tMycelium pathways.\n";
+    let started = start_collide(&f, a, b);
+    let run_id = started["runId"].as_str().unwrap();
+    let polled = poll_until(&f, run_id);
+    assert_eq!(polled["status"], "complete");
+    let wire: Value = serde_json::from_str(&fake.last_body.lock().unwrap()).unwrap();
+    let content = wire["messages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|m| m["content"].as_str())
+        .collect::<Vec<_>>()
+        .join("\n");
+    let saved = f
+        .core
+        .ai_command(
+            "collider-save",
+            json!({
+                "contractVersion": 1, "workspaceId": f.ws, "runId": run_id
+            }),
+        )
+        .unwrap();
+    let body: Value = serde_json::from_str(saved["body"].as_str().unwrap()).unwrap();
+    assert!(
+        content.contains(&format!("Beam A (data):\n{a}"))
+            && content.contains(&format!("Beam B (data):\n{b}"))
+            && body["beamA"] == a
+            && body["beamB"] == b,
+        "exact approved input was altered: saved A={:?}; saved B={:?}",
+        body["beamA"],
+        body["beamB"]
+    );
+}
+
+#[test]
 fn unconfigured_provider_and_archived_project_refuse() {
     // No provider configured at all.
     let dir = tempfile::tempdir().unwrap();

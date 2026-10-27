@@ -1,5 +1,11 @@
 # M8 — LEXI-COLLIDER
 
+Current independent Windows review of `ffbeee40a` requires acceptance repair
+before promotion or Slice 3: six backend probes and one source-identity browser
+probe fail. See [Windows evidence](../docs/reviews/windows-m8-slices1-2.md) and
+[the bounded repair task](../docs/handoffs/M8-slices1-2-Windows-repair.md).
+Positive delivered tests and Linux history below do not waive these failures.
+
 Status: tracked planning task; detailed implementation design and acceptance approval required before coding. This is not an implemented feature or a complete technical design.
 
 Slice 1 (text-first, owner-authorized 2026-10-27, branch `muse/m8-slice1-collider`, tip `8718df8a`): delivered — two text beams, six-section validated output, immutable experiment save and restore on the M5 substrate; Linux verification complete (core 268/272, providers+API 144/0, node 73/73, browser 13/13); Windows verification pending. URL fetching, document ingestion, saved-project/memory selection, 3D visualization and approved Forge transfer remained deferred. Design: `docs/handoffs/M8-slice1-collider-design.md`; record: `docs/handoffs/M8-slice1-collider-addendum.md`.

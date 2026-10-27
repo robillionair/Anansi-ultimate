@@ -1,3 +1,34 @@
+## 2026-10-27 — Independent Windows M8 acceptance requires repair
+
+Incoming `ffbeee40a4dd3be189e2516d38cbde22b65167ce`, Slice 1 `8718df8a`
+and reviewed `08465172a` ancestry, ZIP/bundle hashes, all 5 refs and an independent
+scratch clone verified. Review branch `codex/review-m8-slices1-2` changes tests
+and evidence only; no production repairs or preview promotion.
+
+Windows positives: all 12 delivered Collider backend cases; UI/contracts 76/76;
+TypeScript, contracts drift, strict focused Clippy, formatting, docs and web/API
+builds; original Collider browser workflow 1/1 with cancellation/restart/restore.
+The duplicate transfer rerun was intentionally interrupted after the dedicated
+probes established failures; original transfer-suite Windows completion is not
+claimed.
+
+Acceptance blockers reproduced: five transfer probes failed (brief alteration,
+forged source/model input accepted by Forge with a synthetic provider hit, generic
+brief edit accepted without renewed transfer approval, fabricated derived fields
+published by restore, and retry returning a new concept id after generic revise).
+An additional Collider exact-beam probe failed, and the browser retained a v1
+draft while displaying experiment v2 for the full 30-second assertion window.
+These are expected-success tests that fail on the delivered code, not inverted
+defect tests. Post-approval stale confirmation and cross-process atomicity need
+further coverage; they are not counted as additional reproduced failures.
+
+**Do not promote or start Slice 3 before the bounded acceptance repair.**
+[Evidence](reviews/windows-m8-slices1-2.md) and
+[Muse repair assignment](handoffs/M8-slices1-2-Windows-repair.md) retain exact
+scope, commands/case names and limitations. Linux delivery evidence below remains
+historical and is not relabelled Windows certification. Running preview/data
+untouched; execution and production gates stay open; no paid inference or CI.
+
 ## 2026-10-27 — M8 Slice 2: collider → Forge transfer (Linux verification)
 
 Explicitly approved transfer on branch

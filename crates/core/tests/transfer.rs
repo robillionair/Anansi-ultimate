@@ -426,6 +426,171 @@ fn transfer_creates_concept_with_exact_pins_and_provenance() {
 }
 
 #[test]
+fn acceptance_approved_brief_is_preserved_exactly() {
+    let fake = start_fake();
+    let f = fixture(&fake);
+    let experiment = register_experiment(&f, &experiment_body());
+    let brief = "  Keep the user's leading indentation.\nAnd the final newline.\n";
+    let saved = transfer(&f, &experiment, 1, 0, brief);
+    let body: Value = serde_json::from_str(saved["body"].as_str().unwrap()).unwrap();
+    assert_eq!(
+        body["approvedBrief"], brief,
+        "approval must preserve submitted text exactly"
+    );
+    assert_eq!(fake.hits.load(Ordering::SeqCst), 0);
+}
+
+#[test]
+fn acceptance_forge_rechecks_transfer_binding_before_provider_traffic() {
+    let fake = start_fake();
+    let f = fixture(&fake);
+    let experiment = register_experiment(&f, &experiment_body());
+    let saved = transfer(&f, &experiment, 1, 0, "Use the approved combination.");
+    let id = saved["artifact"]["artifactId"].as_str().unwrap();
+    let mut edited: Value = serde_json::from_str(saved["body"].as_str().unwrap()).unwrap();
+    edited["sourceExperimentArtifactId"] = json!("f".repeat(32));
+    edited["selectedCombination"]["description"] = json!("Fabricated model-derived result.");
+    f.core
+        .artifacts_command(
+            "revise",
+            json!({
+                "contractVersion": 1, "workspaceId": f.ws, "artifactId": id,
+                "expectedVersion": 1, "title": "Concept: edited provenance",
+                "body": edited.to_string(), "sourceReferences": []
+            }),
+        )
+        .unwrap();
+    let started = f.core.ai_command(
+        "forge-spec-start",
+        json!({
+            "contractVersion": 1, "workspaceId": f.ws, "projectId": f.project,
+            "sourceArtifactId": id, "sourceVersion": 2, "conceptIndex": 0,
+            "purpose": "Route flow.", "intendedUsers": "Desks.",
+            "mustHave": "Score venues.", "zeroCostLock": true
+        }),
+    );
+    let hits = fake.hits.load(Ordering::SeqCst);
+    assert!(
+        started.is_err() && hits == 0,
+        "invalid transfer provenance reached Forge: {started:?}; provider hits={hits}"
+    );
+}
+
+#[test]
+fn acceptance_generic_edit_does_not_mint_transfer_approval() {
+    let fake = start_fake();
+    let f = fixture(&fake);
+    let experiment = register_experiment(&f, &experiment_body());
+    let saved = transfer(
+        &f,
+        &experiment,
+        1,
+        0,
+        "Approved through the transfer operation.",
+    );
+    let id = saved["artifact"]["artifactId"].as_str().unwrap();
+    let mut edited: Value = serde_json::from_str(saved["body"].as_str().unwrap()).unwrap();
+    edited["approvedBrief"] = json!("Unapproved replacement saved through the generic editor.");
+    f.core
+        .artifacts_command(
+            "revise",
+            json!({
+                "contractVersion": 1, "workspaceId": f.ws, "artifactId": id,
+                "expectedVersion": 1, "title": "Concept: unapproved replacement",
+                "body": edited.to_string(), "sourceReferences": []
+            }),
+        )
+        .unwrap();
+    let started = f.core.ai_command(
+        "forge-spec-start",
+        json!({
+            "contractVersion": 1, "workspaceId": f.ws, "projectId": f.project,
+            "sourceArtifactId": id, "sourceVersion": 2, "conceptIndex": 0,
+            "purpose": "Route flow.", "intendedUsers": "Desks.",
+            "mustHave": "Score venues.", "zeroCostLock": true
+        }),
+    );
+    let hits = fake.hits.load(Ordering::SeqCst);
+    assert!(
+        started.is_err() && hits == 0,
+        "a generic edit minted transfer approval: {started:?}; provider hits={hits}"
+    );
+}
+
+#[test]
+fn acceptance_restore_rejects_fabricated_model_derived_provenance() {
+    let fake = start_fake();
+    let f = fixture(&fake);
+    let experiment = register_experiment(&f, &experiment_body());
+    let saved = transfer(&f, &experiment, 1, 0, "Use the approved combination.");
+    let id = saved["artifact"]["artifactId"].as_str().unwrap();
+    let mut edited: Value = serde_json::from_str(saved["body"].as_str().unwrap()).unwrap();
+    edited["assumptions"] = json!(["This assumption never appeared in the pinned experiment."]);
+    edited["provider"] = json!("fabricated-provider");
+    edited["model"] = json!("fabricated-model");
+    f.core
+        .artifacts_command(
+            "revise",
+            json!({
+                "contractVersion": 1, "workspaceId": f.ws, "artifactId": id,
+                "expectedVersion": 1, "title": "Concept: edited provenance",
+                "body": edited.to_string(), "sourceReferences": []
+            }),
+        )
+        .unwrap();
+    let bytes = backup_bytes(
+        f._dir.path(),
+        &Storage::new(f._dir.path().to_path_buf()).unwrap(),
+        &f.ws,
+    );
+    let fresh_dir = tempfile::tempdir().unwrap();
+    let fresh = Core::with_storage_root(fresh_dir.path().to_path_buf());
+    let restored = try_upload_restore(&fresh, &bytes, "Forged transfer provenance");
+    assert!(
+        restored.is_err(),
+        "restore published fabricated model provenance: {restored:?}"
+    );
+    let listed = fresh
+        .workspace_command("list", json!({"contractVersion": 1}))
+        .unwrap();
+    assert!(
+        !listed["workspaces"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|w| w["name"] == "Forged transfer provenance")
+    );
+}
+
+#[test]
+fn acceptance_retry_after_generic_revision_keeps_original_transfer_identity() {
+    let fake = start_fake();
+    let f = fixture(&fake);
+    let experiment = register_experiment(&f, &experiment_body());
+    let brief = "Original approved brief.";
+    let first = transfer(&f, &experiment, 1, 0, brief);
+    let id = first["artifact"]["artifactId"].as_str().unwrap();
+    let mut edited: Value = serde_json::from_str(first["body"].as_str().unwrap()).unwrap();
+    edited["approvedBrief"] = json!("Different text in a supported generic revision.");
+    f.core
+        .artifacts_command(
+            "revise",
+            json!({
+                "contractVersion": 1, "workspaceId": f.ws, "artifactId": id,
+                "expectedVersion": 1, "title": "Concept: edited brief",
+                "body": edited.to_string(), "sourceReferences": []
+            }),
+        )
+        .unwrap();
+    let retried = transfer(&f, &experiment, 1, 0, brief);
+    assert_eq!(
+        retried["artifact"]["artifactId"], id,
+        "a retry must not duplicate an existing transfer"
+    );
+    assert_eq!(list_concepts(&f).len(), 1);
+}
+
+#[test]
 fn forged_stale_and_cross_project_sources_are_refused() {
     let fake = start_fake();
     let f = fixture(&fake);

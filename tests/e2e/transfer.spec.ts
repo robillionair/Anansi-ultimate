@@ -197,6 +197,22 @@ test('collider transfer: preview and edit save nothing -> approve creates one co
     await artifacts.getByRole('button', { name: 'Collider experiment: Trading signals' }).click();
     await expect(page.getByText('Collider experiment — provider ollama, model llama-x.')).toBeVisible();
 
+    // Exact source identity must reset transfer drafts on version changes.
+    await page.getByLabel(/Proposed concept brief/).fill('UNAPPROVED DRAFT FOR EXPERIMENT VERSION ONE');
+    const secondExperiment = JSON.parse(experimentBody());
+    secondExperiment.result.combinations[0].name = 'New experiment version combination';
+    const revisedExperiment = await call('artifacts', 'revise', {
+      workspaceId, artifactId: experimentId, expectedVersion: 1,
+      title: 'Collider experiment: Trading signals', body: JSON.stringify(secondExperiment), sourceReferences: [],
+    });
+    expect(revisedExperiment.status).toBe(200);
+    await artifacts.getByRole('button', { name: 'Collider experiment: Trading signals' }).click();
+    await expect(page.getByText('Viewing version 2 of Collider experiment: Trading signals', { exact: false })).toBeVisible();
+    await expect(page.getByLabel(/Proposed concept brief/)).not.toHaveValue('UNAPPROVED DRAFT FOR EXPERIMENT VERSION ONE');
+    await expect(page.getByLabel(/Proposed concept brief/)).toHaveValue(/New experiment version combination/);
+    await page.getByRole('button', { name: 'View version 1', exact: true }).click();
+    await expect(page.getByText('Viewing version 1 of Collider experiment: Trading signals', { exact: false })).toBeVisible();
+
     // Preview and edit save nothing and contact no provider.
     await expect(page.getByRole('button', { name: 'Approve and send to Product Forge' })).toBeVisible();
     await page.getByLabel(/Proposed concept brief/).fill('Mycelial order router, user-edited: score venues by local congestion.');
@@ -211,6 +227,15 @@ test('collider transfer: preview and edit save nothing -> approve creates one co
     const concept = await artifactByType(workspaceId, projectId, 'concept');
     expect(concept).toBeDefined();
     const conceptId = concept!.artifactId as string;
+
+    // Editing after approval must not present the prior concept as approval
+    // of the newly displayed brief/selection. No further creation is implied.
+    await page.getByLabel(/Proposed concept brief/).fill('A DIFFERENT BRIEF THAT HAS NOT BEEN APPROVED');
+    await expect(page.getByRole('button', { name: 'Approve and send to Product Forge' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Open in Product Forge' })).toHaveCount(0);
+    await page.getByLabel(/Proposed concept brief/).fill('Mycelial order router, user-edited: score venues by local congestion.');
+    await page.getByRole('button', { name: 'Approve and send to Product Forge' }).click();
+    await expect(page.getByRole('button', { name: 'Open in Product Forge' })).toBeVisible();
 
     // Duplicate submission through the API returns the same artifact.
     const duplicate = await call('ai', 'collider-transfer', {
