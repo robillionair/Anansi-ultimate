@@ -247,10 +247,12 @@ test('product forge review: assess -> save -> revise -> findings -> revision rej
     // The saved review shows findings, pins and banner.
     await artifacts.getByRole('button', { name: 'Source review: Bean Stock Log' }).click();
     await expect(page.getByRole('heading', { name: 'Source review: Bean Stock Log' })).toBeVisible();
-    await expect(page.getByText('Status: satisfied')).toBeVisible();
-    await expect(page.getByText('Status: needs-changes')).toBeVisible();
+    await expect(page.getByText('Status: Satisfied by inspection')).toBeVisible();
+    await expect(page.getByText('Status: Needs changes')).toBeVisible();
     await expect(page.locator('pre.provider-output').filter({ hasText: 'Reload loses the last entry' }).first()).toBeVisible();
     await expect(page.getByText(/Pins source package artifact .* version 1/)).toBeVisible();
+    await page.getByRole('heading', { name: 'Source review: Bean Stock Log' }).scrollIntoViewIfNeeded();
+    await page.screenshot({ path: 'test-results/forge-review-saved.png' });
 
     // Revise the review as a new version; cancelling a
     // draft must leave no draft behind (regression in
@@ -277,6 +279,25 @@ test('product forge review: assess -> save -> revise -> findings -> revision rej
     await page.getByRole('button', { name: 'Use in revision panel' }).click();
     await expect(page.getByRole('heading', { name: 'Revise this source package' })).toBeVisible();
     await expect(page.locator('#forge-revision-instructions')).toHaveValue('Revision requested from source review: persist the last entry before unload in app.js.');
+    // Switching from a review must switch the entire artifact selection,
+    // including history and the supported generic editor, not just the viewer.
+    await expect(page.locator('#artifact-revise-title')).toHaveValue('Source package: Bean Stock Log');
+    await expect(page.getByRole('list', { name: 'Artifact versions' }).getByRole('button')).toHaveCount(1);
+    await expect(page.locator('#artifact-revise-body')).toHaveValue(/"format":"anansi-source-package"/);
+    // Capture the supported generic editor's actual command without creating
+    // another package version that would alter the revision workflow below.
+    let genericTarget = '';
+    const genericRoute = '**/v1/artifacts/revise';
+    await page.route(genericRoute, async route => {
+      genericTarget = (route.request().postDataJSON() as { artifactId: string }).artifactId;
+      await route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({
+        code: 'REVISION_CONFLICT', message: 'Synthetic command-capture refusal.',
+      }) });
+    });
+    await page.getByRole('button', { name: 'Save new version', exact: true }).click();
+    await expect.poll(() => genericTarget).toBe(pkgId);
+    await expect(page.getByRole('button', { name: 'Save new version', exact: true })).toBeEnabled();
+    await page.unroute(genericRoute);
 
     // Reject saves nothing, then accept saves a new
     // package version; the review still pins v1.

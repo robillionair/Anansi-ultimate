@@ -462,7 +462,9 @@ fn validate_original_review_bindings(source: &rusqlite::Connection) -> Result<()
         let value: serde_json::Value =
             serde_json::from_str(&review.body).map_err(|_| crate::jobs::invalid())?;
         if value.get("format").and_then(|v| v.as_str()) != Some("anansi-source-review") {
-            continue;
+            // The registry type already identifies this as a source review.
+            // A changed discriminator must not bypass validation of its pins.
+            return Err(crate::jobs::invalid());
         }
         let doc: crate::forge::SourceReviewDoc =
             serde_json::from_str(&review.body).map_err(|_| crate::jobs::invalid())?;

@@ -1164,6 +1164,66 @@ fn restore_refuses_tampered_pinned_hash() {
 }
 
 #[test]
+fn restore_refuses_review_with_changed_format_before_publication() {
+    // Use real generated ancestry: the manual inspection fixture deliberately
+    // references an absent idea and cannot be used as a valid restore control.
+    let fake = start_fake();
+    let f = fixture(&fake);
+    let (_, package_id) = spec_and_package(&f, true);
+    let saved = save_review(&f.core, &f.ws, &f.project, &package_id, 1, base_findings()).unwrap();
+    let id = saved["artifact"]["artifactId"].as_str().unwrap();
+    let valid_bytes = backup_bytes(
+        f._dir.path(),
+        &Storage::new(f._dir.path().to_path_buf()).unwrap(),
+        &f.ws,
+    );
+    let control_dir = tempfile::tempdir().unwrap();
+    let control = Core::with_storage_root(control_dir.path().to_path_buf());
+    assert!(try_upload_restore(&control, &valid_bytes, "Valid review format").is_ok());
+    let mut edited: Value = serde_json::from_str(saved["body"].as_str().unwrap()).unwrap();
+    edited["format"] = json!("unexpected-review-format");
+    f.core
+        .artifacts_command(
+            "revise",
+            json!({
+                "contractVersion": 1, "workspaceId": f.ws, "artifactId": id,
+                "expectedVersion": 1, "title": "Source review: invalid discriminator",
+                "body": edited.to_string(), "sourceReferences": []
+            }),
+        )
+        .unwrap();
+    let bytes = backup_bytes(
+        f._dir.path(),
+        &Storage::new(f._dir.path().to_path_buf()).unwrap(),
+        &f.ws,
+    );
+    let fresh_dir = tempfile::tempdir().unwrap();
+    let fresh = Core::with_storage_root(fresh_dir.path().to_path_buf());
+    let result = try_upload_restore(&fresh, &bytes, "Invalid review format");
+    assert!(
+        result.is_err(),
+        "restore accepted an invalid typed review: {result:?}"
+    );
+    let listed = fresh
+        .workspace_command("list", json!({"contractVersion": 1}))
+        .unwrap();
+    assert!(
+        !listed["workspaces"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|w| w["name"] == "Invalid review format")
+    );
+    assert_eq!(
+        versions(&f.core, &f.ws, id)["versions"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+}
+
+#[test]
 fn restore_refuses_cross_workspace_spec() {
     let fake = start_fake();
     let f = fixture(&fake);

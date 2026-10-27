@@ -463,7 +463,7 @@ test('source review view pins versions, shows findings and never claims runtime 
   assert.match(html,/Pins source package artifact/);
   assert.match(html,/Inspection only/);
   assert.match(html,/Reload loses the last entry/);
-  assert.match(html,/Status: needs-changes/);
+  assert.match(html,/Status: Needs changes/);
   assert.match(html,/Revise this review/);
   assert.match(html,/Use findings for a revision/);
   assert.doesNotMatch(html,/has been tested/);
@@ -494,6 +494,7 @@ test('review body parser accepts only the review format',()=>{
   assert.equal(parseReviewBody(JSON.stringify(doc))?.format, 'anansi-source-review');
   assert.equal(parseReviewBody(JSON.stringify({ ...doc, format: 'anansi-deliverable' })), null);
   assert.equal(parseReviewBody('not json'), null);
+  assert.equal(parseReviewBody(JSON.stringify({ ...doc, findings: [{ criterionIndex: 0, criterion: 'Inspect source', status: 'not-assessed', note: '' }] })), null);
 });
 
 test('deliverable view pins versions, shows origins and never claims publication',()=>{

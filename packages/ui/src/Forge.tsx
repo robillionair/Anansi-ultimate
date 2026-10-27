@@ -1079,6 +1079,11 @@ export function DeliverableView(props: {
 // text — never run, built, previewed or deployed.
 
 export const REVIEW_STATUSES = ['not-assessed', 'needs-changes', 'satisfied'] as const;
+const REVIEW_STATUS_LABELS: Record<string, string> = {
+  'not-assessed': 'Not assessed',
+  'needs-changes': 'Needs changes',
+  satisfied: 'Satisfied by inspection',
+};
 
 export const REVIEW_BANNER =
   'Inspection only — this review does not establish runtime behavior, passing tests, security certification or production readiness. The source was not executed, built, previewed or deployed.';
@@ -1086,9 +1091,22 @@ export const REVIEW_BANNER =
 export function parseReviewBody(body: string): SourceReviewDoc | null {
   try {
     const parsed = JSON.parse(body) as SourceReviewDoc;
-    return parsed && parsed.format === 'anansi-source-review' && Array.isArray(parsed.findings)
-      ? parsed
-      : null;
+    // Registry bodies can be edited through the generic artifact editor.
+    // Reject unrenderable records before a finding's arrays reach the viewer;
+    // backend save/restore still owns validation against exact package/spec pins.
+    if (!parsed || parsed.format !== 'anansi-source-review' || parsed.formatVersion !== 1
+      || typeof parsed.conceptName !== 'string'
+      || typeof parsed.packageArtifactId !== 'string' || typeof parsed.packageContentHash !== 'string'
+      || typeof parsed.specArtifactId !== 'string' || typeof parsed.specContentHash !== 'string'
+      || !Number.isInteger(parsed.packageVersion) || parsed.packageVersion < 1
+      || !Number.isInteger(parsed.specVersion) || parsed.specVersion < 1
+      || !Array.isArray(parsed.limitations) || !parsed.limitations.every(x => typeof x === 'string')
+      || !Array.isArray(parsed.findings) || !parsed.findings.every(f => f
+        && Number.isInteger(f.criterionIndex) && f.criterionIndex >= 0
+        && typeof f.criterion === 'string' && typeof f.note === 'string'
+        && REVIEW_STATUSES.some(status => status === f.status)
+        && Array.isArray(f.fileRefs) && f.fileRefs.every(x => typeof x === 'string'))) return null;
+    return parsed;
   } catch {
     return null;
   }
@@ -1221,7 +1239,7 @@ function FindingEditor(props: {
             onChange={e => update(i, { status: e.target.value })}
           >
             {REVIEW_STATUSES.map(s => (
-              <option key={s} value={s}>{s}</option>
+              <option key={s} value={s}>{REVIEW_STATUS_LABELS[s]}</option>
             ))}
           </select>
           <label htmlFor={`forge-review-note-${i}`}>Note (required when Needs changes, at most 2000 characters)</label>
@@ -1400,7 +1418,7 @@ export function SourceReviewView(props: {
           {doc.findings.map((f, i) => (
             <div key={f.criterionIndex}>
               <p><strong>Criterion {f.criterionIndex + 1}:</strong> {f.criterion}</p>
-              <p aria-label={`Review finding ${f.criterionIndex + 1} status`}>Status: {f.status}</p>
+              <p aria-label={`Review finding ${f.criterionIndex + 1} status`}>Status: {REVIEW_STATUS_LABELS[f.status]}</p>
               {f.note && <pre className="provider-output">{f.note}</pre>}
               {f.fileRefs.length > 0 && <p>Files: {f.fileRefs.join(', ')}</p>}
               {props.onPrepareRevision && (

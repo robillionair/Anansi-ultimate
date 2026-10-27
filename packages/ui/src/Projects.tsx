@@ -305,16 +305,22 @@ export function Projects({ client, workspaceId }: { client: Client; workspaceId:
       : `Opportunity set saved as artifact ${saved.artifact.artifactId}.`);
   }
 
-  async function openArtifact(artifactId: string) {
+  async function openArtifact(artifactId: string, version?: number) {
     const epoch = ++artifactViewEpoch.current;
     const versions = await client.listProjectArtifactVersions(workspaceId, artifactId);
     if (epoch !== artifactViewEpoch.current) return;
-    setSelectedArtifact(artifactId);
-    setArtifactVersions(versions.versions);
-    const latest = versions.versions[versions.versions.length - 1];
-    if (latest) {
-      const details = await client.readProjectArtifact(workspaceId, artifactId, latest.version);
+    const target = version === undefined
+      ? versions.versions[versions.versions.length - 1]
+      : versions.versions.find(item => item.version === version);
+    if (version !== undefined && !target) throw new Error('The requested artifact version is unavailable.');
+    if (target) {
+      const details = await client.readProjectArtifact(workspaceId, artifactId, target.version);
       if (epoch !== artifactViewEpoch.current) return;
+      // Publish a coherent selection only after the exact body has loaded.
+      // Review-to-package navigation must not leave review history/editor state
+      // attached to a package viewer or redirect a generic save to the review.
+      setSelectedArtifact(artifactId);
+      setArtifactVersions(versions.versions);
       setViewedArtifact(details);
       setViewedArtifactEpoch(epoch);
       setReviseForm({ title: details.artifact.title, body: details.body, sources: details.artifact.sourceReferences.join('\n') });
@@ -862,7 +868,7 @@ export function Projects({ client, workspaceId }: { client: Client; workspaceId:
                             onSaved={() => { void refreshSavedArtifact(current.memory.id, viewedArtifact.artifact.artifactId, viewedArtifactEpoch); }}
                             onPrepareRevision={(packageArtifactId, packageVersion, text) => {
                               setRevisePrefill({ text, packageArtifactId, packageVersion });
-                              void viewArtifactVersion(packageArtifactId, packageVersion);
+                              void run(() => openArtifact(packageArtifactId, packageVersion));
                             }}
                           />
                         );
