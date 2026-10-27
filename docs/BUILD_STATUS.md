@@ -1,3 +1,19 @@
+## 2026-10-27 — Local combined native preview preparation
+
+The owner requested continuing the Windows preview build and verification.
+The supplied ZIP was the earlier repair package, not the reported preview ZIP;
+Muse's `bed0dc2` is unavailable locally and is not claimed verified. Local branch
+`codex/preview-m7-slices2-3` starts from Windows-verified `cc25155ff` and
+cherry-picks preview materials from `3335248b`, preserving both status histories.
+Application source comparison is identical to `cc25155ff`.
+
+New launcher/root/cache are separate from M7/R17. UI/contracts 60/60, TypeScript,
+web build and docs validation passed. Normal embedded desktop/API build and native
+workflow acceptance are in progress; no completion is claimed by this entry.
+Plan and scope: `docs/handoffs/M7-local-native-preview.md`; owner guide:
+`M7-PREVIEW.md`. No generated-code execution or paid inference, personal-data
+migration, pushes, master merges or remote CI. Production gates remain open.
+
 ## 2026-10-26 — Independent Windows M7 Slice 3 repair verification
 
 Repair baseline `74c4196744e1623e368bda302c0cbc3c62a9e38c` passed Windows
