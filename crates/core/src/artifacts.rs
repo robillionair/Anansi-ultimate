@@ -620,7 +620,9 @@ impl Storage {
             };
             let matches = doc.get("format").and_then(|v| v.as_str())
                 == Some("anansi-transfer-approval")
-                && doc.get("sourceExperimentArtifactId").and_then(|v| v.as_str())
+                && doc
+                    .get("sourceExperimentArtifactId")
+                    .and_then(|v| v.as_str())
                     == Some(receipt.source_experiment_artifact_id.as_str())
                 && doc.get("sourceExperimentVersion").and_then(|v| v.as_u64())
                     == Some(u64::from(receipt.source_experiment_version))
@@ -634,7 +636,8 @@ impl Storage {
                 let concept_id = pinned.concept_artifact_id.clone();
                 let concept_version = pinned.concept_version;
                 drop(tx);
-                let details = self.artifact_read(workspace_id, &concept_id, Some(concept_version))?;
+                let details =
+                    self.artifact_read(workspace_id, &concept_id, Some(concept_version))?;
                 return Ok((details, true));
             }
         }
@@ -664,8 +667,7 @@ impl Storage {
         receipt.concept_artifact_id = concept_id.clone();
         receipt.concept_version = 1;
         receipt.concept_content_hash = concept_hash;
-        let receipt_body =
-            serde_json::to_string(&receipt).map_err(|_| unavailable())?;
+        let receipt_body = serde_json::to_string(&receipt).map_err(|_| unavailable())?;
         let receipt_hash = content::hash(receipt_body.as_bytes());
         let receipt_id = new_artifact_id();
         let receipt_refs = vec![

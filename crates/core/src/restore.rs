@@ -681,19 +681,18 @@ fn validate_original_transfer_bindings(source: &rusqlite::Connection) -> Result<
             serde_json::from_str(&experiment.body).map_err(|_| crate::jobs::invalid())?;
         crate::collider::validate_experiment_doc(&experiment_doc)
             .map_err(|_| crate::jobs::invalid())?;
-        let (combination, assumptions, unknowns, productization_brief, provider, model) =
-            crate::transfer::expected_transfer_fields(
-                &experiment_doc,
-                doc.selected_combination_index,
-            )
-            .map_err(|_| crate::jobs::invalid())?;
-        if combination.name != doc.selected_combination.name
-            || combination.description != doc.selected_combination.description
-            || assumptions != doc.assumptions
-            || unknowns != doc.unknowns
-            || productization_brief != doc.productization_brief
-            || provider != doc.provider
-            || model != doc.model
+        let expected = crate::transfer::expected_transfer_fields(
+            &experiment_doc,
+            doc.selected_combination_index,
+        )
+        .map_err(|_| crate::jobs::invalid())?;
+        if expected.combination.name != doc.selected_combination.name
+            || expected.combination.description != doc.selected_combination.description
+            || expected.assumptions != doc.assumptions
+            || expected.unknowns != doc.unknowns
+            || expected.productization_brief != doc.productization_brief
+            || expected.provider != doc.provider
+            || expected.model != doc.model
         {
             return Err(crate::jobs::invalid());
         }
@@ -919,8 +918,7 @@ fn remap_artifact_row(
         let body_i = index("body")?;
         let hash_i = index("content_hash")?;
         if let Value::Text(body) = &columns[body_i]
-            && let Some(rewritten) =
-                crate::transfer::remap_transfer_approval_references(body, ids)?
+            && let Some(rewritten) = crate::transfer::remap_transfer_approval_references(body, ids)?
         {
             columns[hash_i] = Value::Text(crate::content::hash(rewritten.as_bytes()));
             columns[body_i] = Value::Text(rewritten);

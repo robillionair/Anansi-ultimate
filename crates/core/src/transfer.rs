@@ -229,8 +229,8 @@ pub fn validate_transfer_concept(raw: &str) -> Result<TransferConceptDoc, String
 /// body, used by Forge admission and restore
 /// pre-validation. Returns the parsed doc on success.
 pub fn validate_transfer_approval_doc(raw: &str) -> Result<TransferApprovalDoc, String> {
-    let doc: TransferApprovalDoc = serde_json::from_str(raw)
-        .map_err(|e| format!("transfer approval is not readable: {e}"))?;
+    let doc: TransferApprovalDoc =
+        serde_json::from_str(raw).map_err(|e| format!("transfer approval is not readable: {e}"))?;
     if doc.format != "anansi-transfer-approval" {
         return Err(format!(
             "transfer approval format must be anansi-transfer-approval, got {}",
@@ -250,7 +250,9 @@ pub fn validate_transfer_approval_doc(raw: &str) -> Result<TransferApprovalDoc, 
         || doc.provider.trim().is_empty()
         || doc.model.trim().is_empty()
     {
-        return Err("transfer approval is missing its concept or experiment provenance".to_string());
+        return Err(
+            "transfer approval is missing its concept or experiment provenance".to_string(),
+        );
     }
     check_text(
         &doc.selected_combination.name,
@@ -278,20 +280,19 @@ pub fn validate_transfer_approval_doc(raw: &str) -> Result<TransferApprovalDoc, 
 /// provenance. Shared by the transfer op, the Forge
 /// admission check and restore pre-validation so all
 /// three agree on what counts as the same transfer.
+pub struct ExpectedTransferFields {
+    pub combination: ColliderCombination,
+    pub assumptions: Vec<String>,
+    pub unknowns: Vec<String>,
+    pub productization_brief: String,
+    pub provider: String,
+    pub model: String,
+}
+
 pub fn expected_transfer_fields(
     experiment: &ColliderExperimentDoc,
     combination_index: usize,
-) -> Result<
-    (
-        ColliderCombination,
-        Vec<String>,
-        Vec<String>,
-        String,
-        String,
-        String,
-    ),
-    String,
-> {
+) -> Result<ExpectedTransferFields, String> {
     let combination = experiment
         .result
         .combinations
@@ -302,14 +303,14 @@ pub fn expected_transfer_fields(
         })?;
     let mut unknowns = experiment.result.feasibility.unknown_costs.clone();
     unknowns.extend(experiment.result.feasibility.dependencies.clone());
-    Ok((
+    Ok(ExpectedTransferFields {
         combination,
-        experiment.result.feasibility.hypotheses.clone(),
+        assumptions: experiment.result.feasibility.hypotheses.clone(),
         unknowns,
-        experiment.result.productization.concept_brief.clone(),
-        experiment.provider.clone(),
-        experiment.model.clone(),
-    ))
+        productization_brief: experiment.result.productization.concept_brief.clone(),
+        provider: experiment.provider.clone(),
+        model: experiment.model.clone(),
+    })
 }
 
 /// Authoritative admission check for a transferred
@@ -394,16 +395,15 @@ pub fn validate_transfer_approval(
     let experiment: ColliderExperimentDoc =
         serde_json::from_str(&source.body).map_err(|_| unapproved())?;
     validate_experiment_doc(&experiment).map_err(|_| unapproved())?;
-    let (combination, assumptions, unknowns, productization_brief, provider, model) =
-        expected_transfer_fields(&experiment, concept.selected_combination_index)
-            .map_err(|_| unapproved())?;
-    if combination.name != concept.selected_combination.name
-        || combination.description != concept.selected_combination.description
-        || assumptions != concept.assumptions
-        || unknowns != concept.unknowns
-        || productization_brief != concept.productization_brief
-        || provider != concept.provider
-        || model != concept.model
+    let expected = expected_transfer_fields(&experiment, concept.selected_combination_index)
+        .map_err(|_| unapproved())?;
+    if expected.combination.name != concept.selected_combination.name
+        || expected.combination.description != concept.selected_combination.description
+        || expected.assumptions != concept.assumptions
+        || expected.unknowns != concept.unknowns
+        || expected.productization_brief != concept.productization_brief
+        || expected.provider != concept.provider
+        || expected.model != concept.model
     {
         return Err(unapproved());
     }
@@ -485,9 +485,16 @@ pub fn transfer(value: Value, scope: &CallerScope) -> Result<Value, CommandError
             "The selected experiment's stored hash does not match its body; it may have been tampered with.",
         ));
     }
-    let (combination, assumptions, unknowns, productization_brief, provider, model) =
-        expected_transfer_fields(&experiment, req.combination_index)
-            .map_err(|e| invalid(&e))?;
+    let expected =
+        expected_transfer_fields(&experiment, req.combination_index).map_err(|e| invalid(&e))?;
+    let ExpectedTransferFields {
+        combination,
+        assumptions,
+        unknowns,
+        productization_brief,
+        provider,
+        model,
+    } = expected;
     // The approved brief is recorded exactly as
     // submitted: validation above rejects whitespace-only
     // and overlong briefs, but accepted text keeps its
