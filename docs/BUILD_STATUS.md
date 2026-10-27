@@ -1,3 +1,48 @@
+## 2026-10-27 — M8 Slice 1: text-first LEXI-COLLIDER (Linux verification)
+
+Text-first collision on branch `muse/m8-slice1-collider`, from the independently
+reviewed checkpoint `codex/review-m7-source-review` @ `08465172a` (reviewer
+corrections at `befc66f11` preserved; the original Muse delivery was not
+restarted from). Two bounded text beams collide through the existing M5
+provider/routing/privacy/cost substrate (ops `collider-start/-poll/-cancel/-save`
+on the `ai_command` providers arm); one provider request produces six
+validated sections (source understanding, conceptual primitives, cross-domain
+mappings, combinations, feasibility, productization) shown under honest
+generating/validating states with no invented stages or percentages. Saving
+is explicit and immutable through the existing registry as an
+`anansi-collider-experiment` v1 body on the existing generic `experiment`
+type — no type-list change — pinning exact beams, resolved controls,
+provider/model provenance and the full disclosure record. Restore
+pre-validation gates only format-matching collider rows; generic manual
+experiment rows restore untouched. Accessible 2D only; URL fetching, document
+ingestion, saved-project/memory selection, 3D visualization and approved
+Forge transfer remain deferred and are shown only as a plain-text note.
+
+Linux verification, sequential on an idle machine: backend collider suite
+12/12; full core 268/272 with only the 4 known environmental live-Ollama
+semantic_workflow failures; providers 120/0 + API 24/0 (144/0); node
+UI/contracts 73/73 including 9 new collider tests; TypeScript, contracts
+drift, docs (126 Markdown files after this slice), strict Clippy and
+formatting clean; API+web builds passed. Browser canonical battery 13/13
+across app_checkpoint, artifacts, backups, evaluations, forge,
+forge-revision, forge-deliverable, forge-review, ideas, opportunities,
+providers, vault and the new collider spec (no inference before submit,
+cancel saves nothing, six sections, save, restart, backup/fresh restore),
+with the Forge revision/deliverable/source-review regressions preserved.
+Two failures found and fixed during verification, neither by weakening an
+assertion: the API route allowlist lacked the four collider paths, so the
+browser preflight blocked every collision (fixed in `crates/api`, and the
+panel now surfaces a failed start instead of staying silent); and the spec's
+result assertion matched the generic editor's raw JSON copy as well as the
+rendered section (scoped to the combinations section). No timeout or
+assertion was increased or weakened. Design:
+[Slice 1 design](handoffs/M8-slice1-collider-design.md); record:
+[Slice 1 addendum](handoffs/M8-slice1-collider-addendum.md). Windows
+verification of this slice is pending; M7 native acceptance, preview
+promotion, the §32 sandbox and the M5 production gates remain open.
+Synthetic only, no generated-code execution, credentials, paid inference,
+downloads, pushes or remote CI.
+
 ## 2026-10-27 — Independent Windows source-review acceptance and corrections
 
 Incoming `7607dc7cf17f5763c5311241835211cc14c6af71` ZIP/bundle hashes,

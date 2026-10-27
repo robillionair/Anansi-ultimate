@@ -474,13 +474,26 @@ export function ColliderPanel({
     setResult(null);
     setSavedArtifact('');
     setValidating(false);
-    const started = await controller().start({
-      projectId,
-      beamA,
-      beamB,
-      controls,
-      zeroCostLock: lock,
-    });
+    let started;
+    try {
+      started = await controller().start({
+        projectId,
+        beamA,
+        beamB,
+        controls,
+        zeroCostLock: lock,
+      });
+    } catch (e) {
+      // A refused or unreachable start must be visible,
+      // not a silent no-op: the run alert below renders it.
+      setRun({
+        runId: '',
+        status: 'failed',
+        partialChars: 0,
+        error: e instanceof Error ? e.message : 'Starting the collision failed.',
+      });
+      return;
+    }
     if (!started) return; // superseded while the start was in flight
     setRun({ runId: started.runId, status: 'running', partialChars: 0, error: null });
     if (started.disclosure) setDisclosure(started.disclosure);

@@ -214,7 +214,7 @@ test('lexi-collider: no inference before submit -> collide -> cancel saves nothi
     await pairAndOpen(workspaceId);
     await artifacts.getByRole('button', { name: 'Collider experiment: Trading signals' }).click();
     await expect(page.getByText('Collider experiment — provider ollama, model llama-x.')).toBeVisible();
-    await expect(page.getByText('Mycelial order router')).toBeVisible();
+    await expect(page.locator('section[aria-labelledby="collider-combinations-heading"]').getByText('Mycelial order router')).toBeVisible();
 
     // Backup and restore into a fresh workspace through
     // the same job routes the Backups UI uses, then
@@ -267,7 +267,7 @@ test('lexi-collider: no inference before submit -> collide -> cancel saves nothi
     await pairAndOpen(restoredWs);
     await artifacts.getByRole('button', { name: 'Collider experiment: Trading signals' }).click();
     await expect(page.getByText('Collider experiment — provider ollama, model llama-x.')).toBeVisible();
-    await expect(page.getByText('Mycelial order router')).toBeVisible();
+    await expect(page.locator('section[aria-labelledby="collider-combinations-heading"]').getByText('Mycelial order router')).toBeVisible();
     const restoredProjects = await call('memories', 'list', { workspaceId: restoredWs, kind: 'project' });
     const restoredProjectId = (restoredProjects.body.memories as Array<Record<string, any>>)[0].id as string;
     const restoredExperimentId = await artifactIdByType(restoredWs, restoredProjectId, 'experiment');
