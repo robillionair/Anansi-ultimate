@@ -541,8 +541,12 @@ fn validate_original_experiment_bindings(
     while let Some(row) = rows.next().map_err(|_| crate::jobs::invalid())? {
         let body: String = row.get(0).map_err(|_| crate::jobs::invalid())?;
         let content_hash: String = row.get(1).map_err(|_| crate::jobs::invalid())?;
-        let value: serde_json::Value =
-            serde_json::from_str(&body).map_err(|_| crate::jobs::invalid())?;
+        // A body that is not JSON at all cannot be a
+        // collider record: generic manual experiments
+        // restore untouched.
+        let Ok(value) = serde_json::from_str::<serde_json::Value>(&body) else {
+            continue;
+        };
         if value.get("format").and_then(|v| v.as_str()) != Some("anansi-collider-experiment") {
             continue;
         }
