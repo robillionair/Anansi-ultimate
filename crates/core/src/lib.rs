@@ -7,6 +7,7 @@ pub mod ask_stream;
 pub mod backup;
 pub mod backup_commands;
 pub mod backup_upload;
+pub mod collider;
 pub mod content;
 pub mod context;
 pub mod entities;

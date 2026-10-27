@@ -4,6 +4,11 @@ import type { ArtifactDetails, ArtifactRecord, Client, IdeaConcept, IdeaSet, Opp
 import type { DisclosureRecord } from '@anansi/contracts';
 import { DisclosurePanel } from './Providers';
 import { IdeaRunController } from './ideaRun';
+import {
+  ColliderExperimentView,
+  ColliderPanel,
+  parseColliderExperimentBody,
+} from './Collider';
 import { OpportunityRunController } from './opportunityRun';
 import {
   DeliverablePanel,
@@ -536,6 +541,30 @@ export function Projects({ client, workspaceId }: { client: Client; workspaceId:
             )}
           </section>
 
+          <section aria-labelledby="project-collider-heading">
+            <h3 id="project-collider-heading">LEXI-COLLIDER</h3>
+            <p className="help">
+              Collide two beams of text and explore combinations across
+              domains. Results are model-generated hypotheses, not researched
+              facts. Only the two texts below are sent, exactly as the
+              disclosure after collision shows.
+            </p>
+            {current && (
+              <ColliderPanel
+                key={`collider:${workspaceId}:${current.memory.id}`}
+                client={client}
+                workspaceId={workspaceId}
+                projectId={current.memory.id}
+                notify={(message, isError) => { if (isError) setError(message); else setNotice(message); }}
+                onSaved={async () => {
+                  const artList = await client.listProjectArtifacts(workspaceId, current.memory.id);
+                  setArtifacts(artList.artifacts);
+                }}
+                busy={busy}
+              />
+            )}
+          </section>
+
           <section aria-labelledby="project-opportunities-heading">
             <h3 id="project-opportunities-heading">Opportunity discovery</h3>
             <p className="help">
@@ -916,6 +945,17 @@ export function Projects({ client, workspaceId }: { client: Client; workspaceId:
                               />
                             )}
                           </div>
+                        );
+                      }
+                      const parsedExperiment = viewedArtifact.artifact.type === 'experiment'
+                        ? parseColliderExperimentBody(viewedArtifact.body)
+                        : null;
+                      if (parsedExperiment) {
+                        return (
+                          <ColliderExperimentView
+                            key={`collider:${workspaceId}:${current?.memory.id ?? ''}:${viewedArtifact.artifact.artifactId}:${viewedArtifact.artifact.version}`}
+                            doc={parsedExperiment}
+                          />
                         );
                       }
                       const parsedSet = parseIdeaSetBody(viewedArtifact.body);

@@ -320,6 +320,390 @@ export interface BackupSchedule {
   nextDue?: number | null;
   retention: string;
 }
+/**
+ * One proposed combination or architecture (§25 stage 4).
+ */
+export interface ColliderCombination {
+  description: string;
+  name: string;
+}
+/**
+ * Advanced controls (§24). Every field carries a
+ * server-side default, so a request may omit controls
+ * entirely; unknown enum values are refused at start.
+ */
+export interface ColliderControls {
+  budget?: string;
+  creativity?: string;
+  innovationDistance?: string;
+  practicality?: string;
+  preferredOutputType?: string;
+  technicalDepth?: string;
+}
+/**
+ * Cost knowledge about a model. `Unknown` is treated as paid everywhere
+ * cost is enforced (decision M5-D5).
+ */
+export type CostClass = "free" | "paid" | "unknown";
+/**
+ * User-facing routing modes, verbatim from MASTER_SPEC §17.
+ */
+export type RoutingMode = "auto" | "autoFree" | "private" | "fast" | "deep" | "coding" | "vision" | "chooseModel";
+
+/**
+ * The saved experiment body (format
+ * `anansi-collider-experiment` v1): exact beams,
+ * resolved controls, validated result, and
+ * provider/model provenance with disclosure.
+ */
+export interface ColliderExperimentDoc {
+  beamA: string;
+  beamB: string;
+  controls: ColliderControls;
+  disclosure: DisclosureRecord;
+  format: string;
+  model: string;
+  provider: string;
+  result: ColliderResult;
+  version: number;
+}
+/**
+ * Advanced controls (§24). Every field carries a
+ * server-side default, so a request may omit controls
+ * entirely; unknown enum values are refused at start.
+ */
+export interface ColliderControls {
+  budget?: string;
+  creativity?: string;
+  innovationDistance?: string;
+  practicality?: string;
+  preferredOutputType?: string;
+  technicalDepth?: string;
+}
+/**
+ * "View What ANANSI Sent" at adapter level (§19): what was about to be
+ * / was transmitted, to whom, and why. The UI rendering of this record
+ * is application integration; producing it is the dispatcher's job.
+ */
+export interface DisclosureRecord {
+  attempts: AttemptRecord[];
+  costClass: CostClass;
+  endpointHost: string;
+  estimatedInputTokens: number;
+  local: boolean;
+  messageCount: number;
+  model: string;
+  provider: string;
+  redactionCount: number;
+  routingMode: RoutingMode;
+  routingReason: string;
+  segmentCount: number;
+  usage?: Usage | null;
+}
+export interface AttemptRecord {
+  model: string;
+  outcome: string;
+  provider: string;
+}
+export interface Usage {
+  inputTokens: number;
+  outputTokens: number;
+}
+/**
+ * The validated six-section collision result.
+ */
+export interface ColliderResult {
+  combinations: ColliderCombination[];
+  conceptualPrimitives: string[];
+  crossDomainMappings: string[];
+  feasibility: ColliderFeasibility;
+  productization: ColliderProductization;
+  sourceUnderstanding: string;
+}
+/**
+ * One proposed combination or architecture (§25 stage 4).
+ */
+export interface ColliderCombination {
+  description: string;
+  name: string;
+}
+/**
+ * Feasibility review (§25 stage 5). Hypotheses,
+ * dependencies, unknown costs, risks and testability —
+ * all labelled as hypotheses, never as findings.
+ */
+export interface ColliderFeasibility {
+  dependencies: string[];
+  hypotheses: string[];
+  risks: string[];
+  testability: string;
+  unknownCosts: string[];
+}
+/**
+ * Productization proposals (§25 stage 6).
+ */
+export interface ColliderProductization {
+  architecture: string;
+  conceptBrief: string;
+  prototypeProposal: string;
+  roadmap: string;
+  testPlan: string;
+}
+/**
+ * Feasibility review (§25 stage 5). Hypotheses,
+ * dependencies, unknown costs, risks and testability —
+ * all labelled as hypotheses, never as findings.
+ */
+export interface ColliderFeasibility {
+  dependencies: string[];
+  hypotheses: string[];
+  risks: string[];
+  testability: string;
+  unknownCosts: string[];
+}
+/**
+ * Cost knowledge about a model. `Unknown` is treated as paid everywhere
+ * cost is enforced (decision M5-D5).
+ */
+/**
+ * User-facing routing modes, verbatim from MASTER_SPEC §17.
+ */
+
+export interface ColliderPollResponse {
+  contractVersion: number;
+  disclosure?: DisclosureRecord | null;
+  error?: string | null;
+  partialChars: number;
+  result?: ColliderResult | null;
+  runId: string;
+  /**
+   * running | cancelling | complete | invalid | failed | cancelled
+   */
+  status: string;
+}
+/**
+ * "View What ANANSI Sent" at adapter level (§19): what was about to be
+ * / was transmitted, to whom, and why. The UI rendering of this record
+ * is application integration; producing it is the dispatcher's job.
+ */
+export interface DisclosureRecord {
+  attempts: AttemptRecord[];
+  costClass: CostClass;
+  endpointHost: string;
+  estimatedInputTokens: number;
+  local: boolean;
+  messageCount: number;
+  model: string;
+  provider: string;
+  redactionCount: number;
+  routingMode: RoutingMode;
+  routingReason: string;
+  segmentCount: number;
+  usage?: Usage | null;
+}
+export interface AttemptRecord {
+  model: string;
+  outcome: string;
+  provider: string;
+}
+export interface Usage {
+  inputTokens: number;
+  outputTokens: number;
+}
+/**
+ * The validated six-section collision result.
+ */
+export interface ColliderResult {
+  combinations: ColliderCombination[];
+  conceptualPrimitives: string[];
+  crossDomainMappings: string[];
+  feasibility: ColliderFeasibility;
+  productization: ColliderProductization;
+  sourceUnderstanding: string;
+}
+/**
+ * One proposed combination or architecture (§25 stage 4).
+ */
+export interface ColliderCombination {
+  description: string;
+  name: string;
+}
+/**
+ * Feasibility review (§25 stage 5). Hypotheses,
+ * dependencies, unknown costs, risks and testability —
+ * all labelled as hypotheses, never as findings.
+ */
+export interface ColliderFeasibility {
+  dependencies: string[];
+  hypotheses: string[];
+  risks: string[];
+  testability: string;
+  unknownCosts: string[];
+}
+/**
+ * Productization proposals (§25 stage 6).
+ */
+export interface ColliderProductization {
+  architecture: string;
+  conceptBrief: string;
+  prototypeProposal: string;
+  roadmap: string;
+  testPlan: string;
+}
+/**
+ * Productization proposals (§25 stage 6).
+ */
+export interface ColliderProductization {
+  architecture: string;
+  conceptBrief: string;
+  prototypeProposal: string;
+  roadmap: string;
+  testPlan: string;
+}
+/**
+ * The validated six-section collision result.
+ */
+export interface ColliderResult {
+  combinations: ColliderCombination[];
+  conceptualPrimitives: string[];
+  crossDomainMappings: string[];
+  feasibility: ColliderFeasibility;
+  productization: ColliderProductization;
+  sourceUnderstanding: string;
+}
+/**
+ * One proposed combination or architecture (§25 stage 4).
+ */
+export interface ColliderCombination {
+  description: string;
+  name: string;
+}
+/**
+ * Feasibility review (§25 stage 5). Hypotheses,
+ * dependencies, unknown costs, risks and testability —
+ * all labelled as hypotheses, never as findings.
+ */
+export interface ColliderFeasibility {
+  dependencies: string[];
+  hypotheses: string[];
+  risks: string[];
+  testability: string;
+  unknownCosts: string[];
+}
+/**
+ * Productization proposals (§25 stage 6).
+ */
+export interface ColliderProductization {
+  architecture: string;
+  conceptBrief: string;
+  prototypeProposal: string;
+  roadmap: string;
+  testPlan: string;
+}
+export interface ColliderRunRequest {
+  contractVersion?: number;
+  runId: string;
+  workspaceId: string;
+}
+export interface ColliderSaveResponse {
+  alreadySaved: boolean;
+  artifact: ArtifactRecord;
+  body: string;
+  contractVersion: number;
+}
+/**
+ * One artifact version's metadata — the §9 field set.
+ */
+export interface ArtifactRecord {
+  artifactId: string;
+  contentHash: string;
+  /**
+   * Generator/model metadata: `{"kind":"manual"}` in this
+   * slice; generator slices record model provenance here.
+   */
+  generator?: {
+    [k: string]: unknown;
+  };
+  privacy: string;
+  projectId: string;
+  sourceReferences: string[];
+  /**
+   * The §9 timestamp: when this version was registered.
+   */
+  timestamp: string;
+  title: string;
+  type: string;
+  validationStatus: string;
+  version: number;
+}
+export interface ColliderStartRequest {
+  beamA: string;
+  beamB: string;
+  contractVersion?: number;
+  controls?: ColliderControls;
+  mode?: string | null;
+  model?: string | null;
+  permitId?: string | null;
+  projectId: string;
+  provider?: string | null;
+  workspaceId: string;
+  zeroCostLock?: boolean;
+}
+/**
+ * Advanced controls (§24). Every field carries a
+ * server-side default, so a request may omit controls
+ * entirely; unknown enum values are refused at start.
+ */
+export interface ColliderControls {
+  budget?: string;
+  creativity?: string;
+  innovationDistance?: string;
+  practicality?: string;
+  preferredOutputType?: string;
+  technicalDepth?: string;
+}
+/**
+ * Cost knowledge about a model. `Unknown` is treated as paid everywhere
+ * cost is enforced (decision M5-D5).
+ */
+/**
+ * User-facing routing modes, verbatim from MASTER_SPEC §17.
+ */
+
+export interface ColliderStartResponse {
+  contractVersion: number;
+  disclosure?: DisclosureRecord | null;
+  runId: string;
+}
+/**
+ * "View What ANANSI Sent" at adapter level (§19): what was about to be
+ * / was transmitted, to whom, and why. The UI rendering of this record
+ * is application integration; producing it is the dispatcher's job.
+ */
+export interface DisclosureRecord {
+  attempts: AttemptRecord[];
+  costClass: CostClass;
+  endpointHost: string;
+  estimatedInputTokens: number;
+  local: boolean;
+  messageCount: number;
+  model: string;
+  provider: string;
+  redactionCount: number;
+  routingMode: RoutingMode;
+  routingReason: string;
+  segmentCount: number;
+  usage?: Usage | null;
+}
+export interface AttemptRecord {
+  model: string;
+  outcome: string;
+  provider: string;
+}
+export interface Usage {
+  inputTokens: number;
+  outputTokens: number;
+}
 
 export interface CommandError {
   code: ErrorCode;
@@ -709,11 +1093,9 @@ export interface ForgeExportResponse {
  * Cost knowledge about a model. `Unknown` is treated as paid everywhere
  * cost is enforced (decision M5-D5).
  */
-export type CostClass = "free" | "paid" | "unknown";
 /**
  * User-facing routing modes, verbatim from MASTER_SPEC §17.
  */
-export type RoutingMode = "auto" | "autoFree" | "private" | "fast" | "deep" | "coding" | "vision" | "chooseModel";
 
 export interface ForgePollResponse {
   contractVersion: number;

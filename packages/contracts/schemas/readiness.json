@@ -1291,6 +1291,1327 @@
     "title": "BackupSchedule",
     "type": "object"
   },
+  "ColliderCombination": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "description": "One proposed combination or architecture (§25 stage 4).",
+    "properties": {
+      "description": {
+        "type": "string"
+      },
+      "name": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "name",
+      "description"
+    ],
+    "title": "ColliderCombination",
+    "type": "object"
+  },
+  "ColliderControls": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "description": "Advanced controls (§24). Every field carries a\nserver-side default, so a request may omit controls\nentirely; unknown enum values are refused at start.",
+    "properties": {
+      "budget": {
+        "default": "",
+        "type": "string"
+      },
+      "creativity": {
+        "default": "balanced",
+        "type": "string"
+      },
+      "innovationDistance": {
+        "default": "moderate",
+        "type": "string"
+      },
+      "practicality": {
+        "default": "balanced",
+        "type": "string"
+      },
+      "preferredOutputType": {
+        "default": "concept",
+        "type": "string"
+      },
+      "technicalDepth": {
+        "default": "standard",
+        "type": "string"
+      }
+    },
+    "title": "ColliderControls",
+    "type": "object"
+  },
+  "ColliderExperimentDoc": {
+    "$defs": {
+      "AttemptRecord": {
+        "properties": {
+          "model": {
+            "type": "string"
+          },
+          "outcome": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "model",
+          "outcome"
+        ],
+        "type": "object"
+      },
+      "ColliderCombination": {
+        "additionalProperties": false,
+        "description": "One proposed combination or architecture (§25 stage 4).",
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "description"
+        ],
+        "type": "object"
+      },
+      "ColliderControls": {
+        "additionalProperties": false,
+        "description": "Advanced controls (§24). Every field carries a\nserver-side default, so a request may omit controls\nentirely; unknown enum values are refused at start.",
+        "properties": {
+          "budget": {
+            "default": "",
+            "type": "string"
+          },
+          "creativity": {
+            "default": "balanced",
+            "type": "string"
+          },
+          "innovationDistance": {
+            "default": "moderate",
+            "type": "string"
+          },
+          "practicality": {
+            "default": "balanced",
+            "type": "string"
+          },
+          "preferredOutputType": {
+            "default": "concept",
+            "type": "string"
+          },
+          "technicalDepth": {
+            "default": "standard",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ColliderFeasibility": {
+        "additionalProperties": false,
+        "description": "Feasibility review (§25 stage 5). Hypotheses,\ndependencies, unknown costs, risks and testability —\nall labelled as hypotheses, never as findings.",
+        "properties": {
+          "dependencies": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "hypotheses": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "risks": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "testability": {
+            "type": "string"
+          },
+          "unknownCosts": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "hypotheses",
+          "dependencies",
+          "unknownCosts",
+          "risks",
+          "testability"
+        ],
+        "type": "object"
+      },
+      "ColliderProductization": {
+        "additionalProperties": false,
+        "description": "Productization proposals (§25 stage 6).",
+        "properties": {
+          "architecture": {
+            "type": "string"
+          },
+          "conceptBrief": {
+            "type": "string"
+          },
+          "prototypeProposal": {
+            "type": "string"
+          },
+          "roadmap": {
+            "type": "string"
+          },
+          "testPlan": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "conceptBrief",
+          "architecture",
+          "roadmap",
+          "testPlan",
+          "prototypeProposal"
+        ],
+        "type": "object"
+      },
+      "ColliderResult": {
+        "additionalProperties": false,
+        "description": "The validated six-section collision result.",
+        "properties": {
+          "combinations": {
+            "items": {
+              "$ref": "#/$defs/ColliderCombination"
+            },
+            "type": "array"
+          },
+          "conceptualPrimitives": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "crossDomainMappings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "feasibility": {
+            "$ref": "#/$defs/ColliderFeasibility"
+          },
+          "productization": {
+            "$ref": "#/$defs/ColliderProductization"
+          },
+          "sourceUnderstanding": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "sourceUnderstanding",
+          "conceptualPrimitives",
+          "crossDomainMappings",
+          "combinations",
+          "feasibility",
+          "productization"
+        ],
+        "type": "object"
+      },
+      "CostClass": {
+        "description": "Cost knowledge about a model. `Unknown` is treated as paid everywhere\ncost is enforced (decision M5-D5).",
+        "enum": [
+          "free",
+          "paid",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "DisclosureRecord": {
+        "description": "\"View What ANANSI Sent\" at adapter level (§19): what was about to be\n/ was transmitted, to whom, and why. The UI rendering of this record\nis application integration; producing it is the dispatcher's job.",
+        "properties": {
+          "attempts": {
+            "items": {
+              "$ref": "#/$defs/AttemptRecord"
+            },
+            "type": "array"
+          },
+          "costClass": {
+            "$ref": "#/$defs/CostClass"
+          },
+          "endpointHost": {
+            "type": "string"
+          },
+          "estimatedInputTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "local": {
+            "type": "boolean"
+          },
+          "messageCount": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "model": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "redactionCount": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "routingMode": {
+            "$ref": "#/$defs/RoutingMode"
+          },
+          "routingReason": {
+            "type": "string"
+          },
+          "segmentCount": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "usage": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Usage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "provider",
+          "model",
+          "endpointHost",
+          "local",
+          "routingMode",
+          "routingReason",
+          "messageCount",
+          "segmentCount",
+          "redactionCount",
+          "estimatedInputTokens",
+          "costClass",
+          "attempts"
+        ],
+        "type": "object"
+      },
+      "RoutingMode": {
+        "description": "User-facing routing modes, verbatim from MASTER_SPEC §17.",
+        "enum": [
+          "auto",
+          "autoFree",
+          "private",
+          "fast",
+          "deep",
+          "coding",
+          "vision",
+          "chooseModel"
+        ],
+        "type": "string"
+      },
+      "Usage": {
+        "properties": {
+          "inputTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "outputTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "inputTokens",
+          "outputTokens"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "description": "The saved experiment body (format\n`anansi-collider-experiment` v1): exact beams,\nresolved controls, validated result, and\nprovider/model provenance with disclosure.",
+    "properties": {
+      "beamA": {
+        "type": "string"
+      },
+      "beamB": {
+        "type": "string"
+      },
+      "controls": {
+        "$ref": "#/$defs/ColliderControls"
+      },
+      "disclosure": {
+        "$ref": "#/$defs/DisclosureRecord"
+      },
+      "format": {
+        "type": "string"
+      },
+      "model": {
+        "type": "string"
+      },
+      "provider": {
+        "type": "string"
+      },
+      "result": {
+        "$ref": "#/$defs/ColliderResult"
+      },
+      "version": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "format",
+      "version",
+      "beamA",
+      "beamB",
+      "controls",
+      "result",
+      "provider",
+      "model",
+      "disclosure"
+    ],
+    "title": "ColliderExperimentDoc",
+    "type": "object"
+  },
+  "ColliderFeasibility": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "description": "Feasibility review (§25 stage 5). Hypotheses,\ndependencies, unknown costs, risks and testability —\nall labelled as hypotheses, never as findings.",
+    "properties": {
+      "dependencies": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "hypotheses": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "risks": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "testability": {
+        "type": "string"
+      },
+      "unknownCosts": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "hypotheses",
+      "dependencies",
+      "unknownCosts",
+      "risks",
+      "testability"
+    ],
+    "title": "ColliderFeasibility",
+    "type": "object"
+  },
+  "ColliderPollResponse": {
+    "$defs": {
+      "AttemptRecord": {
+        "properties": {
+          "model": {
+            "type": "string"
+          },
+          "outcome": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "model",
+          "outcome"
+        ],
+        "type": "object"
+      },
+      "ColliderCombination": {
+        "additionalProperties": false,
+        "description": "One proposed combination or architecture (§25 stage 4).",
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "description"
+        ],
+        "type": "object"
+      },
+      "ColliderFeasibility": {
+        "additionalProperties": false,
+        "description": "Feasibility review (§25 stage 5). Hypotheses,\ndependencies, unknown costs, risks and testability —\nall labelled as hypotheses, never as findings.",
+        "properties": {
+          "dependencies": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "hypotheses": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "risks": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "testability": {
+            "type": "string"
+          },
+          "unknownCosts": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "hypotheses",
+          "dependencies",
+          "unknownCosts",
+          "risks",
+          "testability"
+        ],
+        "type": "object"
+      },
+      "ColliderProductization": {
+        "additionalProperties": false,
+        "description": "Productization proposals (§25 stage 6).",
+        "properties": {
+          "architecture": {
+            "type": "string"
+          },
+          "conceptBrief": {
+            "type": "string"
+          },
+          "prototypeProposal": {
+            "type": "string"
+          },
+          "roadmap": {
+            "type": "string"
+          },
+          "testPlan": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "conceptBrief",
+          "architecture",
+          "roadmap",
+          "testPlan",
+          "prototypeProposal"
+        ],
+        "type": "object"
+      },
+      "ColliderResult": {
+        "additionalProperties": false,
+        "description": "The validated six-section collision result.",
+        "properties": {
+          "combinations": {
+            "items": {
+              "$ref": "#/$defs/ColliderCombination"
+            },
+            "type": "array"
+          },
+          "conceptualPrimitives": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "crossDomainMappings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "feasibility": {
+            "$ref": "#/$defs/ColliderFeasibility"
+          },
+          "productization": {
+            "$ref": "#/$defs/ColliderProductization"
+          },
+          "sourceUnderstanding": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "sourceUnderstanding",
+          "conceptualPrimitives",
+          "crossDomainMappings",
+          "combinations",
+          "feasibility",
+          "productization"
+        ],
+        "type": "object"
+      },
+      "CostClass": {
+        "description": "Cost knowledge about a model. `Unknown` is treated as paid everywhere\ncost is enforced (decision M5-D5).",
+        "enum": [
+          "free",
+          "paid",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "DisclosureRecord": {
+        "description": "\"View What ANANSI Sent\" at adapter level (§19): what was about to be\n/ was transmitted, to whom, and why. The UI rendering of this record\nis application integration; producing it is the dispatcher's job.",
+        "properties": {
+          "attempts": {
+            "items": {
+              "$ref": "#/$defs/AttemptRecord"
+            },
+            "type": "array"
+          },
+          "costClass": {
+            "$ref": "#/$defs/CostClass"
+          },
+          "endpointHost": {
+            "type": "string"
+          },
+          "estimatedInputTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "local": {
+            "type": "boolean"
+          },
+          "messageCount": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "model": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "redactionCount": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "routingMode": {
+            "$ref": "#/$defs/RoutingMode"
+          },
+          "routingReason": {
+            "type": "string"
+          },
+          "segmentCount": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "usage": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Usage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "provider",
+          "model",
+          "endpointHost",
+          "local",
+          "routingMode",
+          "routingReason",
+          "messageCount",
+          "segmentCount",
+          "redactionCount",
+          "estimatedInputTokens",
+          "costClass",
+          "attempts"
+        ],
+        "type": "object"
+      },
+      "RoutingMode": {
+        "description": "User-facing routing modes, verbatim from MASTER_SPEC §17.",
+        "enum": [
+          "auto",
+          "autoFree",
+          "private",
+          "fast",
+          "deep",
+          "coding",
+          "vision",
+          "chooseModel"
+        ],
+        "type": "string"
+      },
+      "Usage": {
+        "properties": {
+          "inputTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "outputTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "inputTokens",
+          "outputTokens"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "disclosure": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/DisclosureRecord"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "error": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "partialChars": {
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "result": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/ColliderResult"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "runId": {
+        "type": "string"
+      },
+      "status": {
+        "description": "running | cancelling | complete | invalid | failed | cancelled",
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "runId",
+      "status",
+      "partialChars"
+    ],
+    "title": "ColliderPollResponse",
+    "type": "object"
+  },
+  "ColliderProductization": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "description": "Productization proposals (§25 stage 6).",
+    "properties": {
+      "architecture": {
+        "type": "string"
+      },
+      "conceptBrief": {
+        "type": "string"
+      },
+      "prototypeProposal": {
+        "type": "string"
+      },
+      "roadmap": {
+        "type": "string"
+      },
+      "testPlan": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "conceptBrief",
+      "architecture",
+      "roadmap",
+      "testPlan",
+      "prototypeProposal"
+    ],
+    "title": "ColliderProductization",
+    "type": "object"
+  },
+  "ColliderResult": {
+    "$defs": {
+      "ColliderCombination": {
+        "additionalProperties": false,
+        "description": "One proposed combination or architecture (§25 stage 4).",
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "description"
+        ],
+        "type": "object"
+      },
+      "ColliderFeasibility": {
+        "additionalProperties": false,
+        "description": "Feasibility review (§25 stage 5). Hypotheses,\ndependencies, unknown costs, risks and testability —\nall labelled as hypotheses, never as findings.",
+        "properties": {
+          "dependencies": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "hypotheses": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "risks": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "testability": {
+            "type": "string"
+          },
+          "unknownCosts": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "hypotheses",
+          "dependencies",
+          "unknownCosts",
+          "risks",
+          "testability"
+        ],
+        "type": "object"
+      },
+      "ColliderProductization": {
+        "additionalProperties": false,
+        "description": "Productization proposals (§25 stage 6).",
+        "properties": {
+          "architecture": {
+            "type": "string"
+          },
+          "conceptBrief": {
+            "type": "string"
+          },
+          "prototypeProposal": {
+            "type": "string"
+          },
+          "roadmap": {
+            "type": "string"
+          },
+          "testPlan": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "conceptBrief",
+          "architecture",
+          "roadmap",
+          "testPlan",
+          "prototypeProposal"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "description": "The validated six-section collision result.",
+    "properties": {
+      "combinations": {
+        "items": {
+          "$ref": "#/$defs/ColliderCombination"
+        },
+        "type": "array"
+      },
+      "conceptualPrimitives": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "crossDomainMappings": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "feasibility": {
+        "$ref": "#/$defs/ColliderFeasibility"
+      },
+      "productization": {
+        "$ref": "#/$defs/ColliderProductization"
+      },
+      "sourceUnderstanding": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "sourceUnderstanding",
+      "conceptualPrimitives",
+      "crossDomainMappings",
+      "combinations",
+      "feasibility",
+      "productization"
+    ],
+    "title": "ColliderResult",
+    "type": "object"
+  },
+  "ColliderRunRequest": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "contractVersion": {
+        "default": 1,
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "runId": {
+        "type": "string"
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "workspaceId",
+      "runId"
+    ],
+    "title": "ColliderRunRequest",
+    "type": "object"
+  },
+  "ColliderSaveResponse": {
+    "$defs": {
+      "ArtifactRecord": {
+        "description": "One artifact version's metadata — the §9 field set.",
+        "properties": {
+          "artifactId": {
+            "type": "string"
+          },
+          "contentHash": {
+            "type": "string"
+          },
+          "generator": {
+            "description": "Generator/model metadata: `{\"kind\":\"manual\"}` in this\nslice; generator slices record model provenance here."
+          },
+          "privacy": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "sourceReferences": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "timestamp": {
+            "description": "The §9 timestamp: when this version was registered.",
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "validationStatus": {
+            "type": "string"
+          },
+          "version": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "artifactId",
+          "projectId",
+          "type",
+          "version",
+          "title",
+          "timestamp",
+          "sourceReferences",
+          "validationStatus",
+          "privacy",
+          "contentHash"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "alreadySaved": {
+        "type": "boolean"
+      },
+      "artifact": {
+        "$ref": "#/$defs/ArtifactRecord"
+      },
+      "body": {
+        "type": "string"
+      },
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "artifact",
+      "body",
+      "alreadySaved"
+    ],
+    "title": "ColliderSaveResponse",
+    "type": "object"
+  },
+  "ColliderStartRequest": {
+    "$defs": {
+      "ColliderControls": {
+        "additionalProperties": false,
+        "description": "Advanced controls (§24). Every field carries a\nserver-side default, so a request may omit controls\nentirely; unknown enum values are refused at start.",
+        "properties": {
+          "budget": {
+            "default": "",
+            "type": "string"
+          },
+          "creativity": {
+            "default": "balanced",
+            "type": "string"
+          },
+          "innovationDistance": {
+            "default": "moderate",
+            "type": "string"
+          },
+          "practicality": {
+            "default": "balanced",
+            "type": "string"
+          },
+          "preferredOutputType": {
+            "default": "concept",
+            "type": "string"
+          },
+          "technicalDepth": {
+            "default": "standard",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "beamA": {
+        "type": "string"
+      },
+      "beamB": {
+        "type": "string"
+      },
+      "contractVersion": {
+        "default": 1,
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "controls": {
+        "$ref": "#/$defs/ColliderControls",
+        "default": {
+          "budget": "",
+          "creativity": "balanced",
+          "innovationDistance": "moderate",
+          "practicality": "balanced",
+          "preferredOutputType": "concept",
+          "technicalDepth": "standard"
+        }
+      },
+      "mode": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "model": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "permitId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "projectId": {
+        "type": "string"
+      },
+      "provider": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "workspaceId": {
+        "type": "string"
+      },
+      "zeroCostLock": {
+        "default": false,
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "workspaceId",
+      "projectId",
+      "beamA",
+      "beamB"
+    ],
+    "title": "ColliderStartRequest",
+    "type": "object"
+  },
+  "ColliderStartResponse": {
+    "$defs": {
+      "AttemptRecord": {
+        "properties": {
+          "model": {
+            "type": "string"
+          },
+          "outcome": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "model",
+          "outcome"
+        ],
+        "type": "object"
+      },
+      "CostClass": {
+        "description": "Cost knowledge about a model. `Unknown` is treated as paid everywhere\ncost is enforced (decision M5-D5).",
+        "enum": [
+          "free",
+          "paid",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "DisclosureRecord": {
+        "description": "\"View What ANANSI Sent\" at adapter level (§19): what was about to be\n/ was transmitted, to whom, and why. The UI rendering of this record\nis application integration; producing it is the dispatcher's job.",
+        "properties": {
+          "attempts": {
+            "items": {
+              "$ref": "#/$defs/AttemptRecord"
+            },
+            "type": "array"
+          },
+          "costClass": {
+            "$ref": "#/$defs/CostClass"
+          },
+          "endpointHost": {
+            "type": "string"
+          },
+          "estimatedInputTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "local": {
+            "type": "boolean"
+          },
+          "messageCount": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "model": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "redactionCount": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "routingMode": {
+            "$ref": "#/$defs/RoutingMode"
+          },
+          "routingReason": {
+            "type": "string"
+          },
+          "segmentCount": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "usage": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Usage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "provider",
+          "model",
+          "endpointHost",
+          "local",
+          "routingMode",
+          "routingReason",
+          "messageCount",
+          "segmentCount",
+          "redactionCount",
+          "estimatedInputTokens",
+          "costClass",
+          "attempts"
+        ],
+        "type": "object"
+      },
+      "RoutingMode": {
+        "description": "User-facing routing modes, verbatim from MASTER_SPEC §17.",
+        "enum": [
+          "auto",
+          "autoFree",
+          "private",
+          "fast",
+          "deep",
+          "coding",
+          "vision",
+          "chooseModel"
+        ],
+        "type": "string"
+      },
+      "Usage": {
+        "properties": {
+          "inputTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "outputTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "inputTokens",
+          "outputTokens"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "disclosure": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/DisclosureRecord"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "runId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "runId"
+    ],
+    "title": "ColliderStartResponse",
+    "type": "object"
+  },
   "CommandError": {
     "$defs": {
       "ErrorCode": {

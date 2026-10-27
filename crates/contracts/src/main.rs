@@ -17,6 +17,11 @@ use anansi_core::forge::{
     ForgeSpecStartRequest, ForgeStartResponse, ProductSpec, ProductSpecDoc, ReviewFinding,
     RevisionDiff, SourceFile, SourcePackageDoc, SourceReviewDoc, SpecificationApprovalDoc,
 };
+use anansi_core::collider::{
+    ColliderCombination, ColliderControls, ColliderExperimentDoc, ColliderFeasibility,
+    ColliderPollResponse, ColliderProductization, ColliderResult, ColliderRunRequest,
+    ColliderSaveResponse, ColliderStartRequest, ColliderStartResponse,
+};
 use anansi_core::ideas::{
     IdeaConcept, IdeaSet, IdeasGenerateStartRequest, IdeasGenerateStartResponse, IdeasOptions,
     IdeasPollResponse, IdeasRunRequest, IdeasSaveResponse,
@@ -78,6 +83,17 @@ fn main() {
         "ArtifactDetails":schemars::schema_for!(ArtifactDetails),
         "ArtifactListResponse":schemars::schema_for!(ArtifactListResponse),
         "ArtifactVersionsResponse":schemars::schema_for!(ArtifactVersionsResponse),
+        "ColliderStartRequest":schemars::schema_for!(ColliderStartRequest),
+        "ColliderRunRequest":schemars::schema_for!(ColliderRunRequest),
+        "ColliderStartResponse":schemars::schema_for!(ColliderStartResponse),
+        "ColliderPollResponse":schemars::schema_for!(ColliderPollResponse),
+        "ColliderSaveResponse":schemars::schema_for!(ColliderSaveResponse),
+        "ColliderControls":schemars::schema_for!(ColliderControls),
+        "ColliderResult":schemars::schema_for!(ColliderResult),
+        "ColliderCombination":schemars::schema_for!(ColliderCombination),
+        "ColliderFeasibility":schemars::schema_for!(ColliderFeasibility),
+        "ColliderProductization":schemars::schema_for!(ColliderProductization),
+        "ColliderExperimentDoc":schemars::schema_for!(ColliderExperimentDoc),
         "IdeasGenerateStartRequest":schemars::schema_for!(IdeasGenerateStartRequest),
         "IdeasRunRequest":schemars::schema_for!(IdeasRunRequest),
         "IdeasGenerateStartResponse":schemars::schema_for!(IdeasGenerateStartResponse),

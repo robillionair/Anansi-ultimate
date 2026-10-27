@@ -520,6 +520,43 @@ fn validate_original_review_bindings(source: &rusqlite::Connection) -> Result<()
     Ok(())
 }
 
+/// M8 Slice 1: a saved collider experiment whose body
+/// declares the collider format must fully validate
+/// before any destination write, mirroring the review
+/// format guard. Generic `experiment` rows (manual
+/// artifacts with other bodies) restore untouched: the
+/// registry type alone does not identify a collider
+/// experiment, so only format-matching rows are gated.
+/// A tampered collider body refuses the whole restore
+/// with nothing published.
+fn validate_original_experiment_bindings(
+    source: &rusqlite::Connection,
+) -> Result<(), CommandError> {
+    let mut q = source
+        .prepare(
+            "SELECT body, content_hash FROM artifact_versions WHERE artifact_type = 'experiment'",
+        )
+        .map_err(|_| crate::jobs::invalid())?;
+    let mut rows = q.query([]).map_err(|_| crate::jobs::invalid())?;
+    while let Some(row) = rows.next().map_err(|_| crate::jobs::invalid())? {
+        let body: String = row.get(0).map_err(|_| crate::jobs::invalid())?;
+        let content_hash: String = row.get(1).map_err(|_| crate::jobs::invalid())?;
+        let value: serde_json::Value =
+            serde_json::from_str(&body).map_err(|_| crate::jobs::invalid())?;
+        if value.get("format").and_then(|v| v.as_str()) != Some("anansi-collider-experiment") {
+            continue;
+        }
+        if crate::content::hash(body.as_bytes()) != content_hash {
+            return Err(crate::jobs::invalid());
+        }
+        let doc: crate::collider::ColliderExperimentDoc =
+            serde_json::from_str(&body).map_err(|_| crate::jobs::invalid())?;
+        crate::collider::validate_experiment_doc(&doc)
+            .map_err(|_| crate::jobs::invalid())?;
+    }
+    Ok(())
+}
+
 fn remap_artifact_row(
     names: &[String],
     columns: &mut [rusqlite::types::Value],
@@ -774,6 +811,7 @@ impl crate::storage::Storage {
         // A refusal here publishes no destination state.
         validate_original_deliverable_bindings(&source)?;
         validate_original_review_bindings(&source)?;
+        validate_original_experiment_bindings(&source)?;
         // Validate and prepare every mapped row before any managed content is written.
         let mut tables = vec![
             "workspaces",
