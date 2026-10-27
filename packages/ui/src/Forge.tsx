@@ -5,7 +5,9 @@ import type {
   ForgePollResponse,
   ForgeSpecApprovalStatusResponse,
   ProductSpecDoc,
+  ReviewFinding,
   SourcePackageDoc,
+  SourceReviewDoc,
 } from '@anansi/contracts';
 import type { DisclosureRecord } from '@anansi/contracts';
 import { DisclosurePanel } from './Providers';
@@ -560,6 +562,13 @@ export function ForgeRevisePanel(props: {
   doc: SourcePackageDoc;
   notify: Notify;
   onSaved: () => void;
+  // Slice 4: instructions prefilled from selected review
+  // findings. The effect applies the text when the
+  // prefill object changes; every other revise behavior
+  // (approval gate, reject/accept, stale parents) is
+  // untouched, and the user still inspects and edits
+  // the text before pressing Request revision.
+  prefill?: { text: string };
 }) {
   const { client, workspaceId, pkg, doc } = props;
   const [instructions, setInstructions] = useState('');
@@ -579,6 +588,10 @@ export function ForgeRevisePanel(props: {
     void controllerRef.current?.reset();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pkg.artifactId, pkg.version]);
+  useEffect(() => {
+    if (props.prefill) setInstructions(props.prefill.text);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.prefill]);
   useForgePolling(controller, run, setRun, props.notify);
   const running = run?.status === 'running' || run?.status === 'cancelling';
   async function start(e: React.FormEvent) {
@@ -1050,6 +1063,372 @@ export function DeliverableView(props: {
           <button type="button" className="secondary" onClick={() => startEditing()}>
             Revise documentation
           </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// M7 Slice 4: structured review of a saved source package
+// against its pinned specification's acceptance criteria.
+// A review is inspection only: it is saved by a direct,
+// model-free op, it never starts inference, and it
+// neither requires nor creates specification approval.
+// The generated source is only ever displayed as inert
+// text — never run, built, previewed or deployed.
+
+export const REVIEW_STATUSES = ['not-assessed', 'needs-changes', 'satisfied'] as const;
+
+export const REVIEW_BANNER =
+  'Inspection only — this review does not establish runtime behavior, passing tests, security certification or production readiness. The source was not executed, built, previewed or deployed.';
+
+export function parseReviewBody(body: string): SourceReviewDoc | null {
+  try {
+    const parsed = JSON.parse(body) as SourceReviewDoc;
+    return parsed && parsed.format === 'anansi-source-review' && Array.isArray(parsed.findings)
+      ? parsed
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+export type ReviewFindingDraft = {
+  criterionIndex: number;
+  criterion: string;
+  status: string;
+  note: string;
+  fileRefsText: string;
+  selected: boolean;
+};
+
+function draftsFromCriteria(criteria: string[]): ReviewFindingDraft[] {
+  return criteria.map((criterion, criterionIndex) => ({
+    criterionIndex,
+    criterion,
+    status: 'not-assessed',
+    note: '',
+    fileRefsText: '',
+    selected: false,
+  }));
+}
+
+function draftsFromReview(doc: SourceReviewDoc): ReviewFindingDraft[] {
+  return doc.findings.map(f => ({
+    criterionIndex: f.criterionIndex,
+    criterion: f.criterion,
+    status: f.status,
+    note: f.note,
+    fileRefsText: f.fileRefs.join(', '),
+    selected: f.status === 'needs-changes',
+  }));
+}
+
+function draftsToFindings(drafts: ReviewFindingDraft[]): ReviewFinding[] {
+  return drafts.map(d => ({
+    criterionIndex: d.criterionIndex,
+    criterion: d.criterion,
+    status: d.status,
+    note: d.note,
+    fileRefs: d.fileRefsText.split(',').map(s => s.trim()).filter(s => s.length > 0),
+  }));
+}
+
+/// Compose editable revision instructions from the
+/// selected findings. The text is a starting point the
+/// user inspects and edits — nothing is submitted from
+/// here; submission happens only through the existing
+/// revision panel, with its approval gate intact.
+export function composeRevisionInstructions(
+  drafts: ReviewFindingDraft[],
+  conceptName: string,
+  packageVersion: number,
+): string {
+  const selected = drafts.filter(d => d.selected);
+  if (selected.length === 0) return '';
+  const lines = [`Revision requested from source review of ${conceptName} (package version ${packageVersion}):`];
+  for (const d of selected) {
+    lines.push(`- Criterion: ${d.criterion}`);
+    lines.push(`  Status: ${d.status}`);
+    if (d.note.trim()) lines.push(`  Note: ${d.note.trim()}`);
+    lines.push(`  Files: ${d.fileRefsText.split(',').map(s => s.trim()).filter(s => s.length > 0).join(', ') || 'none'}`);
+  }
+  return lines.join('\n');
+}
+
+function RevisionFromFindings(props: {
+  drafts: ReviewFindingDraft[];
+  conceptName: string;
+  packageVersion: number;
+  onUse: (text: string) => void;
+}) {
+  const [instructions, setInstructions] = useState('');
+  const [message, setMessage] = useState('');
+  function prepare() {
+    const text = composeRevisionInstructions(props.drafts, props.conceptName, props.packageVersion);
+    if (!text) {
+      setMessage('Select at least one finding to include in the revision request.');
+      return;
+    }
+    setMessage('');
+    setInstructions(text);
+  }
+  return (
+    <div>
+      <h5>Use findings for a revision</h5>
+      <p className="help">
+        Select findings, prepare the instructions, inspect and edit them here, then use them in the
+        revision panel. Nothing is submitted from this section; the revision panel's approval gate,
+        reject and accept behavior still apply.
+      </p>
+      <button type="button" onClick={() => prepare()}>Prepare revision instructions</button>
+      {message && <p role="status">{message}</p>}
+      {instructions && (
+        <div>
+          <label htmlFor="forge-review-revision-instructions">Proposed revision instructions — inspect and edit before submitting</label>
+          <textarea
+            id="forge-review-revision-instructions"
+            rows={6}
+            value={instructions}
+            onChange={e => setInstructions(e.target.value)}
+          />
+          <button type="button" onClick={() => props.onUse(instructions)}>Use in revision panel</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FindingEditor(props: {
+  drafts: ReviewFindingDraft[];
+  onChange: (drafts: ReviewFindingDraft[]) => void;
+  packageFiles: string[];
+}) {
+  function update(index: number, patch: Partial<ReviewFindingDraft>) {
+    props.onChange(props.drafts.map((d, i) => (i === index ? { ...d, ...patch } : d)));
+  }
+  return (
+    <div>
+      {props.drafts.map((d, i) => (
+        <div key={d.criterionIndex}>
+          <p><strong>Criterion {i + 1}:</strong> {d.criterion}</p>
+          <label htmlFor={`forge-review-status-${i}`}>Assessment</label>
+          <select
+            id={`forge-review-status-${i}`}
+            aria-label={`Review status for criterion ${i + 1}`}
+            value={d.status}
+            onChange={e => update(i, { status: e.target.value })}
+          >
+            {REVIEW_STATUSES.map(s => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
+          <label htmlFor={`forge-review-note-${i}`}>Note (required when Needs changes, at most 2000 characters)</label>
+          <textarea
+            id={`forge-review-note-${i}`}
+            rows={3}
+            value={d.note}
+            onChange={e => update(i, { note: e.target.value })}
+          />
+          <label htmlFor={`forge-review-files-${i}`}>Package files this finding refers to (comma-separated, optional)</label>
+          <input
+            id={`forge-review-files-${i}`}
+            type="text"
+            value={d.fileRefsText}
+            onChange={e => update(i, { fileRefsText: e.target.value })}
+          />
+          <label>
+            <input
+              id={`forge-review-select-${i}`}
+              type="checkbox"
+              checked={d.selected}
+              onChange={e => update(i, { selected: e.target.checked })}
+            />{' '}
+            Include in revision request
+          </label>
+        </div>
+      ))}
+      <p className="help">Package files: {props.packageFiles.join(', ') || 'none'}.</p>
+    </div>
+  );
+}
+
+export function SourceReviewPanel(props: {
+  client: Client;
+  workspaceId: string;
+  projectId: string;
+  pkg: ArtifactRecord;
+  doc: SourcePackageDoc;
+  notify: Notify;
+  onSaved: () => void;
+  onPrepareRevision: (text: string) => void;
+}) {
+  const { client, workspaceId, doc } = props;
+  const [spec, setSpec] = useState<ProductSpecDoc | null>(null);
+  const [specError, setSpecError] = useState('');
+  const [drafts, setDrafts] = useState<ReviewFindingDraft[] | null>(null);
+  const [savedVersion, setSavedVersion] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    setSpec(null);
+    setSpecError('');
+    setDrafts(null);
+    void (async () => {
+      try {
+        const details = await client.readProjectArtifact(workspaceId, doc.specArtifactId, doc.specVersion);
+        if (cancelled) return;
+        const parsed = JSON.parse(details.body) as ProductSpecDoc;
+        if (parsed.format !== 'anansi-product-spec' || !Array.isArray(parsed.spec.acceptanceCriteria)) {
+          throw new Error('The pinned specification is not readable.');
+        }
+        setSpec(parsed);
+        setDrafts(draftsFromCriteria(parsed.spec.acceptanceCriteria));
+      } catch (err) {
+        if (!cancelled) setSpecError(err instanceof Error ? err.message : 'Could not load the pinned specification.');
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [doc.specArtifactId, doc.specVersion]);
+  async function save() {
+    if (!drafts) return;
+    try {
+      const result = await client.saveForgeReview(workspaceId, {
+        projectId: props.projectId,
+        packageArtifactId: props.pkg.artifactId,
+        packageVersion: props.pkg.version,
+        findings: draftsToFindings(drafts),
+      });
+      setSavedVersion(result.artifact.version);
+      props.notify(`Source review saved as version ${result.artifact.version}. It pins package version ${props.pkg.version} and does not follow newer versions.`, false);
+      props.onSaved();
+    } catch (err) {
+      props.notify(err instanceof Error ? err.message : 'Could not save the source review.', true);
+    }
+  }
+  return (
+    <div>
+      <h4>Review this source package</h4>
+      <p className="help">
+        Reviewing artifact {props.pkg.artifactId} version {props.pkg.version}, against specification
+        artifact {doc.specArtifactId} version {doc.specVersion}. Every criterion starts as Not
+        assessed. {REVIEW_BANNER} Saving a review starts no inference and approves nothing; a
+        revision submitted from findings still needs the pinned specification to be approved.
+      </p>
+      {specError && <p role="alert">{specError}</p>}
+      {!spec && !specError && <p role="status">Loading pinned specification…</p>}
+      {spec && drafts && (
+        <div>
+          <FindingEditor
+            drafts={drafts}
+            onChange={setDrafts}
+            packageFiles={doc.files.map(f => f.path)}
+          />
+          <button type="button" onClick={() => void save()}>Save source review</button>
+          {savedVersion > 0 && <p role="status">Review saved as version {savedVersion}. Open it from the Artifacts list to revise it or prepare a revision from its findings.</p>}
+          <RevisionFromFindings
+            drafts={drafts}
+            conceptName={doc.conceptName}
+            packageVersion={props.pkg.version}
+            onUse={props.onPrepareRevision}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function SourceReviewView(props: {
+  doc: SourceReviewDoc;
+  artifact?: ArtifactRecord;
+  client?: Client;
+  workspaceId?: string;
+  notify?: Notify;
+  onSaved?: () => void;
+  onPrepareRevision?: (packageArtifactId: string, packageVersion: number, text: string) => void;
+}) {
+  const { doc } = props;
+  const [editing, setEditing] = useState(false);
+  const [drafts, setDrafts] = useState<ReviewFindingDraft[]>(() => draftsFromReview(doc));
+  const viewIdentity = props.artifact
+    ? `${props.artifact.artifactId}:${props.artifact.version}`
+    : `${doc.packageArtifactId}:${doc.packageVersion}`;
+  useEffect(() => {
+    setDrafts(draftsFromReview(doc));
+    setEditing(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewIdentity]);
+  function cancelEditing() {
+    setDrafts(draftsFromReview(doc));
+    setEditing(false);
+  }
+  async function saveRevision() {
+    if (!props.client || !props.workspaceId || !props.artifact || !props.notify) return;
+    try {
+      const result = await props.client.saveForgeReview(props.workspaceId, {
+        projectId: props.artifact.projectId,
+        packageArtifactId: doc.packageArtifactId,
+        packageVersion: doc.packageVersion,
+        findings: draftsToFindings(drafts),
+        reviewArtifactId: props.artifact.artifactId,
+        expectedVersion: props.artifact.version,
+      });
+      props.notify(`Review revised as version ${result.artifact.version}. The pinned package version is unchanged.`, false);
+      setEditing(false);
+      props.onSaved?.();
+    } catch (err) {
+      props.notify(err instanceof Error ? err.message : 'Could not revise the review.', true);
+    }
+  }
+  return (
+    <div>
+      <h4>Source review: {doc.conceptName}</h4>
+      <p className="help">
+        Pins source package artifact {doc.packageArtifactId} version {doc.packageVersion} and
+        specification artifact {doc.specArtifactId} version {doc.specVersion}. {REVIEW_BANNER}
+      </p>
+      {editing ? (
+        <div>
+          <FindingEditor drafts={drafts} onChange={setDrafts} packageFiles={[]} />
+          <p className="help">File references are validated against the pinned package when saving; a reference to a file outside that package version is refused.</p>
+          <button type="button" onClick={() => void saveRevision()}>Save revised review as new version</button>{' '}
+          <button type="button" className="secondary" onClick={() => cancelEditing()}>Cancel editing</button>
+        </div>
+      ) : (
+        <div>
+          {doc.findings.map((f, i) => (
+            <div key={f.criterionIndex}>
+              <p><strong>Criterion {f.criterionIndex + 1}:</strong> {f.criterion}</p>
+              <p aria-label={`Review finding ${f.criterionIndex + 1} status`}>Status: {f.status}</p>
+              {f.note && <pre className="provider-output">{f.note}</pre>}
+              {f.fileRefs.length > 0 && <p>Files: {f.fileRefs.join(', ')}</p>}
+              {props.onPrepareRevision && (
+                <label>
+                  <input
+                    id={`forge-review-view-select-${f.criterionIndex}`}
+                    type="checkbox"
+                    checked={drafts[i]?.selected ?? false}
+                    onChange={e => setDrafts(prev => prev.map((d, j) => (j === i ? { ...d, selected: e.target.checked } : d)))}
+                  />{' '}
+                  Include in revision request
+                </label>
+              )}
+            </div>
+          ))}
+          {props.artifact && props.client && props.onPrepareRevision && (
+            <RevisionFromFindings
+              drafts={drafts}
+              conceptName={doc.conceptName}
+              packageVersion={doc.packageVersion}
+              onUse={text => props.onPrepareRevision?.(doc.packageArtifactId, doc.packageVersion, text)}
+            />
+          )}
+          {props.artifact && props.client && (
+            <button type="button" className="secondary" onClick={() => setEditing(true)}>
+              Revise this review
+            </button>
+          )}
         </div>
       )}
     </div>

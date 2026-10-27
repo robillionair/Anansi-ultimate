@@ -35,7 +35,7 @@ use serde_json::Value;
 
 /// Manual artifact types for this slice, from §9's list of what
 /// a project may contain.
-pub const ARTIFACT_TYPES: [&str; 18] = [
+pub const ARTIFACT_TYPES: [&str; 19] = [
     "research",
     "source",
     "idea",
@@ -62,6 +62,11 @@ pub const ARTIFACT_TYPES: [&str; 18] = [
     // packages, registered through the generated path.
     "specification",
     "source-package",
+    // M7 Slice 4: Product Forge source reviews, registered
+    // through the generated path; saving re-validates
+    // every pinned reference, so a hand-registered body
+    // can never pass as a validated review.
+    "source-review",
 ];
 
 fn invalid(message: &str) -> CommandError {

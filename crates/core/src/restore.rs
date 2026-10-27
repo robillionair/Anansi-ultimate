@@ -213,6 +213,91 @@ fn fix_deliverable_hashes(
     Ok(())
 }
 
+/// Fix-up pass over the prepared `artifact_versions`
+/// rows, after every row's references have been remapped:
+/// a restored source review must pin the restored package
+/// and specification versions' recomputed content hashes
+/// (their bodies changed when their own references were
+/// remapped), not the source workspace's hashes. A review
+/// whose pinned package or specification version is
+/// absent from the package fails the restore closed.
+fn fix_review_hashes(
+    names: &[String],
+    values: &mut [Vec<rusqlite::types::Value>],
+) -> Result<(), CommandError> {
+    use rusqlite::types::Value;
+    let index = |name: &str| -> Result<usize, CommandError> {
+        names
+            .iter()
+            .position(|n| n == name)
+            .ok_or_else(crate::jobs::invalid)
+    };
+    let type_i = index("artifact_type")?;
+    let body_i = index("body")?;
+    let hash_i = index("content_hash")?;
+    let id_i = index("artifact_id")?;
+    let version_i = index("version")?;
+    let mut row_hashes: std::collections::BTreeMap<(String, String, i64), String> =
+        std::collections::BTreeMap::new();
+    for row in values.iter() {
+        if let (Value::Text(kind), Value::Text(id), Value::Integer(version), Value::Text(hash)) =
+            (&row[type_i], &row[id_i], &row[version_i], &row[hash_i])
+            && (kind == "source-package" || kind == "specification")
+        {
+            row_hashes.insert((kind.clone(), id.clone(), *version), hash.clone());
+        }
+    }
+    for row in values.iter_mut() {
+        if !matches!(&row[type_i], Value::Text(t) if t == "source-review") {
+            continue;
+        }
+        let Value::Text(body) = &row[body_i].clone() else {
+            continue;
+        };
+        let mut doc: serde_json::Value =
+            serde_json::from_str(body).map_err(|_| crate::jobs::invalid())?;
+        if doc.get("format").and_then(|v| v.as_str()) != Some("anansi-source-review") {
+            continue;
+        }
+        let package_id = doc
+            .get("packageArtifactId")
+            .and_then(|v| v.as_str())
+            .ok_or_else(crate::jobs::invalid)?;
+        let package_version = doc
+            .get("packageVersion")
+            .and_then(|v| v.as_u64())
+            .ok_or_else(crate::jobs::invalid)? as i64;
+        let spec_id = doc
+            .get("specArtifactId")
+            .and_then(|v| v.as_str())
+            .ok_or_else(crate::jobs::invalid)?;
+        let spec_version = doc
+            .get("specVersion")
+            .and_then(|v| v.as_u64())
+            .ok_or_else(crate::jobs::invalid)? as i64;
+        let package_hash = row_hashes
+            .get(&(
+                "source-package".to_string(),
+                package_id.to_string(),
+                package_version,
+            ))
+            .ok_or_else(crate::jobs::invalid)?;
+        let spec_hash = row_hashes
+            .get(&(
+                "specification".to_string(),
+                spec_id.to_string(),
+                spec_version,
+            ))
+            .ok_or_else(crate::jobs::invalid)?;
+        doc["packageContentHash"] = serde_json::Value::String(package_hash.clone());
+        doc["specContentHash"] = serde_json::Value::String(spec_hash.clone());
+        let rewritten = serde_json::to_string(&doc).map_err(|_| crate::jobs::invalid())?;
+        row[hash_i] = Value::Text(crate::content::hash(rewritten.as_bytes()));
+        row[body_i] = Value::Text(rewritten);
+    }
+    Ok(())
+}
+
 /// Slice 3 repair: validate original deliverable
 /// bindings in the source catalog before any id or
 /// hash is changed. A deliverable's pinned package
@@ -320,6 +405,121 @@ fn validate_original_deliverable_bindings(
     Ok(())
 }
 
+/// Slice 4: validate original source-review bindings
+/// in the source catalog before any id or hash is
+/// changed, mirroring the deliverable pre-validation.
+/// A review's pinned package and specification must
+/// exist in the backup, be of the right types, live
+/// in the review's own workspace and project, carry
+/// the original pinned hashes, and validate as a
+/// record against the original package/spec bodies —
+/// otherwise the hash fix-up pass would silently
+/// repair an invalid original binding into a valid
+/// restored one. This runs before the prepared-row
+/// loop and before any destination state is written,
+/// so a refusal publishes nothing.
+fn validate_original_review_bindings(
+    source: &rusqlite::Connection,
+) -> Result<(), CommandError> {
+    struct Row {
+        workspace_id: String,
+        project_id: String,
+        kind: String,
+        body: String,
+        content_hash: String,
+    }
+    let mut pinned: std::collections::BTreeMap<(String, String, i64), Row> =
+        std::collections::BTreeMap::new();
+    let mut reviews: Vec<Row> = Vec::new();
+    {
+        let mut q = source
+            .prepare(
+                "SELECT workspace_id, artifact_id, project_id, version, artifact_type, body, content_hash FROM artifact_versions",
+            )
+            .map_err(|_| crate::jobs::invalid())?;
+        let mut rows = q.query([]).map_err(|_| crate::jobs::invalid())?;
+        while let Some(row) = rows.next().map_err(|_| crate::jobs::invalid())? {
+            let workspace_id: String = row.get(0).map_err(|_| crate::jobs::invalid())?;
+            let artifact_id: String = row.get(1).map_err(|_| crate::jobs::invalid())?;
+            let project_id: String = row.get(2).map_err(|_| crate::jobs::invalid())?;
+            let version: i64 = row.get(3).map_err(|_| crate::jobs::invalid())?;
+            let kind: String = row.get(4).map_err(|_| crate::jobs::invalid())?;
+            let body: String = row.get(5).map_err(|_| crate::jobs::invalid())?;
+            let content_hash: String = row.get(6).map_err(|_| crate::jobs::invalid())?;
+            let entry = Row {
+                workspace_id,
+                project_id,
+                kind: kind.clone(),
+                body,
+                content_hash,
+            };
+            if kind == "source-review" {
+                reviews.push(entry);
+            } else if kind == "source-package" || kind == "specification" {
+                pinned.insert((entry.workspace_id.clone(), artifact_id, version), entry);
+            }
+        }
+    }
+    for review in &reviews {
+        let value: serde_json::Value =
+            serde_json::from_str(&review.body).map_err(|_| crate::jobs::invalid())?;
+        if value.get("format").and_then(|v| v.as_str()) != Some("anansi-source-review") {
+            continue;
+        }
+        let doc: crate::forge::SourceReviewDoc =
+            serde_json::from_str(&review.body).map_err(|_| crate::jobs::invalid())?;
+        if crate::content::hash(review.body.as_bytes()) != review.content_hash {
+            return Err(crate::jobs::invalid());
+        }
+        let package = pinned
+            .get(&(
+                review.workspace_id.clone(),
+                doc.package_artifact_id.clone(),
+                doc.package_version as i64,
+            ))
+            .ok_or_else(crate::jobs::invalid)?;
+        if package.kind != "source-package"
+            || package.workspace_id != review.workspace_id
+            || package.project_id != review.project_id
+            || crate::content::hash(package.body.as_bytes()) != package.content_hash
+        {
+            return Err(crate::jobs::invalid());
+        }
+        let package_doc: crate::forge::SourcePackageDoc =
+            serde_json::from_str(&package.body).map_err(|_| crate::jobs::invalid())?;
+        if package_doc.format != "anansi-source-package" {
+            return Err(crate::jobs::invalid());
+        }
+        let spec = pinned
+            .get(&(
+                review.workspace_id.clone(),
+                doc.spec_artifact_id.clone(),
+                doc.spec_version as i64,
+            ))
+            .ok_or_else(crate::jobs::invalid)?;
+        if spec.kind != "specification"
+            || spec.workspace_id != review.workspace_id
+            || spec.project_id != review.project_id
+            || crate::content::hash(spec.body.as_bytes()) != spec.content_hash
+        {
+            return Err(crate::jobs::invalid());
+        }
+        let spec_doc: crate::forge::ProductSpecDoc =
+            serde_json::from_str(&spec.body).map_err(|_| crate::jobs::invalid())?;
+        if spec_doc.format != "anansi-product-spec" {
+            return Err(crate::jobs::invalid());
+        }
+        crate::forge::validate_review_record(
+            &doc,
+            &package_doc,
+            &spec_doc,
+            &crate::content::hash(package.body.as_bytes()),
+            &spec.content_hash,
+        )?;
+    }
+    Ok(())
+}
+
 fn remap_artifact_row(
     names: &[String],
     columns: &mut [rusqlite::types::Value],
@@ -398,6 +598,23 @@ fn remap_artifact_row(
         let hash_i = index("content_hash")?;
         if let Value::Text(body) = &columns[body_i]
             && let Some(rewritten) = crate::forge::remap_deliverable_references(body, ids)?
+        {
+            columns[hash_i] = Value::Text(crate::content::hash(rewritten.as_bytes()));
+            columns[body_i] = Value::Text(rewritten);
+        }
+    }
+    // Slice 4 source reviews (type `source-review`) pin a
+    // source package and a specification by id: both
+    // resolve to the restored artifacts, fail closed when
+    // either is not in the package, and the pinned hashes
+    // are rewritten afterwards (see the fix-up pass) to
+    // the restored rows' recomputed hashes.
+    let is_review = matches!(&columns[type_i], Value::Text(t) if t == "source-review");
+    if is_review {
+        let body_i = index("body")?;
+        let hash_i = index("content_hash")?;
+        if let Value::Text(body) = &columns[body_i]
+            && let Some(rewritten) = crate::forge::remap_review_references(body, ids)?
         {
             columns[hash_i] = Value::Text(crate::content::hash(rewritten.as_bytes()));
             columns[body_i] = Value::Text(rewritten);
@@ -556,6 +773,7 @@ impl crate::storage::Storage {
         // bindings before any id or hash is changed.
         // A refusal here publishes no destination state.
         validate_original_deliverable_bindings(&source)?;
+        validate_original_review_bindings(&source)?;
         // Validate and prepare every mapped row before any managed content is written.
         let mut tables = vec![
             "workspaces",
@@ -719,6 +937,7 @@ impl crate::storage::Storage {
             if table == "artifact_versions" {
                 fix_approval_hashes(&names, &mut values)?;
                 fix_deliverable_hashes(&names, &mut values)?;
+                fix_review_hashes(&names, &mut values)?;
             }
             prepared.push((table, names, values));
         }

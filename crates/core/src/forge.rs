@@ -429,6 +429,88 @@ pub struct ForgeDeliverableSaveRequest {
     pub expected_version: Option<u32>,
 }
 
+// ---------------------------------------------------------------------------
+// M7 Slice 4: structured review of a saved source package
+// against its pinned specification's acceptance criteria.
+// A review is inspection only: it is saved by a direct,
+// model-free op, it never touches provider machinery,
+// and it neither requires nor creates specification
+// approval. Approval gates stay at revision submission
+// (and build/deliverable paths), unchanged.
+
+/// The fixed limitations every review carries. The
+/// backend writes them; a client-supplied list is never
+/// trusted, so no review can claim what inspection
+/// cannot establish.
+pub const REVIEW_LIMITATIONS: [&str; 5] = [
+    "Inspection does not establish runtime behavior.",
+    "Inspection does not establish passing tests.",
+    "Inspection does not establish security certification.",
+    "Inspection does not establish production readiness.",
+    "The source was not executed, built, previewed or deployed.",
+];
+
+/// One criterion assessment. `criterion` must match the
+/// pinned specification's criterion verbatim, and
+/// `criterion_index` must equal its position — the
+/// backend refuses criterion substitution. `status` is
+/// `not-assessed`, `needs-changes` or `satisfied`.
+/// `note` is bounded to 2000 characters and must be
+/// non-empty for `needs-changes`. `file_refs` are exact
+/// paths in the pinned package's file list.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ReviewFinding {
+    pub criterion_index: usize,
+    pub criterion: String,
+    pub status: String,
+    pub note: String,
+    pub file_refs: Vec<String>,
+}
+
+/// A saved source review: pins one package version and
+/// its specification version, with their content hashes,
+/// and carries one finding per acceptance criterion of
+/// that specification version. Editing the findings
+/// saves a new version of this same artifact; the
+/// pinned package version never moves.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SourceReviewDoc {
+    pub format: String,
+    pub format_version: u8,
+    pub package_artifact_id: String,
+    pub package_version: u32,
+    pub package_content_hash: String,
+    pub spec_artifact_id: String,
+    pub spec_version: u32,
+    pub spec_content_hash: String,
+    pub concept_name: String,
+    pub findings: Vec<ReviewFinding>,
+    pub limitations: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ForgeReviewSaveRequest {
+    #[serde(default = "one")]
+    pub contract_version: u8,
+    pub workspace_id: String,
+    pub project_id: String,
+    /// The saved source-package artifact this review assesses.
+    pub package_artifact_id: String,
+    /// The exact package version this review assesses.
+    pub package_version: u32,
+    /// One finding per acceptance criterion of the pinned
+    /// specification, in spec order, criterion text verbatim.
+    pub findings: Vec<ReviewFinding>,
+    /// Present only when revising a saved review: the
+    /// review artifact to revise, with `expected_version`
+    /// as its current latest version.
+    pub review_artifact_id: Option<String>,
+    pub expected_version: Option<u32>,
+}
+
 #[derive(Debug, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ForgeStartResponse {
@@ -1023,6 +1105,10 @@ pub fn forge_command(
         // run-save — it must accept user edits to a draft,
         // which claim-and-wait run persistence cannot.
         "forge-deliverable-save" => save_deliverable(value, scope),
+        // Slice 4: review saving is a direct, model-free op
+        // — it must accept user findings, which no run
+        // exists to persist, and it must never start one.
+        "forge-review-save" => save_review(value, scope),
         "forge-spec-poll"
         | "forge-build-poll"
         | "forge-revise-poll"
@@ -2283,6 +2369,335 @@ fn save_deliverable(value: Value, scope: &CallerScope) -> Result<Value, CommandE
     .map_err(|_| crate::storage::unavailable())
 }
 
+/// Slice 4: load a pinned package version and its pinned
+/// specification version for review — WITHOUT the
+/// approval gate in `load_pinned_package`. Review is
+/// inspection, not generation: inspecting a package
+/// whose specification was never approved must be
+/// possible, and saving a review must never approve
+/// anything. Returns (package details, package doc,
+/// specification details, specification doc).
+fn load_review_package(
+    storage: &Storage,
+    workspace_id: &str,
+    project_id: &str,
+    package_artifact_id: &str,
+    package_version: u32,
+) -> Result<
+    (
+        crate::artifacts::ArtifactDetails,
+        SourcePackageDoc,
+        crate::artifacts::ArtifactDetails,
+        ProductSpecDoc,
+    ),
+    CommandError,
+> {
+    let package = read_deliverable_package(
+        storage,
+        workspace_id,
+        project_id,
+        package_artifact_id,
+        package_version,
+    )?;
+    let package_doc: SourcePackageDoc = serde_json::from_str(&package.body)
+        .map_err(|_| invalid("The selected artifact is not a readable source package."))?;
+    let spec = read_specification(
+        storage,
+        workspace_id,
+        project_id,
+        &package_doc.spec_artifact_id,
+        package_doc.spec_version,
+    )?;
+    let spec_doc: ProductSpecDoc = serde_json::from_str(&spec.body)
+        .map_err(|_| invalid("The pinned specification is not readable."))?;
+    Ok((package, package_doc, spec, spec_doc))
+}
+
+/// Slice 4: strict finding validation against the pinned
+/// specification's acceptance criteria and the pinned
+/// package's file list. Anything that does not match
+/// exactly — count, order, verbatim criterion text,
+/// status, note bounds, file membership — fails closed.
+fn validate_review_findings(
+    findings: &[ReviewFinding],
+    spec_doc: &ProductSpecDoc,
+    package_doc: &SourcePackageDoc,
+) -> Result<(), CommandError> {
+    let criteria = &spec_doc.spec.acceptance_criteria;
+    if findings.len() != criteria.len() {
+        return Err(invalid(&format!(
+            "A review needs exactly one finding per acceptance criterion ({}), not {}.",
+            criteria.len(),
+            findings.len()
+        )));
+    }
+    let package_paths: std::collections::BTreeSet<&str> = package_doc
+        .files
+        .iter()
+        .map(|f| f.path.as_str())
+        .collect();
+    for (index, finding) in findings.iter().enumerate() {
+        if finding.criterion_index != index {
+            return Err(invalid(&format!(
+                "Finding {} has criterion index {}, expected {index}.",
+                index, finding.criterion_index
+            )));
+        }
+        if finding.criterion != criteria[index] {
+            return Err(invalid(&format!(
+                "Finding {} does not carry the pinned specification's criterion verbatim.",
+                index
+            )));
+        }
+        if finding.status != "not-assessed"
+            && finding.status != "needs-changes"
+            && finding.status != "satisfied"
+        {
+            return Err(invalid(&format!(
+                "Finding {} has an unsupported status: {}.",
+                index, finding.status
+            )));
+        }
+        if finding.note.chars().count() > 2000 {
+            return Err(invalid(&format!(
+                "Finding {} note must be at most 2000 characters.",
+                index
+            )));
+        }
+        if finding.status == "needs-changes" && finding.note.trim().is_empty() {
+            return Err(invalid(&format!(
+                "Finding {} needs changes but carries no note saying what should change.",
+                index
+            )));
+        }
+        if finding.file_refs.len() > 12 {
+            return Err(invalid(&format!(
+                "Finding {} references more than 12 package files.",
+                index
+            )));
+        }
+        let mut seen: std::collections::BTreeSet<&str> = std::collections::BTreeSet::new();
+        for path in &finding.file_refs {
+            if !package_paths.contains(path.as_str()) {
+                return Err(invalid(&format!(
+                    "Finding {} references {path}, which is not a file in the pinned package.",
+                    index
+                )));
+            }
+            if !seen.insert(path.as_str()) {
+                return Err(invalid(&format!(
+                    "Finding {} references {path} more than once.",
+                    index
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Slice 4: validate a complete saved review record
+/// against the backend-resolved provenance it claims.
+/// A registry hash only proves the body bytes are
+/// unchanged since they were written — it does not
+/// prove the body is a valid domain record, and the
+/// supported generic artifact revise path can write
+/// any body. Restore pre-validation reuses this, so a
+/// tampered or hand-written review can never restore
+/// as valid. Invalid records are refused, never
+/// repaired or relabelled.
+pub(crate) fn validate_review_record(
+    doc: &SourceReviewDoc,
+    package_doc: &SourcePackageDoc,
+    spec_doc: &ProductSpecDoc,
+    package_body_hash: &str,
+    spec_content_hash: &str,
+) -> Result<(), CommandError> {
+    if doc.format != "anansi-source-review" || doc.format_version != 1 {
+        return Err(invalid(
+            "The stored review has an unsupported format or version.",
+        ));
+    }
+    if doc.package_version < 1 || doc.spec_version < 1 {
+        return Err(invalid(
+            "The stored review pins an invalid package or specification version.",
+        ));
+    }
+    if doc.spec_artifact_id != package_doc.spec_artifact_id
+        || doc.spec_version != package_doc.spec_version
+    {
+        return Err(invalid(
+            "The stored review's specification does not match its pinned package's specification.",
+        ));
+    }
+    if doc.concept_name != package_doc.concept_name {
+        return Err(invalid(
+            "The stored review's concept does not match its pinned package.",
+        ));
+    }
+    if doc.package_content_hash != package_body_hash {
+        return Err(invalid(
+            "The stored review's pinned package hash does not match its package version.",
+        ));
+    }
+    if doc.spec_content_hash != spec_content_hash {
+        return Err(invalid(
+            "The stored review's pinned specification hash does not match its specification version.",
+        ));
+    }
+    let expected_limitations: Vec<String> = REVIEW_LIMITATIONS
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+    if doc.limitations != expected_limitations {
+        return Err(invalid(
+            "The stored review's limitations do not match the fixed review limitations.",
+        ));
+    }
+    // Findings validate against the pinned specification's
+    // criteria exactly as at save: count, order, verbatim
+    // criterion text, statuses, note bounds and file
+    // membership against the pinned package files.
+    validate_review_findings(&doc.findings, spec_doc, package_doc)?;
+    Ok(())
+}
+
+fn save_review(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
+    let req: ForgeReviewSaveRequest = serde_json::from_value(value)
+        .map_err(|_| invalid("Use a supported Product Forge request."))?;
+    if req.contract_version != 1 {
+        return Err(CommandError::new(
+            ErrorCode::UnsupportedContract,
+            "Use contract version 1.",
+        ));
+    }
+    if req.package_version < 1 {
+        return Err(invalid("Pin an exact package version (1 or later)."));
+    }
+    let (review_id, expected_version) = match (
+        req.review_artifact_id.clone(),
+        req.expected_version,
+    ) {
+        (None, None) => (None, None),
+        (Some(id), Some(version)) => (Some(id), Some(version)),
+        _ => {
+            return Err(invalid(
+                "A review revision needs both the review artifact id and its expected version.",
+            ));
+        }
+    };
+    let workspace_id = logical(scope)?;
+    let storage = storage(scope)?;
+    let connection = storage
+        .connection(false)?
+        .ok_or_else(crate::storage::unavailable)?;
+    crate::artifacts::require_project_writable(&connection, &workspace_id, &req.project_id)?;
+    drop(connection);
+
+    // No approval gate here, by design (see
+    // `load_review_package`): review is inspection.
+    // No provider machinery is touched anywhere on
+    // this path, so saving a review can neither
+    // initiate inference nor approve a specification.
+    let (package, package_doc, spec, spec_doc) = load_review_package(
+        &storage,
+        &workspace_id,
+        &req.project_id,
+        &req.package_artifact_id,
+        req.package_version,
+    )?;
+    validate_review_findings(&req.findings, &spec_doc, &package_doc)?;
+    let title = {
+        let t = format!("Source review: {}", package_doc.concept_name);
+        if t.chars().count() > 200 {
+            t.chars().take(200).collect::<String>()
+        } else {
+            t
+        }
+    };
+    let refs = vec![
+        format!(
+            "artifact://{}@v{}",
+            req.package_artifact_id, req.package_version
+        ),
+        format!(
+            "artifact://{}@v{}",
+            package_doc.spec_artifact_id, package_doc.spec_version
+        ),
+    ];
+    let doc = SourceReviewDoc {
+        format: "anansi-source-review".to_string(),
+        format_version: 1,
+        package_artifact_id: req.package_artifact_id.clone(),
+        package_version: req.package_version,
+        package_content_hash: crate::content::hash(package.body.as_bytes()),
+        spec_artifact_id: package_doc.spec_artifact_id.clone(),
+        spec_version: package_doc.spec_version,
+        spec_content_hash: spec.artifact.content_hash.clone(),
+        concept_name: package_doc.concept_name.clone(),
+        findings: req.findings.clone(),
+        limitations: REVIEW_LIMITATIONS.iter().map(|s| s.to_string()).collect(),
+    };
+    let doc_json = serde_json::to_string(&doc).map_err(|_| crate::storage::unavailable())?;
+    let details = if let (Some(id), Some(version)) = (review_id, expected_version) {
+        let existing = storage.artifact_read(&workspace_id, &id, None)?;
+        if existing.artifact.project_id != req.project_id
+            || existing.artifact.artifact_type != "source-review"
+        {
+            return Err(invalid(
+                "The review to revise does not belong to this project.",
+            ));
+        }
+        let existing_doc: SourceReviewDoc = serde_json::from_str(&existing.body)
+            .map_err(|_| invalid("The review to revise is not readable."))?;
+        if existing_doc.format != "anansi-source-review"
+            || existing_doc.package_artifact_id != req.package_artifact_id
+            || existing_doc.package_version != req.package_version
+            || existing_doc.spec_artifact_id != package_doc.spec_artifact_id
+            || existing_doc.spec_version != package_doc.spec_version
+        {
+            return Err(invalid(
+                "A review revision may not switch packages, package versions or specifications.",
+            ));
+        }
+        let existing_title = existing.artifact.title.clone();
+        storage.artifact_revise_with_generator(
+            &crate::artifacts::ArtifactReviseRequest {
+                contract_version: 1,
+                workspace_id: workspace_id.clone(),
+                artifact_id: id,
+                expected_version: version,
+                title: existing_title,
+                body: doc_json.clone(),
+                source_references: refs,
+            },
+            json!({ "kind": "manual" }),
+            "validated",
+        )?
+    } else {
+        storage.artifact_register_generated(
+            &ArtifactRegisterRequest {
+                contract_version: 1,
+                workspace_id: workspace_id.clone(),
+                project_id: req.project_id.clone(),
+                artifact_type: "source-review".to_string(),
+                title,
+                body: doc_json.clone(),
+                source_references: refs,
+                privacy: "private".to_string(),
+            },
+            json!({ "kind": "manual" }),
+            "validated",
+        )?
+    };
+    serde_json::to_value(ForgeSaveResponse {
+        contract_version: 1,
+        artifact: details.artifact,
+        body: doc_json,
+        already_saved: false,
+    })
+    .map_err(|_| crate::storage::unavailable())
+}
+
 /// Shared start tail: dispatch the stream; a provider that
 /// fails before streaming leaves a terminal failed run
 /// (a generation outcome, not a request refusal).
@@ -3195,6 +3610,31 @@ pub fn remap_deliverable_references(
     }
     remap_artifact_ref(&mut doc, "packageArtifactId", ids, "deliverable")?;
     remap_artifact_ref(&mut doc, "specArtifactId", ids, "deliverable")?;
+    Ok(Some(
+        serde_json::to_string(&doc).map_err(|_| crate::storage::unavailable())?,
+    ))
+}
+
+/// Rewrite the pinned package and specification
+/// references in an `anansi-source-review` body.
+/// Returns `None` for other bodies. A reference to a
+/// package or specification that is not in the backup
+/// fails closed. The caller (restore) rewrites the
+/// pinned hashes afterwards to the restored rows'
+/// recomputed hashes, so the review transfers only to
+/// the restored equivalents of the same versions.
+pub fn remap_review_references(
+    body: &str,
+    ids: &BTreeMap<String, String>,
+) -> Result<Option<String>, CommandError> {
+    let Ok(mut doc) = serde_json::from_str::<Value>(body) else {
+        return Ok(None);
+    };
+    if doc.get("format").and_then(|v| v.as_str()) != Some("anansi-source-review") {
+        return Ok(None);
+    }
+    remap_artifact_ref(&mut doc, "packageArtifactId", ids, "source review")?;
+    remap_artifact_ref(&mut doc, "specArtifactId", ids, "source review")?;
     Ok(Some(
         serde_json::to_string(&doc).map_err(|_| crate::storage::unavailable())?,
     ))

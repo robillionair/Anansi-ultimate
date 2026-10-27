@@ -841,7 +841,8 @@ impl Core {
             | "forge-deliverable-draft-start"
             | "forge-deliverable-draft-poll"
             | "forge-deliverable-draft-cancel"
-            | "forge-deliverable-save" => {
+            | "forge-deliverable-save"
+            | "forge-review-save" => {
                 // The session scope arrives only via
                 // `callerContext`, which the API layer stamps from
                 // the authenticated token (overwriting client

@@ -12,7 +12,10 @@ import {
   ForgeRevisePanel,
   ForgeSpecPanel,
   parseDeliverableBody,
+  parseReviewBody,
   SourcePackageView,
+  SourceReviewPanel,
+  SourceReviewView,
   SpecificationView,
   parseProductSpecBody,
   parseSourcePackageBody,
@@ -48,6 +51,11 @@ export function Projects({ client, workspaceId }: { client: Client; workspaceId:
   const [viewedArtifactEpoch, setViewedArtifactEpoch] = useState(0);
   const [artifactForm, setArtifactForm] = useState({ type: 'note', title: '', body: '', privacy: 'private', sources: '' });
   const [reviseForm, setReviseForm] = useState({ title: '', body: '', sources: '' });
+  // Slice 4: revision instructions prefilled from selected
+  // review findings. The prefill is applied only when it
+  // targets the currently viewed package version, so
+  // switching packages never inherits stale instructions.
+  const [revisePrefill, setRevisePrefill] = useState<{ text: string; packageArtifactId: string; packageVersion: number } | null>(null);
 
   // Relationship creation state
   // M6 Slice 2: project-scoped idea generation (SS21-22).
@@ -782,6 +790,25 @@ export function Projects({ client, workspaceId }: { client: Client; workspaceId:
                                 doc={parsedPackage}
                                 notify={(message, isError) => { if (isError) setError(message); else setNotice(message); }}
                                 onSaved={() => { void refreshSavedArtifact(current.memory.id, viewedArtifact.artifact.artifactId, viewedArtifactEpoch); }}
+                                prefill={revisePrefill && revisePrefill.packageArtifactId === viewedArtifact.artifact.artifactId && revisePrefill.packageVersion === viewedArtifact.artifact.version ? revisePrefill : undefined}
+                              />
+                            )}
+                            {current && (
+                              <SourceReviewPanel
+                                key={`review:${workspaceId}:${current.memory.id}:${viewedArtifact.artifact.artifactId}:${viewedArtifact.artifact.version}`}
+                                client={client}
+                                workspaceId={workspaceId}
+                                projectId={current.memory.id}
+                                pkg={viewedArtifact.artifact}
+                                doc={parsedPackage}
+                                notify={(message, isError) => { if (isError) setError(message); else setNotice(message); }}
+                                onSaved={() => {
+                                  void (async () => {
+                                    const artList = await client.listProjectArtifacts(workspaceId, current.memory.id);
+                                    setArtifacts(artList.artifacts);
+                                  })();
+                                }}
+                                onPrepareRevision={(text) => setRevisePrefill({ text, packageArtifactId: viewedArtifact.artifact.artifactId, packageVersion: viewedArtifact.artifact.version })}
                               />
                             )}
                             {current && (
@@ -817,6 +844,26 @@ export function Projects({ client, workspaceId }: { client: Client; workspaceId:
                             workspaceId={workspaceId}
                             notify={(message, isError) => { if (isError) setError(message); else setNotice(message); }}
                             onSaved={() => { void refreshSavedArtifact(current.memory.id, viewedArtifact.artifact.artifactId, viewedArtifactEpoch); }}
+                          />
+                        );
+                      }
+                      const parsedReview = viewedArtifact.artifact.type === 'source-review'
+                        ? parseReviewBody(viewedArtifact.body)
+                        : null;
+                      if (parsedReview) {
+                        return (
+                          <SourceReviewView
+                            key={`review:${workspaceId}:${current?.memory.id ?? ''}:${viewedArtifact.artifact.artifactId}:${viewedArtifact.artifact.version}`}
+                            doc={parsedReview}
+                            artifact={viewedArtifact.artifact}
+                            client={client}
+                            workspaceId={workspaceId}
+                            notify={(message, isError) => { if (isError) setError(message); else setNotice(message); }}
+                            onSaved={() => { void refreshSavedArtifact(current.memory.id, viewedArtifact.artifact.artifactId, viewedArtifactEpoch); }}
+                            onPrepareRevision={(packageArtifactId, packageVersion, text) => {
+                              setRevisePrefill({ text, packageArtifactId, packageVersion });
+                              void viewArtifactVersion(packageArtifactId, packageVersion);
+                            }}
                           />
                         );
                       }

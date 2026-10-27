@@ -3281,6 +3281,101 @@
     "title": "ForgePollResponse",
     "type": "object"
   },
+  "ForgeReviewSaveRequest": {
+    "$defs": {
+      "ReviewFinding": {
+        "description": "One criterion assessment. `criterion` must match the\npinned specification's criterion verbatim, and\n`criterion_index` must equal its position — the\nbackend refuses criterion substitution. `status` is\n`not-assessed`, `needs-changes` or `satisfied`.\n`note` is bounded to 2000 characters and must be\nnon-empty for `needs-changes`. `file_refs` are exact\npaths in the pinned package's file list.",
+        "properties": {
+          "criterion": {
+            "type": "string"
+          },
+          "criterionIndex": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "fileRefs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "note": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "criterionIndex",
+          "criterion",
+          "status",
+          "note",
+          "fileRefs"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "contractVersion": {
+        "default": 1,
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "expectedVersion": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "findings": {
+        "description": "One finding per acceptance criterion of the pinned\nspecification, in spec order, criterion text verbatim.",
+        "items": {
+          "$ref": "#/$defs/ReviewFinding"
+        },
+        "type": "array"
+      },
+      "packageArtifactId": {
+        "description": "The saved source-package artifact this review assesses.",
+        "type": "string"
+      },
+      "packageVersion": {
+        "description": "The exact package version this review assesses.",
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "projectId": {
+        "type": "string"
+      },
+      "reviewArtifactId": {
+        "description": "Present only when revising a saved review: the\nreview artifact to revise, with `expected_version`\nas its current latest version.",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "workspaceId",
+      "projectId",
+      "packageArtifactId",
+      "packageVersion",
+      "findings"
+    ],
+    "title": "ForgeReviewSaveRequest",
+    "type": "object"
+  },
   "ForgeReviseStartRequest": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
@@ -10148,6 +10243,41 @@
     "title": "RestoreResult",
     "type": "object"
   },
+  "ReviewFinding": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "description": "One criterion assessment. `criterion` must match the\npinned specification's criterion verbatim, and\n`criterion_index` must equal its position — the\nbackend refuses criterion substitution. `status` is\n`not-assessed`, `needs-changes` or `satisfied`.\n`note` is bounded to 2000 characters and must be\nnon-empty for `needs-changes`. `file_refs` are exact\npaths in the pinned package's file list.",
+    "properties": {
+      "criterion": {
+        "type": "string"
+      },
+      "criterionIndex": {
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "fileRefs": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "note": {
+        "type": "string"
+      },
+      "status": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "criterionIndex",
+      "criterion",
+      "status",
+      "note",
+      "fileRefs"
+    ],
+    "title": "ReviewFinding",
+    "type": "object"
+  },
   "RevisionDiff": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "description": "Server-computed diff between a parent package and a\nproposed revision, by path. A path present in both with\ndifferent content counts as changed, never as\nadded+removed. Each list is sorted by path.",
@@ -10573,6 +10703,108 @@
       "limitations"
     ],
     "title": "SourcePackageDoc",
+    "type": "object"
+  },
+  "SourceReviewDoc": {
+    "$defs": {
+      "ReviewFinding": {
+        "description": "One criterion assessment. `criterion` must match the\npinned specification's criterion verbatim, and\n`criterion_index` must equal its position — the\nbackend refuses criterion substitution. `status` is\n`not-assessed`, `needs-changes` or `satisfied`.\n`note` is bounded to 2000 characters and must be\nnon-empty for `needs-changes`. `file_refs` are exact\npaths in the pinned package's file list.",
+        "properties": {
+          "criterion": {
+            "type": "string"
+          },
+          "criterionIndex": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "fileRefs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "note": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "criterionIndex",
+          "criterion",
+          "status",
+          "note",
+          "fileRefs"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "description": "A saved source review: pins one package version and\nits specification version, with their content hashes,\nand carries one finding per acceptance criterion of\nthat specification version. Editing the findings\nsaves a new version of this same artifact; the\npinned package version never moves.",
+    "properties": {
+      "conceptName": {
+        "type": "string"
+      },
+      "findings": {
+        "items": {
+          "$ref": "#/$defs/ReviewFinding"
+        },
+        "type": "array"
+      },
+      "format": {
+        "type": "string"
+      },
+      "formatVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "limitations": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "packageArtifactId": {
+        "type": "string"
+      },
+      "packageContentHash": {
+        "type": "string"
+      },
+      "packageVersion": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "specArtifactId": {
+        "type": "string"
+      },
+      "specContentHash": {
+        "type": "string"
+      },
+      "specVersion": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "format",
+      "formatVersion",
+      "packageArtifactId",
+      "packageVersion",
+      "packageContentHash",
+      "specArtifactId",
+      "specVersion",
+      "specContentHash",
+      "conceptName",
+      "findings",
+      "limitations"
+    ],
+    "title": "SourceReviewDoc",
     "type": "object"
   },
   "SpecificationApprovalDoc": {

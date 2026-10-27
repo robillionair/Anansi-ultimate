@@ -872,6 +872,48 @@ export interface ProductSpec {
   summary: string;
   title: string;
 }
+export interface ForgeReviewSaveRequest {
+  contractVersion?: number;
+  expectedVersion?: number | null;
+  /**
+   * One finding per acceptance criterion of the pinned
+   * specification, in spec order, criterion text verbatim.
+   */
+  findings: ReviewFinding[];
+  /**
+   * The saved source-package artifact this review assesses.
+   */
+  packageArtifactId: string;
+  /**
+   * The exact package version this review assesses.
+   */
+  packageVersion: number;
+  projectId: string;
+  /**
+   * Present only when revising a saved review: the
+   * review artifact to revise, with `expected_version`
+   * as its current latest version.
+   */
+  reviewArtifactId?: string | null;
+  workspaceId: string;
+}
+/**
+ * One criterion assessment. `criterion` must match the
+ * pinned specification's criterion verbatim, and
+ * `criterion_index` must equal its position — the
+ * backend refuses criterion substitution. `status` is
+ * `not-assessed`, `needs-changes` or `satisfied`.
+ * `note` is bounded to 2000 characters and must be
+ * non-empty for `needs-changes`. `file_refs` are exact
+ * paths in the pinned package's file list.
+ */
+export interface ReviewFinding {
+  criterion: string;
+  criterionIndex: number;
+  fileRefs: string[];
+  note: string;
+  status: string;
+}
 export interface ForgeReviseStartRequest {
   contractVersion?: number;
   /**
@@ -2553,6 +2595,23 @@ export interface Workspace {
   name: string;
 }
 /**
+ * One criterion assessment. `criterion` must match the
+ * pinned specification's criterion verbatim, and
+ * `criterion_index` must equal its position — the
+ * backend refuses criterion substitution. `status` is
+ * `not-assessed`, `needs-changes` or `satisfied`.
+ * `note` is bounded to 2000 characters and must be
+ * non-empty for `needs-changes`. `file_refs` are exact
+ * paths in the pinned package's file list.
+ */
+export interface ReviewFinding {
+  criterion: string;
+  criterionIndex: number;
+  fileRefs: string[];
+  note: string;
+  status: string;
+}
+/**
  * Server-computed diff between a parent package and a
  * proposed revision, by path. A path present in both with
  * different content counts as changed, never as
@@ -2656,6 +2715,44 @@ export interface DevelopmentPlan {
   steps: string[];
   summary: string;
   testingNotes: string;
+}
+/**
+ * A saved source review: pins one package version and
+ * its specification version, with their content hashes,
+ * and carries one finding per acceptance criterion of
+ * that specification version. Editing the findings
+ * saves a new version of this same artifact; the
+ * pinned package version never moves.
+ */
+export interface SourceReviewDoc {
+  conceptName: string;
+  findings: ReviewFinding[];
+  format: string;
+  formatVersion: number;
+  limitations: string[];
+  packageArtifactId: string;
+  packageContentHash: string;
+  packageVersion: number;
+  specArtifactId: string;
+  specContentHash: string;
+  specVersion: number;
+}
+/**
+ * One criterion assessment. `criterion` must match the
+ * pinned specification's criterion verbatim, and
+ * `criterion_index` must equal its position — the
+ * backend refuses criterion substitution. `status` is
+ * `not-assessed`, `needs-changes` or `satisfied`.
+ * `note` is bounded to 2000 characters and must be
+ * non-empty for `needs-changes`. `file_refs` are exact
+ * paths in the pinned package's file list.
+ */
+export interface ReviewFinding {
+  criterion: string;
+  criterionIndex: number;
+  fileRefs: string[];
+  note: string;
+  status: string;
 }
 /**
  * The body of a `specification-approval` artifact: the

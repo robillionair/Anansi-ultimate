@@ -135,6 +135,7 @@ pub fn command_path(path: &str) -> bool {
             | "/v1/ai/forge-deliverable-draft-poll"
             | "/v1/ai/forge-deliverable-draft-cancel"
             | "/v1/ai/forge-deliverable-save"
+            | "/v1/ai/forge-review-save"
             | "/v1/artifacts/register"
             | "/v1/artifacts/revise"
             | "/v1/artifacts/list"
