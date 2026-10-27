@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type {
   ArtifactRecord,
   Client,
@@ -26,9 +26,12 @@ function exactKeys(value: Record<string, unknown>, keys: string[]): boolean {
 
 function textField(value: unknown, max: number): string | null {
   if (typeof value !== 'string') return null;
-  const trimmed = value.trim();
-  if (trimmed.length === 0 || trimmed.length > max) return null;
-  return trimmed;
+  // Validate on the trimmed length (matching the
+  // backend), but return the original text:
+  // reopening a saved record must not alter accepted
+  // whitespace (indentation, tabs, terminal newlines).
+  if (value.trim().length === 0 || value.trim().length > max) return null;
+  return value;
 }
 
 function textList(
@@ -130,8 +133,9 @@ export function TransferConceptView({ doc }: { doc: TransferConceptDoc }) {
         {doc.selectedCombination.name}: {doc.selectedCombination.description}
       </p>
       <p>
-        <strong>Approved brief (user-authored).</strong> {doc.approvedBrief}
+        <strong>Approved brief (user-authored).</strong>
       </p>
+      <pre>{doc.approvedBrief}</pre>
       <p>
         <strong>Assumptions (model-derived, verbatim).</strong>
       </p>
@@ -191,14 +195,34 @@ export function ColliderTransferPanel({
   const [brief, setBrief] = useState(() => defaultTransferBrief(experiment, 0));
   const [transferring, setTransferring] = useState(false);
   const [transferredId, setTransferredId] = useState('');
+  // The draft a receipt belongs to. Editing the brief
+  // or changing the selection clears the receipt, so
+  // an old concept is never displayed as approval of
+  // a new draft; a late response is applied only when
+  // the draft still equals the submitted snapshot.
+  const draftRef = useRef({ selected: 0, brief: defaultTransferBrief(experiment, 0) });
 
   function select(index: number) {
     setSelected(index);
-    setBrief(defaultTransferBrief(experiment, index));
+    const next = defaultTransferBrief(experiment, index);
+    setBrief(next);
+    draftRef.current = { selected: index, brief: next };
+    setTransferredId('');
+  }
+
+  function editBrief(next: string) {
+    setBrief(next);
+    draftRef.current = { selected: draftRef.current.selected, brief: next };
+    setTransferredId('');
   }
 
   async function approve() {
     if (brief.trim() === '') return;
+    // The brief is submitted exactly as edited:
+    // validation rejects whitespace-only input, but
+    // accepted indentation, tabs and terminal
+    // newlines are recorded verbatim.
+    const submitted = { selected, brief };
     setTransferring(true);
     try {
       const transferred = await client.transferProjectCollider(workspaceId, {
@@ -206,15 +230,25 @@ export function ColliderTransferPanel({
         experimentArtifactId: experimentArtifact.artifactId,
         experimentVersion: experimentArtifact.version,
         combinationIndex: selected,
-        approvedBrief: brief.trim(),
+        approvedBrief: brief,
       });
-      setTransferredId(transferred.artifact.artifactId);
-      notify(
-        transferred.alreadyTransferred
-          ? 'This transfer already exists; no duplicate was created.'
-          : `Concept sent to Product Forge as artifact ${transferred.artifact.artifactId}.`,
-        false,
-      );
+      if (
+        draftRef.current.selected === submitted.selected
+        && draftRef.current.brief === submitted.brief
+      ) {
+        setTransferredId(transferred.artifact.artifactId);
+        notify(
+          transferred.alreadyTransferred
+            ? 'This transfer already exists; no duplicate was created.'
+            : `Concept sent to Product Forge as artifact ${transferred.artifact.artifactId}.`,
+          false,
+        );
+      } else {
+        notify(
+          'Transfer completed for the previous draft; the current draft has not been approved.',
+          false,
+        );
+      }
     } catch (e) {
       notify(e instanceof Error ? e.message : 'Transfer failed.', true);
     } finally {
@@ -265,7 +299,7 @@ export function ColliderTransferPanel({
       <textarea
         id="collider-transfer-brief"
         value={brief}
-        onChange={e => setBrief(e.target.value)}
+        onChange={e => editBrief(e.target.value)}
         required
         maxLength={4000}
         rows={6}

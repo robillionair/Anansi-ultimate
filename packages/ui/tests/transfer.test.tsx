@@ -9,7 +9,7 @@ import {
 } from '../src/Transfer';
 import type { ColliderExperimentDoc } from '@anansi/contracts';
 
-function validConceptBody(): Record<string, unknown> {
+function validConceptBody(approvedBrief?: string): Record<string, unknown> {
   return {
     format: 'anansi-forge-concept',
     version: 1,
@@ -21,7 +21,7 @@ function validConceptBody(): Record<string, unknown> {
       name: 'Mycelial order router',
       description: 'A routing layer that scores venues by local congestion signals.',
     },
-    approvedBrief: 'Route venues by local congestion, edited by the user.',
+    approvedBrief: approvedBrief ?? 'Route venues by local congestion, edited by the user.',
     assumptions: ['Local congestion signals can rank venues without a central coordinator.'],
     unknowns: ['Exchange fees under rerouting are unknown.', 'A venue feed with latency and fill data'],
     productizationBrief: 'A routing advisor that proposes venue choices from local signals.',
@@ -96,6 +96,12 @@ test('transfer concept parser accepts a valid body and rejects tampering', () =>
   delete missingField.provider;
   assert.equal(parseTransferConceptBody(JSON.stringify(missingField)), null);
   assert.equal(parseTransferConceptBody('not json at all'), null);
+});
+
+test('transfer concept parser preserves approved brief whitespace verbatim', () => {
+  const brief = "  Keep the user's leading indentation.\nAnd the final newline.\n";
+  const doc = parseTransferConceptBody(JSON.stringify(validConceptBody(brief)))!;
+  assert.equal(doc.approvedBrief, brief);
 });
 
 test('transfer concept view pins the experiment and labels origins apart', () => {

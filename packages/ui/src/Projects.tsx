@@ -964,6 +964,7 @@ export function Projects({ client, workspaceId }: { client: Client; workspaceId:
                             />
                             {current && (
                               <ColliderTransferPanel
+                                key={`transfer:${workspaceId}:${current.memory.id}:${viewedArtifact.artifact.artifactId}:${viewedArtifact.artifact.version}`}
                                 client={client}
                                 workspaceId={workspaceId}
                                 projectId={current.memory.id}
@@ -989,9 +990,13 @@ export function Projects({ client, workspaceId }: { client: Client; workspaceId:
                       if (parsedTransfer) {
                         return (
                           <div>
-                            <TransferConceptView doc={parsedTransfer} />
+                            <TransferConceptView
+                              key={`transfer-concept:${workspaceId}:${current?.memory.id ?? ''}:${viewedArtifact.artifact.artifactId}:${viewedArtifact.artifact.version}`}
+                              doc={parsedTransfer}
+                            />
                             {current && (
                               <ForgeSpecPanel
+                                key={`forge-spec:${workspaceId}:${current.memory.id}:${viewedArtifact.artifact.artifactId}:${viewedArtifact.artifact.version}`}
                                 client={client}
                                 workspaceId={workspaceId}
                                 projectId={current.memory.id}

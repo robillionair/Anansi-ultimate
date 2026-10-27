@@ -34,9 +34,12 @@ function textField(
   max: number,
 ): string | null {
   if (typeof value !== 'string') return null;
-  const trimmed = value.trim();
-  if (trimmed.length === 0 || trimmed.length > max) return null;
-  return trimmed;
+  // Validate on the trimmed length (matching the
+  // backend), but return the original text:
+  // reopening a saved record must not alter accepted
+  // whitespace (indentation, tabs, terminal newlines).
+  if (value.trim().length === 0 || value.trim().length > max) return null;
+  return value;
 }
 
 function textList(

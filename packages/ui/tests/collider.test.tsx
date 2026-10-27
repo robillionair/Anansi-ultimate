@@ -79,6 +79,15 @@ test('result parser accepts a valid six-section result and rejects malformed sha
   assert.equal(parseColliderResult('not an object'), null);
 });
 
+test('experiment body parser preserves beam whitespace verbatim', () => {
+  const body = JSON.parse(validExperimentBody());
+  body.beamA = "  def route():\n    return 'local'\n";
+  body.beamB = "\tMycelium pathways.\n";
+  const doc = parseColliderExperimentBody(JSON.stringify(body));
+  assert.equal(doc?.beamA, "  def route():\n    return 'local'\n");
+  assert.equal(doc?.beamB, "\tMycelium pathways.\n");
+});
+
 test('experiment body parser accepts only the collider format with exact controls', () => {
   const doc = parseColliderExperimentBody(validExperimentBody());
   assert.equal(doc?.format, 'anansi-collider-experiment');
