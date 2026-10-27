@@ -1,4 +1,4 @@
-## 2026-10-27 — Local combined native preview preparation
+## 2026-10-27 — Local combined native preview verified
 
 The owner requested continuing the Windows preview build and verification.
 The supplied ZIP was the earlier repair package, not the reported preview ZIP;
@@ -8,8 +8,15 @@ cherry-picks preview materials from `3335248b`, preserving both status histories
 Application source comparison is identical to `cc25155ff`.
 
 New launcher/root/cache are separate from M7/R17. UI/contracts 60/60, TypeScript,
-web build and docs validation passed. Normal embedded desktop/API build and native
-workflow acceptance are in progress; no completion is claimed by this entry.
+web build and docs validation passed. Normal embedded desktop/API build passed.
+Actual Windows native synthetic workflow passed: spec draft/exact approval,
+source generation, revision reject/accept, deliverable edit/save/export, immutable
+version selection, Cancel/reopen, restart and native fresh-restored reopening.
+Export bytes/manifests/hashes passed inert verification. Backup/restore itself
+used fixture API operations; privacy-consent UI acceptance is not claimed.
+The first harness expired after successful restore; the follow-up leased native
+reopen completed normally. Separate personal launcher/shortcut installed on E:;
+old previews preserved. Detailed evidence and hashes are in the linked record.
 Plan and scope: `docs/handoffs/M7-local-native-preview.md`; owner guide:
 `M7-PREVIEW.md`. No generated-code execution or paid inference, personal-data
 migration, pushes, master merges or remote CI. Production gates remain open.

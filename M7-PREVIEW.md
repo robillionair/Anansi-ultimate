@@ -56,3 +56,10 @@ Application code is unchanged from `cc25155ff`.
 Acceptance plan/evidence: `docs/handoffs/M7-local-native-preview.md`.
 Native tests use disposable E: data and a synthetic provider; setup/API operations
 are labelled separately from actual UI actions.
+
+Windows build and the bounded synthetic native workflow passed on 2026-10-27,
+including revision reject/accept, document version/Cancel checks, export hashes,
+restart and native reopening after fixture-API fresh restore. The personal preview
+is available through **ANANSI Preview M7 Slices 2-3** on the Desktop. Its root is
+fresh and contains no synthetic fixture or configured provider. Production gates
+and real-provider/native-credential acceptance remain separate.
