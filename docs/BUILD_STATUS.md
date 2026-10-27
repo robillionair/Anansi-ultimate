@@ -1,3 +1,42 @@
+## 2026-10-27 — M7 Slice 4: source review (Linux verification)
+
+Model-free source review on branch `muse/m7-source-review`, from the owner's
+local integration `codex/m7-preview-discovery` @ `e6d22f711` (ancestry,
+selection fixes, preview materials and discovery changes preserved; the older
+`bed0dc2` integration was not substituted). New artifact type `source-review`
+(19 types): a review pins the exact package and specification versions with
+recomputed content hashes, carries one finding per pinned specification
+criterion (statuses not-assessed / needs-changes / satisfied, notes bounded
+to 2000 characters, file references exact package paths), and states the
+inspection limits in the record. Direct op `forge-review-save` resolves and
+validates pins in the backend, deliberately without the specification-approval
+gate (inspection must be possible on unapproved packages) and without any
+provider traffic: opening, editing or saving a review starts no inference and
+creates no approval. Findings selection composes editable instructions
+prefilled into the existing revision panel (applied only to the viewed
+package version); submission keeps the unchanged approval gate, reject/accept
+and stale-parent behavior. Restore validates original review bindings before
+any remapping, remaps ids fail-closed and rewrites pinned hashes; invalid
+references refuse before destination publication.
+
+Linux verification, sequential on an idle machine: backend review suite 10/10;
+full core 254/258 with only the 4 known environmental live-Ollama
+semantic_workflow failures; providers+API 144/0; node UI/contracts 64/64;
+TypeScript, contracts drift, docs (123 files after this slice), strict Clippy
+and formatting clean; API+web builds passed. Browser canonical battery 13/13
+including the new review spec (assess → save → reopen → review revision with
+Cancel regression → findings → prefill → revision reject → revision accept →
+historical v1 check → restart → backup/fresh restore → reopen) and the
+existing revision and deliverable regressions; no failures in this run, and
+the baseline's one-off deliverable approval-screen delay did not recur (still
+recorded as intermittent, not root-caused). No timeout or assertion was
+increased or weakened. Design:
+[Slice 4 design](handoffs/M7-source-review-design.md); record:
+[Slice 4 addendum](handoffs/M7-source-review-addendum.md). Windows
+verification of Slice 4 is pending and not claimed; §32 execution sandbox,
+native desktop acceptance, preview promotion and M5 production gates remain
+open; M7 is not complete.
+
 ## 2026-10-27 — M7 preview workflow discovery correction
 
 Implementation `a67487d8a` on `codex/m7-preview-discovery` corrects obsolete
