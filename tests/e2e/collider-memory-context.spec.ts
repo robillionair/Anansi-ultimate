@@ -119,6 +119,7 @@ test('lexi-collider memory context: selection -> pre-send review -> collision ->
     await page.getByRole('button', { name: 'Open workspace', exact: true }).click();
     await page.getByRole('button', { name: 'Projects', exact: true }).click();
     await page.getByRole('button', { name: projectTitle }).click();
+    await expect(page.getByRole('heading', { name: `Edit project: ${projectTitle}`, exact: true })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Artifacts' })).toBeVisible();
   }
 
@@ -208,10 +209,12 @@ test('lexi-collider memory context: selection -> pre-send review -> collision ->
     // Project switches discard the selection (panel is keyed by project).
     await page.getByRole('button', { name: 'Projects', exact: true }).click();
     await page.getByRole('button', { name: 'Other Harbor' }).click();
+    await expect(page.getByRole('heading', { name: 'Edit project: Other Harbor', exact: true })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Artifacts' })).toBeVisible();
     await expect(collider.getByRole('group', { name: 'Memory context (optional)' }).locator('input[type="checkbox"]:checked')).toHaveCount(0);
     await page.getByRole('button', { name: 'Projects', exact: true }).click();
     await page.getByRole('button', { name: 'Context Harbor' }).click();
+    await expect(page.getByRole('heading', { name: 'Edit project: Context Harbor', exact: true })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Artifacts' })).toBeVisible();
     await expect(collider.getByRole('group', { name: 'Memory context (optional)' }).locator('input[type="checkbox"]:checked')).toHaveCount(0);
 

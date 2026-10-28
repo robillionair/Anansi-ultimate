@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Route } from '@playwright/test';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer, type Server } from 'node:http';
 import fs from 'node:fs';
@@ -109,6 +109,7 @@ for (const scenario of ['review-pinning', 'pending-review'] as const) {
       await page.getByRole('button', { name: 'Open workspace', exact: true }).click();
       await page.getByRole('button', { name: 'Projects', exact: true }).click();
       await page.getByRole('button', { name: projectTitle }).click();
+    await expect(page.getByRole('heading', { name: `Edit project: ${projectTitle}`, exact: true })).toBeVisible();
       await expect(page.getByRole('heading', { name: 'Artifacts' })).toBeVisible();
     }
 
@@ -166,14 +167,25 @@ for (const scenario of ['review-pinning', 'pending-review'] as const) {
       if (scenario === 'pending-review') {
         let release!: () => void;
         let entered!: () => void;
+        let handled!: () => void;
         const gate = new Promise<void>(resolve => { release = resolve; });
         const responseReady = new Promise<void>(resolve => { entered = resolve; });
-        await page.route('**/v1/memories/read', async route => {
-          const response = await route.fetch();
-          entered();
-          await gate;
-          await route.fulfill({ response });
-        });
+        const responseHandled = new Promise<void>(resolve => { handled = resolve; });
+        const holdSelectedMemory = async (route: Route) => {
+          if (route.request().postDataJSON().id !== memAId) {
+            await route.continue();
+            return;
+          }
+          try {
+            const response = await route.fetch();
+            entered();
+            await gate;
+            await route.fulfill({ response });
+          } finally {
+            handled();
+          }
+        };
+        await page.route('**/v1/memories/read', holdSelectedMemory);
         try {
           await collider.getByLabel('Beam A').fill('Trading signals');
           await collider.getByLabel('Beam B').fill('Mycelium networks');
@@ -184,10 +196,11 @@ for (const scenario of ['review-pinning', 'pending-review'] as const) {
           expect(fakeHits).toBe(0);
           await page.getByRole('button', { name: 'Projects', exact: true }).click();
           await page.getByRole('button', { name: 'Other Harbor', exact: true }).click();
-          await expect(collider.getByRole('heading', { name: 'LEXI-COLLIDER' })).toBeVisible();
+          await expect(page.getByRole('heading', { name: 'Edit project: Other Harbor', exact: true })).toBeVisible();
         } finally {
           release();
-          await page.unrouteAll({ behavior: 'wait' });
+          await responseHandled;
+          await page.unroute('**/v1/memories/read', holdSelectedMemory);
         }
         await expect(collider.locator('section[aria-label="Memory context to send"]')).toHaveCount(0);
         expect(fakeHits).toBe(0);
