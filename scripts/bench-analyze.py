@@ -69,6 +69,9 @@ def main():
         if a["status"] == "InsufficientEvidence":
             print(f"| {key[1]} | miss | {ne} | — | recall miss, not a saving |")
             continue
+        if a.get("wire_checks_passed") is False:
+            print(f"| {key[1]} | quality miss | {ne} | — | evidence check failed (e.g. A12 budget truncation), not a saving |")
+            continue
         d = ae - ne  # negative = ANANSI sends fewer tokens (a saving)
         pct = 100.0 * d / ne if ne else 0.0
         tot_a += ae
@@ -123,7 +126,7 @@ def main():
         pair = by[key]
         a = pair.get("anansi")
         n = pair.get("baseline_naive_full_bodies")
-        if not a or not n or a["status"] == "InsufficientEvidence":
+        if not a or not n or a["status"] == "InsufficientEvidence" or a.get("wire_checks_passed") is False:
             continue
         ae = a.get("anansi_estimate_tokens")
         ne = n.get("anansi_estimate_tokens")

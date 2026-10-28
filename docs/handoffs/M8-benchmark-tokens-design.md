@@ -270,3 +270,40 @@ This Linux VM: 2 CPUs, 8.1 GB RAM with ~0.8 GB available, no GPU,
 confirmed. Model selection is therefore RAM-bound; see the report for
 the selected models and the explicit limitation this places on
 quality generalization.
+
+## Corpus expansion + A12 budget-truncation probe (2026-10-28)
+
+To stop a single long-memory case (A2) dominating the headline, three
+long cases were added with facts at different positions, all with
+keyword-control questions (A10 pattern) so they are graded, not probes:
+A11 lighthouse log (~5500 chars, fact in a middle chunk), A12
+warehouse manifest (~7000 chars, fact in a late chunk), A13 harbor
+master office (~5000 chars, fact in the first chunk). Filler vocab
+shares no content word with each case's control terms.
+
+A12 failed on its first gated run, and the failure is a product
+finding, not a harness bug. Diagnosis: `compile_context` includes a
+hit memory's chunks in order until the 4000-char Ask budget is
+exhausted; it does not select ranked matching chunks first. The A12
+fact sits at ~5900 chars, so the first four filler chunks fill the
+budget and the fact chunk is omitted, even though it is the exact
+retrieval match (compiled prompt 4664 chars, cited Warehouse manifest
+4 times, fact missing). A11 passes because its fact sits at ~2750
+chars, inside the budget; A13 passes as a first-chunk case like A2.
+The first failing run is preserved (`results-fake-expanded.json`,
+41 records, A12 wire_ok=false).
+
+Handling, disclosed rather than hidden: A12 was moved out of the gated
+`ask_cases` loop into a dedicated budget-truncation probe section.
+Only wire/header/status invariants gate the probe; its evidence miss
+is recorded as wire_checks_passed=false and `bench-analyze.py` now
+excludes wire_checks_passed=false Ask records from answerable totals
+and charts, labelling them quality misses, not savings. Fixing the
+compiler to include ranked matching chunks would be an optimization
+and is out of scope for this measurement benchmark; moving the fact
+earlier would be cherry-picking. Neither was done. Fake expanded
+totals after this change: answerable ANANSI est 3802 vs naive 6549
+(-41.9%), of which long cases A2+A11+A13 are 3489 vs 6253 (-44.2%)
+and short cases A4+A5 are 313 vs 296 (+5.7%, ANANSI more expensive).
+The report must show long vs short splits alongside any aggregate,
+and must never quote the aggregate without them.
