@@ -484,6 +484,14 @@ export function ColliderPanel({
   const [review, setReview] = useState<ColliderMemoryReviewEntry[] | null>(null);
   const [reviewLoading, setReviewLoading] = useState(false);
   const [reviewError, setReviewError] = useState('');
+  const [starting, setStarting] = useState(false);
+  const startingRef = useRef(false);
+  const mountedRef = useRef(true);
+  const reviewReady = selectedIds.length === 0 || (
+    !reviewLoading && !reviewError && review !== null &&
+    review.length === selectedIds.length &&
+    review.every((entry, index) => entry.memoryId === selectedIds[index])
+  );
   const [controls, setControls] = useState<ColliderControls>(
     DEFAULT_COLLIDER_CONTROLS,
   );
@@ -530,15 +538,14 @@ export function ColliderPanel({
     return entries;
   }
   useEffect(() => {
+    const epoch = ++reviewEpoch.current;
+    setReview(null);
+    setReviewError('');
     if (selectedIds.length === 0) {
-      setReview(null);
-      setReviewError('');
       setReviewLoading(false);
       return;
     }
-    const epoch = ++reviewEpoch.current;
     setReviewLoading(true);
-    setReviewError('');
     void loadReview(selectedIds)
       .then(entries => {
         if (epoch !== reviewEpoch.current) return;
@@ -553,6 +560,9 @@ export function ColliderPanel({
         );
         setReviewLoading(false);
       });
+    return () => {
+      if (reviewEpoch.current === epoch) reviewEpoch.current += 1;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedIds.join(',')]);
 
@@ -606,40 +616,27 @@ export function ColliderPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [run?.runId, run?.status]);
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      reviewEpoch.current += 1;
       void controllerRef.current?.reset();
-    },
-    [],
-  );
+    };
+  }, []);
 
   async function collide() {
+    if (!mountedRef.current || startingRef.current || busy || running || !reviewReady) return;
+    // The immutable revisions already displayed are the consent boundary.
+    // Re-reading current heads here could transmit an unseen newer revision.
+    const memoryContext = selectedIds.length > 0
+      ? review!.map(entry => ({ memoryId: entry.memoryId, revisionId: entry.revisionId }))
+      : [];
+    startingRef.current = true;
+    setStarting(true);
     setResult(null);
     setSavedArtifact('');
     setValidating(false);
-    // Submit exactly the reviewed revisions: re-read the
-    // selection at submit time so the request carries the
-    // revisions the review displayed, not a stale list.
-    let memoryContext: { memoryId: string; revisionId: string }[] = [];
-    if (selectedIds.length > 0) {
-      try {
-        const entries = await loadReview(selectedIds);
-        setReview(entries);
-        memoryContext = entries.map(e => ({
-          memoryId: e.memoryId,
-          revisionId: e.revisionId,
-        }));
-      } catch {
-        setRun({
-          runId: '',
-          status: 'failed',
-          partialChars: 0,
-          error:
-            'A selected memory could not be read; refresh the selection and try again.',
-        });
-        return;
-      }
-    }
     let started;
     try {
       started = await controller().start({
@@ -653,15 +650,18 @@ export function ColliderPanel({
     } catch (e) {
       // A refused or unreachable start must be visible,
       // not a silent no-op: the run alert below renders it.
-      setRun({
+      if (mountedRef.current) setRun({
         runId: '',
         status: 'failed',
         partialChars: 0,
         error: e instanceof Error ? e.message : 'Starting the collision failed.',
       });
       return;
+    } finally {
+      startingRef.current = false;
+      if (mountedRef.current) setStarting(false);
     }
-    if (!started) return; // superseded while the start was in flight
+    if (!mountedRef.current || !started) return; // superseded while the start was in flight
     setRun({ runId: started.runId, status: 'running', partialChars: 0, error: null });
     if (started.disclosure) setDisclosure(started.disclosure);
   }
@@ -746,6 +746,11 @@ export function ColliderPanel({
                 type="checkbox"
                 checked={selectedIds.includes(m.id)}
                 onChange={e => {
+                  // Invalidate in the input event, before an old read can
+                  // settle or an immediate submit can reuse the previous review.
+                  reviewEpoch.current += 1;
+                  setReview(null);
+                  setReviewError('');
                   setSelectedIds(previous =>
                     e.target.checked
                       ? [...previous, m.id]
@@ -866,7 +871,7 @@ export function ColliderPanel({
             Zero-Cost Lock (never spend)
           </label>
         </fieldset>
-        <button type="submit" disabled={busy || running}>
+        <button type="submit" disabled={busy || running || starting || !reviewReady}>
           Collide Ideas
         </button>
         {run?.status === 'running' && (
@@ -875,6 +880,7 @@ export function ColliderPanel({
           </button>
         )}
       </form>
+      {starting && <p role="status">Starting collision…</p>}
       {run?.status === 'running' && (
         <p role="status">Colliding… {run.partialChars} characters received.</p>
       )}

@@ -893,7 +893,11 @@ fn validate_original_experiment_bindings(
             }
             let meta: serde_json::Value =
                 serde_json::from_str(&raw_meta).map_err(|_| crate::jobs::invalid())?;
-            if meta.get("privacy").and_then(|v| v.as_str()) == Some("sealed") {
+            if meta.get("privacy").and_then(|v| v.as_str()) == Some("sealed")
+                || meta.get("privacy").and_then(|v| v.as_str()) != Some(entry.privacy.as_str())
+                || meta.get("version").and_then(|v| v.as_u64()) != Some(u64::from(entry.version))
+                || meta.get("title").and_then(|v| v.as_str()) != Some(entry.title.as_str())
+            {
                 return Err(crate::jobs::invalid());
             }
         }
@@ -1687,7 +1691,12 @@ mod experiment_binding_tests {
         .unwrap();
         db.execute(
             "INSERT INTO memory_revisions VALUES ('rev-1', ?1, 'ws-1', ?2, ?3)",
-            rusqlite::params![owner_memory, row_hash, revision_meta],
+            rusqlite::params![owner_memory, row_hash, {
+                let mut metadata: serde_json::Value = serde_json::from_str(revision_meta).unwrap();
+                metadata["version"] = serde_json::json!(1);
+                metadata["title"] = serde_json::json!("Notes");
+                metadata.to_string()
+            }],
         )
         .unwrap();
         db
@@ -1742,5 +1751,32 @@ mod experiment_binding_tests {
         )
         .unwrap();
         assert!(validate_original_experiment_bindings(&db).is_ok());
+    }
+
+    #[test]
+    fn experiment_memory_bindings_refuse_fabricated_revision_labels() {
+        let content = "hello context";
+        let hash = crate::content::hash(content.as_bytes());
+        let original = experiment_body(content, &hash, "mem-1");
+        let metadata = r#"{"privacy":"private","version":1,"title":"Notes"}"#;
+        let control = setup(&original, metadata, &hash, "mem-1");
+        assert!(validate_original_experiment_bindings(&control).is_ok());
+        let mut accepted = Vec::new();
+        for (field, replacement) in [
+            ("version", serde_json::json!(999)),
+            ("title", serde_json::json!("Fabricated provenance")),
+            ("privacy", serde_json::json!("public")),
+        ] {
+            let mut changed: serde_json::Value = serde_json::from_str(&original).unwrap();
+            changed["memoryContext"][0][field] = replacement;
+            let db = setup(&changed.to_string(), metadata, &hash, "mem-1");
+            if validate_original_experiment_bindings(&db).is_ok() {
+                accepted.push(field);
+            }
+        }
+        assert!(
+            accepted.is_empty(),
+            "fabricated revision labels accepted: {accepted:?}"
+        );
     }
 }
