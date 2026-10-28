@@ -1,3 +1,33 @@
+## 2026-10-28 — M8 benchmark: automated Linux verification (real-model phase pending)
+
+Benchmark branch `muse/m8-benchmark-tokens` on reviewed baseline `df807259`
+(D1 disclosure-usage repair included; harness semantic extension + lint
+repair verified before commit, production code unchanged from `7ec90dcc`).
+
+Sequential on an idle machine, with `all-minilm:22m` installed locally:
+clean full core 299/300 (46 binaries) — the single failure is an
+intermittent concurrent-open v1-migration race in `workspace_roundtrip`
+(10/10 on alone rerun, not root-caused, recorded as intermittent, no
+assertion weakened); `semantic_workflow` 4/4 with the embedding model
+(0/4 before install, reported separately). Providers+API 144/0. Node
+UI/contracts 81/81, TypeScript and contracts clean. Strict Clippy and
+formatting clean after a harness-only lint repair (4 lints in
+`benchmark_tokens.rs`, fixed without behavior change; a first fix attempt
+used a single-pattern match flagged as `single_match`, replaced by a
+let-chain). Docs validator passes (138 files). API and web builds pass.
+Browser: canonical 17/17 plus non-canonical 17/17 = 34/34 across 28 specs,
+including the reviewer's memory-consent probes (2/2) and the
+semantic-search workflow; the only browser exclusion is the `ask_anansi`
+real-model branch, which hardcodes `qwen2.5:0.5b` and is not used as
+largest-model evidence.
+
+Coverage matrix Linux results filled in
+[M8 benchmark coverage matrix](handoffs/M8-benchmark-coverage-matrix.md).
+Real-model measurements, corpus expansion, findings report and final
+delivery remain pending; no savings headline is claimed. Linux evidence
+cannot certify Windows native dialogs, credential storage, desktop
+acceptance, external audit, cloud providers or remote CI.
+
 ## 2026-10-28 — M8 Slice 3 focused Windows acceptance, with local corrections
 
 Incoming `776259a49819a0166e8199dc85e29b34cf452680`, reviewed baseline
