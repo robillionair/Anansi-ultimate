@@ -348,3 +348,18 @@ and A3 move from InsufficientEvidence to Answered with correct
 citations (A1: Harbor Pier log, est 148; A3: both wings, est 159).
 No assertion weakened; body_search/hybrid/title_search suites
 unchanged and passing.
+
+## Ask browser real-model mode parameterization (Repair 4, 2026-10-28)
+
+`tests/e2e/ask_anansi.spec.ts` no longer hardcodes
+`qwen2.5:0.5b`: the real-model branch reads
+`ANANSI_REAL_MODEL_TAG` and defaults to the selected installed
+model `qwen2.5:3b`. The manifest assertion still checks the
+manifest shows the model actually requested (now via the
+variable, not a literal), the answer assertion still requires
+/SQLite/i, and the citation and cancel assertions are
+unchanged. Exercised on this machine with
+`ANANSI_REAL_MODEL=1` (default 3b, Ollama serve already
+running): 1 passed in 25.0s, including the real-model answer,
+manifest, and cancel flow. The mode exclusion recorded in the
+browser inventory is therefore closed for Linux.

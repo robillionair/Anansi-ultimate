@@ -131,8 +131,16 @@ test('integrated ask anansi workflow: grounded citations, missing evidence, offl
 
     expect(external).toBe(0);
     if(process.env.ANANSI_REAL_MODEL==='1'){
+      // Parameterized real-model mode (benchmark Repair 4): the model
+      // comes from ANANSI_REAL_MODEL_TAG and defaults to the selected
+      // installed model qwen2.5:3b instead of requiring qwen2.5:0.5b.
+      // The assertions below still check the manifest shows the model
+      // that was actually requested, and the answer still must match
+      // /SQLite/i; only the model name is parameterized, nothing is
+      // weakened.
+      const realModel = process.env.ANANSI_REAL_MODEL_TAG ?? 'qwen2.5:3b';
       await page.getByLabel('Local inference endpoint').fill('http://127.0.0.1:11434');
-      await page.getByLabel('Installed Ollama model').fill('qwen2.5:0.5b');
+      await page.getByLabel('Installed Ollama model').fill(realModel);
       await page.getByLabel('Your Question').fill('What did we decide about local search?');
       await page.getByRole('button',{name:'Ask Question',exact:true}).click();
       await expect(page.getByRole('region',{name:'Streaming answer'})).toBeVisible({timeout:180000});
@@ -140,7 +148,7 @@ test('integrated ask anansi workflow: grounded citations, missing evidence, offl
       await expect(page.locator('.answer-text')).toContainText(/SQLite/i);
       await expect(page.locator('.citation-title')).toContainText('Project Aurora Storage Architecture');
       await page.getByRole('button',{name:'View What ANANSI Sent (Disclosure)'}).click();
-      await expect(page.locator('.manifest-metrics')).toContainText('qwen2.5:0.5b');
+      await expect(page.locator('.manifest-metrics')).toContainText(realModel);
       await page.getByRole('button',{name:'Ask Question',exact:true}).click();
       await expect(page.getByRole('button',{name:'Cancel generation'})).toBeVisible();
       await page.getByRole('button',{name:'Cancel generation'}).click();
