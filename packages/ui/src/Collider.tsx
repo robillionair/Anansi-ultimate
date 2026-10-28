@@ -3,8 +3,10 @@ import type {
   Client,
   ColliderControls,
   ColliderExperimentDoc,
+  ColliderMemoryContext,
   ColliderResult,
   DisclosureRecord,
+  MemoryMetadata,
 } from '@anansi/contracts';
 import { DisclosurePanel } from './Providers';
 import { ColliderRunController } from './colliderRun';
@@ -169,6 +171,53 @@ const CONTROL_VALUES: Record<keyof Omit<ColliderControls, 'budget'>, string[]> =
   preferredOutputType: ['concept', 'architecture', 'product', 'research'],
 };
 
+/**
+ * Strict parser for saved memory context entries (M8
+ * Slice 3): exact keys, bounds mirroring the backend,
+ * unique memories, bounded total. Hashes are shape
+ * checked only here; the backend re-validates them
+ * against revision rows at restore.
+ */
+export function parseColliderMemoryContext(
+  value: unknown,
+): ColliderMemoryContext[] | null {
+  if (!Array.isArray(value)) return null;
+  if (value.length > 8) return null;
+  const seen = new Set<string>();
+  let total = 0;
+  const out: ColliderMemoryContext[] = [];
+  for (const item of value) {
+    if (!isRecord(item)) return null;
+    if (
+      !exactKeys(item, [
+        'memoryId',
+        'revisionId',
+        'version',
+        'title',
+        'content',
+        'contentHash',
+        'privacy',
+      ])
+    ) {
+      return null;
+    }
+    if (typeof item.memoryId !== 'string' || item.memoryId.length === 0) return null;
+    if (typeof item.revisionId !== 'string' || item.revisionId.length === 0) return null;
+    if (seen.has(item.memoryId)) return null;
+    seen.add(item.memoryId);
+    if (typeof item.version !== 'number' || item.version < 1) return null;
+    const title = textField(item.title, 200);
+    const content = textField(item.content, 8000);
+    if (title === null || content === null) return null;
+    total += content.length;
+    if (total > 32000) return null;
+    if (typeof item.contentHash !== 'string' || item.contentHash.length === 0) return null;
+    if (!['private', 'standard', 'public'].includes(item.privacy as string)) return null;
+    out.push(item as unknown as ColliderMemoryContext);
+  }
+  return out;
+}
+
 export function parseColliderExperimentBody(
   body: string,
 ): ColliderExperimentDoc | null {
@@ -179,21 +228,31 @@ export function parseColliderExperimentBody(
     return null;
   }
   if (!isRecord(parsed)) return null;
+  const required = [
+    'format',
+    'version',
+    'beamA',
+    'beamB',
+    'controls',
+    'result',
+    'provider',
+    'model',
+    'disclosure',
+  ];
+  // memoryContext is optional: experiments saved before
+  // Slice 3 carry no context and must still parse.
+  const allowed = [...required, 'memoryContext'];
   if (
-    !exactKeys(parsed, [
-      'format',
-      'version',
-      'beamA',
-      'beamB',
-      'controls',
-      'result',
-      'provider',
-      'model',
-      'disclosure',
-    ])
+    !required.every(key => Object.keys(parsed).includes(key)) ||
+    !Object.keys(parsed).every(key => allowed.includes(key))
   ) {
     return null;
   }
+  const memoryContext =
+    parsed.memoryContext === undefined
+      ? []
+      : parseColliderMemoryContext(parsed.memoryContext);
+  if (memoryContext === null) return null;
   if (parsed.format !== 'anansi-collider-experiment' || parsed.version !== 1) {
     return null;
   }
@@ -228,7 +287,7 @@ export function parseColliderExperimentBody(
     return null;
   }
   if (!isRecord(parsed.disclosure)) return null;
-  return parsed as unknown as ColliderExperimentDoc;
+  return { ...parsed, memoryContext } as unknown as ColliderExperimentDoc;
 }
 
 // ---------------------------------------------------------------------------
@@ -359,6 +418,23 @@ export function ColliderExperimentView({ doc }: { doc: ColliderExperimentDoc }) 
         <summary>Beam B (as supplied)</summary>
         <pre>{doc.beamB}</pre>
       </details>
+      {doc.memoryContext && doc.memoryContext.length > 0 && (
+        <section aria-label="Memory context">
+          <p>
+            <strong>Memory context (as sent at generation time).</strong>{' '}
+            This is the generation-time snapshot: later memory edits do not
+            change it.
+          </p>
+          {doc.memoryContext.map(entry => (
+            <details key={entry.memoryId}>
+              <summary>
+                {entry.title} · revision {entry.version} · {entry.privacy}
+              </summary>
+              <pre>{entry.content}</pre>
+            </details>
+          ))}
+        </section>
+      )}
       <ColliderResultView result={doc.result} />
     </div>
   );
@@ -376,10 +452,19 @@ export const DEFAULT_COLLIDER_CONTROLS: ColliderControls = {
   preferredOutputType: 'concept',
 };
 
+export type ColliderMemoryReviewEntry = {
+  memoryId: string;
+  revisionId: string;
+  version: number;
+  title: string;
+  body: string;
+};
+
 export function ColliderPanel({
   client,
   workspaceId,
   projectId,
+  contextMemories = [],
   notify,
   onSaved,
   busy,
@@ -387,12 +472,18 @@ export function ColliderPanel({
   client: Client;
   workspaceId: string;
   projectId: string;
+  /** Workspace memories offered as optional context (nothing selected). */
+  contextMemories?: MemoryMetadata[];
   notify: (message: string, isError: boolean) => void;
   onSaved: () => void;
   busy: boolean;
 }) {
   const [beamA, setBeamA] = useState('');
   const [beamB, setBeamB] = useState('');
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [review, setReview] = useState<ColliderMemoryReviewEntry[] | null>(null);
+  const [reviewLoading, setReviewLoading] = useState(false);
+  const [reviewError, setReviewError] = useState('');
   const [controls, setControls] = useState<ColliderControls>(
     DEFAULT_COLLIDER_CONTROLS,
   );
@@ -415,6 +506,55 @@ export function ColliderPanel({
     }
     return controllerRef.current;
   }
+
+  // Pre-send review: read each selected memory's current
+  // revision and show exactly what will be sent. A
+  // selection epoch drops late responses for a
+  // superseded selection, so a stale review can never
+  // describe a different selection than the one shown.
+  const reviewEpoch = useRef(0);
+  async function loadReview(
+    ids: string[],
+  ): Promise<ColliderMemoryReviewEntry[]> {
+    const entries: ColliderMemoryReviewEntry[] = [];
+    for (const id of ids) {
+      const read = await client.readMemory(workspaceId, id);
+      entries.push({
+        memoryId: read.memory.id,
+        revisionId: read.memory.revisionId,
+        version: read.memory.version,
+        title: read.memory.title,
+        body: read.body,
+      });
+    }
+    return entries;
+  }
+  useEffect(() => {
+    if (selectedIds.length === 0) {
+      setReview(null);
+      setReviewError('');
+      setReviewLoading(false);
+      return;
+    }
+    const epoch = ++reviewEpoch.current;
+    setReviewLoading(true);
+    setReviewError('');
+    void loadReview(selectedIds)
+      .then(entries => {
+        if (epoch !== reviewEpoch.current) return;
+        setReview(entries);
+        setReviewLoading(false);
+      })
+      .catch(() => {
+        if (epoch !== reviewEpoch.current) return;
+        setReview(null);
+        setReviewError(
+          'A selected memory could not be read; refresh the selection and try again.',
+        );
+        setReviewLoading(false);
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedIds.join(',')]);
 
   // Poll the active run; unmount (project switch, panel
   // close) cancels it through the controller reset.
@@ -477,6 +617,29 @@ export function ColliderPanel({
     setResult(null);
     setSavedArtifact('');
     setValidating(false);
+    // Submit exactly the reviewed revisions: re-read the
+    // selection at submit time so the request carries the
+    // revisions the review displayed, not a stale list.
+    let memoryContext: { memoryId: string; revisionId: string }[] = [];
+    if (selectedIds.length > 0) {
+      try {
+        const entries = await loadReview(selectedIds);
+        setReview(entries);
+        memoryContext = entries.map(e => ({
+          memoryId: e.memoryId,
+          revisionId: e.revisionId,
+        }));
+      } catch {
+        setRun({
+          runId: '',
+          status: 'failed',
+          partialChars: 0,
+          error:
+            'A selected memory could not be read; refresh the selection and try again.',
+        });
+        return;
+      }
+    }
     let started;
     try {
       started = await controller().start({
@@ -484,6 +647,7 @@ export function ColliderPanel({
         beamA,
         beamB,
         controls,
+        memoryContext,
         zeroCostLock: lock,
       });
     } catch (e) {
@@ -539,8 +703,7 @@ export function ColliderPanel({
         useful combinations. Supplied text is treated as private data, never as
         instructions to the model. Nothing starts until you press Collide Ideas.
         Later slices will add URL fetching, document ingestion, saved-project
-        and memory selection, 3D visualization and Forge transfer; none of
-        those are available here.
+        selection and 3D visualization; none of those are available here.
       </p>
       <form
         onSubmit={e => {
@@ -566,6 +729,53 @@ export function ColliderPanel({
           maxLength={8000}
           rows={5}
         />
+        <fieldset>
+          <legend>Memory context (optional)</legend>
+          <p className="help">
+            Nothing is selected automatically. Selecting, reviewing or
+            changing context starts no inference; only the memories you
+            check, at the revisions shown below, are sent when you press
+            Collide Ideas.
+          </p>
+          {contextMemories.length === 0 && (
+            <p className="help">No other memories in this workspace yet.</p>
+          )}
+          {contextMemories.map(m => (
+            <label key={m.id}>
+              <input
+                type="checkbox"
+                checked={selectedIds.includes(m.id)}
+                onChange={e => {
+                  setSelectedIds(previous =>
+                    e.target.checked
+                      ? [...previous, m.id]
+                      : previous.filter(id => id !== m.id),
+                  );
+                }}
+              />{' '}
+              {m.title} · Revision {m.version} · {m.privacy}
+            </label>
+          ))}
+        </fieldset>
+        {selectedIds.length > 0 && (
+          <section aria-label="Memory context to send">
+            <p className="help">
+              Exactly these revisions will be sent. Nothing is sent until
+              you press Collide Ideas.
+            </p>
+            {reviewLoading && <p role="status">Loading the selected memory review…</p>}
+            {reviewError && <p role="alert">{reviewError}</p>}
+            {review &&
+              review.map(entry => (
+                <details key={entry.memoryId}>
+                  <summary>
+                    {entry.title} · revision {entry.version}
+                  </summary>
+                  <pre>{entry.body}</pre>
+                </details>
+              ))}
+          </section>
+        )}
         <fieldset>
           <legend>Advanced controls</legend>
           <p className="help">

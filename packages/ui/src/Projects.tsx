@@ -551,7 +551,8 @@ export function Projects({ client, workspaceId }: { client: Client; workspaceId:
             <p className="help">
               Collide two beams of text and explore combinations across
               domains. Results are model-generated hypotheses, not researched
-              facts. Only the two texts below are sent, exactly as the
+              facts. Only the two texts below, plus any memories you
+              explicitly select as context, are sent, exactly as the
               disclosure after collision shows.
             </p>
             {current && (
@@ -560,6 +561,7 @@ export function Projects({ client, workspaceId }: { client: Client; workspaceId:
                 client={client}
                 workspaceId={workspaceId}
                 projectId={current.memory.id}
+                contextMemories={contextMemories}
                 notify={(message, isError) => { if (isError) setError(message); else setNotice(message); }}
                 onSaved={async () => {
                   const artList = await client.listProjectArtifacts(workspaceId, current.memory.id);

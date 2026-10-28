@@ -170,3 +170,89 @@ test('experiment view pins provider, controls and exact beams and stays immutabl
   assert.match(html, /this record is immutable/);
   assert.match(html, /not factually verified/);
 });
+
+test('experiment body parser accepts memory context and rejects malformed entries', () => {
+  const withContext = JSON.parse(validExperimentBody());
+  withContext.memoryContext = [
+    {
+      memoryId: 'm'.repeat(32),
+      revisionId: 'r'.repeat(32),
+      version: 2,
+      title: 'Tide notes',
+      content: '  Revision B tide observations.\n',
+      contentHash: 'a'.repeat(64),
+      privacy: 'private',
+    },
+  ];
+  const parsed = parseColliderExperimentBody(JSON.stringify(withContext));
+  assert.ok(parsed);
+  assert.equal(parsed!.memoryContext!.length, 1);
+  assert.equal(parsed!.memoryContext![0].content, '  Revision B tide observations.\n');
+  // Older experiments without the field still parse, with empty context.
+  const legacy = parseColliderExperimentBody(validExperimentBody())!;
+  assert.deepEqual(legacy.memoryContext, []);
+  // Malformed entries refuse: bad privacy, duplicate memory, missing hash.
+  for (const bad of [
+    { ...withContext.memoryContext[0], privacy: 'sealed' },
+    { ...withContext.memoryContext[0], contentHash: '' },
+  ]) {
+    const doc = JSON.parse(validExperimentBody());
+    doc.memoryContext = [bad];
+    assert.equal(parseColliderExperimentBody(JSON.stringify(doc)), null);
+  }
+  const dup = JSON.parse(validExperimentBody());
+  dup.memoryContext = [withContext.memoryContext[0], withContext.memoryContext[0]];
+  assert.equal(parseColliderExperimentBody(JSON.stringify(dup)), null);
+});
+
+test('experiment view shows generation-time memory context verbatim', () => {
+  const doc = JSON.parse(validExperimentBody());
+  doc.memoryContext = [
+    {
+      memoryId: 'm'.repeat(32),
+      revisionId: 'r'.repeat(32),
+      version: 2,
+      title: 'Tide notes',
+      content: 'Revision B tide observations.',
+      contentHash: 'a'.repeat(64),
+      privacy: 'private',
+    },
+  ];
+  const parsed = parseColliderExperimentBody(JSON.stringify(doc))!;
+  const html = renderToStaticMarkup(<ColliderExperimentView doc={parsed} />);
+  assert.match(html, /Memory context \(as sent at generation time\)/);
+  assert.match(html, /Tide notes · revision 2/);
+  assert.match(html, /Revision B tide observations\./);
+  assert.match(html, /later memory edits do not change it/);
+  const legacy = renderToStaticMarkup(
+    <ColliderExperimentView doc={parseColliderExperimentBody(validExperimentBody())!} />,
+  );
+  assert.doesNotMatch(legacy, /Memory context \(as sent/);
+});
+
+test('panel offers unselected memory context and starts nothing on render', () => {
+  let starts = 0;
+  const client = {
+    startProjectCollider: () => {
+      starts += 1;
+      return Promise.resolve({ runId: 'r' });
+    },
+  } as any;
+  const html = renderToStaticMarkup(
+    <ColliderPanel
+      client={client}
+      workspaceId={'a'.repeat(32)}
+      projectId={'c'.repeat(32)}
+      contextMemories={[
+        { id: 'm'.repeat(32), title: 'Tide notes', version: 2, privacy: 'private' } as any,
+      ]}
+      notify={() => {}}
+      onSaved={() => {}}
+      busy={false}
+    />,
+  );
+  assert.equal(starts, 0);
+  assert.match(html, /Memory context \(optional\)/);
+  assert.match(html, /Tide notes · Revision 2/);
+  assert.match(html, /Nothing is selected automatically/);
+});
