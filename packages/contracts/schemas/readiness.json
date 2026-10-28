@@ -1453,6 +1453,45 @@
         ],
         "type": "object"
       },
+      "ColliderMemoryContext": {
+        "additionalProperties": false,
+        "description": "One resolved memory context entry, saved verbatim\nwith the experiment as generation-time provenance.\nLater edits to the memory never change this snapshot;\nthe pinned hash lets restore re-validate it against\nthe source package's revision rows.",
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "contentHash": {
+            "type": "string"
+          },
+          "memoryId": {
+            "type": "string"
+          },
+          "privacy": {
+            "type": "string"
+          },
+          "revisionId": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "version": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "memoryId",
+          "revisionId",
+          "version",
+          "title",
+          "content",
+          "contentHash",
+          "privacy"
+        ],
+        "type": "object"
+      },
       "ColliderProductization": {
         "additionalProperties": false,
         "description": "Productization proposals (§25 stage 6).",
@@ -1646,7 +1685,7 @@
     },
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
-    "description": "The saved experiment body (format\n`anansi-collider-experiment` v1): exact beams,\nresolved controls, validated result, and\nprovider/model provenance with disclosure.",
+    "description": "The saved experiment body (format\n`anansi-collider-experiment` v1): exact beams,\nresolved controls, validated result, and\nprovider/model provenance with disclosure.\n`memory_context` is optional and defaulted so\nexperiments saved before Slice 3 (no memory\ncontext) still parse: absence means no context.",
     "properties": {
       "beamA": {
         "type": "string"
@@ -1662,6 +1701,13 @@
       },
       "format": {
         "type": "string"
+      },
+      "memoryContext": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/ColliderMemoryContext"
+        },
+        "type": "array"
       },
       "model": {
         "type": "string"
@@ -2369,6 +2415,23 @@
           }
         },
         "type": "object"
+      },
+      "ColliderMemorySelection": {
+        "additionalProperties": false,
+        "description": "One explicitly selected memory, by reference only.\nThe client never supplies a body, privacy label,\nworkspace claim or revision provenance: the backend\nresolves the pair itself (see `resolve_memory_context`)\nand refuses anything unresolvable before provider\ntraffic. The revision id is the exact revision the\npre-send review displayed.",
+        "properties": {
+          "memoryId": {
+            "type": "string"
+          },
+          "revisionId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "memoryId",
+          "revisionId"
+        ],
+        "type": "object"
       }
     },
     "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -2397,6 +2460,12 @@
           "preferredOutputType": "concept",
           "technicalDepth": "standard"
         }
+      },
+      "memoryContext": {
+        "items": {
+          "$ref": "#/$defs/ColliderMemorySelection"
+        },
+        "type": "array"
       },
       "mode": {
         "type": [

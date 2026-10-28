@@ -355,6 +355,9 @@ export type RoutingMode = "auto" | "autoFree" | "private" | "fast" | "deep" | "c
  * `anansi-collider-experiment` v1): exact beams,
  * resolved controls, validated result, and
  * provider/model provenance with disclosure.
+ * `memory_context` is optional and defaulted so
+ * experiments saved before Slice 3 (no memory
+ * context) still parse: absence means no context.
  */
 export interface ColliderExperimentDoc {
   beamA: string;
@@ -362,6 +365,7 @@ export interface ColliderExperimentDoc {
   controls: ColliderControls;
   disclosure: DisclosureRecord;
   format: string;
+  memoryContext?: ColliderMemoryContext[];
   model: string;
   provider: string;
   result: ColliderResult;
@@ -408,6 +412,22 @@ export interface AttemptRecord {
 export interface Usage {
   inputTokens: number;
   outputTokens: number;
+}
+/**
+ * One resolved memory context entry, saved verbatim
+ * with the experiment as generation-time provenance.
+ * Later edits to the memory never change this snapshot;
+ * the pinned hash lets restore re-validate it against
+ * the source package's revision rows.
+ */
+export interface ColliderMemoryContext {
+  content: string;
+  contentHash: string;
+  memoryId: string;
+  privacy: string;
+  revisionId: string;
+  title: string;
+  version: number;
 }
 /**
  * The validated six-section collision result.
@@ -641,6 +661,7 @@ export interface ColliderStartRequest {
   beamB: string;
   contractVersion?: number;
   controls?: ColliderControls;
+  memoryContext?: ColliderMemorySelection[];
   mode?: string | null;
   model?: string | null;
   permitId?: string | null;
@@ -661,6 +682,19 @@ export interface ColliderControls {
   practicality?: string;
   preferredOutputType?: string;
   technicalDepth?: string;
+}
+/**
+ * One explicitly selected memory, by reference only.
+ * The client never supplies a body, privacy label,
+ * workspace claim or revision provenance: the backend
+ * resolves the pair itself (see `resolve_memory_context`)
+ * and refuses anything unresolvable before provider
+ * traffic. The revision id is the exact revision the
+ * pre-send review displayed.
+ */
+export interface ColliderMemorySelection {
+  memoryId: string;
+  revisionId: string;
 }
 /**
  * Cost knowledge about a model. `Unknown` is treated as paid everywhere

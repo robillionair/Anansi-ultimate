@@ -712,7 +712,14 @@ impl Storage {
         }
         let connection = self.connection(false)?.ok_or_else(missing)?;
         let limit = r.limit.unwrap_or(50);
-        let mut statement=connection.prepare("SELECT r.metadata FROM memory_revisions r JOIN memories m ON m.workspace_id=r.workspace_id AND m.id=r.memory_id WHERE r.workspace_id=?1 AND ((?2 IS NULL AND r.id=m.current_revision) OR r.memory_id=?2) AND (?2 IS NOT NULL OR ((?5 IS NULL OR json_extract(r.metadata,'$.kind')=?5) AND (?6 OR json_extract(r.metadata,'$.status')!='archived') AND (?7 OR json_extract(r.metadata,'$.validUntil') IS NULL OR julianday(json_extract(r.metadata,'$.validUntil'))>julianday(?8)))) ORDER BY r.memory_id,r.version DESC LIMIT ?3 OFFSET ?4").map_err(|_|unavailable())?;
+        // Sealed rows are excluded in SQL, not merely
+        // filtered after the read: a workspace containing
+        // a Sealed memory must still list its other
+        // memories (the collider picker depends on this),
+        // and Sealed content is never disclosed. The
+        // allow_plaintext check below stays as a
+        // backstop for any row that slips through.
+        let mut statement=connection.prepare("SELECT r.metadata FROM memory_revisions r JOIN memories m ON m.workspace_id=r.workspace_id AND m.id=r.memory_id WHERE r.workspace_id=?1 AND json_extract(r.metadata,'$.privacy')!='sealed' AND ((?2 IS NULL AND r.id=m.current_revision) OR r.memory_id=?2) AND (?2 IS NOT NULL OR ((?5 IS NULL OR json_extract(r.metadata,'$.kind')=?5) AND (?6 OR json_extract(r.metadata,'$.status')!='archived') AND (?7 OR json_extract(r.metadata,'$.validUntil') IS NULL OR julianday(json_extract(r.metadata,'$.validUntil'))>julianday(?8)))) ORDER BY r.memory_id,r.version DESC LIMIT ?3 OFFSET ?4").map_err(|_|unavailable())?;
         let rows = statement
             .query_map(
                 params![

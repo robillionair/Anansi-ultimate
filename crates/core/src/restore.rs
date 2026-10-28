@@ -288,6 +288,82 @@ fn fix_transfer_receipt_hashes(
     Ok(())
 }
 
+/// Fix-up pass over the prepared `artifact_versions`
+/// rows, after every row's references have been
+/// remapped: a transferred concept — and its transfer
+/// approval receipt — pin their source experiment by
+/// content hash, and a context-bearing experiment's body
+/// changes on restore (its memory ids remap), so its
+/// hash changes too. The pinned experiment hash is
+/// rewritten to the restored experiment row's recomputed
+/// hash for the pinned version, so the binding follows
+/// the restored equivalent instead of breaking. This
+/// mirrors the specification-approval and receipt
+/// concept-hash fix-ups; it never recomputes a hash
+/// from an unvalidated original, because pre-validation
+/// already approved the original bindings.
+fn fix_transfer_experiment_hashes(
+    names: &[String],
+    values: &mut [Vec<rusqlite::types::Value>],
+) -> Result<(), CommandError> {
+    use rusqlite::types::Value;
+    let index = |name: &str| -> Result<usize, CommandError> {
+        names
+            .iter()
+            .position(|n| n == name)
+            .ok_or_else(crate::jobs::invalid)
+    };
+    let type_i = index("artifact_type")?;
+    let body_i = index("body")?;
+    let hash_i = index("content_hash")?;
+    let id_i = index("artifact_id")?;
+    let version_i = index("version")?;
+    let mut experiment_hashes: std::collections::BTreeMap<(String, i64), String> =
+        std::collections::BTreeMap::new();
+    for row in values.iter() {
+        if matches!(&row[type_i], Value::Text(t) if t == "experiment")
+            && let (Value::Text(id), Value::Integer(version), Value::Text(hash)) =
+                (&row[id_i], &row[version_i], &row[hash_i])
+        {
+            experiment_hashes.insert((id.clone(), *version), hash.clone());
+        }
+    }
+    for row in values.iter_mut() {
+        let is_concept = matches!(&row[type_i], Value::Text(t) if t == "concept");
+        let is_receipt = matches!(&row[type_i], Value::Text(t) if t == "transfer-approval");
+        if !is_concept && !is_receipt {
+            continue;
+        }
+        let Value::Text(body) = &row[body_i].clone() else {
+            continue;
+        };
+        let mut doc: serde_json::Value =
+            serde_json::from_str(body).map_err(|_| crate::jobs::invalid())?;
+        let format = doc.get("format").and_then(|v| v.as_str());
+        if (is_concept && format != Some("anansi-forge-concept"))
+            || (is_receipt && format != Some("anansi-transfer-approval"))
+        {
+            continue;
+        }
+        let experiment_id = doc
+            .get("sourceExperimentArtifactId")
+            .and_then(|v| v.as_str())
+            .ok_or_else(crate::jobs::invalid)?;
+        let experiment_version = doc
+            .get("sourceExperimentVersion")
+            .and_then(|v| v.as_u64())
+            .ok_or_else(crate::jobs::invalid)? as i64;
+        let hash = experiment_hashes
+            .get(&(experiment_id.to_string(), experiment_version))
+            .ok_or_else(crate::jobs::invalid)?;
+        doc["sourceExperimentContentHash"] = serde_json::Value::String(hash.clone());
+        let rewritten = serde_json::to_string(&doc).map_err(|_| crate::jobs::invalid())?;
+        row[hash_i] = Value::Text(crate::content::hash(rewritten.as_bytes()));
+        row[body_i] = Value::Text(rewritten);
+    }
+    Ok(())
+}
+
 fn fix_review_hashes(
     names: &[String],
     values: &mut [Vec<rusqlite::types::Value>],
@@ -759,13 +835,14 @@ fn validate_original_experiment_bindings(
 ) -> Result<(), CommandError> {
     let mut q = source
         .prepare(
-            "SELECT body, content_hash FROM artifact_versions WHERE artifact_type = 'experiment'",
+            "SELECT workspace_id, body, content_hash FROM artifact_versions WHERE artifact_type = 'experiment'",
         )
         .map_err(|_| crate::jobs::invalid())?;
     let mut rows = q.query([]).map_err(|_| crate::jobs::invalid())?;
     while let Some(row) = rows.next().map_err(|_| crate::jobs::invalid())? {
-        let body: String = row.get(0).map_err(|_| crate::jobs::invalid())?;
-        let content_hash: String = row.get(1).map_err(|_| crate::jobs::invalid())?;
+        let artifact_workspace: String = row.get(0).map_err(|_| crate::jobs::invalid())?;
+        let body: String = row.get(1).map_err(|_| crate::jobs::invalid())?;
+        let content_hash: String = row.get(2).map_err(|_| crate::jobs::invalid())?;
         // A body that is not JSON at all cannot be a
         // collider record: generic manual experiments
         // restore untouched.
@@ -781,6 +858,45 @@ fn validate_original_experiment_bindings(
         let doc: crate::collider::ColliderExperimentDoc =
             serde_json::from_str(&body).map_err(|_| crate::jobs::invalid())?;
         crate::collider::validate_experiment_doc(&doc).map_err(|_| crate::jobs::invalid())?;
+        // M8 Slice 3: every pinned memory context entry
+        // must resolve to a real revision row in the
+        // source package — same memory, same workspace,
+        // matching body hash, non-Sealed metadata — and
+        // the snapshot content must hash to the pinned
+        // hash. A fabricated or Sealed original refuses
+        // the whole restore before any destination state
+        // is published; nothing here repairs a hash.
+        for entry in &doc.memory_context {
+            let found: Option<(String, String, String, String)> = source
+                .query_row(
+                    "SELECT memory_id, workspace_id, body_hash, metadata FROM memory_revisions WHERE id = ?1",
+                    [entry.revision_id.clone()],
+                    |r| {
+                        Ok((
+                            r.get::<_, String>(0)?,
+                            r.get::<_, String>(1)?,
+                            r.get::<_, String>(2)?,
+                            r.get::<_, String>(3)?,
+                        ))
+                    },
+                )
+                .ok();
+            let Some((owner_memory, owner_workspace, row_hash, raw_meta)) = found else {
+                return Err(crate::jobs::invalid());
+            };
+            if owner_memory != entry.memory_id
+                || owner_workspace != artifact_workspace
+                || row_hash != entry.content_hash
+                || crate::content::hash(entry.content.as_bytes()) != entry.content_hash
+            {
+                return Err(crate::jobs::invalid());
+            }
+            let meta: serde_json::Value =
+                serde_json::from_str(&raw_meta).map_err(|_| crate::jobs::invalid())?;
+            if meta.get("privacy").and_then(|v| v.as_str()) == Some("sealed") {
+                return Err(crate::jobs::invalid());
+            }
+        }
     }
     Ok(())
 }
@@ -940,6 +1056,31 @@ fn remap_artifact_row(
         if let Value::Text(body) = &columns[body_i]
             && let Some(rewritten) =
                 crate::forge::remap_specification_approval_references(body, ids)?
+        {
+            columns[hash_i] = Value::Text(crate::content::hash(rewritten.as_bytes()));
+            columns[body_i] = Value::Text(rewritten);
+        }
+    }
+    // M8 Slice 3 collider experiments (type `experiment`,
+    // body format `anansi-collider-experiment`) pin
+    // memory context by memory and revision id: both
+    // resolve to the restored memory/revision, fail
+    // closed when either is not in the package, and the
+    // revision's owner must match the pinned memory in
+    // the artifact's own workspace. Snapshot content and
+    // pinned hashes stay verbatim; the row hash is
+    // recomputed when the body changed.
+    let is_experiment = matches!(&columns[type_i], Value::Text(t) if t == "experiment");
+    if is_experiment {
+        let body_i = index("body")?;
+        let hash_i = index("content_hash")?;
+        if let Value::Text(body) = &columns[body_i]
+            && let Some(rewritten) = crate::collider::remap_experiment_memory_references(
+                body,
+                ids,
+                revision_owners,
+                old_workspace,
+            )?
         {
             columns[hash_i] = Value::Text(crate::content::hash(rewritten.as_bytes()));
             columns[body_i] = Value::Text(rewritten);
@@ -1245,6 +1386,7 @@ impl crate::storage::Storage {
                 fix_deliverable_hashes(&names, &mut values)?;
                 fix_review_hashes(&names, &mut values)?;
                 fix_transfer_receipt_hashes(&names, &mut values)?;
+                fix_transfer_experiment_hashes(&names, &mut values)?;
             }
             prepared.push((table, names, values));
         }
