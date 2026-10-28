@@ -1672,12 +1672,7 @@ mod experiment_binding_tests {
         .to_string()
     }
 
-    fn setup(
-        body: &str,
-        revision_meta: &str,
-        row_hash: &str,
-        owner_memory: &str,
-    ) -> Connection {
+    fn setup(body: &str, revision_meta: &str, row_hash: &str, owner_memory: &str) -> Connection {
         let db = Connection::open_in_memory().unwrap();
         db.execute_batch(
             "CREATE TABLE artifact_versions (workspace_id TEXT, body TEXT, content_hash TEXT, artifact_type TEXT);

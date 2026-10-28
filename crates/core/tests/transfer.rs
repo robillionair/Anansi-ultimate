@@ -1180,7 +1180,10 @@ fn context_experiment_transfer_survives_restore_and_stays_forge_admissible() {
     let dir2 = tempfile::tempdir().unwrap();
     let fresh = Core::with_storage_root(dir2.path().to_path_buf());
     let restored = try_upload_restore(&fresh, &bytes, "context-transfer").unwrap();
-    let restored_ws = restored["workspaces"][0]["id"].as_str().unwrap().to_string();
+    let restored_ws = restored["workspaces"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
     let projects = fresh
         .memory_command(
             "list",
@@ -1195,9 +1198,15 @@ fn context_experiment_transfer_survives_restore_and_stays_forge_admissible() {
         )
         .unwrap();
     let artifacts = list["artifacts"].as_array().unwrap();
-    let restored_experiment = artifacts.iter().find(|a| a["type"] == "experiment").unwrap();
+    let restored_experiment = artifacts
+        .iter()
+        .find(|a| a["type"] == "experiment")
+        .unwrap();
     let restored_concept = artifacts.iter().find(|a| a["type"] == "concept").unwrap();
-    let restored_receipt = artifacts.iter().find(|a| a["type"] == "transfer-approval").unwrap();
+    let restored_receipt = artifacts
+        .iter()
+        .find(|a| a["type"] == "transfer-approval")
+        .unwrap();
     let restored_experiment_id = restored_experiment["artifactId"].as_str().unwrap();
     let restored_concept_id = restored_concept["artifactId"].as_str().unwrap();
     let experiment_body: Value = serde_json::from_str(
@@ -1212,7 +1221,10 @@ fn context_experiment_transfer_survives_restore_and_stays_forge_admissible() {
     )
     .unwrap();
     // The snapshot survived with remapped references.
-    assert_eq!(experiment_body["memoryContext"][0]["content"], "Revision B tide observations.");
+    assert_eq!(
+        experiment_body["memoryContext"][0]["content"],
+        "Revision B tide observations."
+    );
     assert_ne!(experiment_body["memoryContext"][0]["memoryId"], mem_id);
     assert_ne!(experiment_body["memoryContext"][0]["revisionId"], mem_rev);
     let restored_hash = content::hash(
@@ -1237,7 +1249,10 @@ fn context_experiment_transfer_survives_restore_and_stays_forge_admissible() {
             .unwrap(),
     )
     .unwrap();
-    assert_eq!(concept_body["sourceExperimentArtifactId"], restored_experiment_id);
+    assert_eq!(
+        concept_body["sourceExperimentArtifactId"],
+        restored_experiment_id
+    );
     assert_eq!(concept_body["sourceExperimentContentHash"], restored_hash);
     let receipt_body: Value = serde_json::from_str(
         fresh
@@ -1250,7 +1265,10 @@ fn context_experiment_transfer_survives_restore_and_stays_forge_admissible() {
             .unwrap(),
     )
     .unwrap();
-    assert_eq!(receipt_body["sourceExperimentArtifactId"], restored_experiment_id);
+    assert_eq!(
+        receipt_body["sourceExperimentArtifactId"],
+        restored_experiment_id
+    );
     assert_eq!(receipt_body["sourceExperimentContentHash"], restored_hash);
     // Forge admission on the restored workspace still
     // accepts the transferred concept (receipt + hashes
@@ -1292,12 +1310,17 @@ fn context_experiment_transfer_survives_restore_and_stays_forge_admissible() {
             )
             .unwrap();
         let status = polled["status"].as_str().unwrap().to_string();
-        if matches!(status.as_str(), "complete" | "invalid" | "failed" | "cancelled")
-            || Instant::now() > deadline
+        if matches!(
+            status.as_str(),
+            "complete" | "invalid" | "failed" | "cancelled"
+        ) || Instant::now() > deadline
         {
             break status;
         }
         std::thread::sleep(Duration::from_millis(25));
     };
-    assert_eq!(status, "complete", "restored transfer must stay Forge-admissible");
+    assert_eq!(
+        status, "complete",
+        "restored transfer must stay Forge-admissible"
+    );
 }

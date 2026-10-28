@@ -1050,9 +1050,21 @@ fn seal_memory(root: &Path, memory_id: &str) {
 fn memory_context_sent_on_wire_and_saved_as_provenance() {
     let fake = start_fake();
     let f = fixture(&fake, "free");
-    let (a_id, a_rev, a_ver) = create_memory(&f, "Harbor notes", "Harbor throughput doubles when tides align.");
-    let (b_id, b_rev, _) = create_memory(&f, "Fungal notes", "Hyphae share nutrients along gradients.");
-    let (_c_id, _, _) = create_memory(&f, "Unselected notes", "This content must never reach the provider.");
+    let (a_id, a_rev, a_ver) = create_memory(
+        &f,
+        "Harbor notes",
+        "Harbor throughput doubles when tides align.",
+    );
+    let (b_id, b_rev, _) = create_memory(
+        &f,
+        "Fungal notes",
+        "Hyphae share nutrients along gradients.",
+    );
+    let (_c_id, _, _) = create_memory(
+        &f,
+        "Unselected notes",
+        "This content must never reach the provider.",
+    );
     let started = start_collide_ctx(
         &f,
         "Trading.",
@@ -1067,9 +1079,18 @@ fn memory_context_sent_on_wire_and_saved_as_provenance() {
     let polled = poll_until(&f, &run_id);
     assert_eq!(polled["status"], "complete", "{polled}");
     let wire = wire_text(&fake);
-    assert!(wire.contains("Harbor throughput doubles when tides align."), "selected A missing from request");
-    assert!(wire.contains("Hyphae share nutrients along gradients."), "selected B missing from request");
-    assert!(!wire.contains("This content must never reach the provider."), "unselected content leaked into request");
+    assert!(
+        wire.contains("Harbor throughput doubles when tides align."),
+        "selected A missing from request"
+    );
+    assert!(
+        wire.contains("Hyphae share nutrients along gradients."),
+        "selected B missing from request"
+    );
+    assert!(
+        !wire.contains("This content must never reach the provider."),
+        "unselected content leaked into request"
+    );
     let saved = f
         .core
         .ai_command(
@@ -1084,11 +1105,20 @@ fn memory_context_sent_on_wire_and_saved_as_provenance() {
     assert_eq!(context[0]["revisionId"], a_rev);
     assert_eq!(context[0]["version"], a_ver);
     assert_eq!(context[0]["title"], "Harbor notes");
-    assert_eq!(context[0]["content"], "Harbor throughput doubles when tides align.");
-    assert_eq!(context[0]["contentHash"], content::hash("Harbor throughput doubles when tides align.".as_bytes()));
+    assert_eq!(
+        context[0]["content"],
+        "Harbor throughput doubles when tides align."
+    );
+    assert_eq!(
+        context[0]["contentHash"],
+        content::hash("Harbor throughput doubles when tides align.".as_bytes())
+    );
     assert_eq!(context[0]["privacy"], "private");
     assert_eq!(context[1]["memoryId"], b_id);
-    assert_eq!(context[1]["content"], "Hyphae share nutrients along gradients.");
+    assert_eq!(
+        context[1]["content"],
+        "Hyphae share nutrients along gradients."
+    );
 }
 
 #[test]
@@ -1113,20 +1143,42 @@ fn memory_context_refusals_make_zero_provider_hits() {
         )
         .unwrap();
     let foreign_id = foreign["memory"]["id"].as_str().unwrap().to_string();
-    let foreign_rev = foreign["memory"]["revisionId"].as_str().unwrap().to_string();
+    let foreign_rev = foreign["memory"]["revisionId"]
+        .as_str()
+        .unwrap()
+        .to_string();
     // A sealed memory: sealed via SQL, since creation refuses sealed drafts.
-    let (sealed_id, sealed_rev, _) = create_memory(&f, "Sealed notes", "Sealed content must never be sent.");
+    let (sealed_id, sealed_rev, _) =
+        create_memory(&f, "Sealed notes", "Sealed content must never be sent.");
     seal_memory(f._dir.path(), &sealed_id);
     let cases: Vec<(&str, Value)> = vec![
-        ("nonexistent memory", json!([{ "memoryId": "m".repeat(32), "revisionId": "r".repeat(32) }])),
-        ("nonexistent revision", json!([{ "memoryId": a_id, "revisionId": "r".repeat(32) }])),
-        ("foreign workspace", json!([{ "memoryId": foreign_id, "revisionId": foreign_rev }])),
-        ("sealed", json!([{ "memoryId": sealed_id, "revisionId": sealed_rev }])),
-        ("duplicate", json!([
-            { "memoryId": a_id, "revisionId": a_rev },
-            { "memoryId": a_id, "revisionId": a_rev }
-        ])),
-        ("overlong body", json!([{ "memoryId": b_id, "revisionId": b_rev }])),
+        (
+            "nonexistent memory",
+            json!([{ "memoryId": "m".repeat(32), "revisionId": "r".repeat(32) }]),
+        ),
+        (
+            "nonexistent revision",
+            json!([{ "memoryId": a_id, "revisionId": "r".repeat(32) }]),
+        ),
+        (
+            "foreign workspace",
+            json!([{ "memoryId": foreign_id, "revisionId": foreign_rev }]),
+        ),
+        (
+            "sealed",
+            json!([{ "memoryId": sealed_id, "revisionId": sealed_rev }]),
+        ),
+        (
+            "duplicate",
+            json!([
+                { "memoryId": a_id, "revisionId": a_rev },
+                { "memoryId": a_id, "revisionId": a_rev }
+            ]),
+        ),
+        (
+            "overlong body",
+            json!([{ "memoryId": b_id, "revisionId": b_rev }]),
+        ),
     ];
     // Overlong body: revise B past the 8000-character bound first.
     f.core
@@ -1140,7 +1192,10 @@ fn memory_context_refusals_make_zero_provider_hits() {
         .unwrap();
     let b_rev2 = f
         .core
-        .memory_command("list", json!({ "contractVersion": 1, "workspaceId": f.ws, "id": b_id }))
+        .memory_command(
+            "list",
+            json!({ "contractVersion": 1, "workspaceId": f.ws, "id": b_id }),
+        )
         .unwrap()["memories"][0]["revisionId"]
         .as_str()
         .unwrap()
@@ -1150,8 +1205,15 @@ fn memory_context_refusals_make_zero_provider_hits() {
     cases[5] = ("overlong body", overlong);
     for (label, context) in cases {
         let result = start_collide_ctx(&f, "Trading.", "Mycelium.", context);
-        assert!(result.is_err(), "{label}: unresolvable selection must refuse start");
-        assert_eq!(fake.hits.load(Ordering::SeqCst), 0, "{label}: refusal must not hit the provider");
+        assert!(
+            result.is_err(),
+            "{label}: unresolvable selection must refuse start"
+        );
+        assert_eq!(
+            fake.hits.load(Ordering::SeqCst),
+            0,
+            "{label}: refusal must not hit the provider"
+        );
     }
     // A cost refusal with valid context is still zero-hit (M5 path, unchanged).
     let paid_fake = start_fake();
@@ -1192,7 +1254,10 @@ fn memory_revision_pinning_survives_edits_and_restore() {
             json!({ "contractVersion": 1, "workspaceId": f.ws, "runId": run_id }),
         )
         .unwrap();
-    let artifact_id = saved["artifact"]["artifactId"].as_str().unwrap().to_string();
+    let artifact_id = saved["artifact"]["artifactId"]
+        .as_str()
+        .unwrap()
+        .to_string();
     // Revise the memory to C: the saved experiment must still resolve to B.
     f.core
         .memory_command(
@@ -1205,7 +1270,10 @@ fn memory_revision_pinning_survives_edits_and_restore() {
         .unwrap();
     let reopened = read_version(&f.core, &f.ws, &artifact_id, 1);
     let body: Value = serde_json::from_str(reopened["body"].as_str().unwrap()).unwrap();
-    assert_eq!(body["memoryContext"][0]["content"], "Revision B tide observations.");
+    assert_eq!(
+        body["memoryContext"][0]["content"],
+        "Revision B tide observations."
+    );
     assert_eq!(body["memoryContext"][0]["revisionId"], m_rev_b);
     // Fresh restore: content still B, references remapped to the restored rows.
     let store = Storage::new(f._dir.path().to_path_buf()).unwrap();
@@ -1213,7 +1281,10 @@ fn memory_revision_pinning_survives_edits_and_restore() {
     let fresh_dir = tempfile::tempdir().unwrap();
     let fresh = Core::with_storage_root(fresh_dir.path().to_path_buf());
     let restored = try_upload_restore(&fresh, &bytes, "pinned").unwrap();
-    let restored_ws = restored["workspaces"][0]["id"].as_str().unwrap().to_string();
+    let restored_ws = restored["workspaces"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
     let restored_project = fresh
         .memory_command(
             "list",
@@ -1244,8 +1315,16 @@ fn memory_revision_pinning_survives_edits_and_restore() {
     .unwrap();
     let entry = &restored_body["memoryContext"][0];
     assert_eq!(entry["content"], "Revision B tide observations.");
-    assert_ne!(entry["memoryId"].as_str().unwrap(), m_id, "memory id must remap");
-    assert_ne!(entry["revisionId"].as_str().unwrap(), m_rev_b, "revision id must remap");
+    assert_ne!(
+        entry["memoryId"].as_str().unwrap(),
+        m_id,
+        "memory id must remap"
+    );
+    assert_ne!(
+        entry["revisionId"].as_str().unwrap(),
+        m_rev_b,
+        "revision id must remap"
+    );
     // The remapped reference resolves to the restored revision B body.
     let read_back = fresh
         .memory_command(
@@ -1281,7 +1360,10 @@ fn restore_refuses_tampered_or_misbound_memory_context() {
             json!({ "contractVersion": 1, "workspaceId": f.ws, "runId": run_id }),
         )
         .unwrap();
-    let artifact_id = saved["artifact"]["artifactId"].as_str().unwrap().to_string();
+    let artifact_id = saved["artifact"]["artifactId"]
+        .as_str()
+        .unwrap()
+        .to_string();
     // Control: the valid package restores.
     let store = Storage::new(f._dir.path().to_path_buf()).unwrap();
     let good_bytes = backup_bytes(f._dir.path(), &store, &f.ws);
@@ -1312,7 +1394,11 @@ fn restore_refuses_tampered_or_misbound_memory_context() {
         .workspace_command("list", json!({ "contractVersion": 1 }))
         .unwrap();
     assert!(
-        !listed["workspaces"].as_array().unwrap().iter().any(|w| w["name"] == "tampered"),
+        !listed["workspaces"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|w| w["name"] == "tampered"),
         "tampered restore published a destination workspace"
     );
     // Wrong owner: point the entry at a different memory
@@ -1343,7 +1429,10 @@ fn restore_refuses_tampered_or_misbound_memory_context() {
             json!({ "contractVersion": 1, "workspaceId": f2.ws, "runId": run_id2 }),
         )
         .unwrap();
-    let artifact2 = saved2["artifact"]["artifactId"].as_str().unwrap().to_string();
+    let artifact2 = saved2["artifact"]["artifactId"]
+        .as_str()
+        .unwrap()
+        .to_string();
     let mut doc2: Value = serde_json::from_str(saved2["body"].as_str().unwrap()).unwrap();
     doc2["memoryContext"][0]["memoryId"] = json!(other_id);
     f2.core
@@ -1366,7 +1455,11 @@ fn restore_refuses_tampered_or_misbound_memory_context() {
         .workspace_command("list", json!({ "contractVersion": 1 }))
         .unwrap();
     assert!(
-        !listed3["workspaces"].as_array().unwrap().iter().any(|w| w["name"] == "wrong-owner"),
+        !listed3["workspaces"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|w| w["name"] == "wrong-owner"),
         "wrong-owner restore published a destination workspace"
     );
 }
@@ -1436,5 +1529,8 @@ fn memory_list_skips_sealed_rows() {
         .filter_map(|m| m["id"].as_str())
         .collect();
     assert!(ids.contains(&kept_id.as_str()), "unsealed memory must list");
-    assert!(!ids.contains(&sealed_id.as_str()), "sealed memory must be excluded");
+    assert!(
+        !ids.contains(&sealed_id.as_str()),
+        "sealed memory must be excluded"
+    );
 }
