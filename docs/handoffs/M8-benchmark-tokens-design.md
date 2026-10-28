@@ -326,3 +326,25 @@ distractor test (partial-term chunk with many occurrences ranks
 below the full-fact chunk, proving distinct terms dominate).
 The repair does not change retrieval itself: A1/A3 lexical misses
 remain, addressed separately by the retrieval repair.
+
+## A1/A3 retrieval repair: Ask-scoped query softening (2026-10-28)
+
+Root causes, both in Ask's retrieval query only (global search
+semantics unchanged): the AND query required every question word,
+including prepositions/aggregation words absent from evidence
+("at" in A1; "many", "do", "together" in A3), and exact tokens
+("wings" vs body "wing", "hold" vs "holds"). Repair, all in
+`ask.rs` except where noted: expanded Ask stopwords (at, by, from,
+into, over, under, after, before, during, between, many, much,
+total, together, each, per, do, does); each remaining term is
+stemmed (trailing "es" then "s") and prefix-marked ("wing"*,
+"hold"*) — a recall superset, so no exact match is lost; hybrid
+search strips '*' before semantic embedding so FTS syntax never
+pollutes the semantic query; chunk scoring matches terms
+prefix-tolerantly in either direction so stemmed queries still
+rank fact chunks first. A unit test pins the A1/A3 queries exactly
+(it caught "do", which the first list missed). Fake evidence: A1
+and A3 move from InsufficientEvidence to Answered with correct
+citations (A1: Harbor Pier log, est 148; A3: both wings, est 159).
+No assertion weakened; body_search/hybrid/title_search suites
+unchanged and passing.

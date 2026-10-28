@@ -249,10 +249,13 @@ pub fn hybrid_search_with_status(
                 ));
                 None
             } else {
+                // FTS syntax (notably Ask's '*' prefix marks) must
+                // not leak into the semantic query text.
+                let semantic_query = query_str.replace('*', " ");
                 match crate::semantic::generate_query_vector(
                     request.endpoint.as_deref(),
                     model,
-                    query_str,
+                    &semantic_query,
                 ) {
                     Ok(vec) => Some(vec),
                     Err(e) => {

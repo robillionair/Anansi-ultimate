@@ -108,7 +108,20 @@ fn chunk_relevance(content: &str, terms: &[String]) -> (usize, usize) {
     let mut distinct = 0;
     let mut occurrences = 0;
     for term in terms {
-        let count = tokens.iter().filter(|t| **t == term.as_str()).count();
+        // Prefix-tolerant match in either direction (singular is a
+        // prefix of its plural), so a stemmed Ask query term such as
+        // "lift" still scores a chunk containing "lifts". Exact
+        // matches count first; the prefix rule only widens scoring,
+        // never narrows it.
+        let count = tokens
+            .iter()
+            .filter(|t| {
+                **t == term.as_str()
+                    || (t.len() >= 3
+                        && term.len() >= 3
+                        && (t.starts_with(term.as_str()) || term.starts_with(**t)))
+            })
+            .count();
         if count > 0 {
             distinct += 1;
             occurrences += count;

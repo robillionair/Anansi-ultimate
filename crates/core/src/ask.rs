@@ -71,11 +71,40 @@ pub struct AskResponse {
     pub manifest: DisclosureManifest,
 }
 
+/// Ask's retrieval query: content terms only, each stemmed and
+/// prefix-marked for FTS5. The stopword list covers question-form
+/// words that identify no memory (prepositions, aggregation words
+/// such as "many"/"together") — a natural question routinely contains
+/// words its evidence body does not, and an AND query requiring every
+/// one of them fails with zero hits. Stemming is a recall superset:
+/// "wings" becomes "wing"* (matches wing and wings) and "hold"
+/// becomes "hold"* (matches hold and holds), so no exact match is
+/// ever lost, only plural variants gained. The '*' is FTS syntax,
+/// stripped again before semantic embedding in hybrid search.
+fn ask_search_query(prompt: &str) -> String {
+    extract_query_terms(prompt)
+        .iter()
+        .map(|term| {
+            let stemmed = if term.ends_with("es") && term.len() > 4 {
+                &term[..term.len() - 2]
+            } else if term.ends_with('s') && term.len() > 3 {
+                &term[..term.len() - 1]
+            } else {
+                term.as_str()
+            };
+            format!("{stemmed}*")
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 fn extract_query_terms(prompt: &str) -> Vec<String> {
     let stop_words = [
         "what", "did", "we", "decide", "about", "the", "a", "an", "is", "our", "for", "in", "on",
         "of", "to", "how", "why", "when", "where", "who", "which", "can", "you", "tell", "me",
-        "find", "show", "give", "and", "or", "not", "with",
+        "find", "show", "give", "and", "or", "not", "with", "at", "by", "from", "into", "over",
+        "under", "after", "before", "during", "between", "many", "much", "total", "together",
+        "each", "per", "do", "does",
     ];
 
     let words: Vec<String> = prompt
@@ -345,11 +374,13 @@ impl Core {
         }
 
         // 1. Context Compilation
-        let query_terms = extract_query_terms(trimmed_prompt);
-        let search_query = if !query_terms.is_empty() {
-            query_terms.join(" ")
-        } else {
-            trimmed_prompt.to_string()
+        let search_query = {
+            let q = ask_search_query(trimmed_prompt);
+            if !q.is_empty() {
+                q
+            } else {
+                trimmed_prompt.to_string()
+            }
         };
 
         let storage = self.storage()?;
@@ -627,6 +658,23 @@ mod streaming_protocol_tests {
         assert_eq!(*control.answer.lock().unwrap(), "World!");
         assert!(control.finished.load(Ordering::SeqCst));
     }
+    #[test]
+    fn ask_search_query_drops_function_words_and_stems_plurals() {
+        // Benchmark A1: "at" must not be required; the remaining
+        // terms all appear in the evidence body.
+        assert_eq!(
+            ask_search_query("What is the best launch window for survey boats at Harbor Pier?"),
+            "best* launch* window* survey* boat* harbor* pier*"
+        );
+        // Benchmark A3: "many" and "together" must not be required;
+        // "wings" stems to "wing" (matches wing/wings) and "hold"
+        // prefixes to "hold" (matches hold/holds).
+        assert_eq!(
+            ask_search_query("How many seats do the Harbor Hall wings hold together?"),
+            "seat* harbor* hall* wing* hold*"
+        );
+    }
+
     #[test]
     fn incomplete_and_malformed_http_chunks_are_bounded() {
         assert_eq!(dechunk(b"5\r\nhe").unwrap(), b"");
