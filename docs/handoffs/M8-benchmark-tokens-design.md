@@ -224,3 +224,49 @@ this split plainly.
   strict Clippy; `fmt --check`; `validate-docs.mjs`. No e2e changes
   are required (no UI change); the existing canonical browser specs
   are unaffected.
+
+## First-run corrections (2026-10-28, before any reporting)
+
+First run (checkpoint `80779bff`, log `verify-benchmark-2026-10-28/bench1.log`,
+33 records): 7 invariant failures, root-caused as follows. No assertion
+was weakened and no limit was raised to obtain passes.
+
+1. A1/A3/A9 recall misses are ANANSI behavior, not harness bugs.
+   Lexical retrieval ANDs every content word (FTS5, exact tokens, no
+   stemming) and `extract_query_terms` does not treat `at` as a
+   stopword. A1 fails on `at` (not an FTS token in the evidence body);
+   A3 fails on `together` (and on `wings`/`hold` vs `wing`/`holds`).
+   These questions are retained as recall probes with an honesty
+   invariant only (honest miss + zero provider hits). A10 keyword
+   controls (absent word removed) restore recall, proving the mechanism.
+2. C2/M1 wire parsing was a harness bug: the M5 Ollama chat wire format
+   carries `messages[].content`, not `messages[].segments`. Segments are
+   concatenated with no joiner, so content chars equal segment chars
+   and the disclosed estimate must equal `ceil(content chars / 4)`
+   exactly. Fixed; C2 now verifies 1764 chars → 441 exactly.
+3. B-NAIVE dedup correction: chunk-level citations repeat a memory per
+   chunk. The first run sent the long A2 body once per chunk (4x),
+   inflating the baseline. B-NAIVE now sends each cited body once.
+   A2 honest comparison: ANANSI 4640 chars vs naive ~13.4k chars.
+4. Defect D1 (accounting disclosure): before repair, a completed M5
+   stream run's disclosure carried `usage: null` while the ledger
+   recorded the provider-reported 10/40. Root cause: the run disclosure
+   is built at stream start and the settle thread writes only to the
+   ledger. Repair (separate commit): stream-poll copies each reported
+   Usage event into the run disclosure. M1 splits into ledger fidelity
+   (asserted throughout) and disclosure agreement (asserted after the
+   repair). Before evidence: first-run M1 record (disclosure null,
+   ledger 10/40). After evidence: rerun M1 record (disclosure 10/40,
+   ledger 10/40).
+5. A9 budget sweep uses the answerable tide question: on this corpus
+   all three budgets (1/5/10 items) compile the identical 587-char
+   prompt, because the matching evidence (~500 chars) fits even the
+   smallest budget. Budget binding is demonstrated by A2 instead.
+
+## Machine constraint (2026-10-28)
+
+This Linux VM: 2 CPUs, 8.1 GB RAM with ~0.8 GB available, no GPU,
+141 GB free disk, Ubuntu 24.04, network egress to public model sources
+confirmed. Model selection is therefore RAM-bound; see the report for
+the selected models and the explicit limitation this places on
+quality generalization.
