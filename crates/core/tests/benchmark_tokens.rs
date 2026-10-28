@@ -1343,11 +1343,12 @@ fn benchmark_token_consumption() {
     let mf = collider_fixture(&fake_m5);
     let m1 = run_collider(&mf, &fake_m5, "Trading signals.", "Mycelium networks.", json!([]));
     let (reqs, led_in, led_out) = ledger_totals(&mf.core, &mf.ws);
-    let m1_ok = m1.status == "complete" && led_in == 10 && led_out == 40;
-    // D1 (pre-repair state): the run disclosure never carries settled
-    // usage — only the ledger does. Recorded here, not asserted, until
-    // the D1 repair commit flips this to a hard assertion.
+    // D1 regression: the run disclosure must agree with the ledger.
+    // Before the D1 repair this was false (disclosure usage null while
+    // the ledger recorded 10/40); the repair makes stream-poll carry
+    // reported Usage events into the run disclosure.
     let d1_agrees = m1.disclosure_usage == (Some(10), Some(40));
+    let m1_ok = m1.status == "complete" && led_in == 10 && led_out == 40 && d1_agrees;
     push_record(
         &mut records,
         &mut failures,
@@ -1376,7 +1377,7 @@ fn benchmark_token_consumption() {
             ),
         },
         m1_ok,
-        "M1 ledger fidelity (ledger must equal fake-reported 10/40)",
+        "M1 ledger fidelity + D1 disclosure agreement (both must equal fake-reported 10/40)",
     );
 
     // --- Write results -------------------------------------------------------

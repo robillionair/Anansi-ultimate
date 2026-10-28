@@ -1344,6 +1344,16 @@ pub fn providers_command(
                             Ok(event) => {
                                 let terminal =
                                     matches!(event, Ok(StreamEvent::Completed { .. }) | Err(_));
+                                // D1: the run disclosure is built at stream
+                                // start with usage None, and the settle
+                                // thread records reported usage only in
+                                // the ledger. Carry each reported Usage
+                                // event into the disclosure, so a
+                                // completed run's disclosure agrees with
+                                // the ledger instead of staying null.
+                                if let Ok(StreamEvent::Usage(u)) = &event {
+                                    run.outcome.disclosure.usage = Some(*u);
+                                }
                                 events.push(event_dto(&event));
                                 if terminal {
                                     run.done = true;
