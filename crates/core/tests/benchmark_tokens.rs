@@ -998,6 +998,18 @@ fn ledger_totals(core: &Core, ws: &str) -> (u64, u64, u64) {
     (usage["totalRequests"].as_u64().unwrap_or(0), input, output)
 }
 
+/// Write a compiled prompt to disk for direct provider replay, when
+/// ANANSI_BENCH_PROMPT_DIR is set. Replay (bench-ollama-measure.sh)
+/// needs the exact prompt text; results JSON carries only char counts.
+/// Fails loudly if the directory cannot be created or written, so a
+/// real-model run never silently lacks its replay inputs.
+fn dump_prompt(name: &str, text: &str) {
+    if let Ok(dir) = std::env::var("ANANSI_BENCH_PROMPT_DIR") {
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(std::path::Path::new(&dir).join(format!("{name}.txt")), text).unwrap();
+    }
+}
+
 fn push_record(
     records: &mut Vec<Record>,
     failures: &mut Vec<String>,
@@ -1221,6 +1233,7 @@ fn benchmark_token_consumption() {
             ok,
             "ANANSI evidence/wire invariant",
         );
+        dump_prompt(&format!("{qid}-anansi"), &out.compiled_prompt);
         // B-NAIVE record: full bodies of exactly the cited memories,
         // deduplicated by memory. (A chunk-level citation list repeats a
         // memory per chunk; sending the body once per chunk would inflate
@@ -1270,6 +1283,7 @@ fn benchmark_token_consumption() {
             naive_ok,
             "B-NAIVE cited-set coverage",
         );
+        dump_prompt(&format!("{qid}-naive"), &naive);
     }
 
     // A6: insufficient evidence — zero provider traffic, honest status.
@@ -1605,6 +1619,7 @@ fn benchmark_token_consumption() {
             invariant_ok,
             "A12 budget-truncation probe invariants",
         );
+        dump_prompt("A12-anansi", &out.compiled_prompt);
         let mut seen_titles: Vec<&String> = Vec::new();
         let cited_bodies: Vec<String> = out
             .cited_titles
@@ -1654,6 +1669,7 @@ fn benchmark_token_consumption() {
             naive_ok,
             "A12 B-NAIVE cited-set coverage",
         );
+        dump_prompt("A12-naive", &naive);
     }
 
     // Semantic comparison (real mode only): index embeddings with the
