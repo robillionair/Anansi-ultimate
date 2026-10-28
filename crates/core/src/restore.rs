@@ -1589,3 +1589,153 @@ pub fn restore_to_new_target(source: &Path, target: &Path) -> Result<BackupPrevi
     }
     Ok(verified)
 }
+
+#[cfg(test)]
+mod experiment_binding_tests {
+    use super::*;
+    use rusqlite::Connection;
+
+    fn experiment_body(content: &str, content_hash: &str, memory_id: &str) -> String {
+        serde_json::json!({
+            "format": "anansi-collider-experiment",
+            "version": 1,
+            "beamA": "Trading.",
+            "beamB": "Mycelium.",
+            "controls": {
+                "creativity": "balanced",
+                "technicalDepth": "standard",
+                "practicality": "balanced",
+                "innovationDistance": "moderate",
+                "budget": "",
+                "preferredOutputType": "concept"
+            },
+            "memoryContext": [{
+                "memoryId": memory_id,
+                "revisionId": "rev-1",
+                "version": 1,
+                "title": "Notes",
+                "content": content,
+                "contentHash": content_hash,
+                "privacy": "private"
+            }],
+            "result": {
+                "sourceUnderstanding": "Two domains.",
+                "conceptualPrimitives": ["a", "b", "c"],
+                "crossDomainMappings": ["m1", "m2"],
+                "combinations": [
+                    { "name": "one", "description": "first" },
+                    { "name": "two", "description": "second" }
+                ],
+                "feasibility": {
+                    "hypotheses": ["h"],
+                    "dependencies": [],
+                    "unknownCosts": [],
+                    "risks": ["r"],
+                    "testability": "testable"
+                },
+                "productization": {
+                    "conceptBrief": "brief",
+                    "architecture": "arch",
+                    "roadmap": "road",
+                    "testPlan": "plan",
+                    "prototypeProposal": "proto"
+                }
+            },
+            "provider": "ollama",
+            "model": "llama-x",
+            "disclosure": {
+                "provider": "ollama",
+                "model": "llama-x",
+                "endpointHost": "127.0.0.1",
+                "local": true,
+                "routingMode": "auto",
+                "routingReason": "test",
+                "messageCount": 1,
+                "segmentCount": 1,
+                "redactionCount": 0,
+                "estimatedInputTokens": 10,
+                "costClass": "free",
+                "usage": null,
+                "attempts": []
+            }
+        })
+        .to_string()
+    }
+
+    fn setup(
+        body: &str,
+        revision_meta: &str,
+        row_hash: &str,
+        owner_memory: &str,
+    ) -> Connection {
+        let db = Connection::open_in_memory().unwrap();
+        db.execute_batch(
+            "CREATE TABLE artifact_versions (workspace_id TEXT, body TEXT, content_hash TEXT, artifact_type TEXT);
+             CREATE TABLE memory_revisions (id TEXT, memory_id TEXT, workspace_id TEXT, body_hash TEXT, metadata TEXT);",
+        )
+        .unwrap();
+        let artifact_hash = crate::content::hash(body.as_bytes());
+        db.execute(
+            "INSERT INTO artifact_versions VALUES (?1, ?2, ?3, 'experiment')",
+            rusqlite::params!["ws-1", body, artifact_hash],
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO memory_revisions VALUES ('rev-1', ?1, 'ws-1', ?2, ?3)",
+            rusqlite::params![owner_memory, row_hash, revision_meta],
+        )
+        .unwrap();
+        db
+    }
+
+    #[test]
+    fn experiment_memory_bindings_accept_valid_and_refuse_bad_originals() {
+        let content = "hello context";
+        let hash = crate::content::hash(content.as_bytes());
+        let body = experiment_body(content, &hash, "mem-1");
+        // Valid original passes.
+        let db = setup(&body, r#"{"privacy":"private"}"#, &hash, "mem-1");
+        assert!(validate_original_experiment_bindings(&db).is_ok());
+        // Sealed original refuses (defense in depth: the
+        // supported backup pipeline already refuses sealed
+        // packages at export, so this branch guards
+        // foreign or hand-crafted packages).
+        let db = setup(&body, r#"{"privacy":"sealed"}"#, &hash, "mem-1");
+        assert!(validate_original_experiment_bindings(&db).is_err());
+        // Wrong owner memory refuses.
+        let db = setup(&body, r#"{"privacy":"private"}"#, &hash, "mem-2");
+        assert!(validate_original_experiment_bindings(&db).is_err());
+        // Wrong revision-row hash refuses.
+        let db = setup(
+            &body,
+            r#"{"privacy":"private"}"#,
+            &crate::content::hash("different".as_bytes()),
+            "mem-1",
+        );
+        assert!(validate_original_experiment_bindings(&db).is_err());
+        // Snapshot content that does not hash to the
+        // pinned hash refuses.
+        let bad_body = experiment_body("other content", &hash, "mem-1");
+        let db = setup(&bad_body, r#"{"privacy":"private"}"#, &hash, "mem-1");
+        assert!(validate_original_experiment_bindings(&db).is_err());
+        // Non-collider and non-JSON experiment bodies
+        // restore untouched, as before.
+        let db = Connection::open_in_memory().unwrap();
+        db.execute_batch(
+            "CREATE TABLE artifact_versions (workspace_id TEXT, body TEXT, content_hash TEXT, artifact_type TEXT);
+             CREATE TABLE memory_revisions (id TEXT, memory_id TEXT, workspace_id TEXT, body_hash TEXT, metadata TEXT);",
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO artifact_versions VALUES ('ws-1', 'Just notes.', 'x', 'experiment')",
+            [],
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO artifact_versions VALUES ('ws-1', '{\"format\":\"other\"}', 'y', 'experiment')",
+            [],
+        )
+        .unwrap();
+        assert!(validate_original_experiment_bindings(&db).is_ok());
+    }
+}
