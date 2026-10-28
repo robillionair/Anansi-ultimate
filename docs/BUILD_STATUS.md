@@ -1,3 +1,44 @@
+## 2026-10-28 — M8 Slice 3: explicitly selected memory context (Linux verification)
+
+Slice 3 on branch `muse/m8-slice3-memory-context`, from the
+Windows-reviewed baseline `codex/review-m8-acceptance-repair` @
+`4d3f8bfd` (including correction `5b3cf958f`; review ZIP/bundle
+hashes and ancestry verified before work). The collider panel in an
+existing project now offers an optional picker for memories in the
+current workspace: nothing selected automatically, selecting or
+reviewing starts no inference, and a pre-send review shows exactly
+which memory revisions will be sent. The client submits references
+only (at most 8, each at most 8000 chars, 32000 total); the backend
+resolves each pair through workspace-scoped, revision-pinned,
+ownership-checked, hash-verified reads that refuse Sealed content
+before any provider traffic, sends the resolved entries as
+`private` data segments in selection order, and saves exact
+generation-time provenance with the experiment (older experiments
+stay readable). Restore pre-validates original memory/revision
+bindings fail-closed, remaps references, and a new
+`fix_transfer_experiment_hashes` fix-up carries concept and receipt
+experiment hashes to restored rows. The slice's transfer test caught
+a pre-existing restore fix-up ordering bug (receipt pinned the
+concept hash before the concept body was rewritten, leaving a stale
+receipt whenever an experiment hash changed on restore); the fix
+reorders the fix-ups and is covered by Forge admission succeeding
+on the restored workspace.
+
+Linux verification, sequential on an idle machine: collider 19/19,
+transfer 18/18, full core 294/298 with only the 4 known
+environmental live-Ollama semantic_workflow failures; providers+API
+144/0; node UI/contracts 81/81; TypeScript, contracts drift, strict
+Clippy, formatting clean; API+web builds passed. Browser canonical
+battery 17/17 including the new collider-memory-context spec
+(selection → pre-send review → collision → save → restart → fresh
+restore). Design:
+[Slice 3 design](handoffs/M8-slice3-memory-context-design.md);
+record:
+[Slice 3 addendum](handoffs/M8-slice3-memory-context-addendum.md).
+Windows verification of Slice 3 pending; AN-013 remains in
+progress; M8 is not complete. No preview promotion, native
+acceptance, §32 sandbox or production gates claimed.
+
 ## 2026-10-27 — M8 repair accepted in focused Windows checks, with local integrity correction
 
 Incoming `1ccda62d92ae800b6730ee01aee9e8eac3a17b68` passed all 16 transfer
