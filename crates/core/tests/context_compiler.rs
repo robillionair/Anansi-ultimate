@@ -324,3 +324,129 @@ fn test_disclosure_manifest_completeness() {
     );
     assert!(compiled.system_prompt.contains("Milestone 4"));
 }
+
+fn compile_with_budget(
+    root: &std::path::Path,
+    ws: &str,
+    prompt: &str,
+    budget: usize,
+) -> anansi_core::context::CompiledContext {
+    let conn = rusqlite::Connection::open(root.join("workspaces.sqlite3")).unwrap();
+    let req = ContextCompilationRequest {
+        workspace_id: ws.to_string(),
+        user_prompt: prompt.to_string(),
+        max_budget_chars: Some(budget),
+        runtime_endpoint: None,
+        model_tag: None,
+        embedding_model: None,
+        kind_filter: None,
+    };
+    compile_context(&conn, root, &req).unwrap()
+}
+
+fn create_note(core: &Core, ws: &str, title: &str, body: &str) {
+    core.memory_command(
+        "create",
+        json!({
+            "contractVersion": 1,
+            "workspaceId": ws,
+            "draft": { "title": title, "body": body, "privacy": "private" },
+            "kind": "note"
+        }),
+    )
+    .unwrap();
+}
+
+#[test]
+fn late_fact_is_prioritized_within_budget() {
+    // Benchmark A12 shape: a long memory whose fact sits beyond the
+    // 4000-char budget in document order. Relevance ordering must
+    // bring the fact chunk first so it survives the budget.
+    let (_temp, core, root, ws) = setup_test_workspace("Late Fact Workspace");
+    let mut body = String::from("# Warehouse Manifest\n");
+    for i in 0..55 {
+        body.push_str(&format!(
+            "Pallet record {i}: stacked crates, inventory tallies and forklift routes checked against the loading schedule.\n"
+        ));
+    }
+    body.push_str("The warehouse crane lifts 12 tonnes.\n");
+    for i in 0..7 {
+        body.push_str(&format!(
+            "Pallet record {i}: stacked crates, inventory tallies and forklift routes checked against the loading schedule.\n"
+        ));
+    }
+    create_note(&core, &ws, "Warehouse manifest", &body);
+    let compiled = compile_with_budget(&root, &ws, "warehouse crane lifts tonnes", 4000);
+    assert!(
+        compiled.system_prompt.contains("lifts 12 tonnes"),
+        "late fact must survive the budget"
+    );
+    assert!(
+        compiled.evidence_chunks[0]
+            .content
+            .contains("lifts 12 tonnes"),
+        "fact chunk must come first, not after filler"
+    );
+    let evidence_chars: usize = compiled
+        .evidence_chunks
+        .iter()
+        .map(|c| c.content.len())
+        .sum();
+    assert!(evidence_chars <= 4000, "budget unchanged");
+    // Citation follows the fact chunk, late in the document.
+    assert_eq!(
+        compiled.citations[0].line_number,
+        compiled.evidence_chunks[0].line_number
+    );
+    assert!(
+        compiled.citations[0].line_number.unwrap_or(0) > 50,
+        "fact citation must point late in the document"
+    );
+}
+
+#[test]
+fn middle_fact_is_prioritized_within_budget() {
+    let (_temp, core, root, ws) = setup_test_workspace("Middle Fact Workspace");
+    let mut body = String::from("# Lighthouse Log\n");
+    for i in 0..25 {
+        body.push_str(&format!(
+            "Coastal weather note {i}: wind gusts, gull counts and fog horns logged by the shore watch during the morning patrol.\n"
+        ));
+    }
+    body.push_str("The lighthouse lamp rotates every 45 seconds.\n");
+    for i in 0..25 {
+        body.push_str(&format!(
+            "Coastal weather note {i}: wind gusts, gull counts and fog horns logged by the shore watch during the morning patrol.\n"
+        ));
+    }
+    create_note(&core, &ws, "Lighthouse log", &body);
+    let compiled = compile_with_budget(&root, &ws, "lighthouse lamp rotates seconds", 4000);
+    assert!(compiled.system_prompt.contains("rotates every 45 seconds"));
+    assert!(
+        compiled.evidence_chunks[0]
+            .content
+            .contains("rotates every 45 seconds"),
+        "middle fact chunk must come first"
+    );
+}
+
+#[test]
+fn distractor_with_partial_terms_ranks_below_full_fact() {
+    // A distractor section repeats two query terms many times but
+    // lacks the other two; the fact section contains all four.
+    // Distinct-term count must dominate raw occurrences.
+    let (_temp, core, root, ws) = setup_test_workspace("Distractor Workspace");
+    let mut body = String::from("# Distractor\n");
+    body.push_str(&"warehouse crane ".repeat(20));
+    body.push('\n');
+    body.push_str("# Fact\nThe warehouse crane lifts 12 tonnes.\n");
+    create_note(&core, &ws, "Warehouse manifest", &body);
+    let compiled = compile_with_budget(&root, &ws, "warehouse crane lifts tonnes", 4000);
+    assert!(compiled.system_prompt.contains("lifts 12 tonnes"));
+    assert!(
+        compiled.evidence_chunks[0]
+            .content
+            .contains("lifts 12 tonnes"),
+        "full-fact chunk must outrank the partial-term distractor even though it appears later"
+    );
+}

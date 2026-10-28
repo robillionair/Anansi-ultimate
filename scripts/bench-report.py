@@ -59,14 +59,6 @@ def classify(rec, real_mode):
         if status == "InsufficientEvidence":
             return ("correct-insufficient", False, True)
         return ("unexpected-answer", False, False)
-    if sc == "A12":
-        if not wire_ok:
-            return ("compilation-failure", False, False)
-        if real_mode:
-            fact = parse_fact(rec.get("notes", ""))
-            if fact is False:
-                return ("model-wrong-answer", False, False)
-        return ("correct", True, True)
     if sc in RECALL_PROBES:
         if status == "InsufficientEvidence":
             return ("retrieval-failure", False, False)
@@ -82,8 +74,21 @@ def classify(rec, real_mode):
         if real_mode:
             fact = parse_fact(rec.get("notes", ""))
             if fact is False:
+                # A5 exception: its must_contain is the topic phrase
+                # "Harbor Hall capacity", not an answer fact, so the
+                # harness's answer.contains(topic phrase) check is a
+                # grading artifact, not evidence of a model miss. The
+                # retained answer text (runs with ANANSI_BENCH_ANSWER_DIR)
+                # must be checked manually; without it, A5 is
+                # unverified, never counted as model-wrong.
+                if sc == "A5":
+                    return ("grading-artifact-unverified", False, False)
                 return ("model-wrong-answer", False, False)
         return ("correct", True, True)
+    if sc == "A12" and status in ("Answered", "Offline"):
+        # A12's known failure mode is compilation/budget omission of
+        # the fact chunk, not retrieval (the memory is hit).
+        return ("compilation-failure", False, False)
     return ("evidence-failure", False, False)
 
 

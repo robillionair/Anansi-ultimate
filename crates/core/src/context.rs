@@ -67,6 +67,56 @@ pub struct ContextCompilationRequest {
     pub kind_filter: Option<String>,
 }
 
+/// Query terms for chunk relevance scoring: lowercase alphanumeric
+/// tokens, deduplicated, with a small stopword filter so question words
+/// and articles do not outrank content terms. Used only to ORDER chunks
+/// within a hit memory under the existing budget; it never changes the
+/// budget, the retrieval set, or which memories are cited.
+fn query_terms_for_scoring(query: &str) -> Vec<String> {
+    const STOPWORDS: &[&str] = &[
+        "a", "an", "the", "is", "are", "was", "were", "be", "been", "what", "where", "when", "how",
+        "why", "who", "whom", "to", "of", "in", "on", "at", "for", "with", "by", "do", "does",
+        "did", "can", "could", "should", "would", "i", "you", "he", "she", "it", "we", "they",
+        "this", "that", "these", "those", "and", "or", "but", "not", "no",
+    ];
+    let mut terms = Vec::new();
+    for token in query
+        .to_lowercase()
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|t| t.len() >= 2)
+    {
+        if !STOPWORDS.contains(&token) && !terms.contains(&token.to_string()) {
+            terms.push(token.to_string());
+        }
+    }
+    terms
+}
+
+/// Relevance of one chunk to the query: (distinct query terms present,
+/// total query-term occurrences). Distinct terms dominate, so a chunk
+/// containing every query term outranks a distractor chunk containing
+/// only some of them, even if the distractor repeats its terms often.
+fn chunk_relevance(content: &str, terms: &[String]) -> (usize, usize) {
+    if terms.is_empty() {
+        return (0, 0);
+    }
+    let lowered = content.to_lowercase();
+    let tokens: Vec<&str> = lowered
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|t| !t.is_empty())
+        .collect();
+    let mut distinct = 0;
+    let mut occurrences = 0;
+    for term in terms {
+        let count = tokens.iter().filter(|t| **t == term.as_str()).count();
+        if count > 0 {
+            distinct += 1;
+            occurrences += count;
+        }
+    }
+    (distinct, occurrences)
+}
+
 pub fn chunk_markdown_sections(
     memory_id: &str,
     title: &str,
@@ -210,8 +260,30 @@ pub(crate) fn compile_context_with_query(
             break;
         }
 
-        // Chunk sections
-        let sections = chunk_markdown_sections(&hit.memory_id, &hit.title, &hit.kind, &body);
+        // Chunk sections, ordered by relevance to the query within
+        // this memory (most query terms first, then most occurrences,
+        // then document order). Previously chunks were taken in
+        // document order until the budget ran out, so a fact late in
+        // a long memory was dropped while early filler filled the
+        // budget (benchmark A12). The budget itself is unchanged, as
+        // is the memory order from hybrid retrieval; only the chunk
+        // order within each memory changes, and citations keep their
+        // original line numbers.
+        let effective_query = retrieval_query.unwrap_or(&req.user_prompt);
+        let terms = query_terms_for_scoring(effective_query);
+        let mut sections = chunk_markdown_sections(&hit.memory_id, &hit.title, &hit.kind, &body);
+        {
+            let mut scored: Vec<(usize, usize, usize, ContextChunk)> = sections
+                .into_iter()
+                .enumerate()
+                .map(|(idx, sec)| {
+                    let (distinct, occurrences) = chunk_relevance(&sec.content, &terms);
+                    (distinct, occurrences, idx, sec)
+                })
+                .collect();
+            scored.sort_by(|a, b| b.0.cmp(&a.0).then(b.1.cmp(&a.1)).then(a.2.cmp(&b.2)));
+            sections = scored.into_iter().map(|(_, _, _, sec)| sec).collect();
+        }
         for mut sec in sections {
             if current_budget_used >= budget {
                 break;

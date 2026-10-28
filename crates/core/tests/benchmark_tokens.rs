@@ -1139,6 +1139,16 @@ fn benchmark_token_consumption() {
             "",
         ),
         (
+            "A12",
+            "warehouse crane lifts tonnes",
+            "Warehouse manifest",
+            Some(5),
+            &["lifts 12 tonnes"],
+            &["SEALED-CANARY-7F3A", "XWS-CANARY-9B2E"],
+            false,
+            "",
+        ),
+        (
             "A13",
             "harbor master office tide charts",
             "Harbor master office",
@@ -1565,130 +1575,6 @@ fn benchmark_token_consumption() {
             answered && fact_ok,
             "A10 control recall",
         );
-    }
-
-    // A12 budget-truncation probe (NOT a gated case — see note).
-    // The warehouse fact sits at ~5900 chars, beyond the 4000-char Ask
-    // budget. compile_context includes a hit memory's chunks in order
-    // until the budget is exhausted, so the fact chunk is omitted even
-    // though it is the exact retrieval match; the first four filler
-    // chunks fill the budget instead. The original gated run failed on
-    // this case (A12 wire_ok=false, preserved in
-    // results-fake-expanded.json); it is kept as a quality failure,
-    // not hidden: this probe records wire_checks_passed=false and the
-    // analysis excludes it from savings and correct totals. Fixing the
-    // compiler to include ranked matching chunks would be an
-    // optimization and is out of scope for this measurement benchmark;
-    // moving the fact earlier would be cherry-picking. Only
-    // wire/header/status invariants gate this probe.
-    {
-        let out = run_ask(
-            &ask_core,
-            &ask_ws,
-            "warehouse crane lifts tonnes",
-            Some(5),
-            fake_ask_ref,
-            real_endpoint.as_deref(),
-            real_model.as_deref(),
-        );
-        let answered = out.status == "Answered" || out.status == "Offline";
-        let (pack_ok, pack_notes) = check_wire(
-            &out.compiled_prompt,
-            &["lifts 12 tonnes"],
-            &["SEALED-CANARY-7F3A", "XWS-CANARY-9B2E"],
-        );
-        let header_ok = header_count_once(&out.compiled_prompt);
-        let wire_eq = match (&out.wire_body, real_mode) {
-            (Some(wire), false) => {
-                let w: Value = serde_json::from_str(wire).unwrap();
-                w.get("prompt").and_then(|v| v.as_str()) == Some(out.compiled_prompt.as_str())
-            }
-            (_, true) => true,
-            (None, false) => false,
-        };
-        let invariant_ok = answered && header_ok && wire_eq;
-        let quality_ok = invariant_ok && pack_ok;
-        push_record(
-            &mut records,
-            &mut failures,
-            Record {
-                scenario: "A12".to_string(),
-                approach: "anansi".to_string(),
-                question_id: "A12".to_string(),
-                status: out.status.clone(),
-                provider_hits: if real_mode { None } else { Some(out.hits) },
-                request_bytes: out.wire_body.as_ref().map(|b| b.len() as u64),
-                prompt_chars: Some(out.compiled_prompt.chars().count() as u64),
-                evidence_chars: Some(out.manifest_chars),
-                cited_memory_count: Some(out.cited_titles.len() as u64),
-                anansi_estimate_tokens: Some(out.manifest_estimate),
-                compile_ms: Some(out.compile_ms),
-                total_ms: Some(out.total_ms),
-                provider_reported_input_tokens: None,
-                provider_reported_output_tokens: None,
-                provider_reported_cached_tokens: None,
-                ledger_input_tokens: None,
-                ledger_output_tokens: None,
-                wire_checks_passed: quality_ok,
-                notes: format!(
-                    "budget-truncation probe; cited={:?};{pack_notes};fact at ~5900 chars beyond 4000-char Ask budget; compiler includes chunks in order until budget",
-                    out.cited_titles
-                ),
-            },
-            invariant_ok,
-            "A12 budget-truncation probe invariants",
-        );
-        dump_prompt("A12-anansi", &out.compiled_prompt);
-        let mut seen_titles: Vec<&String> = Vec::new();
-        let cited_bodies: Vec<String> = out
-            .cited_titles
-            .iter()
-            .filter(|t| {
-                if seen_titles.contains(t) {
-                    false
-                } else {
-                    seen_titles.push(t);
-                    true
-                }
-            })
-            .filter_map(|t| bodies.get(t).cloned())
-            .collect();
-        let naive = naive_prompt(
-            &header_of(&out.compiled_prompt),
-            &cited_bodies,
-            "warehouse crane lifts tonnes",
-        );
-        let naive_chars = naive.chars().count() as u64;
-        let naive_bytes = naive.len() as u64;
-        let naive_ok = cited_bodies.len() == seen_titles.len();
-        push_record(
-            &mut records,
-            &mut failures,
-            Record {
-                scenario: "A12".to_string(),
-                approach: "baseline_naive_full_bodies".to_string(),
-                question_id: "A12".to_string(),
-                status: "synthetic".to_string(),
-                provider_hits: None,
-                request_bytes: Some(naive_bytes),
-                prompt_chars: Some(naive_chars),
-                evidence_chars: Some(cited_bodies.iter().map(|b| b.len() as u64).sum()),
-                cited_memory_count: Some(cited_bodies.len() as u64),
-                anansi_estimate_tokens: Some(est(naive_chars)),
-                compile_ms: None,
-                total_ms: None,
-                provider_reported_input_tokens: None,
-                provider_reported_output_tokens: None,
-                provider_reported_cached_tokens: None,
-                ledger_input_tokens: None,
-                ledger_output_tokens: None,
-                wire_checks_passed: naive_ok,
-                notes: "synthetic assembly from cited set; same header and question".to_string(),
-            },
-            naive_ok,
-            "A12 B-NAIVE cited-set coverage",
-        );
-        dump_prompt("A12-naive", &naive);
     }
 
     // Semantic comparison (real mode only): index embeddings with the

@@ -307,3 +307,22 @@ totals after this change: answerable ANANSI est 3802 vs naive 6549
 and short cases A4+A5 are 313 vs 296 (+5.7%, ANANSI more expensive).
 The report must show long vs short splits alongside any aggregate,
 and must never quote the aggregate without them.
+
+## A12 repair: relevance-ordered chunks within the budget (2026-10-28)
+
+Repair (production change, budget unchanged): `compile_context` now
+orders each hit memory's chunks by query relevance before applying
+the existing budget — most distinct query terms first, then most
+occurrences, then document order — instead of taking chunks in
+document order until the budget ran out. Memory order from hybrid
+retrieval is unchanged, citations keep their original line numbers,
+and the 4000-char Ask budget is unchanged. A12 is re-gated as an
+ordinary ask case (same question, same fact position, same budget);
+the probe section was removed. Fake evidence: A12 wire_ok false →
+true, est 1166 → 1180 (fact chunk plus filler within budget, 5
+citations instead of 4); A11/A13 est unchanged (1158/1171).
+Regressions in `context_compiler`: late-fact, middle-fact, and a
+distractor test (partial-term chunk with many occurrences ranks
+below the full-fact chunk, proving distinct terms dominate).
+The repair does not change retrieval itself: A1/A3 lexical misses
+remain, addressed separately by the retrieval repair.
