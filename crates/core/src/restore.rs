@@ -1385,8 +1385,18 @@ impl crate::storage::Storage {
                 fix_approval_hashes(&names, &mut values)?;
                 fix_deliverable_hashes(&names, &mut values)?;
                 fix_review_hashes(&names, &mut values)?;
-                fix_transfer_receipt_hashes(&names, &mut values)?;
+                // Order matters: the experiment fix-up
+                // rewrites concept bodies (their pinned
+                // experiment hash follows the restored
+                // experiment row), which changes concept
+                // row hashes. The receipt fix-up must run
+                // after it so the receipt pins the final
+                // concept hash; the reverse order leaves
+                // a stale conceptContentHash whenever
+                // the experiment hash changes on restore
+                // (e.g. remapped memory references).
                 fix_transfer_experiment_hashes(&names, &mut values)?;
+                fix_transfer_receipt_hashes(&names, &mut values)?;
             }
             prepared.push((table, names, values));
         }
