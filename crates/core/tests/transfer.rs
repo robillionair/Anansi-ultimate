@@ -1173,8 +1173,7 @@ fn context_experiment_transfer_survives_restore_and_stays_forge_admissible() {
         "privacy": "private"
     }]);
     let experiment = register_experiment(&f, &body.to_string());
-    let transferred = transfer(&f, &experiment, 1, 0, "Route venues by local congestion.");
-    let concept_id = transferred["artifact"]["artifactId"].as_str().unwrap().to_string();
+    let _ = transfer(&f, &experiment, 1, 0, "Route venues by local congestion.");
     let root = f._dir.path().to_path_buf();
     let store = Storage::new(root.clone()).unwrap();
     let bytes = backup_bytes(&root, &store, &f.ws);
