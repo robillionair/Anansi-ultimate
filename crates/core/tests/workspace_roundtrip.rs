@@ -5,6 +5,7 @@ use anansi_core::{
 };
 use serde_json::json;
 use std::fs;
+use std::sync::{Arc, Barrier};
 fn create(core: &Core, name: &str) -> WorkspaceDetails {
     serde_json::from_value(
         core.workspace_command("create", json!({"contractVersion":1,"name":name}))
@@ -443,4 +444,66 @@ fn failed_v1_forward_migration_rolls_back_and_keeps_original_rows_and_version() 
             .unwrap(),
         "Preserved"
     );
+}
+
+#[test]
+fn concurrent_v1_open_migration_and_wal_switch_do_not_fail() {
+    // Synchronized concurrency coverage for the intermittent
+    // StorageUnavailable failure seen once in a full-suite run: the
+    // original 3-thread unsynchronized test passed 30/30 alone, but
+    // 16 barrier-synchronized threads opening a fresh v1 workspace
+    // failed within 9 iterations pre-fix. Root cause was NOT the
+    // migration transaction (which waits on busy_timeout) but the
+    // journal_mode WAL switch at the end of connection(): SQLite
+    // refuses that switch immediately with DatabaseBusy while peer
+    // connections hold the database open, and busy_timeout does not
+    // apply to it. This test fails pre-fix and passes post-fix.
+    for _ in 0..20 {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("store");
+        let storage = Storage::new(root.clone()).unwrap();
+        storage.create("Seed").unwrap();
+        let file = root.join(DATABASE_NAME);
+        fs::remove_file(&file).unwrap();
+        {
+            let connection = rusqlite::Connection::open(&file).unwrap();
+            connection
+                .execute_batch(include_str!("../migrations/0001_workspace.sql"))
+                .unwrap();
+            connection
+                .pragma_update(None, "application_id", 0x414e414e)
+                .unwrap();
+            connection.pragma_update(None, "user_version", 1).unwrap();
+            connection
+                .execute(
+                    "INSERT INTO workspaces VALUES(?1,'Original','original')",
+                    ["a".repeat(32)],
+                )
+                .unwrap();
+            connection
+                .execute(
+                    "INSERT INTO workspace_settings VALUES(?1,1)",
+                    ["a".repeat(32)],
+                )
+                .unwrap();
+        }
+        private_permissions(&file, false, false).unwrap();
+        let barrier = Arc::new(Barrier::new(17));
+        let workers: Vec<_> = (0..16)
+            .map(|_| {
+                let storage = storage.clone();
+                let barrier = barrier.clone();
+                std::thread::spawn(move || {
+                    barrier.wait();
+                    storage.open(&"a".repeat(32))
+                })
+            })
+            .collect();
+        barrier.wait();
+        for worker in workers {
+            let opened = worker.join().unwrap().unwrap();
+            assert_eq!(opened.workspace.name, "Original");
+            assert!(opened.settings.reduced_motion);
+        }
+    }
 }

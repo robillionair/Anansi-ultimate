@@ -309,9 +309,23 @@ impl Storage {
             .pragma_query_value(None, "journal_mode", |row| row.get(0))
             .map_err(|_| corrupt())?;
         if journal != "wal" {
-            connection
-                .pragma_update(None, "journal_mode", "WAL")
-                .map_err(|_| unavailable())?;
+            // SQLite refuses a journal_mode change to WAL immediately
+            // with DatabaseBusy while peer connections hold the
+            // database open, and busy_timeout does not apply to this
+            // pragma. Failing the open here turned transient
+            // contention into a storage outage even though the
+            // database was fully usable (concurrent v1 opens failed
+            // exactly here, not in the migration transaction). Only
+            // DatabaseBusy is tolerated: if a peer already switched
+            // to WAL, or if no peer has yet, the open proceeds and
+            // the next uncontended open retries the switch. Any other
+            // error still fails the open.
+            match connection.pragma_update(None, "journal_mode", "WAL") {
+                Ok(_) => {}
+                Err(rusqlite::Error::SqliteFailure(ffi_err, _))
+                    if ffi_err.code == rusqlite::ErrorCode::DatabaseBusy => {}
+                Err(_) => return Err(unavailable()),
+            }
         }
         Ok(Some(connection))
     }
