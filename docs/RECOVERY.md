@@ -1,5 +1,17 @@
 # ANANSI Ultimate — Recovery Guide
 
+## Current M8 Slice 3 review resume authority — 2026-10-28
+
+Use `E:/Anansi/worktrees/review-m8-slice3`, branch `codex/review-m8-slice3`.
+Incoming `776259a4` plus local consent/provenance correction `f54e46695` and its
+test strengthening/synchronization commits is the reviewed implementation.
+Read [exact Windows evidence](reviews/windows-m8-slice3.md) and current BUILD_STATUS;
+focused acceptance passed, while native promotion and complete M8/production
+certification remain open. Preserve all existing previews/data and other worktrees.
+Use E: for builds/temp and the shared application-test lease. No new slice, push,
+CI or generated execution is authorized by this review. The audit monitor remains
+off at the owner's instruction. Earlier resume authorities below are historical.
+
 ## Current M8 review resume authority — 2026-10-27
 
 Use `E:/Anansi/worktrees/review-m8-acceptance-repair`, branch

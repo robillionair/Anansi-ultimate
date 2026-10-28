@@ -1,4 +1,34 @@
-## 2026-10-28 — M8 Slice 3: explicitly selected memory context (Linux verification)
+## 2026-10-28 — M8 Slice 3 focused Windows acceptance, with local corrections
+
+Incoming `776259a49819a0166e8199dc85e29b34cf452680`, reviewed baseline
+`4d3f8bfd`, ZIP/bundle identity and all four refs verified. The delivered binaries
+passed Collider 19/19 and transfer 18/18 on Windows, including context-bearing
+transfer restore followed by Forge admission. This is not a full final-tree rerun.
+
+Additional expected-success probes exposed two boundary gaps: clicking Collide
+re-read the current memory head and sent unseen C after the owner reviewed B;
+restore pre-validation accepted fabricated revision version/title/privacy labels.
+Local correction `f54e46695e7aacbeca5676c11060bed4f04a6c1a` submits reviewed
+immutable references, blocks pending/error/stale reviews and duplicate starts,
+invalidates selection/unmount continuations, and checks source revision labels
+before restore remapping/publication. No schema/DTO/provider path changed.
+
+Corrected implementation: restore-binding units 2/2, Forge restore 4/4, UI/contracts
+81/81, TypeScript, contracts drift, web/API builds, strict core all-target Clippy,
+formatting and docs passed. Confirming browser 3/3 under the shared lease: reviewed
+B reaches the wire despite newer C, a held old-project review cannot populate or
+transmit in the new project, context-free collision still works, and the complete
+memory-context save/edit/restart/fresh-restore workflow passes. Diagnostic browser
+failures and root-caused harness corrections (exact project identity and selected-
+memory gate cleanup) are preserved; no assertion or time limit was weakened.
+
+Use `codex/review-m8-slice3`, including the local fix and test commits, as the next
+M8 baseline. [Exact Windows scope/evidence](reviews/windows-m8-slice3.md).
+AN-013 remains in progress. Native acceptance/promotion, remaining M8 inputs/3D,
+execution and production gates remain open. Existing preview/data untouched;
+all new work/cache/temp on E:; no pushes, CI, real credentials or paid inference.
+
+## 2026-10-28 — M8 Slice 3: explicitly selected memory context (Linux delivery evidence)
 
 Slice 3 on branch `muse/m8-slice3-memory-context`, from the
 Windows-reviewed baseline `codex/review-m8-acceptance-repair` @

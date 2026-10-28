@@ -1,5 +1,17 @@
 # M8 — LEXI-COLLIDER
 
+Current checkpoint: Slice 3 has focused Windows acceptance on
+`codex/review-m8-slice3`, including local correction `f54e46695` (reviewed revision
+consent and source revision-label validation), regression strengthening and exact
+project-identity test synchronization. Incoming Collider 19/19 and transfer 18/18,
+corrected binding units 2/2, Forge restore 4/4, UI/contracts 81/81 and final browser
+3/3 passed. [Current Windows evidence](../docs/reviews/windows-m8-slice3.md)
+records exact trees and diagnostics. Use the corrected review ref, not incoming
+`776259a4` alone. Native promotion and remaining M8/production scope stay open;
+this review implements no additional slice.
+
+### Earlier Slices 1–2 acceptance checkpoint
+
 Focused Windows acceptance of the repair is passed, including the local receipt
 integrity correction `5b3cf958f`: incoming transfer 16/16 and exact-beam 1/1,
 new corruption probe refuses with zero provider hits, final browser 4/4 covering
@@ -8,19 +20,22 @@ identity, two-process atomicity, Forge, restart and restore. See
 Use `codex/review-m8-acceptance-repair` including that correction as the next
 baseline. The earlier [red review](../docs/reviews/windows-m8-slices1-2.md) and
 [repair assignment](../docs/handoffs/M8-slices1-2-Windows-repair.md) are historical.
-Native acceptance/promotion remains pending; no Slice 3 is approved by this review.
+Native acceptance/promotion remains pending. The later owner-authorized Slice 3
+assignment and current review above supersede that earlier phase boundary.
 
-Status: Slices 1–2 implemented and accepted in the focused Windows scope above;
+### Slice history and current status
+
+Status: Slices 1–3 implemented and accepted in the focused Windows scope above;
 the complete milestone remains in progress. Further slices require bounded design
 and acceptance criteria before implementation.
 
 Slice 1 (text-first, owner-authorized 2026-10-27, branch `muse/m8-slice1-collider`, tip `8718df8a`): delivered — two text beams, six-section validated output, immutable experiment save and restore on the M5 substrate; Linux verification complete (core 268/272, providers+API 144/0, node 73/73, browser 13/13); Windows verification pending. URL fetching, document ingestion, saved-project/memory selection, 3D visualization and approved Forge transfer remained deferred. Design: `docs/handoffs/M8-slice1-collider-design.md`; record: `docs/handoffs/M8-slice1-collider-addendum.md`.
 
-Slice 2 (explicitly approved collider → Forge transfer, owner-authorized 2026-10-27, branch `muse/m8-slice2-forge-transfer`): delivered — model-free `collider-transfer` op binding an exact experiment version + hash + selected combination + user-approved brief into a durable concept artifact; single-concept support in Forge spec-start; idempotent resubmission; fail-closed restore remapping; transfer panel and concept branch in the Projects UI. Linux verification complete (core 276/280, providers+API 144/0, node 76/76, browser 14/14); Windows verification pending. Design: `docs/handoffs/M8-slice2-forge-transfer-design.md`; record: `docs/handoffs/M8-slice2-forge-transfer-addendum.md`.
+Slice 2 (explicitly approved collider → Forge transfer, owner-authorized 2026-10-27, branch `muse/m8-slice2-forge-transfer`): delivered — model-free `collider-transfer` op binding an exact experiment version + hash + selected combination + user-approved brief into a durable concept artifact; single-concept support in Forge spec-start; idempotent resubmission; fail-closed restore remapping; transfer panel and concept branch in the Projects UI. Linux verification complete (core 276/280, providers+API 144/0, node 76/76, browser 14/14); Later focused Windows verification is recorded above. Design: `docs/handoffs/M8-slice2-forge-transfer-design.md`; record: `docs/handoffs/M8-slice2-forge-transfer-addendum.md`.
 
 Acceptance repair (owner-authorized 2026-10-27, branch `muse/m8-acceptance-repair`, from Windows review tip `c50de23b`): version-1 transfer-approval receipt + Forge recheck before provider traffic; full model-field restore validation with receipt remap/fix-up; transactional cross-process idempotency with no schema change; verbatim beams/briefs; source-keyed panels with snapshot-bound responses. Linux verification complete (core 285/289, providers+API 144/0, node 78/78, browser 16/16). Focused Windows acceptance of the repair passed on the reviewed tip `4d3f8bfd` including local receipt-integrity correction `5b3cf958f` (see the review record at the top of this plan). Design: `docs/handoffs/M8-acceptance-repair-design.md`; record: `docs/handoffs/M8-acceptance-repair-addendum.md`. Neither slice nor this repair declares M8 complete or waives M7's open native acceptance, execution environment or production gates.
 
-Slice 3 (explicitly selected memory context, owner-authorized 2026-10-28, branch `muse/m8-slice3-memory-context`, from reviewed baseline `4d3f8bfd`): optional memory picker in an existing project (nothing selected automatically, no inference on select/review/change), pre-send review of exact revisions, backend-only reference resolution with Sealed/inaccessible refusal before provider traffic, generation-time provenance pinned on the experiment, fail-closed restore remapping with a transfer experiment-hash fix-up (including a fix-up ordering fix found by the new transfer test). Linux verification complete (core 294/298 with only the 4 known environmental live-Ollama failures, providers+API 144/0, node 81/81, browser 17/17); Windows verification pending. Design: `docs/handoffs/M8-slice3-memory-context-design.md`; record: `docs/handoffs/M8-slice3-memory-context-addendum.md`.
+Slice 3 (explicitly selected memory context, owner-authorized 2026-10-28, branch `muse/m8-slice3-memory-context`, from reviewed baseline `4d3f8bfd`): optional memory picker in an existing project (nothing selected automatically, no inference on select/review/change), pre-send review of exact revisions, backend-only reference resolution with Sealed/inaccessible refusal before provider traffic, generation-time provenance pinned on the experiment, fail-closed restore remapping with a transfer experiment-hash fix-up (including a fix-up ordering fix found by the new transfer test). Linux verification complete (core 294/298 with only the 4 known environmental live-Ollama failures, providers+API 144/0, node 81/81, browser 17/17); Later focused Windows verification is recorded above. Design: `docs/handoffs/M8-slice3-memory-context-design.md`; record: `docs/handoffs/M8-slice3-memory-context-addendum.md`.
 
 Authority: [master specification](../docs/MASTER_SPEC.md), sections 23–27, 65–67, 78–80; [canonical roadmap](../docs/ROADMAP.md).
 
@@ -28,4 +43,4 @@ Required scope: Six-stage pipeline, versioned outputs, approved Forge transfer, 
 
 Dependencies: complete the preceding milestone and verify relevant shared contracts. Before implementation, inventory every bullet in the cited sections, define task-sized vertical slices, exact files, security boundaries, migrations, tests, observable workflow evidence, rollback and acceptance criteria. Record unresolved design choices in decisions; do not invent integrations or claim mocks are live verification.
 
-Planning completion requires requirement-level traceability, explicit deferred sub-slices with rationale, current official dependency/provider verification where relevant, executable verification commands and reviewable Definition of Done. Stop at each approved task boundary. Earlier reconciliation-era restrictions describe their historical checkpoint; the current authorized scope is the bounded M8 Slices 1–2 repair review above.
+Planning completion requires requirement-level traceability, explicit deferred sub-slices with rationale, current official dependency/provider verification where relevant, executable verification commands and reviewable Definition of Done. Stop at each approved task boundary. Earlier reconciliation-era restrictions describe their historical checkpoint; the current authorized scope is the bounded M8 Slice 3 review above.
