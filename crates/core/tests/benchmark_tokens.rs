@@ -72,7 +72,9 @@ fn start_fake_ask() -> FakeAsk {
                 }
                 let mut body = vec![0u8; content_length];
                 reader.read_exact(&mut body).unwrap_or(());
-                b3.lock().unwrap().push(String::from_utf8_lossy(&body).to_string());
+                b3.lock()
+                    .unwrap()
+                    .push(String::from_utf8_lossy(&body).to_string());
                 h3.fetch_add(1, Ordering::SeqCst);
                 let payload = json!({
                     "model": "bench",
@@ -88,7 +90,11 @@ fn start_fake_ask() -> FakeAsk {
             });
         }
     });
-    FakeAsk { base_url: format!("http://{addr}"), bodies, hits }
+    FakeAsk {
+        base_url: format!("http://{addr}"),
+        bodies,
+        hits,
+    }
 }
 
 /// Loopback NDJSON server for M5 Ollama chat streams. The final frame
@@ -180,7 +186,11 @@ fn start_fake_m5() -> FakeM5 {
             });
         }
     });
-    FakeM5 { base_url: format!("http://{addr}"), last_body, hits }
+    FakeM5 {
+        base_url: format!("http://{addr}"),
+        last_body,
+        hits,
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -193,7 +203,13 @@ fn draft(title: &str, body: &str, privacy: &str) -> Value {
             "confidence": null, "sourceReferences": [] })
 }
 
-fn create_memory(core: &Core, ws: &str, title: &str, body: &str, privacy: &str) -> (String, String, u32) {
+fn create_memory(
+    core: &Core,
+    ws: &str,
+    title: &str,
+    body: &str,
+    privacy: &str,
+) -> (String, String, u32) {
     let created = core
         .memory_command(
             "create",
@@ -203,12 +219,22 @@ fn create_memory(core: &Core, ws: &str, title: &str, body: &str, privacy: &str) 
         .unwrap();
     (
         created["memory"]["id"].as_str().unwrap().to_string(),
-        created["memory"]["revisionId"].as_str().unwrap().to_string(),
+        created["memory"]["revisionId"]
+            .as_str()
+            .unwrap()
+            .to_string(),
         created["memory"]["version"].as_u64().unwrap() as u32,
     )
 }
 
-fn revise_memory(core: &Core, ws: &str, id: &str, rev: &str, title: &str, body: &str) -> (String, u32) {
+fn revise_memory(
+    core: &Core,
+    ws: &str,
+    id: &str,
+    rev: &str,
+    title: &str,
+    body: &str,
+) -> (String, u32) {
     let out = core
         .memory_command(
             "revise",
@@ -230,7 +256,6 @@ fn seal_memory(root: &std::path::Path, memory_id: &str) {
     )
     .unwrap();
 }
-
 
 fn seed_one(
     core: &Core,
@@ -270,27 +295,90 @@ fn seed_ask_workspace(core: &Core, ws: &str, root: &std::path::Path) -> BTreeMap
         "# Tide Observations\nRevision C tide observations. The morning high tide reaches 2.7 meters at Harbor Pier.".to_string(),
     );
     // A1: small relevant memory.
-    seed_one(core, ws, &mut bodies, "Harbor Pier log",
+    seed_one(
+        core,
+        ws,
+        &mut bodies,
+        "Harbor Pier log",
         "# Pier Log\nThe Harbor Pier morning high tide is the best launch window for survey boats.",
-        "private",);
+        "private",
+    );
     // A2: long memory, fact in the first chunk, ~6000 chars total.
-    let mut long_body = String::from("# Harbor Archive\nThe archive annex key is kept in the Harbor office safe.\n");
+    let mut long_body = String::from(
+        "# Harbor Archive\nThe archive annex key is kept in the Harbor office safe.\n",
+    );
     for i in 0..110 {
         long_body.push_str(&format!(
             "Archive shelf {i} holds harbor maps, tide charts and survey logs from past seasons, catalogued by year and pier section. "
         ));
     }
-    seed_one(core, ws, &mut bodies, "Harbor archive", &long_body, "private");
+    seed_one(
+        core,
+        ws,
+        &mut bodies,
+        "Harbor archive",
+        &long_body,
+        "private",
+    );
     // A3: fact split across two memories.
-    seed_one(core, ws, &mut bodies, "North wing", "The Harbor Hall north wing holds 120 seats.", "private");
-    seed_one(core, ws, &mut bodies, "South wing", "The Harbor Hall south wing holds 180 seats.", "private");
+    seed_one(
+        core,
+        ws,
+        &mut bodies,
+        "North wing",
+        "The Harbor Hall north wing holds 120 seats.",
+        "private",
+    );
+    seed_one(
+        core,
+        ws,
+        &mut bodies,
+        "South wing",
+        "The Harbor Hall south wing holds 180 seats.",
+        "private",
+    );
     // A5: contradiction, both mention the same capacity phrase.
-    seed_one(core, ws, &mut bodies, "Venue survey A", "Harbor Hall capacity is 120 seats according to the spring survey.", "private");
-    seed_one(core, ws, &mut bodies, "Venue survey B", "Harbor Hall capacity is 180 seats according to the autumn survey.", "private");
+    seed_one(
+        core,
+        ws,
+        &mut bodies,
+        "Venue survey A",
+        "Harbor Hall capacity is 120 seats according to the spring survey.",
+        "private",
+    );
+    seed_one(
+        core,
+        ws,
+        &mut bodies,
+        "Venue survey B",
+        "Harbor Hall capacity is 180 seats according to the autumn survey.",
+        "private",
+    );
     // A8 conversation topics.
-    seed_one(core, ws, &mut bodies, "Mycelium notes", "Hyphal gradients carry nutrients across the forest floor network.", "private");
-    seed_one(core, ws, &mut bodies, "Routing notes", "Venue routing scores stops by local congestion signals.", "private");
-    seed_one(core, ws, &mut bodies, "Deployment notes", "Our deployment target is a self-hosted Windows 11 appliance.", "standard");
+    seed_one(
+        core,
+        ws,
+        &mut bodies,
+        "Mycelium notes",
+        "Hyphal gradients carry nutrients across the forest floor network.",
+        "private",
+    );
+    seed_one(
+        core,
+        ws,
+        &mut bodies,
+        "Routing notes",
+        "Venue routing scores stops by local congestion signals.",
+        "private",
+    );
+    seed_one(
+        core,
+        ws,
+        &mut bodies,
+        "Deployment notes",
+        "Our deployment target is a self-hosted Windows 11 appliance.",
+        "standard",
+    );
     // Sealed canary: must never appear on any wire request. Creation
     // refuses sealed drafts, so seal via SQL after creating it private.
     let (sealed_id, _, _) = create_memory(
@@ -300,40 +388,121 @@ fn seed_ask_workspace(core: &Core, ws: &str, root: &std::path::Path) -> BTreeMap
         "SEALED-CANARY-7F3A must never leave this workspace.",
         "private",
     );
-    bodies.insert("Sealed notes".to_string(), "SEALED-CANARY-7F3A must never leave this workspace.".to_string());
+    bodies.insert(
+        "Sealed notes".to_string(),
+        "SEALED-CANARY-7F3A must never leave this workspace.".to_string(),
+    );
     seal_memory(root, &sealed_id);
     // Distractors: unrelated topics, no Harbor/tide/venue keywords.
     let topics = [
-        ("Alpine baking", "Sourdough starter care in mountain cabins and stone ovens."),
-        ("Bicycle repair", "Truing a wheel requires patience, a spoke key and even tension."),
-        ("Orchid care", "Moth orchids prefer indirect light and weekly watering."),
-        ("Beekeeping", "Inspect hives in late morning when foragers are out."),
-        ("Bookbinding", "Sew signatures with linen thread before casing in."),
-        ("Canoe routes", "Portage trails follow old logging roads in summer."),
-        ("Cheese aging", "Cave temperature must stay near twelve degrees."),
-        ("Desert botany", "Agave stores water in thick leaves for dry months."),
-        ("Falconry", "A lure swing trains recall without live quarry."),
-        ("Glassblowing", "Gather glass at twelve hundred degrees and marver it."),
-        ("Harp tuning", "Pedal harps need a chromatic tuner and quiet room."),
-        ("Ice fishing", "Auger holes away from current and pressure ridges."),
-        ("Juggling", "Three-ball cascade starts with one throw at a time."),
-        ("Kite design", "Diamond kites fly best with a tail for stability."),
-        ("Luthier notes", "Spruce tops voice best when carved thin at the edges."),
-        ("Mushroom foraging", "Only pick boletes with a trusted field guide."),
-        ("Navigation stars", "Polaris sits above the northern horizon at night."),
-        ("Origami cranes", "Sharp creases come from a bone folder, not nails."),
-        ("Pottery glaze", "Ash glazes vary with firing temperature and clay."),
-        ("Quilting", "Batting loft decides warmth more than pattern does."),
-        ("Rope splicing", "A short splice doubles rope strength at the join."),
+        (
+            "Alpine baking",
+            "Sourdough starter care in mountain cabins and stone ovens.",
+        ),
+        (
+            "Bicycle repair",
+            "Truing a wheel requires patience, a spoke key and even tension.",
+        ),
+        (
+            "Orchid care",
+            "Moth orchids prefer indirect light and weekly watering.",
+        ),
+        (
+            "Beekeeping",
+            "Inspect hives in late morning when foragers are out.",
+        ),
+        (
+            "Bookbinding",
+            "Sew signatures with linen thread before casing in.",
+        ),
+        (
+            "Canoe routes",
+            "Portage trails follow old logging roads in summer.",
+        ),
+        (
+            "Cheese aging",
+            "Cave temperature must stay near twelve degrees.",
+        ),
+        (
+            "Desert botany",
+            "Agave stores water in thick leaves for dry months.",
+        ),
+        (
+            "Falconry",
+            "A lure swing trains recall without live quarry.",
+        ),
+        (
+            "Glassblowing",
+            "Gather glass at twelve hundred degrees and marver it.",
+        ),
+        (
+            "Harp tuning",
+            "Pedal harps need a chromatic tuner and quiet room.",
+        ),
+        (
+            "Ice fishing",
+            "Auger holes away from current and pressure ridges.",
+        ),
+        (
+            "Juggling",
+            "Three-ball cascade starts with one throw at a time.",
+        ),
+        (
+            "Kite design",
+            "Diamond kites fly best with a tail for stability.",
+        ),
+        (
+            "Luthier notes",
+            "Spruce tops voice best when carved thin at the edges.",
+        ),
+        (
+            "Mushroom foraging",
+            "Only pick boletes with a trusted field guide.",
+        ),
+        (
+            "Navigation stars",
+            "Polaris sits above the northern horizon at night.",
+        ),
+        (
+            "Origami cranes",
+            "Sharp creases come from a bone folder, not nails.",
+        ),
+        (
+            "Pottery glaze",
+            "Ash glazes vary with firing temperature and clay.",
+        ),
+        (
+            "Quilting",
+            "Batting loft decides warmth more than pattern does.",
+        ),
+        (
+            "Rope splicing",
+            "A short splice doubles rope strength at the join.",
+        ),
         ("Sail repair", "Dacron patches need UV-resistant thread."),
         ("Tea blending", "Assam adds malt body to breakfast blends."),
         ("Violin rosin", "Dark rosin grips better in humid weather."),
-        ("Weaving", "Warp tension must be even across the whole loom."),
-        ("Xylophone", "Rosewood bars ring longer than synthetic bars."),
-        ("Yoga breath", "Diaphragm breathing calms the nervous system."),
+        (
+            "Weaving",
+            "Warp tension must be even across the whole loom.",
+        ),
+        (
+            "Xylophone",
+            "Rosewood bars ring longer than synthetic bars.",
+        ),
+        (
+            "Yoga breath",
+            "Diaphragm breathing calms the nervous system.",
+        ),
         ("Zither strings", "Steel strings hold tune longer than gut."),
-        ("Archery form", "Anchor at the corner of the mouth for consistency."),
-        ("Calligraphy", "Broad nibs need a forty-five degree pen angle."),
+        (
+            "Archery form",
+            "Anchor at the corner of the mouth for consistency.",
+        ),
+        (
+            "Calligraphy",
+            "Broad nibs need a forty-five degree pen angle.",
+        ),
     ];
     for (title, body) in topics {
         seed_one(core, ws, &mut bodies, title, body, "private");
@@ -449,6 +618,31 @@ struct AskOutcome {
     total_ms: u64,
 }
 
+/// Mode options for one Ask run, bundled so the runner stays under the
+/// argument-count lint. A real endpoint wins over the fake, which wins
+/// over no live call (manifest only).
+#[derive(Clone, Copy)]
+struct AskMode<'a> {
+    fake: Option<&'a FakeAsk>,
+    real_endpoint: Option<&'a str>,
+    real_model: Option<&'a str>,
+    embedding_model: Option<&'a str>,
+}
+
+/// One row of the Ask scenario table: id, question, anchor title,
+/// max evidence items, required substrings, forbidden substrings,
+/// recall-probe flag, probe note.
+type AskCase<'a> = (
+    &'a str,
+    &'a str,
+    &'a str,
+    Option<usize>,
+    &'a [&'a str],
+    &'a [&'a str],
+    bool,
+    &'a str,
+);
+
 /// Runs one Ask question twice: once against a dead port (manifest-only,
 /// which times compilation without a provider round-trip) and once against
 /// the fake (or real) endpoint to capture the wire body. In real mode the
@@ -462,13 +656,34 @@ fn run_ask(
     real_endpoint: Option<&str>,
     real_model: Option<&str>,
 ) -> AskOutcome {
+    run_ask_embed(
+        core,
+        ws,
+        question,
+        max_items,
+        AskMode {
+            fake,
+            real_endpoint,
+            real_model,
+            embedding_model: None,
+        },
+    )
+}
+
+fn run_ask_embed(
+    core: &Core,
+    ws: &str,
+    question: &str,
+    max_items: Option<usize>,
+    mode: AskMode,
+) -> AskOutcome {
     let req = |endpoint: String| AskRequest {
         contract_version: 1,
         workspace_id: ws.to_string(),
         prompt: question.to_string(),
         runtime_endpoint: Some(endpoint),
-        model_tag: real_model.map(|m| m.to_string()),
-        embedding_model: None,
+        model_tag: mode.real_model.map(|m| m.to_string()),
+        embedding_model: mode.embedding_model.map(|m| m.to_string()),
         max_evidence_items: max_items,
     };
     // Dead-port call: compilation timing + manifest values.
@@ -497,29 +712,33 @@ fn run_ask(
     if offline.status == AskStatus::InsufficientEvidence {
         return outcome;
     }
-    let endpoint = match (real_endpoint, fake) {
+    let endpoint = match (mode.real_endpoint, mode.fake) {
         (Some(url), _) => url.to_string(),
         (None, Some(f)) => f.base_url.clone(),
         (None, None) => return outcome,
     };
-    let before = fake.map(|f| f.hits.load(Ordering::SeqCst)).unwrap_or(0);
+    let before = mode
+        .fake
+        .map(|f| f.hits.load(Ordering::SeqCst))
+        .unwrap_or(0);
     let t1 = Instant::now();
     let live = core.ask_anansi(req(endpoint)).unwrap();
     outcome.total_ms = t1.elapsed().as_millis() as u64;
     outcome.status = format!("{:?}", live.status);
     outcome.answer = live.answer.clone();
-    if let Some(f) = fake {
+    if let Some(f) = mode.fake {
         let bodies = f.bodies.lock().unwrap();
         let new_hits = f.hits.load(Ordering::SeqCst) - before;
         outcome.hits = new_hits as u64;
-        if let Some(last) = bodies.last() {
-            outcome.wire_body = Some(last.clone());
-            if let Ok(wire) = serde_json::from_str::<Value>(last) {
-                if let Some(p) = wire.get("prompt").and_then(|v| v.as_str()) {
-                    outcome.wire_prompt_chars = Some(p.chars().count() as u64);
-                }
-            }
-        }
+        let last_body = bodies.last().cloned();
+        outcome.wire_body = last_body.clone();
+        outcome.wire_prompt_chars = last_body
+            .and_then(|last| serde_json::from_str::<Value>(&last).ok())
+            .and_then(|wire| {
+                wire.get("prompt")
+                    .and_then(|v| v.as_str())
+                    .map(|p| p.chars().count() as u64)
+            });
     }
     outcome
 }
@@ -539,7 +758,10 @@ fn collider_fixture(fake: &FakeM5) -> ColliderFixture {
     let dir = tempfile::tempdir().unwrap();
     let core = Core::with_storage_root(dir.path().to_path_buf());
     let ws = core
-        .workspace_command("create", json!({ "contractVersion": 1, "name": "Bench Collider" }))
+        .workspace_command(
+            "create",
+            json!({ "contractVersion": 1, "name": "Bench Collider" }),
+        )
         .unwrap()["workspace"]["id"]
         .as_str()
         .unwrap()
@@ -573,7 +795,12 @@ fn collider_fixture(fake: &FakeM5) -> ColliderFixture {
         }),
     )
     .unwrap();
-    ColliderFixture { _dir: dir, core, ws, project }
+    ColliderFixture {
+        _dir: dir,
+        core,
+        ws,
+        project,
+    }
 }
 
 fn poll_collider(f: &ColliderFixture, run_id: &str) -> Value {
@@ -587,8 +814,10 @@ fn poll_collider(f: &ColliderFixture, run_id: &str) -> Value {
             )
             .unwrap();
         let status = polled["status"].as_str().unwrap().to_string();
-        if matches!(status.as_str(), "complete" | "invalid" | "failed" | "cancelled")
-            || Instant::now() > deadline
+        if matches!(
+            status.as_str(),
+            "complete" | "invalid" | "failed" | "cancelled"
+        ) || Instant::now() > deadline
         {
             return polled;
         }
@@ -654,15 +883,24 @@ fn run_collider(
     }
     let segment_chars: u64 = segment_texts.iter().map(|t| t.chars().count() as u64).sum();
     let disclosure = polled.get("disclosure");
-    let disclosure_estimate =
-        disclosure.and_then(|d| d.get("estimatedInputTokens")).and_then(|v| v.as_u64());
-    let disclosure_segments =
-        disclosure.and_then(|d| d.get("segmentCount")).and_then(|v| v.as_u64());
-    let disclosure_messages =
-        disclosure.and_then(|d| d.get("messageCount")).and_then(|v| v.as_u64());
+    let disclosure_estimate = disclosure
+        .and_then(|d| d.get("estimatedInputTokens"))
+        .and_then(|v| v.as_u64());
+    let disclosure_segments = disclosure
+        .and_then(|d| d.get("segmentCount"))
+        .and_then(|v| v.as_u64());
+    let disclosure_messages = disclosure
+        .and_then(|d| d.get("messageCount"))
+        .and_then(|v| v.as_u64());
     let disclosure_usage = (
-        disclosure.and_then(|d| d.get("usage")).and_then(|u| u.get("inputTokens")).and_then(|v| v.as_u64()),
-        disclosure.and_then(|d| d.get("usage")).and_then(|u| u.get("outputTokens")).and_then(|v| v.as_u64()),
+        disclosure
+            .and_then(|d| d.get("usage"))
+            .and_then(|u| u.get("inputTokens"))
+            .and_then(|v| v.as_u64()),
+        disclosure
+            .and_then(|d| d.get("usage"))
+            .and_then(|u| u.get("outputTokens"))
+            .and_then(|v| v.as_u64()),
     );
     ColliderOutcome {
         status,
@@ -681,7 +919,10 @@ fn run_collider(
 
 fn ledger_totals(core: &Core, ws: &str) -> (u64, u64, u64) {
     let usage = core
-        .ai_command("providers-usage", json!({ "contractVersion": 1, "workspaceId": ws }))
+        .ai_command(
+            "providers-usage",
+            json!({ "contractVersion": 1, "workspaceId": ws }),
+        )
         .unwrap();
     let mut input = 0u64;
     let mut output = 0u64;
@@ -691,7 +932,6 @@ fn ledger_totals(core: &Core, ws: &str) -> (u64, u64, u64) {
     }
     (usage["totalRequests"].as_u64().unwrap_or(0), input, output)
 }
-
 
 fn push_record(
     records: &mut Vec<Record>,
@@ -723,7 +963,10 @@ fn benchmark_token_consumption() {
     let ask_root = ask_dir.path().to_path_buf();
     let ask_core = Core::with_storage_root(ask_root.clone());
     let ask_ws = ask_core
-        .workspace_command("create", json!({ "contractVersion": 1, "name": "Bench Ask" }))
+        .workspace_command(
+            "create",
+            json!({ "contractVersion": 1, "name": "Bench Ask" }),
+        )
         .unwrap()["workspace"]["id"]
         .as_str()
         .unwrap()
@@ -731,20 +974,33 @@ fn benchmark_token_consumption() {
     let bodies = seed_ask_workspace(&ask_core, &ask_ws, &ask_root);
     // Cross-workspace canary (must never appear in ask_ws requests).
     let xws = ask_core
-        .workspace_command("create", json!({ "contractVersion": 1, "name": "Bench Other" }))
+        .workspace_command(
+            "create",
+            json!({ "contractVersion": 1, "name": "Bench Other" }),
+        )
         .unwrap()["workspace"]["id"]
         .as_str()
         .unwrap()
         .to_string();
-    create_memory(&ask_core, &xws, "Foreign notes", "XWS-CANARY-9B2E lives in another workspace.", "private");
-    let fake_ask = if real_mode { None } else { Some(start_fake_ask()) };
+    create_memory(
+        &ask_core,
+        &xws,
+        "Foreign notes",
+        "XWS-CANARY-9B2E lives in another workspace.",
+        "private",
+    );
+    let fake_ask = if real_mode {
+        None
+    } else {
+        Some(start_fake_ask())
+    };
     let fake_ask_ref = fake_ask.as_ref();
 
     // recall_probe=true: natural phrasing whose content words include a term
     // absent as an exact FTS token from the evidence body. ANANSI's lexical
     // retrieval ANDs all terms with no stemming, so these miss. They are
     // retained as probes (honesty invariant only); A10 holds the controls.
-    let ask_cases: Vec<(&str, &str, &str, Option<usize>, &[&str], &[&str], bool, &str)> = vec![
+    let ask_cases: Vec<AskCase> = vec![
         (
             "A1",
             "What is the best launch window for survey boats at Harbor Pier?",
@@ -796,7 +1052,9 @@ fn benchmark_token_consumption() {
             "",
         ),
     ];
-    for (qid, question, _anchor, max_items, must_contain, must_absent, recall_probe, probe_note) in &ask_cases {
+    for (qid, question, _anchor, max_items, must_contain, must_absent, recall_probe, probe_note) in
+        &ask_cases
+    {
         let out = run_ask(
             &ask_core,
             &ask_ws,
@@ -821,9 +1079,12 @@ fn benchmark_token_consumption() {
         // Recall probes: an honest miss (InsufficientEvidence, zero hits)
         // is a recorded outcome, not a harness failure. The unfavorable
         // finding is preserved in the data and the report.
-        let recall_honest =
-            out.status == "InsufficientEvidence" && (real_mode || out.hits == 0);
-        let ok = if *recall_probe { answered_ok || recall_honest } else { answered_ok };
+        let recall_honest = out.status == "InsufficientEvidence" && (real_mode || out.hits == 0);
+        let ok = if *recall_probe {
+            answered_ok || recall_honest
+        } else {
+            answered_ok
+        };
         let mut notes = pack_notes;
         if !header_ok {
             notes.push_str(";header-duplicated-or-missing");
@@ -833,6 +1094,16 @@ fn benchmark_token_consumption() {
         }
         if *recall_probe {
             notes.push_str(&format!(";{probe_note}"));
+        }
+        if real_mode && (out.status == "Answered" || out.status == "Offline") {
+            let fact = must_contain
+                .first()
+                .map(|m| out.answer.contains(m))
+                .unwrap_or(false);
+            let cites = out.answer.contains('[');
+            notes.push_str(&format!(
+                ";real_answer_fact={fact};real_answer_cites_marker={cites}"
+            ));
         }
         if real_mode {
             notes.push_str(";real-model-mode");
@@ -1002,7 +1273,9 @@ fn benchmark_token_consumption() {
     let repeat_identical =
         repeat_bytes.len() == 3 && repeat_bytes.iter().all(|b| *b == repeat_bytes[0]);
     if !repeat_identical {
-        failures.push(format!("A7: repeated request bytes differ: {repeat_bytes:?}"));
+        failures.push(format!(
+            "A7: repeated request bytes differ: {repeat_bytes:?}"
+        ));
     }
 
     // A8: six-turn conversation; ANANSI per-turn vs B-HISTORY growth.
@@ -1129,7 +1402,11 @@ fn benchmark_token_consumption() {
     // evidence. Added after the first run (2026-10-28); the original
     // natural phrasings are retained above as recall probes.
     for (qid, question, must_contain) in [
-        ("A10a", "best launch window survey boats Harbor Pier", "launch window"),
+        (
+            "A10a",
+            "best launch window survey boats Harbor Pier",
+            "launch window",
+        ),
         ("A10b", "Harbor Hall north wing holds seats", "120 seats"),
     ] {
         let out = run_ask(
@@ -1172,11 +1449,105 @@ fn benchmark_token_consumption() {
         );
     }
 
+    // Semantic comparison (real mode only): index embeddings with the
+    // configured embedding model, then rerun the recall probes and
+    // controls with hybrid retrieval. Lexical-only is the default above.
+    if real_mode
+        && let (Some(emb_model), Some(endpoint)) = (
+            std::env::var("ANANSI_BENCH_EMBEDDING_MODEL").ok(),
+            real_endpoint.clone(),
+        )
+    {
+        let indexed = ask_core.ai_command(
+            "index-embeddings",
+            json!({ "contractVersion": 1, "workspaceId": ask_ws,
+                        "model": emb_model, "endpoint": endpoint }),
+        );
+        match indexed {
+            Ok(v) => {
+                let mems = v["indexedMemories"].as_u64().unwrap_or(0);
+                let chunks = v["indexedChunks"].as_u64().unwrap_or(0);
+                for (qid, question, must_contain) in [
+                    (
+                        "A1",
+                        "What is the best launch window for survey boats at Harbor Pier?",
+                        "launch window",
+                    ),
+                    (
+                        "A3",
+                        "How many seats do the Harbor Hall wings hold together?",
+                        "120 seats",
+                    ),
+                    (
+                        "A10a",
+                        "best launch window survey boats Harbor Pier",
+                        "launch window",
+                    ),
+                    ("A10b", "Harbor Hall north wing holds seats", "120 seats"),
+                ] {
+                    let out = run_ask_embed(
+                        &ask_core,
+                        &ask_ws,
+                        question,
+                        Some(5),
+                        AskMode {
+                            fake: fake_ask_ref,
+                            real_endpoint: real_endpoint.as_deref(),
+                            real_model: real_model.as_deref(),
+                            embedding_model: Some(&emb_model),
+                        },
+                    );
+                    let fact_ok = out.compiled_prompt.contains(must_contain)
+                        || out.answer.contains(must_contain);
+                    push_record(
+                        &mut records,
+                        &mut failures,
+                        Record {
+                            scenario: qid.to_string(),
+                            approach: "anansi_semantic".to_string(),
+                            question_id: format!("{qid}-semantic"),
+                            status: out.status.clone(),
+                            provider_hits: None,
+                            request_bytes: out.wire_body.as_ref().map(|b| b.len() as u64),
+                            prompt_chars: Some(out.compiled_prompt.chars().count() as u64),
+                            evidence_chars: Some(out.manifest_chars),
+                            cited_memory_count: Some(out.cited_titles.len() as u64),
+                            anansi_estimate_tokens: Some(out.manifest_estimate),
+                            compile_ms: Some(out.compile_ms),
+                            total_ms: Some(out.total_ms),
+                            provider_reported_input_tokens: None,
+                            provider_reported_output_tokens: None,
+                            provider_reported_cached_tokens: None,
+                            ledger_input_tokens: None,
+                            ledger_output_tokens: None,
+                            wire_checks_passed: true,
+                            notes: format!(
+                                "indexed_memories={mems} indexed_chunks={chunks} embedding_model={emb_model} fact_in_evidence_or_answer={fact_ok} cited={:?}",
+                                out.cited_titles
+                            ),
+                        },
+                        true,
+                        "semantic rerun",
+                    );
+                }
+            }
+            Err(e) => {
+                failures.push(format!("semantic indexing failed: {e:?}"));
+            }
+        }
+    }
+
     // --- Collider (M5 path) --------------------------------------------------
     let fake_m5 = start_fake_m5();
     let cf = collider_fixture(&fake_m5);
     // C1: beams only.
-    let c1 = run_collider(&cf, &fake_m5, "Trading signals.", "Mycelium networks.", json!([]));
+    let c1 = run_collider(
+        &cf,
+        &fake_m5,
+        "Trading signals.",
+        "Mycelium networks.",
+        json!([]),
+    );
     let c1_ok = c1.status == "complete";
     push_record(
         &mut records,
@@ -1239,7 +1610,10 @@ fn benchmark_token_consumption() {
         && c2.wire_message_count == 1;
     let (ctx_ok, ctx_notes) = check_wire(
         &c2.wire_body,
-        &["Harbor throughput doubles", "Hyphal gradients carry nutrients"],
+        &[
+            "Harbor throughput doubles",
+            "Hyphal gradients carry nutrients",
+        ],
         &["SEALED-CANARY-7F3A", "XWS-CANARY-9B2E"],
     );
     let c2_ok = c2.status == "complete" && est_ok && seg_ok && ctx_ok;
@@ -1306,11 +1680,7 @@ fn benchmark_token_consumption() {
         "Mycelium networks.",
         json!([{ "memoryId": ct_id, "revisionId": ct_rev_b }]),
     );
-    let (consent_ok, consent_notes) = check_wire(
-        &c3.wire_body,
-        &["2.4 meters"],
-        &["2.7 meters"],
-    );
+    let (consent_ok, consent_notes) = check_wire(&c3.wire_body, &["2.4 meters"], &["2.7 meters"]);
     let c3_ok = c3.status == "complete" && consent_ok;
     push_record(
         &mut records,
@@ -1341,7 +1711,13 @@ fn benchmark_token_consumption() {
     );
     // M1: ledger fidelity on a fresh fixture with exactly one run.
     let mf = collider_fixture(&fake_m5);
-    let m1 = run_collider(&mf, &fake_m5, "Trading signals.", "Mycelium networks.", json!([]));
+    let m1 = run_collider(
+        &mf,
+        &fake_m5,
+        "Trading signals.",
+        "Mycelium networks.",
+        json!([]),
+    );
     let (reqs, led_in, led_out) = ledger_totals(&mf.core, &mf.ws);
     // D1 regression: the run disclosure must agree with the ledger.
     // Before the D1 repair this was false (disclosure usage null while
@@ -1403,7 +1779,11 @@ fn benchmark_token_consumption() {
         "records": records,
     });
     std::fs::write(&out_path, serde_json::to_string_pretty(&doc).unwrap()).unwrap();
-    println!("benchmark results: {} records -> {}", records.len(), out_path.display());
+    println!(
+        "benchmark results: {} records -> {}",
+        records.len(),
+        out_path.display()
+    );
     for r in &records {
         println!(
             "{} / {}: status={} req_bytes={:?} prompt_chars={:?} est_tokens={:?} compile_ms={:?} total_ms={:?} wire_ok={}",
