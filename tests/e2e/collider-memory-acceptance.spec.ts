@@ -191,6 +191,14 @@ for (const scenario of ['review-pinning', 'pending-review'] as const) {
         }
         await expect(collider.locator('section[aria-label="Memory context to send"]')).toHaveCount(0);
         expect(fakeHits).toBe(0);
+        // The new project can start a context-free collision, and the late
+        // read from the previous project must not leak into its request.
+        await collider.getByLabel('Beam A').fill('Trading signals');
+        await collider.getByLabel('Beam B').fill('Mycelium networks');
+        await collider.getByRole('button', { name: 'Collide Ideas' }).click();
+        await expect(collider.getByRole('heading', { name: 'Source understanding' })).toBeVisible();
+        expect(fakeHits).toBe(1);
+        expect(capturedRequest).not.toContain('Revision B tide observations.');
       } else {
         // The owner reviews B. Another client then creates C; clicking Collide
         // must send the already-reviewed immutable revision, never unseen C.
