@@ -8,9 +8,9 @@ Usage:
 Rules enforced here (raw results JSON is never rewritten):
 - Every primary case stays in the overall denominator. Nothing is
   dropped because it failed.
-- Tokens spent on failed attempts count in overall consumption and in
-  tokens per correctly answered question (total tokens across all
-  primary attempts / correctly answered answerable questions).
+- Tokens spent on failed attempts count in overall consumption.
+  Per-correct figures require independent grades for each approach and
+  each replay sample; these raw harness files do not supply those grades.
 - Successful-case savings are a secondary breakdown only, labelled as
   such, with its sample count.
 - Correct insufficient-evidence responses (A6) are counted as correct
@@ -31,9 +31,9 @@ Replay file format: one JSON object per line, each with
   prompt_file (basename, e.g. "A2-anansi.txt"),
   prompt_eval_count, eval_count, and durations in ms.
 """
+import argparse
 import json
 import re
-import sys
 
 PRIMARY = ["A1", "A2", "A3", "A4", "A5", "A6", "A11", "A12", "A13"]
 RECALL_PROBES = {"A1", "A3"}
@@ -93,17 +93,22 @@ def classify(rec, real_mode):
 
 
 def main():
-    args = [a for a in sys.argv[1:] if not a.startswith("--")]
-    replay_path = None
-    if "--replay" in sys.argv:
-        replay_path = sys.argv[sys.argv.index("--replay") + 1]
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("results", nargs="+", help="Raw harness JSON result files")
+    parser.add_argument("--replay", help="Separate provider-usage JSONL replay file")
+    args = parser.parse_args()
+    replay_path = args.replay
     docs = []
-    for path in args:
-        with open(path) as fh:
+    for path in args.results:
+        with open(path, encoding="utf-8") as fh:
             docs.append(json.load(fh))
     real_mode = any(d.get("mode", "").startswith("real") for d in docs)
     print(f"# Benchmark report ({'real' if real_mode else 'fake/offline'} mode, "
           f"{len(docs)} run(s))")
+    print()
+    print("Quality counts below are diagnostic harness proxies, not validated "
+          "answer grades. The substring checks can misgrade A3/A5 and other "
+          "cases. Use the retained answers and owner rubric for final scoring.")
     print()
     print("## Primary denominator: every case, no failures dropped")
     print("| case | attempts | correct | category counts |")
@@ -152,7 +157,7 @@ def main():
         correct_n = cats.get("correct", 0)
         print(f"| {case} | {len(anansi_recs)} | {correct_n} | {cat_str} |")
     print()
-    print(f"Overall success rate (correct answers + correct-insufficient, "
+    print(f"Diagnostic harness success rate (fact proxies + correct-insufficient, "
           f"over all primary attempts): "
           f"{total_correct_behaviour}/{total_attempts} "
           f"= {100.0 * total_correct_behaviour / max(total_attempts, 1):.1f}%")
@@ -178,16 +183,13 @@ def main():
           f"including failed attempts): {total_anansi_est}")
     print(f"Overall naive estimated tokens (corresponding naive attempts, "
           f"A6 has no naive record): {total_naive_est}")
-    if total_correct_answers:
-        print(f"Tokens per correctly answered question (estimated, ANANSI, "
-              f"failed-attempt tokens included): "
-              f"{total_anansi_est / total_correct_answers:.1f}")
-        print(f"Tokens per correctly answered question (estimated, naive, "
-              f"same denominator): "
-              f"{total_naive_est / total_correct_answers:.1f}")
+    print("Tokens per correctly answered question: unavailable here. These "
+          "records lack independent answer grades for each approach; "
+          "ANANSI's harness count cannot be used for the naive baseline.")
     print()
     print("## Secondary breakdown ONLY: successful cases (labelled, "
           "excludes failed attempts)")
+    print("Selection uses diagnostic harness proxies, not the manual rubric.")
     print(f"Sample count (correct ANANSI attempts paired with naive): "
           f"{secondary_n}")
     print(f"ANANSI estimated tokens on successful cases only: "
@@ -223,7 +225,7 @@ def main():
     print("- Estimated: chars/4 from the Ask manifest (above).")
     if replay_path:
         replay = {}
-        with open(replay_path) as fh:
+        with open(replay_path, encoding="utf-8") as fh:
             for line in fh:
                 line = line.strip()
                 if not line:
@@ -244,10 +246,9 @@ def main():
         print(f"Replay totals (ANANSI prompts, all primary cases replayed, "
               f"including failed cases): input {tot_in}, output {tot_out}, "
               f"total {tot_in + tot_out}")
-        if total_correct_answers:
-            print(f"Replay tokens per correctly answered question "
-                  f"(failed-attempt replay included): "
-                  f"{(tot_in + tot_out) / total_correct_answers:.1f}")
+        print("Replay tokens per correctly answered question: unavailable here; "
+              "replayed answers require their own grades, independently of "
+              "the original Ask run and the other approach.")
     else:
         print("- Direct replay: no --replay file supplied; replay totals "
               "are not claimed.")
