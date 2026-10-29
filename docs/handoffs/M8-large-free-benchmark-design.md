@@ -10,6 +10,8 @@ preview promotion, paid models, downloads, private owner data, pushes or CI.
 - Prepare 100 distinct synthetic questions before inference. Cover short, medium,
   and long documents, early/middle/late evidence, multiple sources, conflicts,
   absent evidence and paraphrasing. Record actual category counts and corpus size.
+  The fixture uses ten repeated question templates with varied entities/values,
+  lengths and fact positions: report that effective diversity explicitly.
 - ANANSI must use its real lexical Ask/context path, not hand-selected evidence.
   No embeddings are installed: semantic retrieval is outside this experiment.
   Bulk SQL fixture creation is test setup only; production reads/integrity/privacy

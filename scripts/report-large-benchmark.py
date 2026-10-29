@@ -70,7 +70,7 @@ def main():
     finishes = Counter(str(r.get('finish_reason')) for r in records)
     lines += ["", "## Limits and reproduction", "",
         f"Finish reasons: `{dict(finishes)}`. Preserve any truncation/parse errors in the raw ledger.",
-        "Synthetic formulaic names, ASCII text, single revisions, six documents per corpus, one free cloud model and no semantic embeddings.",
+        "100 distinct instances across ten repeated question templates; synthetic formulaic names, ASCII text, single revisions, six documents per corpus, one free cloud model and no semantic embeddings.",
         "Basic retrieval is a named simple baseline, not a commercial product or a tuned state-of-the-art RAG system.",
         "Full context includes irrelevant eligible documents; a reduction versus it is not proof of superiority over efficient retrieval.",
         "Batch usage cannot be allocated to individual questions or question categories. Character counts are not tokenizer measurements.",
