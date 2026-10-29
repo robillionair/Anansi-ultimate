@@ -13,7 +13,7 @@ preview promotion, paid models, downloads, private owner data, pushes or CI.
   The fixture uses ten repeated question templates with varied entities/values,
   lengths and fact positions: report that effective diversity explicitly.
 - ANANSI must use its real lexical Ask/context path, not hand-selected evidence.
-  No embeddings are installed: semantic retrieval is outside this experiment.
+  No embedding model is configured for this fixture: semantic retrieval is outside this experiment.
   Bulk SQL fixture creation is test setup only; production reads/integrity/privacy
   enforcement remain intact. Document setup omissions and timing scope honestly.
 - Compare full eligible context, a frozen basic lexical top-three/first-chunk
