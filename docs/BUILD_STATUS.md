@@ -13,6 +13,20 @@ evidence remains scoped; model-answer quality and actual token savings are still
 unmeasured on repaired prompts. No production code, preview or provider calls
 changed in this review. Next task is bounded Windows performance/scorer repair.
 
+## 2026-10-29 — Ask Windows scale repair (batch proofs, fact binding)
+
+Branch `muse/ask-windows-scale-repair` from reviewed checkpoint
+`8bdcbae1`. [Full report](handoffs/ask-windows-scale-repair-report.md).
+Ask now shares one operation-scoped batch permission proof between
+index rebuild and compilation (Linux 16-note Ask: 1 batch, 34 paths,
+42 individual checks, versus about 4N before); all ACL, link, hash,
+and privacy checks retained, no permanent cache, no rebuild removed.
+Large-scale scorer now binds each required span to its declared
+source's actual evidence chunk (40/40), with a wrong-source
+regression and a retained 4-question natural negative family (4/4).
+Windows timing is NOT claimed from Linux: the reviewer's 16-note
+probe rerun decides. Cloud replay still held at 0/31 attempts.
+
 ## 2026-10-29 — Ask retrieval verified at larger scale; model replay held
 
 Branch `muse/ask-retrieval-verify` from `95d384e3`. [Full report](handoffs/ask-retrieval-verify-report.md).
