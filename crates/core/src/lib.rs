@@ -33,4 +33,6 @@ pub mod storage;
 pub mod transfer;
 pub mod vault;
 pub mod vector;
+#[cfg(windows)]
+pub(crate) mod windows_security;
 pub mod workspace;

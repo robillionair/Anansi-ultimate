@@ -124,10 +124,9 @@ pub fn read(
 /// revision created mid-operation, or a path that was absent when the
 /// batch was built) falls back to the full per-path verification in
 /// `read`, never to an unverified read. A failed batch fails the whole
-/// operation. On non-Windows platforms a proven read additionally
-/// re-validates the file's permission bits at read time (one metadata
-/// check), closing the widen-after-proof race there; on Windows that
-/// race has a one-operation residual window (see `read_verified`).
+/// operation. A proven read additionally re-validates current
+/// permissions at read time (see `read_verified`), so a permission
+/// widened after proving fails the read on every platform.
 pub(crate) struct VerifiedPaths {
     files: HashSet<PathBuf>,
 }
@@ -241,13 +240,14 @@ impl VerifiedPaths {
             crate::storage::record_permission_fallback(fs::symlink_metadata(&file).is_ok());
             return read(root, workspace, record, revision, expected);
         }
-        // Read-time revalidation where it costs a single metadata
-        // check: a file widened after proving must fail here, so the
-        // batch proof does not authorize a read of a file that is no
-        // longer private. Windows has no cheap equivalent (ACL checks
-        // need a process spawn, which batching exists to avoid), so
-        // the Windows residual window is one operation: proofs are
-        // fresh per operation and the next operation re-verifies.
+        // Read-time revalidation: a file (or ancestor directory)
+        // widened after proving must fail here, so the batch proof
+        // does not authorize a read of content that is no longer
+        // private. Unix checks permission bits with metadata calls;
+        // Windows validates current owner/DACL natively in-process
+        // (see windows_security), never via a per-file process.
+        // One recheck is counted per proven read, covering the file
+        // and its proven ancestor directories.
         #[cfg(not(windows))]
         {
             use std::os::unix::fs::PermissionsExt;
@@ -259,6 +259,35 @@ impl VerifiedPaths {
             crate::storage::record_permission_recheck();
             if mode != 0o600 {
                 return Err(unavailable());
+            }
+            let mut ancestor = file.parent();
+            for _ in 0..3 {
+                let Some(dir) = ancestor else { break };
+                let dir_mode = fs::metadata(dir)
+                    .map_err(|_| unavailable())?
+                    .permissions()
+                    .mode()
+                    & 0o777;
+                if dir_mode != 0o700 {
+                    return Err(unavailable());
+                }
+                ancestor = dir.parent();
+            }
+        }
+        #[cfg(windows)]
+        {
+            let Some(user_sid) = crate::windows_security::current_user_sid() else {
+                return Err(unavailable());
+            };
+            crate::storage::record_permission_recheck();
+            match crate::windows_security::proven_paths_are_private(&file, &user_sid) {
+                crate::windows_security::WindowsVerify::Ok => {}
+                crate::windows_security::WindowsVerify::NotFound => {
+                    return Err(integrity());
+                }
+                crate::windows_security::WindowsVerify::Failed => {
+                    return Err(unavailable());
+                }
             }
         }
         if !file.exists() {
@@ -362,11 +391,9 @@ mod tests {
         std::fs::write(&file_a, "tampered").unwrap();
         assert!(proofs.read_verified(root, WS, REC_A, REV, &hash_a).is_err());
         std::fs::write(&file_a, body_a).unwrap();
-        // Widening after proving: the read-time recheck (non-Windows)
-        // fails the read, so a widened file is not read on a stale
-        // proof. On Windows the batch-only proof keeps its
-        // one-operation residual window, and a fresh batch fails in
-        // both cases. Repair restores both the proven read and fresh
+        // Widening after proving: the read-time recheck fails the
+        // read, so a widened file is not read on a stale proof.
+        // Repair restores both the proven read and fresh
         // verification.
         let file_b = root
             .join("content")
@@ -374,22 +401,18 @@ mod tests {
             .join(REC_B)
             .join(format!("{REV}.md"));
         widen(&file_b);
-        #[cfg(not(windows))]
         assert!(proofs.read_verified(root, WS, REC_B, REV, &hash_b).is_err());
-        #[cfg(windows)]
-        assert!(proofs.read_verified(root, WS, REC_B, REV, &hash_b).is_ok());
         assert!(VerifiedPaths::verify(root, WS, &[(REC_B.to_string(), REV.to_string())]).is_err());
         crate::storage::private_permissions(&file_b, false, false).unwrap();
         assert!(proofs.read_verified(root, WS, REC_B, REV, &hash_b).is_ok());
         assert!(VerifiedPaths::verify(root, WS, &[(REC_B.to_string(), REV.to_string())]).is_ok());
     }
 
-    /// Review-only expected-success security reproduction. Run explicitly;
-    /// incoming Windows batching currently fails this assertion. A future
-    /// repair must make it pass without changing the expected result.
+    /// Windows widen-after-proof regression, kept from the review
+    /// reproduction with its refusal assertion unchanged: a batch
+    /// proof must not authorize a body read after its ACL is widened.
     #[test]
     #[cfg(windows)]
-    #[ignore = "explicit review reproduction: Windows read must reject widened permissions"]
     fn windows_widen_after_proof_must_fail_closed() {
         let temp = tempfile::tempdir().unwrap();
         let root = temp.path();
