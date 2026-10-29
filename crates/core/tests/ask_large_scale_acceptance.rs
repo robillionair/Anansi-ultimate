@@ -1,12 +1,17 @@
 //! Large-scale Ask retrieval acceptance: one shared workspace with 1,000+
-//! records and 48 fresh questions. Local only: Ask runs against a refused
+//! records and 48 fresh questions, plus a 4-question natural negative
+//! family (52 questions total). Local only: Ask runs against a refused
 //! loopback endpoint, so every question yields an Offline compiled prompt
 //! (or InsufficientEvidence) with no inference and no cloud call.
 //!
-//! See docs/handoffs/ask-large-scale-acceptance.md for the frozen criteria.
+//! See docs/handoffs/ask-large-scale-acceptance.md for the frozen criteria
+//! and docs/handoffs/ask-windows-scale-repair.md for the fact-to-source
+//! binding and natural negative family added by the Windows review.
 //! No gold answers are passed into retrieval; questions go through
 //! `Core::ask_anansi` only, and assertions read the returned prompt,
-//! citations, and disclosure manifest.
+//! citations, and disclosure manifest. Answerable completeness now
+//! requires each required span inside its declared source's actual
+//! serialized evidence chunk, not merely anywhere in the prompt.
 
 use anansi_core::{
     Core,
@@ -99,6 +104,68 @@ fn ask(core: &Core, ws: &str, prompt: &str) -> anansi_core::ask::AskResponse {
     .unwrap()
 }
 
+/// Parse serialized evidence chunks from a compiled prompt: (citation
+/// index, chunk content). Headers are `[n] title - heading (line L)`
+/// lines; content runs until the next header or the `User Question:`
+/// line. An empty (insufficient) prompt yields no chunks.
+fn prompt_chunks(prompt: &str) -> Vec<(usize, String)> {
+    let mut chunks = Vec::new();
+    let mut current: Option<(usize, String)> = None;
+    for line in prompt.lines() {
+        if line.starts_with("User Question:") {
+            break;
+        }
+        if let Some(index) = chunk_header_index(line) {
+            if let Some(prev) = current.take() {
+                chunks.push(prev);
+            }
+            current = Some((index, String::new()));
+        } else if let Some((_, content)) = current.as_mut() {
+            if !content.is_empty() {
+                content.push('\n');
+            }
+            content.push_str(line);
+        }
+    }
+    if let Some(last) = current.take() {
+        chunks.push(last);
+    }
+    chunks
+}
+
+fn chunk_header_index(line: &str) -> Option<usize> {
+    let rest = line.strip_prefix('[')?;
+    let (digits, after) = rest.split_once(']')?;
+    if !after.starts_with(' ') || digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    digits.parse().ok()
+}
+
+/// Fact-to-source binding: true only when `span` appears in a chunk
+/// whose citation maps to `source_id` (citation `index == n` is the
+/// `[n]` chunk). A span anywhere else in the prompt, or in the
+/// 200-byte citation preview, does not satisfy it. A chunk/citation
+/// count mismatch makes the mapping untrustworthy and fails closed.
+fn span_bound_to_source(
+    prompt: &str,
+    citations: &[anansi_core::ask::GroundedCitation],
+    span: &str,
+    source_id: &str,
+) -> bool {
+    let chunks = prompt_chunks(prompt);
+    if chunks.len() != citations.len() {
+        return false;
+    }
+    let source_by_index: std::collections::HashMap<usize, &str> = citations
+        .iter()
+        .map(|c| (c.index, c.memory_id.as_str()))
+        .collect();
+    chunks.iter().any(|(index, content)| {
+        source_by_index.get(index).is_some_and(|s| *s == source_id) && content.contains(span)
+    })
+}
+
 fn filler_sentence(i: usize) -> &'static str {
     const SENTENCES: [&str; 7] = [
         "The quarterly review entry is filed.",
@@ -140,9 +207,8 @@ fn long_body(fact: &str, position: &str) -> String {
 
 struct Case {
     question: &'static str,
-    required: Vec<&'static str>,
+    required: Vec<(&'static str, String)>,
     forbidden: Vec<&'static str>,
-    required_ids: Vec<String>,
     insufficient: bool,
 }
 
@@ -200,9 +266,8 @@ fn large_shared_workspace_retrieval_acceptance() {
     created += 1;
     cases.push(Case {
         question: "How many crates does the Harrow depot store?",
-        required: vec!["320 crates"],
+        required: vec![("320 crates", harrow_depot.clone())],
         forbidden: vec![],
-        required_ids: vec![harrow_depot.clone()],
         insufficient: false,
     });
     let wrenfield = note(
@@ -215,9 +280,8 @@ fn large_shared_workspace_retrieval_acceptance() {
     created += 1;
     cases.push(Case {
         question: "When does the Wrenfield greenhouse water the orchids?",
-        required: vec!["orchids at dawn"],
+        required: vec![("orchids at dawn", wrenfield.clone())],
         forbidden: vec![],
-        required_ids: vec![wrenfield.clone()],
         insufficient: false,
     });
     let tamsin_ferry = note(
@@ -230,9 +294,8 @@ fn large_shared_workspace_retrieval_acceptance() {
     created += 1;
     cases.push(Case {
         question: "When does the Tamsin ferry depart?",
-        required: vec!["half past seven"],
+        required: vec![("half past seven", tamsin_ferry.clone())],
         forbidden: vec![],
-        required_ids: vec![tamsin_ferry.clone()],
         insufficient: false,
     });
     let sorrel = note(
@@ -245,9 +308,8 @@ fn large_shared_workspace_retrieval_acceptance() {
     created += 1;
     cases.push(Case {
         question: "How hot does the Sorrel bakery oven get?",
-        required: vec!["240 degrees"],
+        required: vec![("240 degrees", sorrel.clone())],
         forbidden: vec![],
-        required_ids: vec![sorrel.clone()],
         insufficient: false,
     });
     let fenwick = note(
@@ -260,9 +322,8 @@ fn large_shared_workspace_retrieval_acceptance() {
     created += 1;
     cases.push(Case {
         question: "When does the Fenwick archive reading room close?",
-        required: vec!["closes at six"],
+        required: vec![("closes at six", fenwick.clone())],
         forbidden: vec![],
-        required_ids: vec![fenwick.clone()],
         insufficient: false,
     });
     let aldermere = note(
@@ -275,9 +336,8 @@ fn large_shared_workspace_retrieval_acceptance() {
     created += 1;
     cases.push(Case {
         question: "How often does the Aldermere lighthouse lamp flash?",
-        required: vec!["every twelve seconds"],
+        required: vec![("every twelve seconds", aldermere.clone())],
         forbidden: vec![],
-        required_ids: vec![aldermere.clone()],
         insufficient: false,
     });
     let osprey = note(
@@ -290,9 +350,8 @@ fn large_shared_workspace_retrieval_acceptance() {
     created += 1;
     cases.push(Case {
         question: "When does the Osprey clinic open on weekdays?",
-        required: vec!["at eight"],
+        required: vec![("at eight", osprey.clone())],
         forbidden: vec![],
-        required_ids: vec![osprey.clone()],
         insufficient: false,
     });
     let yarrow = note(
@@ -305,9 +364,8 @@ fn large_shared_workspace_retrieval_acceptance() {
     created += 1;
     cases.push(Case {
         question: "How many bunches of herbs does the Yarrow market stall sell?",
-        required: vec!["forty bunches"],
+        required: vec![("forty bunches", yarrow.clone())],
         forbidden: vec![],
-        required_ids: vec![yarrow.clone()],
         insufficient: false,
     });
     fillers(&core, &ws, 150, &mut filler_counter);
@@ -324,9 +382,8 @@ fn large_shared_workspace_retrieval_acceptance() {
     created += 1;
     cases.push(Case {
         question: "What is the Marlowe society membership total?",
-        required: vec!["480 members"],
+        required: vec![("480 members", marlowe.clone())],
         forbidden: vec![],
-        required_ids: vec![marlowe.clone()],
         insufficient: false,
     });
     let dunlin = note(
@@ -339,9 +396,8 @@ fn large_shared_workspace_retrieval_acceptance() {
     created += 1;
     cases.push(Case {
         question: "How many pallets are held at the Dunlin warehouse?",
-        required: vec!["215 pallets"],
+        required: vec![("215 pallets", dunlin.clone())],
         forbidden: vec![],
-        required_ids: vec![dunlin.clone()],
         insufficient: false,
     });
     let corvid = note(
@@ -354,9 +410,8 @@ fn large_shared_workspace_retrieval_acceptance() {
     created += 1;
     cases.push(Case {
         question: "At what time does the Corvid tower bell sound?",
-        required: vec!["at noon"],
+        required: vec![("at noon", corvid.clone())],
         forbidden: vec![],
-        required_ids: vec![corvid.clone()],
         insufficient: false,
     });
     let linden = note(
@@ -369,9 +424,8 @@ fn large_shared_workspace_retrieval_acceptance() {
     created += 1;
     cases.push(Case {
         question: "On which weekday can patients get a flu shot at the Linden clinic?",
-        required: vec!["on Tuesdays"],
+        required: vec![("on Tuesdays", linden.clone())],
         forbidden: vec![],
-        required_ids: vec![linden.clone()],
         insufficient: false,
     });
     let aspen = note(
@@ -384,9 +438,8 @@ fn large_shared_workspace_retrieval_acceptance() {
     created += 1;
     cases.push(Case {
         question: "What is the hourly canoe hire price at the Aspen boathouse?",
-        required: vec!["nine coins"],
+        required: vec![("nine coins", aspen.clone())],
         forbidden: vec![],
-        required_ids: vec![aspen.clone()],
         insufficient: false,
     });
     let rowan = note(
@@ -399,9 +452,8 @@ fn large_shared_workspace_retrieval_acceptance() {
     created += 1;
     cases.push(Case {
         question: "On which day does the Rowan pottery studio bake its bowls?",
-        required: vec!["on Fridays"],
+        required: vec![("on Fridays", rowan.clone())],
         forbidden: vec![],
-        required_ids: vec![rowan.clone()],
         insufficient: false,
     });
     let hazel = note(
@@ -414,9 +466,8 @@ fn large_shared_workspace_retrieval_acceptance() {
     created += 1;
     cases.push(Case {
         question: "How much fruit does the Hazel orchard produce?",
-        required: vec!["900 kilograms"],
+        required: vec![("900 kilograms", hazel.clone())],
         forbidden: vec![],
-        required_ids: vec![hazel.clone()],
         insufficient: false,
     });
     let elmwood = note(
@@ -429,9 +480,8 @@ fn large_shared_workspace_retrieval_acceptance() {
     created += 1;
     cases.push(Case {
         question: "What is the Elmwood theatre audience capacity?",
-        required: vec!["220 guests"],
+        required: vec![("220 guests", elmwood.clone())],
         forbidden: vec![],
-        required_ids: vec![elmwood.clone()],
         insufficient: false,
     });
     fillers(&core, &ws, 150, &mut filler_counter);
@@ -455,9 +505,11 @@ fn large_shared_workspace_retrieval_acceptance() {
     created += 2;
     cases.push(Case {
         question: "How many loaves does the Juniper bakery bake in a day?",
-        required: vec!["40 loaves", "25 loaves"],
+        required: vec![
+            ("40 loaves", jb_morning.clone()),
+            ("25 loaves", jb_evening.clone()),
+        ],
         forbidden: vec![],
-        required_ids: vec![jb_morning.clone(), jb_evening.clone()],
         insufficient: false,
     });
     let wp_morning = note(
@@ -477,9 +529,11 @@ fn large_shared_workspace_retrieval_acceptance() {
     created += 2;
     cases.push(Case {
         question: "What are the Willow pool session times?",
-        required: vec!["starts at seven", "ends at ten"],
+        required: vec![
+            ("starts at seven", wp_morning.clone()),
+            ("ends at ten", wp_evening.clone()),
+        ],
         forbidden: vec![],
-        required_ids: vec![wp_morning.clone(), wp_evening.clone()],
         insufficient: false,
     });
     let beech_c = note(
@@ -499,9 +553,11 @@ fn large_shared_workspace_retrieval_acceptance() {
     created += 2;
     cases.push(Case {
         question: "How many workers does the Beech workshop employ?",
-        required: vec!["twelve carpenters", "nine painters"],
+        required: vec![
+            ("twelve carpenters", beech_c.clone()),
+            ("nine painters", beech_p.clone()),
+        ],
         forbidden: vec![],
-        required_ids: vec![beech_c.clone(), beech_p.clone()],
         insufficient: false,
     });
     let ash_n = note(
@@ -521,9 +577,11 @@ fn large_shared_workspace_retrieval_acceptance() {
     created += 2;
     cases.push(Case {
         question: "How many trains does Ashford station serve across its platforms?",
-        required: vec!["six trains", "four trains"],
+        required: vec![
+            ("six trains", ash_n.clone()),
+            ("four trains", ash_s.clone()),
+        ],
         forbidden: vec![],
-        required_ids: vec![ash_n.clone(), ash_s.clone()],
         insufficient: false,
     });
     let briar_w = note(
@@ -543,9 +601,11 @@ fn large_shared_workspace_retrieval_acceptance() {
     created += 2;
     cases.push(Case {
         question: "What crops grow in the Briar farm fields?",
-        required: vec!["grows wheat", "grows barley"],
+        required: vec![
+            ("grows wheat", briar_w.clone()),
+            ("grows barley", briar_b.clone()),
+        ],
         forbidden: vec![],
-        required_ids: vec![briar_w.clone(), briar_b.clone()],
         insufficient: false,
     });
     let holly_m = note(
@@ -565,9 +625,11 @@ fn large_shared_workspace_retrieval_acceptance() {
     created += 2;
     cases.push(Case {
         question: "How many nurses work at the Holly clinic across shifts?",
-        required: vec!["five nurses", "three nurses"],
+        required: vec![
+            ("five nurses", holly_m.clone()),
+            ("three nurses", holly_n.clone()),
+        ],
         forbidden: vec![],
-        required_ids: vec![holly_m.clone(), holly_n.clone()],
         insufficient: false,
     });
     fillers(&core, &ws, 150, &mut filler_counter);
@@ -584,9 +646,8 @@ fn large_shared_workspace_retrieval_acceptance() {
     created += 1;
     cases.push(Case {
         question: "How deep is the Quarry pit?",
-        required: vec!["90 metres"],
+        required: vec![("90 metres", quarry.clone())],
         forbidden: vec![],
-        required_ids: vec![quarry.clone()],
         insufficient: false,
     });
     let sable = note(
@@ -599,9 +660,8 @@ fn large_shared_workspace_retrieval_acceptance() {
     created += 1;
     cases.push(Case {
         question: "When does the Sable vineyard harvest begin?",
-        required: vec!["in September"],
+        required: vec![("in September", sable.clone())],
         forbidden: vec![],
-        required_ids: vec![sable.clone()],
         insufficient: false,
     });
     let umber = note(
@@ -614,9 +674,8 @@ fn large_shared_workspace_retrieval_acceptance() {
     created += 1;
     cases.push(Case {
         question: "How much does the Umber quarry stone weigh?",
-        required: vec!["800 kilograms"],
+        required: vec![("800 kilograms", umber.clone())],
         forbidden: vec![],
-        required_ids: vec![umber.clone()],
         insufficient: false,
     });
     let vesper = note(
@@ -629,9 +688,8 @@ fn large_shared_workspace_retrieval_acceptance() {
     created += 1;
     cases.push(Case {
         question: "When does the Vesper observatory dome open?",
-        required: vec!["at dusk"],
+        required: vec![("at dusk", vesper.clone())],
         forbidden: vec![],
-        required_ids: vec![vesper.clone()],
         insufficient: false,
     });
     let cobalt = note(
@@ -644,9 +702,8 @@ fn large_shared_workspace_retrieval_acceptance() {
     created += 1;
     cases.push(Case {
         question: "How far does the Cobalt mine shaft descend?",
-        required: vec!["400 metres"],
+        required: vec![("400 metres", cobalt.clone())],
         forbidden: vec![],
-        required_ids: vec![cobalt.clone()],
         insufficient: false,
     });
     let garnet = note(
@@ -659,9 +716,8 @@ fn large_shared_workspace_retrieval_acceptance() {
     created += 1;
     cases.push(Case {
         question: "When does the Garnet reef tide turn?",
-        required: vec!["at midnight"],
+        required: vec![("at midnight", garnet.clone())],
         forbidden: vec![],
-        required_ids: vec![garnet.clone()],
         insufficient: false,
     });
     fillers(&core, &ws, 150, &mut filler_counter);
@@ -696,9 +752,8 @@ fn large_shared_workspace_retrieval_acceptance() {
     created += 1;
     cases.push(Case {
         question: "How many sacks does the Tamsin mill grind a day?",
-        required: vec!["68 sacks"],
+        required: vec![("68 sacks", tamsin_mill.clone())],
         forbidden: vec!["40 sacks", "55 sacks"],
-        required_ids: vec![tamsin_mill.clone()],
         insufficient: false,
     });
     let plover = note(
@@ -729,9 +784,8 @@ fn large_shared_workspace_retrieval_acceptance() {
     created += 1;
     cases.push(Case {
         question: "How many rooms does the Plover inn have?",
-        required: vec!["27 rooms"],
+        required: vec![("27 rooms", plover.clone())],
         forbidden: vec!["18 rooms", "22 rooms"],
-        required_ids: vec![plover.clone()],
         insufficient: false,
     });
     let fernhill = note(
@@ -762,9 +816,8 @@ fn large_shared_workspace_retrieval_acceptance() {
     created += 1;
     cases.push(Case {
         question: "How long is the Fernhill bridge?",
-        required: vec!["42 metres"],
+        required: vec![("42 metres", fernhill.clone())],
         forbidden: vec!["30 metres", "36 metres"],
-        required_ids: vec![fernhill.clone()],
         insufficient: false,
     });
     let snowdrop = note(
@@ -795,9 +848,8 @@ fn large_shared_workspace_retrieval_acceptance() {
     created += 1;
     cases.push(Case {
         question: "How many doses does the Snowdrop clinic stock?",
-        required: vec!["175 doses"],
+        required: vec![("175 doses", snowdrop.clone())],
         forbidden: vec!["120 doses", "150 doses"],
-        required_ids: vec![snowdrop.clone()],
         insufficient: false,
     });
     fillers(&core, &ws, 150, &mut filler_counter);
@@ -821,9 +873,11 @@ fn large_shared_workspace_retrieval_acceptance() {
     created += 2;
     cases.push(Case {
         question: "How many people does the Norbury hall seat?",
-        required: vec!["150 people", "190 people"],
+        required: vec![
+            ("150 people", norbury_a.clone()),
+            ("190 people", norbury_b.clone()),
+        ],
         forbidden: vec![],
-        required_ids: vec![norbury_a.clone(), norbury_b.clone()],
         insufficient: false,
     });
     let redwood_a = note(
@@ -843,9 +897,11 @@ fn large_shared_workspace_retrieval_acceptance() {
     created += 2;
     cases.push(Case {
         question: "How much water does the Redwood dam hold?",
-        required: vec!["800 litres", "950 litres"],
+        required: vec![
+            ("800 litres", redwood_a.clone()),
+            ("950 litres", redwood_b.clone()),
+        ],
         forbidden: vec![],
-        required_ids: vec![redwood_a.clone(), redwood_b.clone()],
         insufficient: false,
     });
     let ivory_a = note(
@@ -865,9 +921,8 @@ fn large_shared_workspace_retrieval_acceptance() {
     created += 2;
     cases.push(Case {
         question: "When does the Ivory tower clock chime?",
-        required: vec!["at eight", "at nine"],
+        required: vec![("at eight", ivory_a.clone()), ("at nine", ivory_b.clone())],
         forbidden: vec![],
-        required_ids: vec![ivory_a.clone(), ivory_b.clone()],
         insufficient: false,
     });
     let marble_a = note(
@@ -887,9 +942,11 @@ fn large_shared_workspace_retrieval_acceptance() {
     created += 2;
     cases.push(Case {
         question: "How fast does the Marble fountain flow?",
-        required: vec!["six litres", "nine litres"],
+        required: vec![
+            ("six litres", marble_a.clone()),
+            ("nine litres", marble_b.clone()),
+        ],
         forbidden: vec![],
-        required_ids: vec![marble_a.clone(), marble_b.clone()],
         insufficient: false,
     });
     fillers(&core, &ws, 150, &mut filler_counter);
@@ -926,7 +983,6 @@ fn large_shared_workspace_retrieval_acceptance() {
         question: "At what temperature does the Quorble fizzletrate calibrate?",
         required: vec![],
         forbidden: vec![],
-        required_ids: vec![],
         insufficient: true,
     });
     let archived_b = note(
@@ -950,7 +1006,6 @@ fn large_shared_workspace_retrieval_acceptance() {
         question: "What is the Vexnor glimmerlens measurement?",
         required: vec![],
         forbidden: vec![],
-        required_ids: vec![],
         insufficient: true,
     });
     let expired_a = expired_note(
@@ -964,7 +1019,6 @@ fn large_shared_workspace_retrieval_acceptance() {
         question: "How many hives does the Zorblix trundlewheel house?",
         required: vec![],
         forbidden: vec![],
-        required_ids: vec![],
         insufficient: true,
     });
     let expired_b = expired_note(
@@ -978,14 +1032,65 @@ fn large_shared_workspace_retrieval_acceptance() {
         question: "How long is the Morvain duskpetal?",
         required: vec![],
         forbidden: vec![],
-        required_ids: vec![],
         insufficient: true,
     });
+    // Natural overlapping negative notes (separate family, checked after
+    // the main loop): fresh values, so an excluded-fact leak is
+    // attributable to exactly one note. These reproduce the four
+    // cycle-2 collision shapes (Alder/Aldermere prefix, observatory,
+    // keeps/keep stemming, holds in filler) without reusing the
+    // term-disjoint family's values; the cycle-2 question wordings
+    // were not preserved verbatim, so these questions are new
+    // writings in the same shapes, not claimed restorations.
+    let natural_archived_a = note(
+        &core,
+        &ws,
+        "Kiln note",
+        "The Alder workshop kiln fires at 960 degrees.",
+        "private",
+    );
+    revise(
+        &core,
+        &root,
+        &ws,
+        &natural_archived_a,
+        "Kiln note",
+        "The Alder workshop kiln fires at 960 degrees.",
+        Some(json!({"state":"archived","confirmed":true,"successorId":null})),
+    );
+    created += 1;
+    let natural_archived_b = note(
+        &core,
+        &ws,
+        "Telescope note",
+        "The Bramble observatory telescope lens measures 180 millimetres.",
+        "private",
+    );
+    revise(
+        &core,
+        &root,
+        &ws,
+        &natural_archived_b,
+        "Telescope note",
+        "The Bramble observatory telescope lens measures 180 millimetres.",
+        Some(json!({"state":"archived","confirmed":true,"successorId":null})),
+    );
+    created += 1;
+    let natural_expired_a = expired_note(
+        &core,
+        &ws,
+        "Apiary note",
+        "The Foxglove apiary keeps 60 hives.",
+    );
+    created += 1;
     let excluded_ids: BTreeSet<String> = [
         archived_a.clone(),
         archived_b.clone(),
         expired_a.clone(),
         expired_b.clone(),
+        natural_archived_a.clone(),
+        natural_archived_b.clone(),
+        natural_expired_a.clone(),
     ]
     .into_iter()
     .collect();
@@ -1002,7 +1107,6 @@ fn large_shared_workspace_retrieval_acceptance() {
             question: q,
             required: vec![],
             forbidden: vec![],
-            required_ids: vec![],
             insufficient: true,
         });
     }
@@ -1026,9 +1130,8 @@ fn large_shared_workspace_retrieval_acceptance() {
     created += 2;
     cases.push(Case {
         question: "When does the Cedar Falls library open?",
-        required: vec!["opens at eight"],
+        required: vec![("opens at eight", cedar_library.clone())],
         forbidden: vec![],
-        required_ids: vec![cedar_library.clone()],
         insufficient: false,
     });
     let _juniper_cafe = note(
@@ -1041,9 +1144,8 @@ fn large_shared_workspace_retrieval_acceptance() {
     created += 1;
     cases.push(Case {
         question: "How many loaves are in the Juniper bakery morning batch?",
-        required: vec!["40 loaves"],
+        required: vec![("40 loaves", jb_morning.clone())],
         forbidden: vec![],
-        required_ids: vec![jb_morning.clone()],
         insufficient: false,
     });
     let _harrow_yard = note(
@@ -1056,9 +1158,8 @@ fn large_shared_workspace_retrieval_acceptance() {
     created += 1;
     cases.push(Case {
         question: "How many crates does the Harrow depot store?",
-        required: vec!["320 crates"],
+        required: vec![("320 crates", harrow_depot.clone())],
         forbidden: vec![],
-        required_ids: vec![harrow_depot.clone()],
         insufficient: false,
     });
     let _wrenfield_nursery = note(
@@ -1071,9 +1172,8 @@ fn large_shared_workspace_retrieval_acceptance() {
     created += 1;
     cases.push(Case {
         question: "When does the Wrenfield greenhouse water the orchids?",
-        required: vec!["orchids at dawn"],
+        required: vec![("orchids at dawn", wrenfield.clone())],
         forbidden: vec![],
-        required_ids: vec![wrenfield.clone()],
         insufficient: false,
     });
 
@@ -1153,7 +1253,8 @@ fn large_shared_workspace_retrieval_acceptance() {
             .map(|m| m.id.clone())
             .collect();
         total_cited += cited.len();
-        let required_ids: BTreeSet<String> = case.required_ids.iter().cloned().collect();
+        let required_ids: BTreeSet<String> =
+            case.required.iter().map(|(_, id)| id.clone()).collect();
         total_irrelevant += cited.difference(&required_ids).count();
         if cited == disclosed {
             disclosure_ok += 1;
@@ -1188,15 +1289,19 @@ fn large_shared_workspace_retrieval_acceptance() {
                 ));
             }
         } else {
-            let all_present = case.required.iter().all(|s| prompt.contains(s));
+            let unbound: Vec<(&str, &str)> = case
+                .required
+                .iter()
+                .map(|(span, id)| (*span, id.as_str()))
+                .filter(|(span, id)| !span_bound_to_source(prompt, &response.citations, span, id))
+                .collect();
             let none_forbidden = case.forbidden.iter().all(|s| !prompt.contains(s));
-            if all_present && none_forbidden && response.status == AskStatus::Offline {
+            if unbound.is_empty() && none_forbidden && response.status == AskStatus::Offline {
                 complete += 1;
             } else {
                 failures.push(format!(
-                    "q{i} incomplete: present={all_present} forbidden_clear={none_forbidden} status={:?} missing={:?}",
-                    response.status,
-                    case.required.iter().filter(|s| !prompt.contains(*s)).collect::<Vec<_>>()
+                    "q{i} incomplete: unbound={unbound:?} forbidden_clear={none_forbidden} status={:?}",
+                    response.status
                 ));
             }
         }
@@ -1207,6 +1312,86 @@ fn large_shared_workspace_retrieval_acceptance() {
             cited.len(),
             cited.difference(&required_ids).count(),
             durations[i]
+        );
+    }
+
+    // Natural overlapping negative family (4), separate from the
+    // term-disjoint exclusion probes above. Without inference, each
+    // must verify no excluded content, honest partial context, and
+    // the abstention instruction (or an InsufficientEvidence result
+    // with empty citations). These durations stay out of the p95 and
+    // prompt/citation totals above, so the original bars are
+    // unchanged. Actual model refusal still needs model-answer
+    // evidence and is not claimed here.
+    struct NegativeCase {
+        question: &'static str,
+        excluded_fact: Option<&'static str>,
+    }
+    let negatives = [
+        NegativeCase {
+            question: "At what temperature does the Alder workshop kiln fire?",
+            excluded_fact: Some("960 degrees"),
+        },
+        NegativeCase {
+            question: "How wide is the Bramble observatory telescope lens?",
+            excluded_fact: Some("180 millimetres"),
+        },
+        NegativeCase {
+            question: "How many hives does the Foxglove apiary keep?",
+            excluded_fact: Some("60 hives"),
+        },
+        NegativeCase {
+            question: "What record does the Zorbian glimmer archive hold?",
+            excluded_fact: None,
+        },
+    ];
+    let mut negative_ok = 0usize;
+    for (i, neg) in negatives.iter().enumerate() {
+        let started = Instant::now();
+        let response = ask(&core, &ws, neg.question);
+        let ms = started.elapsed().as_secs_f64() * 1000.0;
+        let prompt = &response.manifest.compiled_prompt;
+        let cited: BTreeSet<String> = response
+            .citations
+            .iter()
+            .map(|c| c.memory_id.clone())
+            .collect();
+        let disclosed: BTreeSet<String> = response
+            .manifest
+            .source_memories
+            .iter()
+            .map(|m| m.id.clone())
+            .collect();
+        let excluded_clear = cited.is_disjoint(&excluded_ids)
+            && !cited.contains(&sealed_a)
+            && !cited.contains(&sealed_b)
+            && !prompt.contains(SEALED_CANARY)
+            && !prompt.contains(FOREIGN_CANARY);
+        let fact_clear = neg.excluded_fact.is_none_or(|fact| !prompt.contains(fact));
+        let abstention_ok = if response.status == AskStatus::InsufficientEvidence {
+            cited.is_empty()
+        } else {
+            prompt.contains("state truthfully that evidence is missing")
+        };
+        let ok = excluded_clear
+            && fact_clear
+            && abstention_ok
+            && cited == disclosed
+            && prompt.len() < 5500;
+        if ok {
+            negative_ok += 1;
+        } else {
+            failures.push(format!(
+                "n{i} negative check failed: excluded_clear={excluded_clear} fact_clear={fact_clear} abstention_ok={abstention_ok} status={:?} cited={}",
+                response.status,
+                cited.len()
+            ));
+        }
+        eprintln!(
+            "n{i} status={:?} prompt_chars={} cited={} ms={ms:.0}",
+            response.status,
+            prompt.len(),
+            cited.len()
         );
     }
 
@@ -1245,7 +1430,7 @@ fn large_shared_workspace_retrieval_acceptance() {
     let p95 = durations[(durations.len() * 95 / 100).min(durations.len() - 1)];
     let max = durations[durations.len() - 1];
     eprintln!(
-        "SUMMARY records={created} questions=48 answerable_complete={complete}/40 insufficient_ok={insufficient_ok}/8 disclosure={disclosure_ok}/48 budget={budget_ok}/48 canary_leaks={canary_leaks} excluded_leaks={excluded_leaks} total_prompt_chars={total_prompt_chars} total_cited={total_cited} total_irrelevant_cited={total_irrelevant} ask_ms mean={mean:.1} p95={p95:.1} max={max:.1}"
+        "SUMMARY records={created} questions=52 answerable_complete={complete}/40 insufficient_ok={insufficient_ok}/8 negative_ok={negative_ok}/4 disclosure={disclosure_ok}/48 budget={budget_ok}/48 canary_leaks={canary_leaks} excluded_leaks={excluded_leaks} total_prompt_chars={total_prompt_chars} total_cited={total_cited} total_irrelevant_cited={total_irrelevant} ask_ms mean={mean:.1} p95={p95:.1} max={max:.1}"
     );
     for f in &failures {
         eprintln!("FAILURE {f}");
@@ -1255,9 +1440,59 @@ fn large_shared_workspace_retrieval_acceptance() {
         "answerable completeness {complete}/40 below bar 36: {failures:?}"
     );
     assert_eq!(insufficient_ok, 8, "insufficient correctness: {failures:?}");
+    assert_eq!(negative_ok, 4, "natural negative family: {failures:?}");
     assert_eq!(disclosure_ok, 48, "disclosure equality: {failures:?}");
     assert_eq!(budget_ok, 48, "budget compliance: {failures:?}");
     assert_eq!(canary_leaks, 0, "canary leaks: {failures:?}");
     assert_eq!(excluded_leaks, 0, "archived/expired leaks: {failures:?}");
     assert!(p95 < 5000.0, "ask p95 {p95:.1}ms over 5000ms bar");
+}
+
+#[test]
+fn wrong_source_phrase_cannot_satisfy_binding() {
+    // Isolated regression for the binding check: the same phrase in a
+    // wrong source satisfies the old whole-prompt search but must not
+    // satisfy binding to the intended source, while binding to the
+    // source that actually carries the phrase passes.
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().join("storage");
+    let core = Core::with_storage_root(root);
+    let ws = core
+        .workspace_command(
+            "create",
+            json!({"contractVersion":1,"name":"Binding regression"}),
+        )
+        .unwrap()["workspace"]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let wrong = note(
+        &core,
+        &ws,
+        "Quill depot",
+        "The Quill depot stores 77 crates.",
+        "private",
+    );
+    let intended = note(
+        &core,
+        &ws,
+        "Quill office",
+        "The Quill depot office opens at nine.",
+        "private",
+    );
+    let response = ask(&core, &ws, "How many crates does the Quill depot store?");
+    let prompt = &response.manifest.compiled_prompt;
+    assert_eq!(response.status, AskStatus::Offline);
+    assert!(
+        prompt.contains("77 crates"),
+        "old whole-prompt check would pass"
+    );
+    assert!(
+        span_bound_to_source(prompt, &response.citations, "77 crates", &wrong),
+        "correct binding passes"
+    );
+    assert!(
+        !span_bound_to_source(prompt, &response.citations, "77 crates", &intended),
+        "wrong-source binding must fail"
+    );
 }
