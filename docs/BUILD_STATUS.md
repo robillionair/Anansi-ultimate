@@ -14,6 +14,23 @@ TypeScript/contracts, builds and browser Ask 1/1 pass. No new model answers/toke
 measurements, native preview promotion, cloud calls, pushes or CI. Existing
 full-core A6/Ollama failures remain scoped and recorded.
 
+## 2026-10-30 — Verified integration: regressions green, quality unmeasured
+
+From reviewed `532afccf9333522c3e15c97cd42105c71807bf35` on branch
+`muse/ask-verified-integration` (integrator `4ef90406d` preserved).
+Linux: focused suites, Clippy/fmt/contracts/tsc/docs, API/web builds,
+browser Ask 1/1, full core 322 passed / 5 failed (same 4 live-Ollama
+environment + 1 pre-existing benchmark A6 as last round, no new
+failures), providers+API 144/0. Windows evidence audit reproduced
+exactly (68/68, 80/80 bindings, p95 4,383.3 ms). Frozen cloud round
+inspected unchanged, still 0 attempts. Local quality comparison
+BLOCKED: no model installed (Ollama blobs empty, no .gguf, no
+llama.cpp); criteria frozen in `ask-local-quality-acceptance.md`,
+no quality or token claim made. Isolated preview checkpoint
+prepared (new launcher + handoff, fresh data root); owner's
+running preview untouched, nothing launched, no Windows/native
+acceptance claimed from Linux.
+
 ## 2026-10-29 — Windows findings repair: widen-after-proof closed natively
 
 From reviewed `6e355b02d5aa46f1aa5646b674edb01cd6ec2884` on branch
