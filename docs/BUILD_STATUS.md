@@ -1,3 +1,28 @@
+## 2026-10-29 — Windows findings repair: widen-after-proof closed natively
+
+From reviewed `6e355b02d5aa46f1aa5646b674edb01cd6ec2884` on branch
+`muse/ask-windows-findings-repair`. R1: proven reads re-validate current
+owner/DACL natively in-process on Windows (new `windows_security.rs`,
+`windows-sys` 0.45.0 already in the lockfile) for the file and its proven
+ancestor directories, matching the `protect.ps1` invariant with no per-file
+process; the reviewer's refusal reproduction keeps its assertion and is now
+a standing regression test. R2: accounting expectations split by platform
+(Windows singles stay 8; Unix singles equal batch paths plus 8) with no
+counter inflation. R3: Windows-only Clippy dead code gated by platform
+(`BatchPath`, `REC3`/`REC4`; the recheck function is now used on Windows
+too), no suppressions. R4: realistic-corpus binding helper searches all
+matching chunks, plus a pure two-occurrence regression; no question or gold
+fact changed. A6 benchmark invariant unchanged and documented as
+partial-retrieval versus genuinely-empty. Linux: content 7/7, batch-proof
+4/4, accounting 1/1, realistic 2/2 (68/68), large-scale 2/2, Clippy/fmt/
+contracts/tsc/docs clean, API/web builds pass, browser Ask 1/1, full core
+322 passed / 5 failed (4 live-Ollama environment failures, 1 pre-existing
+benchmark A6; run split by a VM replacement, both logs preserved). The
+Windows module compiles and passes strict Clippy for the Windows target;
+the full-crate Windows check needs the reviewer's MSVC toolchain (this
+machine lacks `lib.exe` and mingw). Windows rerun (refusal test, probe,
+accounting, Clippy, then full scale) decides acceptance.
+
 ## 2026-10-29 — Scale hardening Windows review: faster, acceptance still open
 
 Incoming `825f75614656aa0118d924fc5ae1fe51b3a9cf7e` verifies against its ZIP/bundle
