@@ -191,6 +191,16 @@ pub(crate) fn compile_context_with_query(
     req: &ContextCompilationRequest,
     retrieval_query: Option<&str>,
 ) -> Result<CompiledContext, CommandError> {
+    compile_context_with_query_and_proofs(conn, storage_root, req, retrieval_query, None)
+}
+
+pub(crate) fn compile_context_with_query_and_proofs(
+    conn: &Connection,
+    storage_root: &Path,
+    req: &ContextCompilationRequest,
+    retrieval_query: Option<&str>,
+    proofs: Option<&crate::content::VerifiedPaths>,
+) -> Result<CompiledContext, CommandError> {
     let budget = req
         .max_budget_chars
         .unwrap_or(DEFAULT_MAX_BUDGET_CHARS)
@@ -259,13 +269,22 @@ pub(crate) fn compile_context_with_query(
 
         let body_hash = rev_row.map_err(|_| crate::storage::unavailable())?;
 
-        let body = content::read(
-            storage_root,
-            &req.workspace_id,
-            &hit.memory_id,
-            &revision_id,
-            &body_hash,
-        )?;
+        let body = match proofs {
+            Some(proofs) => proofs.read_verified(
+                storage_root,
+                &req.workspace_id,
+                &hit.memory_id,
+                &revision_id,
+                &body_hash,
+            )?,
+            None => content::read(
+                storage_root,
+                &req.workspace_id,
+                &hit.memory_id,
+                &revision_id,
+                &body_hash,
+            )?,
+        };
 
         // Chunk sections, ordered by relevance to the query within
         // this memory (most query terms first, then most occurrences,

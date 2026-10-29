@@ -391,11 +391,15 @@ impl Core {
         )?;
         // Use the same compiler as the explicit context application command.
         // Rebuild/integrity checks run before reading derived retrieval data.
-        storage.rebuild_search_index(&request.workspace_id)?;
+        // One operation-scoped batch proof covers rebuild and compilation,
+        // so Windows pays for one permission-verification process per Ask
+        // instead of one per record per read; see content::VerifiedPaths.
+        let proofs = storage.verify_content_paths(&request.workspace_id)?;
+        storage.rebuild_search_index_with_proofs(&request.workspace_id, Some(&proofs))?;
         let conn = storage
             .connection(false)?
             .ok_or_else(crate::storage::unavailable)?;
-        let compiled = crate::context::compile_context_with_query(
+        let compiled = crate::context::compile_context_with_query_and_proofs(
             &conn,
             storage.root_path(),
             &crate::context::ContextCompilationRequest {
@@ -408,6 +412,7 @@ impl Core {
                 kind_filter: None,
             },
             Some(&search_query),
+            Some(&proofs),
         )?;
         drop(conn);
         let citations = compiled.citations;

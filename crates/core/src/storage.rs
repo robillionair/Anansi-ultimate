@@ -8,6 +8,7 @@ use std::{
     fs::{self, OpenOptions},
     io::{self, Write},
     path::{Component, Path, PathBuf},
+    sync::atomic::{AtomicU64, Ordering},
     time::Duration,
 };
 
@@ -28,6 +29,35 @@ pub(crate) const CURRENT_SCHEMA: &str = concat!(
 );
 const ROOT_MARKER: &[u8] = b"ANANSI workspace root v1\n";
 pub const DATABASE_NAME: &str = "workspaces.sqlite3";
+
+/// Diagnostic counters for permission-verification overhead. They change
+/// no behavior; tests use them to prove batching is actually wired in.
+/// `single_calls` counts individual `private_permissions` calls (one
+/// PowerShell spawn each on Windows). `batch_calls` counts completed
+/// batch verifications and `batch_paths` the paths they covered.
+static PERMISSION_SINGLE_CALLS: AtomicU64 = AtomicU64::new(0);
+static PERMISSION_BATCH_CALLS: AtomicU64 = AtomicU64::new(0);
+static PERMISSION_BATCH_PATHS: AtomicU64 = AtomicU64::new(0);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PermissionVerificationStats {
+    pub single_calls: u64,
+    pub batch_calls: u64,
+    pub batch_paths: u64,
+}
+
+pub fn permission_verification_stats() -> PermissionVerificationStats {
+    PermissionVerificationStats {
+        single_calls: PERMISSION_SINGLE_CALLS.load(Ordering::Relaxed),
+        batch_calls: PERMISSION_BATCH_CALLS.load(Ordering::Relaxed),
+        batch_paths: PERMISSION_BATCH_PATHS.load(Ordering::Relaxed),
+    }
+}
+
+pub(crate) fn record_permission_batch(path_count: u64) {
+    PERMISSION_BATCH_CALLS.fetch_add(1, Ordering::Relaxed);
+    PERMISSION_BATCH_PATHS.fetch_add(path_count, Ordering::Relaxed);
+}
 
 pub fn unavailable() -> CommandError {
     CommandError::new(
@@ -63,6 +93,7 @@ pub fn reject_links(path: &Path) -> io::Result<()> {
     Ok(())
 }
 pub fn private_permissions(path: &Path, directory: bool, verify_only: bool) -> io::Result<()> {
+    PERMISSION_SINGLE_CALLS.fetch_add(1, Ordering::Relaxed);
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;

@@ -30,7 +30,10 @@ Repair (bounded, checks preserved):
 - Ask builds one proof set per question and shares it between index
   rebuild and context compilation. Rebuild also builds its own batch
   when called without proofs, so every rebuild caller benefits and no
-  rebuild/integrity behavior is removed.
+  rebuild/integrity behavior is removed. (Correction: the measured
+  total equals 2N + 10 exactly, because Ask opens four connections
+  and each connection verifies the root and the database file; the
+  bound below is "at most 2N + 10", not "under" it.)
 - Every check is retained: link rejection per path, owner/DACL
   verification (batched, not skipped), body-hash verification per
   read, `MAX_BODY` enforcement, UTF-8 validation, privacy/identity
@@ -51,11 +54,12 @@ Acceptance:
   and batch verifications (diagnostic only, no behavior change).
   On a 16-note workspace, one Ask performs exactly 1 batch
   verification covering 34 paths (2 shared directories + 16 record
-  directories + 16 files), and individual verification calls stay
-  under 2N + 10 (42 for N = 16; the old path needs about 4N plus
-  compile re-reads plus root checks). The same bounds hold on Linux
-  (where the batch loops metadata checks) and on Windows (where the
-  batch is one process).
+  directories + 16 files), and individual verification calls stay at
+  or under 2N + 10 (42 for N = 16: the batch's 2N + 2 paths plus 8
+  root/database checks from the four connections Ask opens; the old
+  path needs about 4N plus compile re-reads plus those checks). The
+  same bounds hold on Linux (where the batch loops metadata checks)
+  and on Windows (where the batch is one process).
 - Tamper cases fail closed: a corrupted body still fails integrity
   (hash check), and an overbroad file still fails batch verification;
   a fresh verification after repair succeeds.

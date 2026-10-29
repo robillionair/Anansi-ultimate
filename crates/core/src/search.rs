@@ -250,7 +250,53 @@ fn calculate_recency_score(updated_at: &str, event_date: Option<&str>) -> f64 {
 }
 
 impl Storage {
+    /// Batch-verify the content paths of every current non-Sealed record
+    /// once for the calling operation, returning operation-scoped proofs
+    /// the caller shares between rebuild and compilation. See
+    /// `content::VerifiedPaths` for the proof contract.
+    pub(crate) fn verify_content_paths(
+        &self,
+        workspace_id: &str,
+    ) -> Result<content::VerifiedPaths, CommandError> {
+        crate::workspace::validate_id(workspace_id)?;
+        let conn = self.connection(false)?.ok_or_else(unavailable)?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT m.id, r.id
+                 FROM memories m
+                 JOIN memory_revisions r ON r.workspace_id = m.workspace_id
+                                        AND r.memory_id = m.id
+                                        AND r.id = m.current_revision
+                 WHERE m.workspace_id = ?1
+                   AND json_extract(r.metadata, '$.privacy') != 'sealed'
+                 ORDER BY m.id",
+            )
+            .map_err(|_| unavailable())?;
+        let records = stmt
+            .query_map(params![workspace_id], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })
+            .map_err(|_| unavailable())?
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(|_| unavailable())?;
+        if records.len() > MAX_RECORDS {
+            return Err(CommandError::new(
+                ErrorCode::InvalidSearch,
+                "Body search exceeds 10,000 records. Narrow the record type and try again; no partial results were returned.",
+            ));
+        }
+        content::VerifiedPaths::verify(&self.root, workspace_id, &records)
+    }
+
     pub fn rebuild_search_index(&self, workspace_id: &str) -> Result<u32, CommandError> {
+        self.rebuild_search_index_with_proofs(workspace_id, None)
+    }
+
+    pub(crate) fn rebuild_search_index_with_proofs(
+        &self,
+        workspace_id: &str,
+        proofs: Option<&content::VerifiedPaths>,
+    ) -> Result<u32, CommandError> {
         crate::workspace::validate_id(workspace_id)?;
         let mut conn = self.connection(false)?.ok_or_else(unavailable)?;
         ensure_fts_table(&conn)?;
@@ -295,6 +341,27 @@ impl Storage {
             ));
         }
 
+        // One batch verification for the whole rebuild; supplied proofs
+        // are reused instead so a caller (Ask) pays for one batch per
+        // operation, not one per record and one per compilation read.
+        let owned_proofs;
+        let effective_proofs = match proofs {
+            Some(proofs) => proofs,
+            None => {
+                owned_proofs = content::VerifiedPaths::verify(
+                    &self.root,
+                    workspace_id,
+                    &rows
+                        .iter()
+                        .map(|(memory_id, revision_id, _, _)| {
+                            (memory_id.clone(), revision_id.clone())
+                        })
+                        .collect::<Vec<_>>(),
+                )?;
+                &owned_proofs
+            }
+        };
+
         let mut indexed_count = 0u32;
         for (memory_id, revision_id, body_hash, metadata_str) in rows {
             let metadata: MemoryMetadata =
@@ -309,7 +376,7 @@ impl Storage {
                 return Err(content::integrity());
             }
             metadata.privacy.allow_plaintext()?;
-            let body = content::read(
+            let body = effective_proofs.read_verified(
                 &self.root,
                 workspace_id,
                 &memory_id,
