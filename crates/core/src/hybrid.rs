@@ -5,7 +5,7 @@
 
 use crate::content;
 use crate::context::chunk_markdown_sections;
-use crate::search::{ensure_fts_table, locate_evidence, parse_body_query};
+use crate::search::{ensure_fts_table, locate_evidence, parse_body_query, parse_question_query};
 use crate::vector::{EmbeddingVector, ensure_embeddings_table, vector_search};
 use crate::{CommandError, ErrorCode};
 use chrono::Utc;
@@ -139,6 +139,23 @@ pub fn hybrid_search_with_status(
     storage_root: Option<&Path>,
     request: &HybridSearchRequest,
 ) -> Result<HybridSearchResponse, CommandError> {
+    hybrid_search_internal(conn, storage_root, request, false)
+}
+
+pub(crate) fn hybrid_question_search(
+    conn: &Connection,
+    storage_root: &Path,
+    request: &HybridSearchRequest,
+) -> Result<HybridSearchResponse, CommandError> {
+    hybrid_search_internal(conn, Some(storage_root), request, true)
+}
+
+fn hybrid_search_internal(
+    conn: &Connection,
+    storage_root: Option<&Path>,
+    request: &HybridSearchRequest,
+    natural_question: bool,
+) -> Result<HybridSearchResponse, CommandError> {
     if !request.lexical_weight.is_finite()
         || !request.semantic_weight.is_finite()
         || !request.rrf_k.is_finite()
@@ -163,19 +180,52 @@ pub fn hybrid_search_with_status(
     if let Some(query_str) = &request.query {
         let trimmed = query_str.trim();
         if !trimmed.is_empty() && request.lexical_weight > 0.0 {
-            let (expression, parsed_terms) = parse_body_query(trimmed)?;
+            let (expression, parsed_terms) = if natural_question {
+                parse_question_query(trimmed)?
+            } else {
+                parse_body_query(trimmed)?
+            };
+            // Broader Ask candidates must be eligible BEFORE the 100-row cut,
+            // or archived/Sealed/stale rows can crowd out useful evidence.
+            // Publication filters and canonical content checks below still run.
+            let sql = if natural_question {
+                "SELECT f.memory_id, f.body FROM memory_body_fts f
+                 JOIN memories m ON m.workspace_id=f.workspace_id AND m.id=f.memory_id
+                 JOIN memory_revisions r ON r.workspace_id=m.workspace_id AND r.memory_id=m.id AND r.id=m.current_revision
+                 WHERE f.workspace_id=?1 AND memory_body_fts MATCH ?2
+                   AND f.revision_id=m.current_revision
+                   AND lower(json_extract(r.metadata,'$.privacy')) != 'sealed'
+                   AND (?3 OR json_extract(r.metadata,'$.status') != 'archived')
+                   AND (?4 OR json_extract(r.metadata,'$.validUntil') IS NULL
+                        OR julianday(json_extract(r.metadata,'$.validUntil')) > julianday('now'))
+                   AND (?5 IS NULL OR lower(json_extract(r.metadata,'$.kind')) = lower(?5))
+                 ORDER BY bm25(memory_body_fts), f.memory_id LIMIT 100"
+            } else {
+                "SELECT memory_id, body FROM memory_body_fts
+                 WHERE workspace_id = ?1 AND memory_body_fts MATCH ?2
+                 ORDER BY bm25(memory_body_fts), memory_id LIMIT 100"
+            };
+            let mut bindings: Vec<rusqlite::types::Value> =
+                vec![request.workspace_id.clone().into(), expression.into()];
+            if natural_question {
+                bindings.extend([
+                    (request.include_archived as i64).into(),
+                    (request.include_expired as i64).into(),
+                    request
+                        .kind
+                        .as_deref()
+                        .map(str::trim)
+                        .filter(|s| !s.is_empty())
+                        .map(|s| rusqlite::types::Value::Text(s.into()))
+                        .unwrap_or(rusqlite::types::Value::Null),
+                ]);
+            }
             let mut stmt = conn
-                .prepare(
-                    "SELECT memory_id, body
-                     FROM memory_body_fts
-                     WHERE workspace_id = ?1 AND memory_body_fts MATCH ?2
-                     ORDER BY bm25(memory_body_fts), memory_id
-                     LIMIT 100",
-                )
+                .prepare(sql)
                 .map_err(|e| CommandError::new(ErrorCode::StorageUnavailable, &e.to_string()))?;
 
             let rows = stmt
-                .query_map(params![request.workspace_id, expression], |row| {
+                .query_map(rusqlite::params_from_iter(bindings), |row| {
                     let memory_id: String = row.get(0)?;
                     let body: String = row.get(1)?;
                     Ok((memory_id, body))
@@ -502,4 +552,91 @@ pub fn hybrid_search_with_status(
         fallback_reason,
         embedding_model: if lexical_only { None } else { clean_model },
     })
+}
+
+#[cfg(test)]
+mod question_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn question_candidates_filter_before_limit_and_keep_partial_and_strict_hits() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("CREATE TABLE memories(workspace_id TEXT,id TEXT,current_revision TEXT);
+            CREATE TABLE memory_revisions(workspace_id TEXT,memory_id TEXT,id TEXT,metadata TEXT,body_hash TEXT);").unwrap();
+        ensure_fts_table(&conn).unwrap();
+        // More than the candidate cap for EACH excluded class. They rank above
+        // useful evidence but must never displace it or escape in snippets.
+        for n in 0..632 {
+            let (ws, privacy, status, expiry, kind, stale) = match n / 105 {
+                0 => ("ws", "sealed", "active", None, "note", false),
+                1 => ("ws", "private", "archived", None, "note", false),
+                2 => (
+                    "ws",
+                    "private",
+                    "active",
+                    Some("2000-01-01T00:00:00Z"),
+                    "note",
+                    false,
+                ),
+                3 => ("foreign", "private", "active", None, "note", false),
+                4 => ("ws", "private", "active", None, "task", false),
+                5 => ("ws", "private", "active", None, "note", true),
+                _ => ("ws", "private", "active", None, "note", false),
+            };
+            let id = format!("m{n:04}");
+            let body = if n == 630 {
+                "Oriole endurance 17 hours"
+            } else if n == 631 {
+                "Oriole running log"
+            } else {
+                "Oriole running EXCLUDED_CANARY"
+            };
+            conn.execute(
+                "INSERT INTO memories VALUES(?1,?2,'current')",
+                params![ws, id],
+            )
+            .unwrap();
+            conn.execute("INSERT INTO memory_revisions VALUES(?1,?2,'current',?3,'')",params![ws,id,json!({"title":"Bulletin","kind":kind,"status":status,"privacy":privacy,"validUntil":expiry,"updatedAt":"2026-01-01T00:00:00Z"}).to_string()]).unwrap();
+            conn.execute(
+                "INSERT INTO memory_body_fts VALUES(?1,?2,?3,'Bulletin',?4)",
+                params![ws, id, if stale { "old" } else { "current" }, body],
+            )
+            .unwrap();
+        }
+        let req = HybridSearchRequest {
+            workspace_id: "ws".into(),
+            query: Some("Oriole* running*".into()),
+            query_vector: None,
+            model: None,
+            endpoint: None,
+            limit: 10,
+            lexical_weight: 1.0,
+            semantic_weight: 0.0,
+            rrf_k: 60.0,
+            kind: Some("note".into()),
+            include_archived: false,
+            include_expired: false,
+        };
+        let result = hybrid_question_search(&conn, Path::new("unused"), &req).unwrap();
+        let ids = result
+            .results
+            .iter()
+            .map(|r| r.memory_id.as_str())
+            .collect::<HashSet<_>>();
+        assert_eq!(ids, HashSet::from(["m0630", "m0631"]));
+        assert!(
+            result.results.iter().all(|r| !r
+                .snippet
+                .as_deref()
+                .unwrap()
+                .contains("EXCLUDED_CANARY"))
+        );
+        assert_eq!(
+            result.results,
+            hybrid_question_search(&conn, Path::new("unused"), &req)
+                .unwrap()
+                .results
+        );
+    }
 }

@@ -1,5 +1,21 @@
 # ANANSI Ultimate — Architecture Decisions
 
+## ADR-0030: Natural-question recall without changing exact Search
+
+- Owner authority: fix the candidate-recall loss observed in the 2026-10-29
+  benchmark. [Acceptance](handoffs/Ask-retrieval-recall-repair.md) precedes coding.
+- Ask uses a private any-term FTS mode with existing BM25/hybrid ranking; normal
+  Search keeps all-term matching. No dictionary of benchmark synonyms or answers.
+- Workspace, current revision, Sealed, archive, expiry and kind checks precede
+  Ask's 100-candidate cap, with canonical checks retained before compilation.
+- Ask offers the best chunk from each ranked record before further chunks. Extra
+  zero-overlap lexical chunks are omitted; title-only and semantic evidence keep
+  a body chunk. Default evidence remains 4,000 UTF-8 bytes, excluding prompt framing.
+- Source disclosure reflects included chunks only. Retrieval overlap is not an
+  answerability guarantee; abstention instructions remain mandatory.
+- Local fact-availability measurements cannot replace a new model-accuracy or
+  provider-usage measurement. No cloud replay is implied by this repair.
+
 ## Current integration authority — 2026-10-20
 
 The Owner authorizes completing M2–M4 in the main integration checkout. [Ownership](handoffs/M2-M4-integration-owner.md) supersedes historical isolation limits within this task. [Readiness](evidence/M5-READINESS.md) supersedes premature M3/M4 full-completion claims. Ask must consume the shared Context Compiler; canonical metadata/content errors must propagate rather than silently becoming missing evidence or guessed privacy. Native credential input uses flags belonging to `CredUIPromptForCredentialsW`, explicitly generic/non-persistent/always-visible. Synthetic credentials are debug-only and never establish production native-control acceptance. No cryptographic primitive or Owner audit exception is changed.

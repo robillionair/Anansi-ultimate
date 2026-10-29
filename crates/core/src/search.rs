@@ -55,6 +55,19 @@ pub(crate) fn validate_body_query(text: &str) -> Result<(), CommandError> {
 }
 
 pub(crate) fn parse_body_query(text: &str) -> Result<(String, Vec<String>), CommandError> {
+    parse_body_query_joined(text, " AND ")
+}
+
+/// Natural-language Ask uses ranked partial matches; explicit Search retains AND.
+/// Both paths share literal escaping, phrase handling and query bounds.
+pub(crate) fn parse_question_query(text: &str) -> Result<(String, Vec<String>), CommandError> {
+    parse_body_query_joined(text, " OR ")
+}
+
+fn parse_body_query_joined(
+    text: &str,
+    joiner: &str,
+) -> Result<(String, Vec<String>), CommandError> {
     if text.len() > MAX_BODY_QUERY_BYTES {
         return Err(invalid_body_search());
     }
@@ -118,7 +131,7 @@ pub(crate) fn parse_body_query(text: &str) -> Result<(String, Vec<String>), Comm
     if tokens.is_empty() {
         return Err(invalid_body_search());
     }
-    let expression = tokens.join(" AND ");
+    let expression = tokens.join(joiner);
     Ok((expression, literal_terms))
 }
 
@@ -601,6 +614,19 @@ mod tests {
         assert!(parse_body_query("!@#$%^&*()").is_err());
         assert!(parse_body_query(&"a ".repeat(17)).is_err());
         assert!(parse_body_query(&"a".repeat(513)).is_err());
+    }
+
+    #[test]
+    fn question_query_relaxes_terms_without_accepting_fts_operators() {
+        let (expr, terms) = parse_question_query("\"north gate\" unlock* NOT secret").unwrap();
+        assert_eq!(
+            expr,
+            "\"north gate\" OR \"unlock\"* OR \"NOT\" OR \"secret\""
+        );
+        assert_eq!(terms, vec!["north gate", "unlock", "NOT", "secret"]);
+        for invalid in [String::new(), "term ".repeat(17), "a".repeat(513)] {
+            assert!(parse_question_query(&invalid).is_err());
+        }
     }
 
     #[test]

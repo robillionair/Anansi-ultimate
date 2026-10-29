@@ -1,5 +1,18 @@
 # ANANSI Ultimate — Architecture
 
+## Ask recall repair — 2026-10-29
+
+Natural-language Ask has an internal ranked any-term lexical candidate path;
+explicit Search and explicit context queries keep their all-term semantics.
+Ask applies workspace/current-revision/privacy/lifecycle/kind eligibility before
+the bounded candidate cut, then retains canonical metadata and body-hash checks.
+It interleaves the best chunks from ranked memories within the existing evidence
+budget; extra lexical chunks without query overlap are omitted, while title-only
+and semantic evidence retain a body chunk. Disclosure lists only included sources.
+No schema, DTO, model, embedding consent or cloud-routing policy changes.
+See [acceptance scope](handoffs/Ask-retrieval-recall-repair.md); matching a term
+does not establish that the retrieved evidence answers the question.
+
 ## Owner amendment — M2.7-Core isolation (2026-10-19)
 
 M2.7-Core initial parser/keys/session/policy/native-store/shadow-preparation subset is implemented and tested in isolation; [Increment 1 evidence](evidence/M2-7.md) records its scope. [Increment 2](evidence/M2-7-increment2.md) adds an explicit schema-9 core boundary, OS admission locks, durable epochs, typed encrypted history/graph generations, full DEK rotation, recovery acknowledgement and ciphertext export/restore. ADR-0026 defines committed-generation authority and retained-copy limits. Existing application Core stays schema 8 and refuses schema 9; no adapter calls the new API. It is not a complete or application-enabled vault.

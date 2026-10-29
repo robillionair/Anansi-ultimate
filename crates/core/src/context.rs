@@ -5,7 +5,7 @@
 use crate::CommandError;
 use crate::ask::{DisclosureManifest, GroundedCitation, SourceMemoryReference};
 use crate::content;
-use crate::hybrid::{HybridSearchRequest, hybrid_search_with_status};
+use crate::hybrid::{HybridSearchRequest, hybrid_question_search, hybrid_search_with_status};
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -212,7 +212,12 @@ pub(crate) fn compile_context_with_query(
         include_expired: false,
     };
 
-    let hybrid_res = hybrid_search_with_status(conn, Some(storage_root), &hybrid_req)?;
+    let question_mode = retrieval_query.is_some();
+    let hybrid_res = if question_mode {
+        hybrid_question_search(conn, storage_root, &hybrid_req)?
+    } else {
+        hybrid_search_with_status(conn, Some(storage_root), &hybrid_req)?
+    };
     let hits = hybrid_res.results;
 
     let mut evidence_chunks: Vec<ContextChunk> = Vec::new();
@@ -222,8 +227,10 @@ pub(crate) fn compile_context_with_query(
     let mut seen_chunk_contents: HashSet<String> = HashSet::new();
 
     let mut current_budget_used = 0usize;
+    let mut pending = Vec::new();
+    let terms = query_terms_for_scoring(retrieval_query.unwrap_or(&req.user_prompt));
 
-    for hit in hits {
+    for (memory_rank, hit) in hits.into_iter().enumerate() {
         // Fail-closed privacy check: query record metadata
         let row_res = conn.query_row(
             "SELECT m.current_revision, json_extract(r.metadata, '$.privacy')
@@ -260,30 +267,13 @@ pub(crate) fn compile_context_with_query(
             &body_hash,
         )?;
 
-        if !seen_memory_ids.contains(&hit.memory_id) {
-            seen_memory_ids.insert(hit.memory_id.clone());
-            source_memories.push(SourceMemoryReference {
-                id: hit.memory_id.clone(),
-                title: hit.title.clone(),
-                kind: hit.kind.clone(),
-            });
-        }
-
-        if current_budget_used >= budget {
-            break;
-        }
-
         // Chunk sections, ordered by relevance to the query within
         // this memory (most query terms first, then most occurrences,
         // then document order). Previously chunks were taken in
         // document order until the budget ran out, so a fact late in
         // a long memory was dropped while early filler filled the
-        // budget (benchmark A12). The budget itself is unchanged, as
-        // is the memory order from hybrid retrieval; only the chunk
-        // order within each memory changes, and citations keep their
-        // original line numbers.
-        let effective_query = retrieval_query.unwrap_or(&req.user_prompt);
-        let terms = query_terms_for_scoring(effective_query);
+        // budget (benchmark A12). Citations keep their original line
+        // numbers. Ask additionally interleaves the ranked memories below.
         let mut sections = chunk_markdown_sections(&hit.memory_id, &hit.title, &hit.kind, &body);
         {
             let mut scored: Vec<(usize, usize, usize, ContextChunk)> = sections
@@ -297,49 +287,77 @@ pub(crate) fn compile_context_with_query(
             scored.sort_by(|a, b| b.0.cmp(&a.0).then(b.1.cmp(&a.1)).then(a.2.cmp(&b.2)));
             sections = scored.into_iter().map(|(_, _, _, sec)| sec).collect();
         }
-        for mut sec in sections {
-            if current_budget_used >= budget {
+        for (chunk_rank, sec) in sections.into_iter().enumerate() {
+            // Keep a body chunk for title-only matches and preserve semantic
+            // evidence. Extra lexical chunks with no overlap only pad the prompt.
+            if !question_mode
+                || chunk_rank == 0
+                || hit.semantic_rank.is_some()
+                || chunk_relevance(&sec.content, &terms).0 > 0
+            {
+                pending.push((chunk_rank, memory_rank, sec));
+            }
+        }
+    }
+    if question_mode {
+        // First evidence from each ranked source, then additional chunks. A
+        // long first document must not consume the budget before a second
+        // operand or a contradictory record is even considered.
+        pending.sort_by_key(|(chunk_rank, memory_rank, _)| (*chunk_rank, *memory_rank));
+    }
+    for (_, _, mut sec) in pending {
+        if current_budget_used >= budget {
+            break;
+        }
+
+        // Deduplicate chunks
+        if seen_chunk_contents.contains(&sec.content) {
+            continue;
+        }
+
+        let chunk_len = sec.content.len();
+        let remaining = budget - current_budget_used;
+
+        if chunk_len > remaining {
+            if remaining < 50 {
+                // Not enough budget left for a meaningful chunk
                 break;
             }
+            // Truncate cleanly to remaining budget
+            let cutoff = remaining.saturating_sub(3);
+            sec.content = format!("{}...", utf8_prefix(&sec.content, cutoff));
+        }
 
-            // Deduplicate chunks
-            if seen_chunk_contents.contains(&sec.content) {
-                continue;
-            }
+        let actual_len = sec.content.len();
+        seen_chunk_contents.insert(sec.content.clone());
+        current_budget_used += actual_len;
 
-            let chunk_len = sec.content.len();
-            let remaining = budget - current_budget_used;
+        let citation_idx = citations.len() + 1;
+        citations.push(GroundedCitation {
+            index: citation_idx,
+            memory_id: sec.memory_id.clone(),
+            title: sec.title.clone(),
+            kind: sec.kind.clone(),
+            section_heading: sec.section_heading.clone(),
+            line_number: sec.line_number,
+            snippet: if sec.content.len() > 200 {
+                format!("{}...", utf8_prefix(&sec.content, 200))
+            } else {
+                sec.content.clone()
+            },
+        });
 
-            if chunk_len > remaining {
-                if remaining < 50 {
-                    // Not enough budget left for a meaningful chunk
-                    break;
-                }
-                // Truncate cleanly to remaining budget
-                let cutoff = remaining.saturating_sub(3);
-                sec.content = format!("{}...", utf8_prefix(&sec.content, cutoff));
-            }
+        evidence_chunks.push(sec);
+    }
 
-            let actual_len = sec.content.len();
-            seen_chunk_contents.insert(sec.content.clone());
-            current_budget_used += actual_len;
-
-            let citation_idx = citations.len() + 1;
-            citations.push(GroundedCitation {
-                index: citation_idx,
-                memory_id: sec.memory_id.clone(),
+    // Disclosure describes evidence actually included, not merely read candidates.
+    for sec in &evidence_chunks {
+        if seen_memory_ids.insert(sec.memory_id.clone()) {
+            source_memories.push(SourceMemoryReference {
+                id: sec.memory_id.clone(),
                 title: sec.title.clone(),
                 kind: sec.kind.clone(),
-                section_heading: sec.section_heading.clone(),
-                line_number: sec.line_number,
-                snippet: if sec.content.len() > 200 {
-                    format!("{}...", utf8_prefix(&sec.content, 200))
-                } else {
-                    sec.content.clone()
-                },
             });
-
-            evidence_chunks.push(sec);
         }
     }
 

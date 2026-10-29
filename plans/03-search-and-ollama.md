@@ -1,5 +1,13 @@
 # M3 — Search and local AI
 
+## Current remedial increment — 2026-10-29
+
+The owner authorized a fix for measured Ask candidate-recall failures after the
+100-case benchmark. [Bounded acceptance](../docs/handoffs/Ask-retrieval-recall-repair.md)
+defines ranked partial-match retrieval and source-diverse evidence budgeting.
+This does not reopen milestone implementation order or close production gates.
+Earlier phase sequencing below is historical; exact Search semantics remain.
+
 Status: user explicitly authorized vault-independent next-phase work on 2026-10-19 while waiting for upstream audit feedback. M3.1 below is the bounded approved increment. M2.6/G1, M2.7 and M2.8 remain outstanding; this is a scheduling exception, not M2 completion or permission to bypass crypto review.
 
 Authority: [master specification](../docs/MASTER_SPEC.md), sections 11, 13, 18–19, 66–67; [canonical roadmap](../docs/ROADMAP.md).

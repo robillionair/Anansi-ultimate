@@ -75,8 +75,9 @@ pub struct AskResponse {
 /// prefix-marked for FTS5. The stopword list covers question-form
 /// words that identify no memory (prepositions, aggregation words
 /// such as "many"/"together") — a natural question routinely contains
-/// words its evidence body does not, and an AND query requiring every
-/// one of them fails with zero hits. Stemming is a recall superset:
+/// words its evidence body does not. Ask's internal candidate search
+/// OR-joins these literal terms, then ranks matches; exact Search still
+/// requires AND. Stemming is a recall superset:
 /// "wings" becomes "wing"* (matches wing and wings) and "hold"
 /// becomes "hold"* (matches hold and holds), so no exact match is
 /// ever lost, only plural variants gained. The '*' is FTS syntax,

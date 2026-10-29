@@ -129,6 +129,18 @@ test('integrated ask anansi workflow: grounded citations, missing evidence, offl
     await expect(page.locator('.manifest-metrics')).toContainText('Project Aurora Storage Architecture');
     await expect(page.locator('.compiled-prompt-text')).toContainText('Architecture Plan');
 
+    // Natural wording must retain the named project's evidence even when the
+    // other terms do not occur in it. This also exercises a title-only match.
+    await page.getByLabel('Your Question').fill('Which database powers Aurora offline knowledge?');
+    await page.getByRole('button', { name: 'Ask Question' }).click();
+    await expect(page.locator('.status-banner.status-offline')).toBeVisible();
+    await expect(page.locator('.citation-title')).toContainText('Project Aurora Storage Architecture');
+    if (!(await page.locator('.manifest-details').isVisible())) {
+      await page.getByRole('button', { name: 'View What ANANSI Sent (Disclosure)' }).click();
+    }
+    await expect(page.locator('.compiled-prompt-text')).toContainText('SQLite with FTS5');
+    await expect(page.locator('.compiled-prompt-text')).toContainText('Which database powers Aurora offline knowledge?');
+
     expect(external).toBe(0);
     if(process.env.ANANSI_REAL_MODEL==='1'){
       // Parameterized real-model mode (benchmark Repair 4): the model
