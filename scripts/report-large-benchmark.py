@@ -73,6 +73,7 @@ def main():
         "100 distinct instances across ten repeated question templates; synthetic formulaic names, ASCII text, single revisions, six documents per corpus, one free cloud model and no semantic embeddings.",
         "Basic retrieval is a named simple baseline, not a commercial product or a tuned state-of-the-art RAG system.",
         "Full context includes irrelevant eligible documents; a reduction versus it is not proof of superiority over efficient retrieval.",
+        "This full-context baseline differs from the earlier eight-question pilot's full bodies of cited memories. Do not present a larger percentage here as an algorithm improvement over that pilot.",
         "Batch usage cannot be allocated to individual questions or question categories. Character counts are not tokenizer measurements.",
         "Per-case zero-evidence app requests would avoid inference; this replay still evaluates all question items in shared batches.",
         "No paid-cost saving is measured: all inference is free. No significance/generalization claim or automatic publication.",
