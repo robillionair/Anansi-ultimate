@@ -135,7 +135,7 @@ def main():
                     record["answers"] = parse_answers(choice.get("message", {}).get("content"))
                 except (ValueError, KeyError, TypeError, IndexError):
                     record["parse_error"] = True
-                ledger.write(json.dumps(record, ensure_ascii=False) + "\n")
+                ledger.write(json.dumps(record, ensure_ascii=False).replace(key, "[REDACTED]") + "\n")
                 ledger.flush()
                 print(json.dumps({"attempt": attempts, "tag": tag, "status": status,
                                   "finish": record["finish_reason"], "total_tokens": usage.get("total_tokens"),

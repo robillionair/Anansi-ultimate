@@ -71,6 +71,7 @@ def main():
     lines += ["", "## Limits and reproduction", "",
         f"Finish reasons: `{dict(finishes)}`. Preserve any truncation/parse errors in the raw ledger.",
         "100 distinct instances across ten repeated question templates; synthetic formulaic names, ASCII text, single revisions, six documents per corpus, one free cloud model and no semantic embeddings.",
+        "Document length and fact position vary but are not fully crossed within each question template; do not infer their independent causal effects.",
         "Basic retrieval is a named simple baseline, not a commercial product or a tuned state-of-the-art RAG system.",
         "Full context includes irrelevant eligible documents; a reduction versus it is not proof of superiority over efficient retrieval.",
         "This full-context baseline differs from the earlier eight-question pilot's full bodies of cited memories. Do not present a larger percentage here as an algorithm improvement over that pilot.",
