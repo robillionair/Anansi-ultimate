@@ -19,6 +19,11 @@ score_spec = importlib.util.spec_from_file_location(
 )
 scorer = importlib.util.module_from_spec(score_spec)
 score_spec.loader.exec_module(scorer)
+report_spec = importlib.util.spec_from_file_location(
+    "large_report", Path(__file__).resolve().parents[1] / "scripts" / "report-large-benchmark.py"
+)
+reporter = importlib.util.module_from_spec(report_spec)
+report_spec.loader.exec_module(reporter)
 
 
 class RunnerTests(unittest.TestCase):
@@ -39,14 +44,28 @@ class RunnerTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             runner.parse_answers('{"answers":{}}')
 
-    def test_numerical_match_has_boundaries_and_requires_visible_support(self):
-        self.assertFalse(scorer.contains_fact("130", "30"))
+    def test_exact_numeric_match_requires_visible_support(self):
         case = {"expected": {"kind": "exact", "answer": "30"},
                 "evidence": {"supportingMemoryIds": ["m1"], "exactFactSpans": ["Capacity is 30."]},
                 "approaches": {"basic": {"sources": [{"index": 1, "memoryId": "m1", "text": "Truncated notes"}]}}}
         result = scorer.grade(case, "basic", {"answer": "30", "citations": [1], "insufficient": False})
         self.assertTrue(result["fact_correct"])
         self.assertFalse(result["grounded_correct"])
+        for wrong in ["30.5", "-30", "130"]:
+            self.assertFalse(scorer.grade(case, "basic", {"answer": wrong, "citations": [1], "insufficient": False})["fact_correct"])
+
+    def test_false_insufficient_flag_cannot_hide_a_fabricated_answer(self):
+        case = {"expected": {"kind": "insufficient"}, "approaches": {"anansi": {"sources": []}}}
+        self.assertFalse(scorer.grade(case, "anansi", {"answer": "The warranty is five years.", "citations": [], "insufficient": True})["fact_correct"])
+        self.assertTrue(scorer.grade(case, "anansi", {"answer": "INSUFFICIENT_EVIDENCE", "citations": [], "insufficient": True})["fact_correct"])
+
+    def test_rejected_or_duplicate_final_request_is_not_complete(self):
+        records = [{"batch": i, "approach": a, "valid_for_accounting": True} for i in range(10) for a in runner.APPROACHES]
+        self.assertTrue(reporter.is_complete(records))
+        records[-1]["valid_for_accounting"] = False
+        self.assertFalse(reporter.is_complete(records))
+        records[-1] = dict(records[0])
+        self.assertFalse(reporter.is_complete(records))
 
     def test_absent_responses_keep_full_denominator(self):
         case = {"id": "Q1", "category": "insufficient",

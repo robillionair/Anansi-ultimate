@@ -21,9 +21,15 @@ preview promotion, paid models, downloads, private owner data, pushes or CI.
   Score all questions, including refusals, missing answers and malformed output.
   Deterministic fact matching and citation-index validity are diagnostic scores,
   not independent human verification of every semantic claim.
+  Before scored calls, a read-only review identified numeric-substring, false
+  abstention and final-request-completeness scoring defects. The frozen runner
+  now requests exact values, integer arithmetic, pipe-separated conflicting
+  values and the explicit INSUFFICIENT_EVIDENCE abstention sentinel. The scorer
+  follows that format; no decimal/negative substring match or flag-only refusal
+  gets credit. All 30 unique batch/approach pairs require validated accounting.
 - Use only `nvidia/nemotron-3-ultra-550b-a55b:free`, after official model metadata
   confirms zero input/output pricing. Exact model, fallback disabled. Maximum
-  33 inference attempts including smoke; stop on nonzero cost, unexpected model,
+  31 inference attempts including smoke; stop on nonzero cost, unexpected model,
   auth/payment/rate-limit/server error or ambiguous failed request. No auto-retry.
 - Ten independent question items per request: 10 batches × 3 approaches = 30
   scored calls, plus one smoke. Within each batch avoid repeated identical corpus

@@ -7,11 +7,6 @@ from pathlib import Path
 import re
 
 
-def contains_fact(text, expected):
-    pattern = r"(?<!\w)" + re.escape(expected.strip()).replace(r"\ ", r"\s+") + r"(?!\w)"
-    return bool(re.search(pattern, text, re.IGNORECASE))
-
-
 def grade(case, approach, answer):
     expected = case["expected"]
     sources = case["approaches"][approach]["sources"]
@@ -24,13 +19,16 @@ def grade(case, approach, answer):
         return {"fact_correct": False, "grounded_correct": False, "missing_or_malformed": True}
     valid = bool(cites) and all(type(i) is int and i in by_index for i in cites)
     if expected["kind"] == "insufficient":
-        fact_ok = answer.get("insufficient") is True
+        fact_ok = answer.get("insufficient") is True and text.strip() == "INSUFFICIENT_EVIDENCE"
         grounded = fact_ok and not cites
     else:
-        values = expected.get("values", [expected["answer"]])
-        fact_ok = all(contains_fact(text, value) for value in values) and answer.get("insufficient") is False
-        # Both conflicting values must match. Whether prose wrongly privileges
-        # one value needs manual semantic review, not a fragile keyword rule.
+        if expected["kind"] == "conflict":
+            parts = text.strip().split("|")
+            fact_ok = len(parts) == 2 and all(re.fullmatch(r"[+-]?\d+", p.strip()) for p in parts)
+            fact_ok = bool(fact_ok) and sorted(int(p.strip()) for p in parts) == sorted(int(v) for v in expected["values"])
+        else:
+            fact_ok = " ".join(text.split()).casefold() == " ".join(expected["answer"].split()).casefold()
+        fact_ok = fact_ok and answer.get("insufficient") is False
         required = set(case["evidence"]["supportingMemoryIds"])
         cited_ids = {by_index[i]["memoryId"] for i in cites if type(i) is int and i in by_index}
         exact_facts = case["evidence"]["exactFactSpans"]
@@ -58,7 +56,7 @@ def score(fixture, records):
         if isinstance(reasoning, int) and reasoning > usage.get("completion_tokens", reasoning):
             anomalies.append({"tag": record["tag"], "reasoning": reasoning,
                               "completion": usage.get("completion_tokens")})
-        if record.get("http_status") != 200 or record.get("finish_reason") != "stop":
+        if not record.get("valid_for_accounting") or record.get("finish_reason") != "stop":
             continue
         seen = Counter(a.get("id") for a in record.get("answers", []) if isinstance(a, dict))
         for answer in record.get("answers", []):

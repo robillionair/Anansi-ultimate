@@ -11,6 +11,12 @@ def reduction(a, baseline):
     return f"{100 * (1 - a / baseline):.2f}%" if baseline else "unavailable"
 
 
+def is_complete(records):
+    expected = {(i, a) for i in range(10) for a in ["anansi", "basic", "full"]}
+    return (len(records) == 30 and {(r['batch'], r['approach']) for r in records} == expected
+            and all(r.get('valid_for_accounting') for r in records))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("fixture", type=Path)
@@ -20,7 +26,7 @@ def main():
     scored = json.loads((args.run / "scores.json").read_text(encoding="utf-8"))
     records = [json.loads(x) for x in (args.run / "requests.jsonl").read_text(encoding="utf-8").splitlines()]
     totals = scored["totals"]
-    complete = len(records) == 30 and all(r.get("http_status") == 200 for r in records)
+    complete = is_complete(records)
     lines = ["# ANANSI larger synthetic prompt-replay benchmark", "",
         f"Frozen fixture SHA-256: `{hashlib.sha256(args.fixture.read_bytes()).hexdigest()}`.",
         f"100 distinct questions, 100 independent six-document corpora; {len(records)}/30 scored calls attempted.",
