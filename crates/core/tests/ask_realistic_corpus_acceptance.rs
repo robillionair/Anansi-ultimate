@@ -853,7 +853,9 @@ fn realistic_corpus_retrieval_acceptance() {
         "Ferrum Deep shaft inspection is scheduled for 7 July 2026.",
     );
     created += 1;
-    let long1 = note(
+    // Structured corpus material, deliberately unqueried: its headed
+    // sections and table rows are available as distractor chunks.
+    let _long1 = note(
         &core,
         &ws,
         "Meridian North freight handbook",
@@ -1429,73 +1431,74 @@ fn realistic_corpus_retrieval_acceptance() {
     });
     assert_eq!(cases.len(), 68, "answerable questions must number 68");
 
-    let mut negatives: Vec<Case> = Vec::new();
     // Term-disjoint (6): every content term is absent from the corpus
     // (verified by construction: these tokens appear nowhere in notes
     // or filler templates). The forbidden token is checked against
     // evidence chunks only, since the question itself is in the prompt.
-    negatives.push(Case {
-        question: "What is the Zorblax heliograph's calibration?",
-        required: vec![],
-        forbidden: vec!["Zorblax"],
-    });
-    negatives.push(Case {
-        question: "How does the Quendal astrolabe function?",
-        required: vec![],
-        forbidden: vec!["Quendal"],
-    });
-    negatives.push(Case {
-        question: "What does the Vireo semaphore signal?",
-        required: vec![],
-        forbidden: vec!["Vireo"],
-    });
-    negatives.push(Case {
-        question: "Where is the Thistledown observatory located?",
-        required: vec![],
-        forbidden: vec!["Thistledown"],
-    });
-    negatives.push(Case {
-        question: "What does the Mireworth lodestone weigh?",
-        required: vec![],
-        forbidden: vec!["Mireworth"],
-    });
-    negatives.push(Case {
-        question: "When does the Caldera pendulum swing?",
-        required: vec![],
-        forbidden: vec!["Caldera"],
-    });
     // Natural negatives (6): three whose fact lives only in an
     // excluded note, three fabricated combinations no note states.
-    negatives.push(Case {
-        question: "How many crates does the archived ledger record?",
-        required: vec![],
-        forbidden: vec!["777 crates"],
-    });
-    negatives.push(Case {
-        question: "How many crates does the expired ledger record?",
-        required: vec![],
-        forbidden: vec!["666 crates"],
-    });
-    negatives.push(Case {
-        question: "What is the sealed vault code?",
-        required: vec![],
-        forbidden: vec!["SEALED-777"],
-    });
-    negatives.push(Case {
-        question: "How many barrels does the Ferrum North shaft store?",
-        required: vec![],
-        forbidden: vec![],
-    });
-    negatives.push(Case {
-        question: "What time does the Halcyon North greenhouse train depart?",
-        required: vec![],
-        forbidden: vec![],
-    });
-    negatives.push(Case {
-        question: "How many seed samples does the Solenne North cellar hold?",
-        required: vec![],
-        forbidden: vec![],
-    });
+    let negatives: Vec<Case> = vec![
+        Case {
+            question: "What is the Zorblax heliograph's calibration?",
+            required: vec![],
+            forbidden: vec!["Zorblax"],
+        },
+        Case {
+            question: "How does the Quendal astrolabe function?",
+            required: vec![],
+            forbidden: vec!["Quendal"],
+        },
+        Case {
+            question: "What does the Vireo semaphore signal?",
+            required: vec![],
+            forbidden: vec!["Vireo"],
+        },
+        Case {
+            question: "Where is the Thistledown observatory located?",
+            required: vec![],
+            forbidden: vec!["Thistledown"],
+        },
+        Case {
+            question: "What does the Mireworth lodestone weigh?",
+            required: vec![],
+            forbidden: vec!["Mireworth"],
+        },
+        Case {
+            question: "When does the Caldera pendulum swing?",
+            required: vec![],
+            forbidden: vec!["Caldera"],
+        },
+        Case {
+            question: "How many crates does the archived ledger record?",
+            required: vec![],
+            forbidden: vec!["777 crates"],
+        },
+        Case {
+            question: "How many crates does the expired ledger record?",
+            required: vec![],
+            forbidden: vec!["666 crates"],
+        },
+        Case {
+            question: "What is the sealed vault code?",
+            required: vec![],
+            forbidden: vec!["SEALED-777"],
+        },
+        Case {
+            question: "How many barrels does the Ferrum North shaft store?",
+            required: vec![],
+            forbidden: vec![],
+        },
+        Case {
+            question: "What time does the Halcyon North greenhouse train depart?",
+            required: vec![],
+            forbidden: vec![],
+        },
+        Case {
+            question: "How many seed samples does the Solenne North cellar hold?",
+            required: vec![],
+            forbidden: vec![],
+        },
+    ];
     assert_eq!(negatives.len(), 12, "negative questions must number 12");
 
     let mut complete = 0usize;
@@ -1510,18 +1513,18 @@ fn realistic_corpus_retrieval_acceptance() {
     let mut durations: Vec<f64> = Vec::new();
     let excluded_set: std::collections::BTreeSet<String> = excluded_ids.iter().cloned().collect();
 
-    let mut run_one = |label: &str,
-                       case: &Case,
-                       complete: &mut usize,
-                       disjoint_ok: &mut usize,
-                       natural_ok: &mut usize,
-                       disclosure_ok: &mut usize,
-                       budget_ok: &mut usize,
-                       canary_leaks: &mut usize,
-                       excluded_leaks: &mut usize,
-                       total_additional: &mut usize,
-                       failures: &mut Vec<String>,
-                       durations: &mut Vec<f64>| {
+    let run_one = |label: &str,
+                   case: &Case,
+                   complete: &mut usize,
+                   disjoint_ok: &mut usize,
+                   natural_ok: &mut usize,
+                   disclosure_ok: &mut usize,
+                   budget_ok: &mut usize,
+                   canary_leaks: &mut usize,
+                   excluded_leaks: &mut usize,
+                   total_additional: &mut usize,
+                   failures: &mut Vec<String>,
+                   durations: &mut Vec<f64>| {
         let started = Instant::now();
         let response = ask(&core, &ws, case.question);
         durations.push(started.elapsed().as_secs_f64() * 1000.0);

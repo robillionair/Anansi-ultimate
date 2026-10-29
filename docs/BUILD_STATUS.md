@@ -13,6 +13,22 @@ evidence remains scoped; model-answer quality and actual token savings are still
 unmeasured on repaired prompts. No production code, preview or provider calls
 changed in this review. Next task is bounded Windows performance/scorer repair.
 
+## 2026-10-29 — Ask scale hardening (permission accounting, proof race repair, realistic corpus)
+
+Branch `muse/ask-scale-hardening` from `9b9ead8f` (that checkpoint
+preserved untouched). [Full report](handoffs/ask-scale-hardening-report.md).
+One Ask accounts for every permission check across 0/1/16/128/1,010
+notes: batches stay 1, outside-batch work stays 8, batch paths grow
+2N + 2; Linux spawns no permission processes. Adversarial tests
+found a real widen-after-proof race; proven reads now re-validate
+file permissions at read time on non-Windows (Windows keeps a
+documented one-operation residual window). Realistic corpus:
+1,008 records, 4 domains, 80 questions — 68/68 binding-complete,
+6/6 disjoint, 6/6 natural negatives, disclosure and budget 80/80,
+zero leaks, query p95 366.8 ms (Linux). Windows rerun of the probe,
+accounting diagnostic, and full-scale corpus decides acceptance;
+cloud replay still held at 0/31 attempts.
+
 ## 2026-10-29 — Ask Windows scale repair (batch proofs, fact binding)
 
 Branch `muse/ask-windows-scale-repair` from reviewed checkpoint
