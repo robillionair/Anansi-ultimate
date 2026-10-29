@@ -1,3 +1,26 @@
+## 2026-10-29 — Larger free-model benchmark completed; quality gap measured
+
+100 controlled question instances across ten templates, three approaches, 30 scored
+batch requests plus one smoke, exact free Nemotron Ultra alias, zero reported cost.
+Measured protocol/source commit `21b1afb0ba1a7969825d39c61a3745bfc4c29e40` on
+`codex/benchmark-large-free`; no application code changed.
+
+ANANSI: 60/100 supported correct outcomes, 46,339 input + 12,467 completion = 58,806
+reported tokens. Basic retrieval: 70/100, 50,479 + 13,305 = 63,784. Full context:
+100/100, 228,145 + 16,277 = 244,422. ANANSI input reduction is 79.69% versus full
+but only 8.20% versus basic, with lower quality than both. The 40 ANANSI misses
+are refusals on answerable questions after candidate retrieval omitted the facts.
+Do not present these savings as an unqualified efficiency win or as an improvement
+over the differently defined earlier pilot baseline. Prior LinkedIn draft is on hold.
+
+Read [full measured review and scope](reviews/large-free-benchmark-2026-10-29.md).
+All 30 calls were HTTP 200, finish stop, parseable; all 300 items and raw responses
+retained. No scored reasoning>completion anomaly; old pilot anomalies remain open.
+100-case offline fixture checks 2/2, Python regressions 8/8, strict harness Clippy,
+formatting, docs and Git validation passed. Artifacts are on E:. Next work should
+improve retrieval and validate on held-out questions, not automatically rerun cloud
+experiments. Production/native/audit/CI gates and the existing previews are unchanged.
+
 ## 2026-10-29 — Independent benchmark review (qualified measurement verdict)
 
 Incoming `8639c44c30eb98848961dfd31fe1057e769d53e4`, reviewed on

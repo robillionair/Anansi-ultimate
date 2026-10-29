@@ -1,6 +1,13 @@
 # ANANSI Ultimate — Recovery Guide
 
-## Large free-model benchmark in progress — 2026-10-29
+## Large free-model benchmark completed — 2026-10-29
+
+The authorized 100-case test is complete. Measured protocol commit `21b1afb0b`.
+Read [measured result](reviews/large-free-benchmark-2026-10-29.md): ANANSI 60/100,
+basic 70/100, full 100/100; 79.69% lower input versus full does not preserve quality.
+All 30 scored calls and one smoke reported zero cost. Raw data and exact sums are
+preserved. No further cloud call or repeat is automatically authorized by this
+completed experiment. Keep the savings-led LinkedIn draft on hold.
 
 The owner's newer request authorizes a new bounded test on this computer.
 Use branch `codex/benchmark-large-free` in `E:/Anansi/worktrees/review-m8-benchmark`.

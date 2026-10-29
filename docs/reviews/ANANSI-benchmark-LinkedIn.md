@@ -1,5 +1,11 @@
 # Draft — limited pilot evidence, not a competitive benchmark
 
+**Hold this savings-led draft.** The newer [100-case lexical-only benchmark](large-free-benchmark-2026-10-29.md)
+found 60/100 supported correct outcomes versus 100/100 for full context. The older
+pilot input arithmetic is unchanged, but posting it without the broader quality
+finding would give an incomplete picture. Improve retrieval and independently
+validate on held-out questions before making a general efficiency claim.
+
 I have been testing ANANSI's approach to selecting relevant memory before sending
 context to a language model.
 
