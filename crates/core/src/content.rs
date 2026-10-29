@@ -114,9 +114,10 @@ pub fn read(
 /// runs per path before and per read, and each read still verifies
 /// existence, the body hash against the database value, `MAX_BODY`,
 /// and UTF-8. A read for a path outside the set (for example a
-/// revision created mid-operation) falls back to the full per-path
-/// verification in `read`, never to an unverified read. A failed batch
-/// fails the whole operation.
+/// revision created mid-operation, or a path that was absent when the
+/// batch was built) falls back to the full per-path verification in
+/// `read`, never to an unverified read. A failed batch fails the whole
+/// operation.
 pub(crate) struct VerifiedPaths {
     files: HashSet<PathBuf>,
 }
@@ -149,6 +150,13 @@ impl VerifiedPaths {
         if ordered.len() > 200_000 {
             return Err(unavailable());
         }
+        // Absent paths stay out of the batch: a workspace with no notes
+        // yet has no content directories, and a record whose directory
+        // or file is missing must keep the old read behavior (link
+        // rejection, then unavailable for a missing directory or
+        // integrity for a missing file) through the fallback in
+        // `read_verified`, not fail the whole batch up front.
+        ordered.retain(|(path, _)| fs::symlink_metadata(path).is_ok());
         for (path, _) in &ordered {
             reject_links(path).map_err(|_| unavailable())?;
         }
