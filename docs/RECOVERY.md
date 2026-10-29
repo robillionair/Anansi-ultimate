@@ -1,5 +1,17 @@
 # ANANSI Ultimate — Recovery Guide
 
+## Current Windows retrieval review — 2026-10-29
+
+Use `E:/Anansi/worktrees/review-m8-benchmark`, branch
+`codex/review-ask-retrieval-verify`, incoming `f90f9e850`.
+Read [findings and evidence](reviews/windows-ask-retrieval-verify-2026-10-29.md).
+One Windows Ask on 16 notes took 27,637 ms while retrieving the right evidence.
+Do not infer Windows scale readiness from Linux timing or run the expensive
+1,007-record public-path suite unbounded before resolving process-launch overhead.
+Preserve ACL/reparse/owner/hash checks and the original scale questions. Model
+replay and token measurements remain held; no cloud calls are authorized by
+resuming this review. Existing previews, data and audit-monitor state stay intact.
+
 ## Ask recall repair completed — 2026-10-29
 
 Use `E:/Anansi/worktrees/review-m8-benchmark`, branch `codex/ask-retrieval-recall`.

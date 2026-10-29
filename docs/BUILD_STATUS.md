@@ -1,3 +1,18 @@
+## 2026-10-29 — Windows review: retrieval package verified, performance defect found
+
+Incoming `f90f9e850` preserves the app repair; checksum, ancestry and all 30 frozen
+scored payloads verify. [Windows review and repair requirements](reviews/windows-ask-retrieval-verify-2026-10-29.md).
+A public-path Windows diagnostic on 16 notes retrieves the correct fact but takes
+27,637 ms for one Ask. Rebuilding the full workspace and launching per-path
+PowerShell ACL checks is an existing scaling defect. Full 1,007-record Windows
+acceptance was not run or claimed. Strict Clippy for both new tests passes.
+
+The larger test also needs source-bound fact assertions and preserved overlapping
+negative cases alongside its revised term-disjoint probes. Linux 40/40 retrieval
+evidence remains scoped; model-answer quality and actual token savings are still
+unmeasured on repaired prompts. No production code, preview or provider calls
+changed in this review. Next task is bounded Windows performance/scorer repair.
+
 ## 2026-10-29 — Ask retrieval verified at larger scale; model replay held
 
 Branch `muse/ask-retrieval-verify` from `95d384e3`. [Full report](handoffs/ask-retrieval-verify-report.md).
