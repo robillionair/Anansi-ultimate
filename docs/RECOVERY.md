@@ -1,5 +1,20 @@
 # ANANSI Ultimate — Recovery Guide
 
+## Large free-model benchmark in progress — 2026-10-29
+
+The owner's newer request authorizes a new bounded test on this computer.
+Use branch `codex/benchmark-large-free` in `E:/Anansi/worktrees/review-m8-benchmark`.
+Read [frozen acceptance plan](handoffs/M8-large-free-benchmark-design.md).
+Artifacts are under `E:/Anansi/benchmarks/large-free-2026-10-29`.
+100 natural questions use actual lexical Ask preparation; cloud replay is limited
+to the verified free Nemotron model, 30 scored batch requests plus the successful
+smoke. Stop on error/rate limit/cost/model mismatch; no retries or paid fallback.
+No credentials are stored in source or artifacts. Earlier no-new-round language
+below remains historical and is superseded only for this explicitly scoped run.
+Preserve partial results and immutable prompts. Do not run the cloud runner again
+automatically. Production changes, previews, CI, pushes and publication remain out
+of scope. The external-audit monitor stays off.
+
 ## Current benchmark review resume authority — 2026-10-29
 
 Use `E:/Anansi/worktrees/review-m8-benchmark`, branch
