@@ -67,6 +67,7 @@ pub(crate) enum PermissionCheckKind {
     ContentReadFile,
     ContentWriteDir,
     ContentWriteFile,
+    #[cfg(not(windows))]
     BatchPath,
     Other,
 }
@@ -134,6 +135,7 @@ fn record_permission_kind(kind: PermissionCheckKind) {
         PermissionCheckKind::ContentReadFile => &PERMISSION_CONTENT_READ_FILE_CHECKS,
         PermissionCheckKind::ContentWriteDir => &PERMISSION_CONTENT_WRITE_DIR_CHECKS,
         PermissionCheckKind::ContentWriteFile => &PERMISSION_CONTENT_WRITE_FILE_CHECKS,
+        #[cfg(not(windows))]
         PermissionCheckKind::BatchPath => &PERMISSION_BATCH_PATH_CHECKS,
         PermissionCheckKind::Other => &PERMISSION_OTHER_CHECKS,
     };

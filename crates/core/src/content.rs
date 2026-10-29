@@ -417,7 +417,9 @@ mod adversarial_tests {
     const WSB: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
     const REC1: &str = "cccccccccccccccccccccccccccccccc";
     const REC2: &str = "dddddddddddddddddddddddddddddddd";
+    #[cfg(unix)]
     const REC3: &str = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
+    #[cfg(unix)]
     const REC4: &str = "ffffffffffffffffffffffffffffffff";
     const REC5: &str = "11111111111111111111111111111111";
     const REV1: &str = "22222222222222222222222222222222";
