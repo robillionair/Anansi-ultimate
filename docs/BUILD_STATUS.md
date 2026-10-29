@@ -1,3 +1,19 @@
+## 2026-10-30 — Windows findings verified; native verification integrated
+
+Implementation `4ef90406d8726757f225e75a36e3bf57e01ebde6` on
+`codex/review-ask-windows-findings`, from Muse's `c15fe5d6` repair.
+[Exact Windows evidence and limits](reviews/windows-ask-findings-verified-2026-10-30.md).
+All four findings pass focused Windows checks. Native verify-only integration
+removes permission-helper launches: unchanged 16-note Ask is 2,264 ms (incoming
+6,299; pre-batch 27,637). Full realistic corpus passes: 68/68 answerable, 80/80
+bindings, both six-case negative families, disclosure/budget 80/80, no leaks,
+Windows p95 4,383.3 ms below original 5,000 ms bar. Raw prompts/audit retained.
+Accounting 0/1/16/128/1010 notes passes with zero helper launches.
+98 distinct Rust tests, strict Clippy, UI/contracts 81/81, Python 8/8,
+TypeScript/contracts, builds and browser Ask 1/1 pass. No new model answers/token
+measurements, native preview promotion, cloud calls, pushes or CI. Existing
+full-core A6/Ollama failures remain scoped and recorded.
+
 ## 2026-10-29 — Windows findings repair: widen-after-proof closed natively
 
 From reviewed `6e355b02d5aa46f1aa5646b674edb01cd6ec2884` on branch

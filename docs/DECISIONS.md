@@ -1,5 +1,17 @@
 # ANANSI Ultimate — Architecture Decisions
 
+## ADR-0031: Native Windows verify-only permissions and explicit process accounting
+
+The approved Windows Ask performance repair reuses the existing native owner-only
+protected-DACL verifier for verify-only root/catalog paths and operation batches.
+Protected reads still recheck file and ancestor permissions; creation/repair
+retains the script. No permanent positive cache or privacy/schema change.
+Logical calls and batches are distinct from successful helper process launches.
+[Windows evidence](reviews/windows-ask-findings-verified-2026-10-30.md) records the
+parity/refusal tests, zero-launch clean Ask and unchanged full-size acceptance.
+Windows synthetic bulk setup is test-only, with all production reads retained;
+it does not certify application bulk ingestion. Model measurements remain separate.
+
 ## ADR-0030: Natural-question recall without changing exact Search
 
 - Owner authority: fix the candidate-recall loss observed in the 2026-10-29

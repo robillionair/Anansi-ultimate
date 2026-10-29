@@ -1,5 +1,15 @@
 # ANANSI Ultimate — Architecture
 
+## Windows permission verification — 2026-10-30
+
+Verify-only storage and operation batches use native current-user owner/protected
+DACL checks; each protected body read rechecks file and ancestor permissions.
+Permission creation/repair retains the existing script. No permanent ACL cache.
+Diagnostic function-call/batch counts are distinct from actual helper launches.
+[Windows evidence](reviews/windows-ask-findings-verified-2026-10-30.md) records
+script/native parity, refusal, zero-launch clean Ask and full-size acceptance.
+Synthetic bulk test setup does not replace the public Ask or ingestion contracts.
+
 ## Ask recall repair — 2026-10-29
 
 Natural-language Ask has an internal ranked any-term lexical candidate path;

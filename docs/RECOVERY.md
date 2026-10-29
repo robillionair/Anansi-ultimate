@@ -1,5 +1,18 @@
 # ANANSI Ultimate — Recovery Guide
 
+## Current verified Windows integration — 2026-10-30
+
+Use `E:/Anansi/worktrees/review-m8-benchmark`, branch
+`codex/review-ask-windows-findings`, implementation `4ef90406d` over incoming
+`c15fe5d6`. [Verification and scope](reviews/windows-ask-findings-verified-2026-10-30.md).
+All four findings pass focused Windows checks. Native verify-only root/catalog
+and batch checks yield zero permission-helper launches. Same 16-note Ask: 2,264 ms;
+full realistic corpus 68/68 answerable, 80/80 bindings, p95 4,383.3 ms. Use this
+integrated checkpoint rather than the incoming branch alone. Preserve incoming
+ZIPs, frozen cloud prompts and historical measurements. Model quality/token replay,
+desktop preview promotion, production gates and known full-core failures remain
+open. No automatic cloud calls, pushes, CI or audit-monitor activation.
+
 ## Current scale-hardening Windows review — 2026-10-29
 
 Use `E:/Anansi/worktrees/review-m8-benchmark`, branch

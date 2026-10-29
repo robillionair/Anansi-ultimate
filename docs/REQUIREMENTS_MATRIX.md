@@ -1,5 +1,14 @@
 # ANANSI Ultimate — Requirements Matrix
 
+## Windows Ask/storage verification — 2026-10-30
+
+AN-005/006/010/018 focused evidence: [Windows native integration](reviews/windows-ask-findings-verified-2026-10-30.md).
+The four findings pass focused checks, with read-time refusal and zero permission
+helper launches. The larger realistic corpus passes 68/68 answerable evidence,
+80/80 fact bindings and the unchanged timing/privacy/budget bars on Windows.
+This does not close model-answer/token measurement, preview/native certification
+or remaining production gates. AN-006 remains in progress.
+
 ## Ask retrieval repair — 2026-10-29
 
 AN-005/006/010 focused remedial evidence: [Windows repair review](reviews/ask-retrieval-recall-repair-2026-10-29.md).
