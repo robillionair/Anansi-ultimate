@@ -158,18 +158,18 @@ fn protect_seed(root: &Path, template_dir: &Path, template_file: &Path) {
     use std::os::windows::process::CommandExt;
     let script = r#"
 $ErrorActionPreference='Stop'
-$sections=[Security.AccessControl.AccessControlSections]::All
+$sections=[Security.AccessControl.AccessControlSections]'Access,Owner,Group'
 $dirSddl=[IO.Directory]::GetAccessControl($env:ANANSI_TEMPLATE_DIR).GetSecurityDescriptorSddlForm($sections)
 $fileSddl=[IO.File]::GetAccessControl($env:ANANSI_TEMPLATE_FILE).GetSecurityDescriptorSddlForm($sections)
 $items=[IO.Directory]::EnumerateFileSystemEntries($env:ANANSI_CONTENT_ROOT,'*',[IO.SearchOption]::AllDirectories)
 foreach($item in $items) {
  if([IO.Directory]::Exists($item)) {
    $acl=New-Object Security.AccessControl.DirectorySecurity
-   $acl.SetSecurityDescriptorSddlForm($dirSddl)
+   $acl.SetSecurityDescriptorSddlForm($dirSddl,$sections)
    [IO.Directory]::SetAccessControl($item,$acl)
  } else {
    $acl=New-Object Security.AccessControl.FileSecurity
-   $acl.SetSecurityDescriptorSddlForm($fileSddl)
+   $acl.SetSecurityDescriptorSddlForm($fileSddl,$sections)
    [IO.File]::SetAccessControl($item,$acl)
  }
 }

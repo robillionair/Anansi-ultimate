@@ -20,7 +20,7 @@ def grade(case, approach, answer):
         return {"fact_correct": False, "grounded_correct": False, "missing_or_malformed": True}
     text = answer.get("answer", "")
     cites = answer.get("citations", [])
-    if not isinstance(text, str) or not isinstance(cites, list):
+    if not isinstance(text, str) or not text.strip() or not isinstance(cites, list):
         return {"fact_correct": False, "grounded_correct": False, "missing_or_malformed": True}
     valid = bool(cites) and all(type(i) is int and i in by_index for i in cites)
     if expected["kind"] == "insufficient":
