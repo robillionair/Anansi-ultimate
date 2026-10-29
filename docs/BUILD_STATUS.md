@@ -10,7 +10,9 @@ Windows focused checks passed: context 10/10; workspace roundtrip 11/11 includin
 20×16 concurrent migration stress; Ask 5/5; streaming/cancellation 1/1; synthetic
 Ask browser 1/1; UI/contracts 81/81; TypeScript, web/API builds, contracts drift,
 strict core all-target Clippy. Reporting CLI regressions 2/2. No full Windows
-suite or real-model replication is claimed. Synthetic benchmark harness pending.
+suite or real-model replication is claimed. Supplemental synthetic benchmark
+harness was reviewer-stopped after more than 25 minutes without a terminal result;
+coverage is incomplete, with no invariant verdict. See review and attempt log.
 
 Offline sums reproduce 37.1% lower API-reported input and 30.9% lower reported
 total tokens, on eight questions/32 responses. Eight reasoning subcounter

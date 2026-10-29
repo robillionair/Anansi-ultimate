@@ -76,7 +76,11 @@ migration regression; Ask 5/5; streaming and backend cancellation 1/1;
 canonical synthetic Ask browser workflow 1/1 under the shared application lease;
 UI/contracts 81/81; reporting CLI regressions 2/2. TypeScript, web/API builds,
 contracts drift, strict core all-target Clippy, formatting, documentation validation
-and Git diff checks passed. The larger synthetic harness is still pending.
+and Git diff checks passed. The supplemental full synthetic harness was stopped by
+the reviewer after more than 25 minutes without a terminal result. It remained
+active in an isolated fixture; this is incomplete Windows coverage, not a passing
+run or an established invariant failure. Do not use its interrupted execution to
+claim model latency or token savings. No assertions or deadlines were weakened.
 
 No full Windows suite, independent real-model replication, native acceptance or
 preview promotion is claimed. Prior production gates remain open. Source repairs
