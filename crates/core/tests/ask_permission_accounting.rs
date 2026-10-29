@@ -109,22 +109,44 @@ fn permission_accounting_across_workspace_sizes() {
         }
         // Outside-batch permission work is constant: four connections
         // (open, proof enumeration, rebuild, compilation), each
-        // verifying the root and the database file. Everything else
-        // in `single` is the batch loop itself.
+        // verifying the root and the database file.
+        //
+        // Platform split, measured honestly: on Unix the batch loop
+        // calls the per-path function, so singles include the batch
+        // paths; on Windows the batch process checks its paths
+        // internally, so singles stay at the 8 connection checks
+        // regardless of batch size. Neither side inflates counters
+        // to match the other.
+        #[cfg(not(windows))]
         assert_eq!(
             single as usize,
             paths as usize + 8,
-            "single calls must equal batch paths plus 8 connection checks"
+            "unix singles must equal batch paths plus 8 connection checks"
+        );
+        #[cfg(windows)]
+        assert_eq!(
+            single, 8,
+            "windows singles must equal the 8 connection checks only"
+        );
+        #[cfg(not(windows))]
+        assert_eq!(
+            batch_path_c as usize, paths as usize,
+            "unix batch loop must count every batch path"
+        );
+        #[cfg(windows)]
+        assert_eq!(
+            batch_path_c, 0,
+            "windows batch paths are checked inside the batch process, not the per-path function"
         );
         assert_eq!(root_c, 4, "four connections verify the root");
         assert_eq!(db_c, 4, "four connections verify the database file");
         assert_eq!(fb_app, 0, "no fallback expected on a clean Ask");
         assert_eq!(fb_abs, 0, "no fallback expected on a clean Ask");
-        // Non-Windows proven reads re-validate the file's permission
-        // bits: one recheck per rebuild read plus one per cited
-        // compilation read. (Windows has no cheap equivalent; its
-        // recheck count stays 0 and the residual window is documented.)
-        #[cfg(not(windows))]
+        // Proven reads re-validate current permissions: one recheck
+        // per rebuild read plus one per cited compilation read, on
+        // both platforms (Unix metadata checks; Windows native
+        // owner/DACL validation covering the file and its proven
+        // ancestor directories).
         assert_eq!(
             rechecks as usize,
             size + response.citations.len(),
