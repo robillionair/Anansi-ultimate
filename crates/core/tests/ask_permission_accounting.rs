@@ -5,9 +5,8 @@
 //! test seeds N notes, snapshots the diagnostic counters, runs one
 //! Ask, and reports the deltas with setup and Ask timings separated.
 //! Linux permission verification spawns no processes (metadata
-//! checks only); the Windows process count for an operation is, by
-//! construction, `single_calls + batch_calls`, and must be confirmed
-//! by running this diagnostic on Windows rather than inferred here.
+//! checks only). Process launches are measured separately with
+//! `process_spawns`; logical calls and batches are not OS processes.
 use anansi_core::{
     Core,
     ask::{AskRequest, AskStatus},
@@ -16,6 +15,11 @@ use anansi_core::{
 use serde_json::json;
 use std::time::Instant;
 
+#[cfg(windows)]
+#[path = "support/windows_seed.rs"]
+mod windows_seed;
+
+#[cfg(not(windows))]
 fn note(core: &Core, ws: &str, title: &str, body: &str) -> String {
     core.memory_command(
         "create",
@@ -57,6 +61,23 @@ fn permission_accounting_across_workspace_sizes() {
             .unwrap()
             .to_owned();
         let seed_started = Instant::now();
+        #[cfg(windows)]
+        {
+            let entries = (0..size)
+                .map(|n| {
+                    (
+                        format!("Accounting note {n}"),
+                        if n == 0 {
+                            "The Tern archive shelf has reference code ACCT-991.".to_owned()
+                        } else {
+                            format!("Diagnostic filler entry {n} contains printed maps.")
+                        },
+                    )
+                })
+                .collect::<Vec<_>>();
+            windows_seed::notes(&core, &ws, &entries);
+        }
+        #[cfg(not(windows))]
         for n in 0..size {
             let body = if n == 0 {
                 "The Tern archive shelf has reference code ACCT-991.".to_owned()
@@ -88,8 +109,9 @@ fn permission_accounting_across_workspace_sizes() {
         let fb_app = after.fallback_appeared - before.fallback_appeared;
         let fb_abs = after.fallback_absent - before.fallback_absent;
         let rechecks = after.read_rechecks - before.read_rechecks;
+        let processes = after.process_spawns - before.process_spawns;
         eprintln!(
-            "ACCOUNTING notes={size} setup_ms={setup_ms} ask_ms={ask_ms} status={:?} cited={} batch={batch} batch_paths={paths} single={single} root={root_c} database={db_c} batch_path={batch_path_c} read_dir={read_dir} read_file={read_file} other={other} fallback_appeared={fb_app} fallback_absent={fb_abs} read_rechecks={rechecks}",
+            "ACCOUNTING notes={size} setup_ms={setup_ms} ask_ms={ask_ms} status={:?} cited={} batch={batch} batch_paths={paths} single={single} root={root_c} database={db_c} batch_path={batch_path_c} read_dir={read_dir} read_file={read_file} other={other} fallback_appeared={fb_app} fallback_absent={fb_abs} read_rechecks={rechecks} process_spawns={processes}",
             response.status,
             response.citations.len()
         );
@@ -155,5 +177,9 @@ fn permission_accounting_across_workspace_sizes() {
         assert_eq!(read_dir, 0, "no per-path content reads on a clean Ask");
         assert_eq!(read_file, 0, "no per-path content reads on a clean Ask");
         assert_eq!(other, 0, "no untagged checks on a clean Ask");
+        assert_eq!(
+            processes, 0,
+            "clean Ask must launch no permission helper processes"
+        );
     }
 }

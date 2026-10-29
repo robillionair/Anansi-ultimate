@@ -33,16 +33,16 @@ pub const DATABASE_NAME: &str = "workspaces.sqlite3";
 /// Diagnostic counters for permission-verification overhead. They change
 /// no behavior; tests use them to account for every check during an
 /// Ask. `single_calls` counts individual `private_permissions` calls
-/// (one PowerShell spawn each on Windows). `batch_calls` counts
+/// (native verification for verify-only Windows calls). `batch_calls` counts
 /// completed batch verifications and `batch_paths` the paths they
 /// covered. The category counters split `single_calls` by call site;
 /// untagged call sites count as `other_checks`. No counter records
 /// paths, file contents, or credentials — only counts. On Linux,
 /// permission verification spawns no processes at all (metadata
-/// checks only); the Windows process count for an operation is, by
-/// construction, `single_calls + batch_calls`, and must be confirmed
-/// by running the diagnostic on Windows rather than inferred here.
+/// checks only). `process_spawns` separately counts successful permission-helper
+/// process launches; logical calls and batches are not process counts.
 static PERMISSION_SINGLE_CALLS: AtomicU64 = AtomicU64::new(0);
+static PERMISSION_PROCESS_SPAWNS: AtomicU64 = AtomicU64::new(0);
 static PERMISSION_BATCH_CALLS: AtomicU64 = AtomicU64::new(0);
 static PERMISSION_BATCH_PATHS: AtomicU64 = AtomicU64::new(0);
 static PERMISSION_ROOT_CHECKS: AtomicU64 = AtomicU64::new(0);
@@ -75,6 +75,7 @@ pub(crate) enum PermissionCheckKind {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PermissionVerificationStats {
     pub single_calls: u64,
+    pub process_spawns: u64,
     pub batch_calls: u64,
     pub batch_paths: u64,
     pub root_checks: u64,
@@ -94,6 +95,7 @@ pub fn permission_verification_stats() -> PermissionVerificationStats {
     let load = |c: &AtomicU64| c.load(Ordering::Relaxed);
     PermissionVerificationStats {
         single_calls: load(&PERMISSION_SINGLE_CALLS),
+        process_spawns: load(&PERMISSION_PROCESS_SPAWNS),
         batch_calls: load(&PERMISSION_BATCH_CALLS),
         batch_paths: load(&PERMISSION_BATCH_PATHS),
         root_checks: load(&PERMISSION_ROOT_CHECKS),
@@ -108,6 +110,11 @@ pub fn permission_verification_stats() -> PermissionVerificationStats {
         fallback_absent: load(&PERMISSION_FALLBACK_ABSENT),
         read_rechecks: load(&PERMISSION_READ_RECHECKS),
     }
+}
+
+#[cfg(windows)]
+fn record_permission_process_spawn() {
+    PERMISSION_PROCESS_SPAWNS.fetch_add(1, Ordering::Relaxed);
 }
 
 pub(crate) fn record_permission_batch(path_count: u64) {
@@ -190,7 +197,17 @@ pub(crate) fn private_permissions_kind(
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
-        let result = std::process::Command::new("powershell.exe")
+        if verify_only {
+            let sid = crate::windows_security::current_user_sid()
+                .ok_or_else(|| io::Error::other("Private permissions could not be verified"))?;
+            return match crate::windows_security::path_is_private(path, &sid) {
+                crate::windows_security::WindowsVerify::Ok => Ok(()),
+                _ => Err(io::Error::other(
+                    "Private permissions could not be verified",
+                )),
+            };
+        }
+        let child = std::process::Command::new("powershell.exe")
             .args([
                 "-NoProfile",
                 "-NonInteractive",
@@ -207,7 +224,12 @@ pub(crate) fn private_permissions_kind(
                 if verify_only { "1" } else { "0" },
             )
             .creation_flags(0x08000000)
-            .output()?;
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()?;
+        record_permission_process_spawn();
+        let result = child.wait_with_output()?;
         if !result.status.success() {
             return Err(io::Error::other(
                 "Private permissions could not be verified",

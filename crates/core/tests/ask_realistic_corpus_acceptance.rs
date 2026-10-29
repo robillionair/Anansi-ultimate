@@ -13,6 +13,10 @@ use anansi_core::{
 use serde_json::json;
 use std::time::Instant;
 
+#[cfg(windows)]
+#[path = "support/windows_seed.rs"]
+mod windows_seed;
+
 fn note(core: &Core, ws: &str, title: &str, body: &str) -> String {
     core.memory_command(
         "create",
@@ -290,6 +294,7 @@ fn binding_helper_searches_all_matching_chunks() {
 
 #[test]
 fn realistic_corpus_retrieval_acceptance() {
+    let setup_started = Instant::now();
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path().join("storage");
     let core = Core::with_storage_root(root.clone());
@@ -1108,6 +1113,15 @@ fn realistic_corpus_retrieval_acceptance() {
     // --- Combinatorial filler (910 notes): varied, not repeated sentences.
     let seed_started = Instant::now();
     let mut rng = Rng(0x9e3779b97f4a7c15);
+    #[cfg(windows)]
+    {
+        let entries = (0..910)
+            .map(|i| (format!("Filler record {i}"), filler_body(&mut rng)))
+            .collect::<Vec<_>>();
+        windows_seed::notes(&core, &ws, &entries);
+        created += entries.len();
+    }
+    #[cfg(not(windows))]
     for i in 0..910 {
         note(
             &core,
@@ -1117,12 +1131,13 @@ fn realistic_corpus_retrieval_acceptance() {
         );
         created += 1;
     }
-    let setup_ms = seed_started.elapsed().as_millis();
+    let filler_setup_ms = seed_started.elapsed().as_millis();
+    let setup_ms = setup_started.elapsed().as_millis();
     assert!(
         created >= 1000,
         "corpus must hold at least 1000 records, got {created}"
     );
-    eprintln!("SETUP records={created} setup_ms={setup_ms}");
+    eprintln!("SETUP records={created} setup_ms={setup_ms} filler_setup_ms={filler_setup_ms}");
 
     let mut cases: Vec<Case> = Vec::new();
     let req = |span: &'static str, id: &str| (span, id.to_string());
@@ -1560,6 +1575,7 @@ fn realistic_corpus_retrieval_acceptance() {
     let mut total_additional = 0usize;
     let mut failures: Vec<String> = Vec::new();
     let mut durations: Vec<f64> = Vec::new();
+    let raw_evidence = std::cell::RefCell::new(Vec::new());
     let excluded_set: std::collections::BTreeSet<String> = excluded_ids.iter().cloned().collect();
 
     let run_one = |label: &str,
@@ -1577,6 +1593,10 @@ fn realistic_corpus_retrieval_acceptance() {
         let started = Instant::now();
         let response = ask(&core, &ws, case.question);
         durations.push(started.elapsed().as_secs_f64() * 1000.0);
+        raw_evidence.borrow_mut().push(json!({
+            "label":label,"question":case.question,"required_bindings":case.required,
+            "forbidden":case.forbidden,"ask_ms":durations.last(),"response":response
+        }));
         let prompt = &response.manifest.compiled_prompt;
         let chunks = prompt_chunks(prompt);
         let evidence_text: String = chunks.iter().map(|(_, t)| t.as_str()).collect();
@@ -1717,6 +1737,29 @@ fn realistic_corpus_retrieval_acceptance() {
         );
     }
 
+    if let Some(path) = std::env::var_os("ANANSI_REALISTIC_OUT") {
+        use std::io::Write;
+        let path = std::path::PathBuf::from(path);
+        assert!(
+            path.is_absolute(),
+            "evidence output must be an absolute test artifact path"
+        );
+        let value = json!({"format":"anansi-realistic-evidence-v1","os":std::env::consts::OS,
+            "records":created,"setup_ms":setup_ms,"filler_setup_ms":filler_setup_ms,
+            "windows_bulk_filler_setup":cfg!(windows),"cloud_calls":0,
+            "cases":raw_evidence.into_inner()});
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(path)
+            .unwrap();
+        file.write_all(&serde_json::to_vec_pretty(&value).unwrap())
+            .unwrap();
+        file.sync_all().unwrap();
+        let mut permissions = file.metadata().unwrap().permissions();
+        permissions.set_readonly(true);
+        file.set_permissions(permissions).unwrap();
+    }
     durations.sort_by(|a, b| a.partial_cmp(b).unwrap());
     let p95 = durations[((durations.len() as f64 * 0.95).ceil() as usize).saturating_sub(1)];
     let mean = durations.iter().sum::<f64>() / durations.len() as f64;

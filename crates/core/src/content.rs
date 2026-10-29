@@ -108,10 +108,10 @@ pub fn read(
 }
 
 /// Operation-scoped batch permission proofs for content reads, following
-/// the `vault/io.rs` `VerifiedFiles` pattern. One Windows PowerShell
-/// process verifies the whole batch (JSON path list on stdin, the same
+/// the `vault/io.rs` `VerifiedFiles` pattern. One Windows native
+/// operation verifies the whole batch natively with the same
 /// `protect.ps1` owner/DACL invariant per item, verify-only so nothing
-/// is mutated); other platforms check each deduplicated path with
+/// is mutated; other platforms check each deduplicated path with
 /// `private_permissions`. Shared directories are verified once.
 ///
 /// The proof set is created fresh per operation and dropped at its end:
@@ -176,40 +176,14 @@ impl VerifiedPaths {
         }
         #[cfg(windows)]
         {
-            use std::{
-                io::Write,
-                os::windows::process::CommandExt,
-                process::{Command, Stdio},
-            };
-            const SCRIPT: &str = concat!(
-                "$ErrorActionPreference='Stop'; [Console]::InputEncoding=[Text.UTF8Encoding]::new($false); ",
-                "$items=ConvertFrom-Json ([Console]::In.ReadToEnd()); foreach($item in $items) { ",
-                "$env:ANANSI_PERMISSION_PATH=$item.path; $env:ANANSI_PERMISSION_DIRECTORY=if($item.directory){'1'}else{'0'}; ",
-                "$env:ANANSI_PERMISSION_VERIFY='1'; & {\n",
-                include_str!("protect.ps1"),
-                "\n}; }"
-            );
-            let request: Vec<_> = ordered
-                .iter()
-                .map(|(path, directory)| serde_json::json!({"path": path, "directory": directory}))
-                .collect();
-            let input = serde_json::to_vec(&request).map_err(|_| unavailable())?;
-            let mut child = Command::new("powershell.exe")
-                .args(["-NoProfile", "-NonInteractive", "-Command", SCRIPT])
-                .creation_flags(0x08000000)
-                .stdin(Stdio::piped())
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped())
-                .spawn()
-                .map_err(|_| unavailable())?;
-            let written = child
-                .stdin
-                .take()
-                .ok_or_else(unavailable)?
-                .write_all(&input);
-            let result = child.wait_with_output().map_err(|_| unavailable())?;
-            if written.is_err() || !result.status.success() {
-                return Err(unavailable());
+            let sid = crate::windows_security::current_user_sid().ok_or_else(unavailable)?;
+            for (path, _) in &ordered {
+                if !matches!(
+                    crate::windows_security::path_is_private(path, &sid),
+                    crate::windows_security::WindowsVerify::Ok
+                ) {
+                    return Err(unavailable());
+                }
             }
         }
         #[cfg(not(windows))]

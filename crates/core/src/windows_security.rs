@@ -142,7 +142,7 @@ fn check_descriptor(sd: PSECURITY_DESCRIPTOR, user_sid: &[u8]) -> WindowsVerify 
     }
 }
 
-fn path_is_private(path: &Path, user_sid: &[u8]) -> WindowsVerify {
+pub(crate) fn path_is_private(path: &Path, user_sid: &[u8]) -> WindowsVerify {
     unsafe {
         let wide = wide_path(path);
         let mut sd: PSECURITY_DESCRIPTOR = std::ptr::null_mut();
@@ -183,4 +183,96 @@ pub(crate) fn proven_paths_are_private(file: &Path, user_sid: &[u8]) -> WindowsV
         current = path.parent();
     }
     WindowsVerify::Ok
+}
+
+#[cfg(test)]
+mod review_tests {
+    use super::*;
+    use std::os::windows::process::CommandExt;
+
+    fn script_accepts(path: &Path, directory: bool) -> bool {
+        std::process::Command::new("powershell.exe")
+            .args([
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                include_str!("protect.ps1"),
+            ])
+            .env("ANANSI_PERMISSION_PATH", path)
+            .env(
+                "ANANSI_PERMISSION_DIRECTORY",
+                if directory { "1" } else { "0" },
+            )
+            .env("ANANSI_PERMISSION_VERIFY", "1")
+            .creation_flags(0x08000000)
+            .output()
+            .unwrap()
+            .status
+            .success()
+    }
+
+    #[test]
+    fn native_verifier_matches_script_and_rechecks_ancestor_permissions() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let ws = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        let record = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+        let revision = "cccccccccccccccccccccccccccccccc";
+        crate::content::write(root, ws, record, revision, "Synthetic ACL parity data.").unwrap();
+        let file = root
+            .join("content")
+            .join(ws)
+            .join(record)
+            .join(format!("{revision}.md"));
+        let dir = file.parent().unwrap();
+        let sid = current_user_sid().unwrap();
+        assert!(script_accepts(&file, false));
+        assert!(matches!(path_is_private(&file, &sid), WindowsVerify::Ok));
+        assert!(script_accepts(dir, true));
+        assert!(matches!(
+            proven_paths_are_private(&file, &sid),
+            WindowsVerify::Ok
+        ));
+
+        for (path, directory) in [(file.as_path(), false), (dir, true)] {
+            let status = std::process::Command::new("icacls.exe")
+                .arg(path)
+                .args(["/grant", "*S-1-1-0:(R)"])
+                .creation_flags(0x08000000)
+                .stdout(std::process::Stdio::null())
+                .status()
+                .unwrap();
+            assert!(status.success());
+            let script_ok = script_accepts(path, directory);
+            let native_ok = matches!(path_is_private(path, &sid), WindowsVerify::Ok);
+            let chain_ok = matches!(proven_paths_are_private(&file, &sid), WindowsVerify::Ok);
+            crate::storage::private_permissions(path, directory, false).unwrap();
+            assert!(
+                !script_ok && !native_ok && !chain_ok,
+                "widened file or directory must be refused by script and native checks"
+            );
+        }
+
+        // Inheritance alone violates the protected-DACL invariant even when
+        // all resulting rules still belong to the current user.
+        let status = std::process::Command::new("icacls.exe")
+            .arg(&file)
+            .arg("/inheritance:e")
+            .creation_flags(0x08000000)
+            .stdout(std::process::Stdio::null())
+            .status()
+            .unwrap();
+        assert!(status.success());
+        let script_ok = script_accepts(&file, false);
+        let native_ok = matches!(path_is_private(&file, &sid), WindowsVerify::Ok);
+        crate::storage::private_permissions(&file, false, false).unwrap();
+        assert!(
+            !script_ok && !native_ok,
+            "unprotected DACL must fail both checks"
+        );
+        assert!(matches!(
+            proven_paths_are_private(&file, &sid),
+            WindowsVerify::Ok
+        ));
+    }
 }
