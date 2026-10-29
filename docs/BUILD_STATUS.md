@@ -1,3 +1,14 @@
+## 2026-10-29 — Ask retrieval verified at larger scale; model replay held
+
+Branch `muse/ask-retrieval-verify` from `95d384e3`. [Full report](handoffs/ask-retrieval-verify-report.md).
+Large-scale acceptance (criteria committed before implementation): 1,007 records,
+48 fresh questions, answerable completeness 40/40, insufficient 8/8, disclosure
+48/48, budget 48/48, zero Sealed/foreign/archived/expired leaks. No production
+code changed. Model replay on the repaired fixture is HELD: 30 payloads frozen
+from the hash-verified fixture, Nemotron free pricing verified publicly, but
+`OPENROUTER_API_KEY` was absent in the session, so 0/31 attempts were spent.
+No new answer-quality or token-saving claim. Windows acceptance still pending.
+
 ## 2026-10-29 — Ask recall repaired and locally verified
 
 Implementation `24d3df5c7cf7a90f849f7d16c08c9fe4fd3841dd` on
