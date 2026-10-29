@@ -124,7 +124,10 @@ pub fn read(
 /// revision created mid-operation, or a path that was absent when the
 /// batch was built) falls back to the full per-path verification in
 /// `read`, never to an unverified read. A failed batch fails the whole
-/// operation.
+/// operation. On non-Windows platforms a proven read additionally
+/// re-validates the file's permission bits at read time (one metadata
+/// check), closing the widen-after-proof race there; on Windows that
+/// race has a one-operation residual window (see `read_verified`).
 pub(crate) struct VerifiedPaths {
     files: HashSet<PathBuf>,
 }
@@ -238,6 +241,26 @@ impl VerifiedPaths {
             crate::storage::record_permission_fallback(fs::symlink_metadata(&file).is_ok());
             return read(root, workspace, record, revision, expected);
         }
+        // Read-time revalidation where it costs a single metadata
+        // check: a file widened after proving must fail here, so the
+        // batch proof does not authorize a read of a file that is no
+        // longer private. Windows has no cheap equivalent (ACL checks
+        // need a process spawn, which batching exists to avoid), so
+        // the Windows residual window is one operation: proofs are
+        // fresh per operation and the next operation re-verifies.
+        #[cfg(not(windows))]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = fs::metadata(&file)
+                .map_err(|_| integrity())?
+                .permissions()
+                .mode()
+                & 0o777;
+            crate::storage::record_permission_recheck();
+            if mode != 0o600 {
+                return Err(unavailable());
+            }
+        }
         if !file.exists() {
             return Err(integrity());
         }
@@ -339,20 +362,262 @@ mod tests {
         std::fs::write(&file_a, "tampered").unwrap();
         assert!(proofs.read_verified(root, WS, REC_A, REV, &hash_a).is_err());
         std::fs::write(&file_a, body_a).unwrap();
-        // Proofs are point-in-time within one operation: widening a file
-        // after proving does not break an already-proven read, but a
-        // fresh batch fails, and repair restores batch success. This is
-        // why revocation takes effect on the next operation, not within
-        // the operation that already proved the paths.
+        // Widening after proving: the read-time recheck (non-Windows)
+        // fails the read, so a widened file is not read on a stale
+        // proof. On Windows the batch-only proof keeps its
+        // one-operation residual window, and a fresh batch fails in
+        // both cases. Repair restores both the proven read and fresh
+        // verification.
         let file_b = root
             .join("content")
             .join(WS)
             .join(REC_B)
             .join(format!("{REV}.md"));
         widen(&file_b);
+        #[cfg(not(windows))]
+        assert!(proofs.read_verified(root, WS, REC_B, REV, &hash_b).is_err());
+        #[cfg(windows)]
         assert!(proofs.read_verified(root, WS, REC_B, REV, &hash_b).is_ok());
         assert!(VerifiedPaths::verify(root, WS, &[(REC_B.to_string(), REV.to_string())]).is_err());
         crate::storage::private_permissions(&file_b, false, false).unwrap();
+        assert!(proofs.read_verified(root, WS, REC_B, REV, &hash_b).is_ok());
         assert!(VerifiedPaths::verify(root, WS, &[(REC_B.to_string(), REV.to_string())]).is_ok());
+    }
+}
+
+#[cfg(test)]
+mod adversarial_tests {
+    use super::*;
+
+    const WSA: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const WSB: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    const REC1: &str = "cccccccccccccccccccccccccccccccc";
+    const REC2: &str = "dddddddddddddddddddddddddddddddd";
+    const REC3: &str = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
+    const REC4: &str = "ffffffffffffffffffffffffffffffff";
+    const REC5: &str = "11111111111111111111111111111111";
+    const REV1: &str = "22222222222222222222222222222222";
+    const REV2: &str = "33333333333333333333333333333333";
+
+    fn widen(path: &Path) {
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            let status = std::process::Command::new("icacls.exe")
+                .arg(path)
+                .args(["/grant", "*S-1-1-0:(R)"])
+                .creation_flags(0x08000000)
+                .stdout(std::process::Stdio::null())
+                .status()
+                .unwrap();
+            assert!(status.success());
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o644)).unwrap();
+        }
+    }
+
+    fn file_path(root: &Path, ws: &str, rec: &str, rev: &str) -> PathBuf {
+        root.join("content")
+            .join(ws)
+            .join(rec)
+            .join(format!("{rev}.md"))
+    }
+
+    #[test]
+    fn outside_set_and_other_root_fall_back_to_full_verification() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let root2 = temp.path().join("second-root");
+        std::fs::create_dir(&root2).unwrap();
+        let hash_b = write(
+            root,
+            WSB,
+            REC1,
+            REV1,
+            "The other workspace holds 44 crates.",
+        )
+        .unwrap();
+        let hash_a = write(
+            root,
+            WSA,
+            REC1,
+            REV1,
+            "The first workspace holds 12 crates.",
+        )
+        .unwrap();
+        let hash_a2 = write(&root2, WSA, REC1, REV1, "The second root holds 12 crates.").unwrap();
+        let proofs =
+            VerifiedPaths::verify(root, WSA, &[(REC1.to_string(), REV1.to_string())]).unwrap();
+        // Another workspace: fallback reads a properly permissioned
+        // file, and refuses an overbroad one. Proofs never authorize it.
+        assert_eq!(
+            proofs
+                .read_verified(root, WSB, REC1, REV1, &hash_b)
+                .unwrap(),
+            "The other workspace holds 44 crates."
+        );
+        widen(&file_path(root, WSB, REC1, REV1));
+        assert!(
+            proofs
+                .read_verified(root, WSB, REC1, REV1, &hash_b)
+                .is_err()
+        );
+        // Another storage root: same fallback/fail rules.
+        assert_eq!(
+            proofs
+                .read_verified(&root2, WSA, REC1, REV1, &hash_a2)
+                .unwrap(),
+            "The second root holds 12 crates."
+        );
+        widen(&file_path(&root2, WSA, REC1, REV1));
+        assert!(
+            proofs
+                .read_verified(&root2, WSA, REC1, REV1, &hash_a2)
+                .is_err()
+        );
+        // The proven path itself still reads.
+        assert_eq!(
+            proofs
+                .read_verified(root, WSA, REC1, REV1, &hash_a)
+                .unwrap(),
+            "The first workspace holds 12 crates."
+        );
+    }
+
+    #[test]
+    fn replaced_bodies_fail_integrity() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let hash = write(root, WSA, REC2, REV1, "Original body with 31 stones.").unwrap();
+        let proofs =
+            VerifiedPaths::verify(root, WSA, &[(REC2.to_string(), REV1.to_string())]).unwrap();
+        // Hash-altered body.
+        std::fs::write(
+            file_path(root, WSA, REC2, REV1),
+            "Altered body with 31 stones.",
+        )
+        .unwrap();
+        assert!(proofs.read_verified(root, WSA, REC2, REV1, &hash).is_err());
+        // Missing body.
+        std::fs::write(
+            file_path(root, WSA, REC2, REV1),
+            "Original body with 31 stones.",
+        )
+        .unwrap();
+        std::fs::remove_file(file_path(root, WSA, REC2, REV1)).unwrap();
+        assert!(proofs.read_verified(root, WSA, REC2, REV1, &hash).is_err());
+        // Oversized body.
+        let big = "x".repeat(MAX_BODY + 1);
+        std::fs::write(file_path(root, WSA, REC2, REV1), &big).unwrap();
+        assert!(proofs.read_verified(root, WSA, REC2, REV1, &hash).is_err());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn replaced_paths_fail_link_rejection() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let target = root.join("target.md");
+        std::fs::write(&target, "Target body.").unwrap();
+        let hash_f = write(root, WSA, REC3, REV1, "File link body.").unwrap();
+        let hash_d = write(root, WSA, REC4, REV1, "Directory link body.").unwrap();
+        let proofs = VerifiedPaths::verify(
+            root,
+            WSA,
+            &[
+                (REC3.to_string(), REV1.to_string()),
+                (REC4.to_string(), REV1.to_string()),
+            ],
+        )
+        .unwrap();
+        // File replaced by a symlink.
+        std::fs::remove_file(file_path(root, WSA, REC3, REV1)).unwrap();
+        std::os::unix::fs::symlink(&target, file_path(root, WSA, REC3, REV1)).unwrap();
+        assert!(
+            proofs
+                .read_verified(root, WSA, REC3, REV1, &hash_f)
+                .is_err()
+        );
+        // Directory replaced by a symlink.
+        let dir = root.join("content").join(WSA).join(REC4);
+        std::fs::remove_dir_all(&dir).unwrap();
+        let other_dir = root.join("other-dir");
+        std::fs::create_dir(&other_dir).unwrap();
+        std::os::unix::fs::symlink(&other_dir, &dir).unwrap();
+        assert!(
+            proofs
+                .read_verified(root, WSA, REC4, REV1, &hash_d)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn revised_record_reads_new_revision_via_fallback() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let hash1 = write(root, WSA, REC5, REV1, "First revision counts 10.").unwrap();
+        let proofs =
+            VerifiedPaths::verify(root, WSA, &[(REC5.to_string(), REV1.to_string())]).unwrap();
+        assert_eq!(
+            proofs.read_verified(root, WSA, REC5, REV1, &hash1).unwrap(),
+            "First revision counts 10."
+        );
+        let hash2 = write(root, WSA, REC5, REV2, "Second revision counts 20.").unwrap();
+        // New revision path was never proven: full verification, new hash.
+        assert_eq!(
+            proofs.read_verified(root, WSA, REC5, REV2, &hash2).unwrap(),
+            "Second revision counts 20."
+        );
+    }
+
+    #[test]
+    fn failed_batch_leaves_no_trace() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        write(root, WSA, REC1, REV1, "Trace body.").unwrap();
+        let file = file_path(root, WSA, REC1, REV1);
+        widen(&file);
+        let before: Vec<_> = std::fs::read_dir(root.join("content").join(WSA).join(REC1))
+            .unwrap()
+            .map(|e| e.unwrap().file_name())
+            .collect();
+        assert!(VerifiedPaths::verify(root, WSA, &[(REC1.to_string(), REV1.to_string())]).is_err());
+        let after: Vec<_> = std::fs::read_dir(root.join("content").join(WSA).join(REC1))
+            .unwrap()
+            .map(|e| e.unwrap().file_name())
+            .collect();
+        assert_eq!(before, after, "failed verify-only batch creates nothing");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(
+                std::fs::metadata(&file).unwrap().permissions().mode() & 0o777,
+                0o644,
+                "failed verify-only batch repairs nothing"
+            );
+        }
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn widened_file_after_proof_fails_read() {
+        // Race case: permissions widened after proving must fail the
+        // read once the read-time recheck is in place. This test
+        // fails against batch-only semantics and passes after the
+        // repair.
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let hash = write(root, WSA, REC1, REV1, "Race body holds 5.").unwrap();
+        let proofs =
+            VerifiedPaths::verify(root, WSA, &[(REC1.to_string(), REV1.to_string())]).unwrap();
+        assert_eq!(
+            proofs.read_verified(root, WSA, REC1, REV1, &hash).unwrap(),
+            "Race body holds 5."
+        );
+        widen(&file_path(root, WSA, REC1, REV1));
+        assert!(proofs.read_verified(root, WSA, REC1, REV1, &hash).is_err());
     }
 }

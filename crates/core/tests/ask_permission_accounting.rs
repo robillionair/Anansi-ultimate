@@ -87,8 +87,9 @@ fn permission_accounting_across_workspace_sizes() {
         let other = after.other_checks - before.other_checks;
         let fb_app = after.fallback_appeared - before.fallback_appeared;
         let fb_abs = after.fallback_absent - before.fallback_absent;
+        let rechecks = after.read_rechecks - before.read_rechecks;
         eprintln!(
-            "ACCOUNTING notes={size} setup_ms={setup_ms} ask_ms={ask_ms} status={:?} cited={} batch={batch} batch_paths={paths} single={single} root={root_c} database={db_c} batch_path={batch_path_c} read_dir={read_dir} read_file={read_file} other={other} fallback_appeared={fb_app} fallback_absent={fb_abs}",
+            "ACCOUNTING notes={size} setup_ms={setup_ms} ask_ms={ask_ms} status={:?} cited={} batch={batch} batch_paths={paths} single={single} root={root_c} database={db_c} batch_path={batch_path_c} read_dir={read_dir} read_file={read_file} other={other} fallback_appeared={fb_app} fallback_absent={fb_abs} read_rechecks={rechecks}",
             response.status,
             response.citations.len()
         );
@@ -119,6 +120,16 @@ fn permission_accounting_across_workspace_sizes() {
         assert_eq!(db_c, 4, "four connections verify the database file");
         assert_eq!(fb_app, 0, "no fallback expected on a clean Ask");
         assert_eq!(fb_abs, 0, "no fallback expected on a clean Ask");
+        // Non-Windows proven reads re-validate the file's permission
+        // bits: one recheck per rebuild read plus one per cited
+        // compilation read. (Windows has no cheap equivalent; its
+        // recheck count stays 0 and the residual window is documented.)
+        #[cfg(not(windows))]
+        assert_eq!(
+            rechecks as usize,
+            size + response.citations.len(),
+            "rechecks must cover every proven read"
+        );
         assert_eq!(read_dir, 0, "no per-path content reads on a clean Ask");
         assert_eq!(read_file, 0, "no per-path content reads on a clean Ask");
         assert_eq!(other, 0, "no untagged checks on a clean Ask");

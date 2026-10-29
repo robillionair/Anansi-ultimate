@@ -55,6 +55,7 @@ static PERMISSION_BATCH_PATH_CHECKS: AtomicU64 = AtomicU64::new(0);
 static PERMISSION_OTHER_CHECKS: AtomicU64 = AtomicU64::new(0);
 static PERMISSION_FALLBACK_APPEARED: AtomicU64 = AtomicU64::new(0);
 static PERMISSION_FALLBACK_ABSENT: AtomicU64 = AtomicU64::new(0);
+static PERMISSION_READ_RECHECKS: AtomicU64 = AtomicU64::new(0);
 
 /// Call-site category for a permission verification. Only the
 /// Ask-relevant sites are tagged; everything else is `Other`.
@@ -85,6 +86,7 @@ pub struct PermissionVerificationStats {
     pub other_checks: u64,
     pub fallback_appeared: u64,
     pub fallback_absent: u64,
+    pub read_rechecks: u64,
 }
 
 pub fn permission_verification_stats() -> PermissionVerificationStats {
@@ -103,12 +105,17 @@ pub fn permission_verification_stats() -> PermissionVerificationStats {
         other_checks: load(&PERMISSION_OTHER_CHECKS),
         fallback_appeared: load(&PERMISSION_FALLBACK_APPEARED),
         fallback_absent: load(&PERMISSION_FALLBACK_ABSENT),
+        read_rechecks: load(&PERMISSION_READ_RECHECKS),
     }
 }
 
 pub(crate) fn record_permission_batch(path_count: u64) {
     PERMISSION_BATCH_CALLS.fetch_add(1, Ordering::Relaxed);
     PERMISSION_BATCH_PATHS.fetch_add(path_count, Ordering::Relaxed);
+}
+
+pub(crate) fn record_permission_recheck() {
+    PERMISSION_READ_RECHECKS.fetch_add(1, Ordering::Relaxed);
 }
 
 pub(crate) fn record_permission_fallback(appeared_after_batch: bool) {
