@@ -158,12 +158,12 @@ fn protect_seed(root: &Path, template_dir: &Path, template_file: &Path) {
     use std::os::windows::process::CommandExt;
     let script = r#"
 $ErrorActionPreference='Stop'
-$dirAcl=Get-Acl -LiteralPath $env:ANANSI_TEMPLATE_DIR
-$fileAcl=Get-Acl -LiteralPath $env:ANANSI_TEMPLATE_FILE
-$items=@(Get-ChildItem -LiteralPath $env:ANANSI_CONTENT_ROOT -Recurse -Force)
+$dirAcl=[IO.Directory]::GetAccessControl($env:ANANSI_TEMPLATE_DIR)
+$fileAcl=[IO.File]::GetAccessControl($env:ANANSI_TEMPLATE_FILE)
+$items=[IO.Directory]::EnumerateFileSystemEntries($env:ANANSI_CONTENT_ROOT,'*',[IO.SearchOption]::AllDirectories)
 foreach($item in $items) {
- if($item.PSIsContainer) {[IO.Directory]::SetAccessControl($item.FullName,$dirAcl)}
- else {[IO.File]::SetAccessControl($item.FullName,$fileAcl)}
+ if([IO.Directory]::Exists($item)) {[IO.Directory]::SetAccessControl($item,$dirAcl)}
+ else {[IO.File]::SetAccessControl($item,$fileAcl)}
 }
 "#;
     let output = std::process::Command::new("powershell.exe")
