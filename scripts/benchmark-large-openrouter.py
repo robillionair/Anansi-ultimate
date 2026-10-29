@@ -134,6 +134,9 @@ def main():
                     raise RuntimeError("Stopped after failed/ambiguous request or unexpected model; no retry")
                 if usage.get("cost") is None or float(usage["cost"]) != 0:
                     raise RuntimeError("Stopped: missing or nonzero reported cost")
+                if any(type(usage.get(k)) is not int or usage[k] < 0 for k in
+                       ["prompt_tokens", "completion_tokens", "total_tokens"]):
+                    raise RuntimeError("Stopped: incomplete provider token accounting")
                 # Conservative pacing below the documented free-tier minute cap.
                 time.sleep(max(0, 3.2 - (time.monotonic() - started)))
 
