@@ -1,5 +1,17 @@
 # ANANSI Ultimate — Recovery Guide
 
+## Current scale-hardening Windows review — 2026-10-29
+
+Use `E:/Anansi/worktrees/review-m8-benchmark`, branch
+`codex/review-ask-scale-hardening`, incoming `825f7561`.
+Read [exact findings and commands](reviews/windows-ask-scale-hardening-2026-10-29.md).
+Speed improves to 6,910 ms on 16 notes, but permission-widen refusal, Windows
+accounting and strict Clippy are open. Preserve the explicit ignored reproduction
+and its FAILED output; it must become a true refusal pass, not a permitted read.
+No runtime changes or full-scale Windows pass are claimed by this review. Frozen
+cloud measurement remains held. Preserve owner data, previews and audit-monitor
+state; no automatic model calls, pushes, CI or new feature work.
+
 ## Current Windows retrieval review — 2026-10-29
 
 Use `E:/Anansi/worktrees/review-m8-benchmark`, branch

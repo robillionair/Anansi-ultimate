@@ -1,3 +1,16 @@
+## 2026-10-29 — Scale hardening Windows review: faster, acceptance still open
+
+Incoming `825f75614656aa0118d924fc5ae1fe51b3a9cf7e` verifies against its ZIP/bundle
+identities. [Windows results and concrete repair requirements](reviews/windows-ask-scale-hardening-2026-10-29.md).
+The unchanged 16-note probe improves from 27,637 to 6,910 ms with correct evidence.
+Content adversarial checks 4/4 and source-binding regression 1/1 pass on Windows.
+An explicit permission-widen-after-proof refusal reproduction FAILS; the incoming
+accounting test FAILS at one note due to a Linux-only count assumption; strict
+all-target Clippy FAILS on Windows-only dead code. Realistic-corpus source-binding
+helper also has a static early-return defect. Full-scale Windows acceptance is
+deferred; no new model answers, token measurements or preview promotion claimed.
+Review adds an opt-in failing reproduction and docs only, no runtime changes.
+
 ## 2026-10-29 — Windows review: retrieval package verified, performance defect found
 
 Incoming `f90f9e850` preserves the app repair; checksum, ancestry and all 30 frozen

@@ -383,6 +383,30 @@ mod tests {
         assert!(proofs.read_verified(root, WS, REC_B, REV, &hash_b).is_ok());
         assert!(VerifiedPaths::verify(root, WS, &[(REC_B.to_string(), REV.to_string())]).is_ok());
     }
+
+    /// Review-only expected-success security reproduction. Run explicitly;
+    /// incoming Windows batching currently fails this assertion. A future
+    /// repair must make it pass without changing the expected result.
+    #[test]
+    #[cfg(windows)]
+    #[ignore = "explicit review reproduction: Windows read must reject widened permissions"]
+    fn windows_widen_after_proof_must_fail_closed() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let body = "Synthetic review data; no private user content.";
+        let hash = write(root, WS, REC_A, REV, body).unwrap();
+        let proof = VerifiedPaths::verify(root, WS, &[(REC_A.into(), REV.into())]).unwrap();
+        let file = root
+            .join("content")
+            .join(WS)
+            .join(REC_A)
+            .join(format!("{REV}.md"));
+        widen(&file);
+        assert!(
+            proof.read_verified(root, WS, REC_A, REV, &hash).is_err(),
+            "a batch proof must not authorize a body read after its ACL is widened"
+        );
+    }
 }
 
 #[cfg(test)]
