@@ -1,6 +1,6 @@
 use crate::{
     CommandError, ErrorCode,
-    storage::{private_permissions, reject_links, unavailable},
+    storage::{PermissionCheckKind, private_permissions_kind, reject_links, unavailable},
 };
 use sha2::{Digest, Sha256};
 use std::{
@@ -40,14 +40,19 @@ fn location(
         reject_links(&directory).map_err(|_| unavailable())?;
         if create && !directory.exists() {
             match fs::create_dir(&directory) {
-                Ok(()) => {
-                    private_permissions(&directory, true, false).map_err(|_| unavailable())?
-                }
+                Ok(()) => private_permissions_kind(
+                    &directory,
+                    true,
+                    false,
+                    PermissionCheckKind::ContentWriteDir,
+                )
+                .map_err(|_| unavailable())?,
                 Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
                 Err(_) => return Err(unavailable()),
             }
         }
-        private_permissions(&directory, true, true).map_err(|_| unavailable())?;
+        private_permissions_kind(&directory, true, true, PermissionCheckKind::ContentReadDir)
+            .map_err(|_| unavailable())?;
     }
     let file = directory.join(format!("{revision}.md"));
     reject_links(&file).map_err(|_| unavailable())?;
@@ -69,7 +74,8 @@ pub fn write(
         options.mode(0o600);
     }
     let mut handle = options.open(&file).map_err(|_| unavailable())?;
-    private_permissions(&file, false, false).map_err(|_| unavailable())?;
+    private_permissions_kind(&file, false, false, PermissionCheckKind::ContentWriteFile)
+        .map_err(|_| unavailable())?;
     handle
         .write_all(body.as_bytes())
         .and_then(|_| handle.sync_all())
@@ -87,7 +93,8 @@ pub fn read(
     if !file.exists() {
         return Err(integrity());
     }
-    private_permissions(&file, false, true).map_err(|_| unavailable())?;
+    private_permissions_kind(&file, false, true, PermissionCheckKind::ContentReadFile)
+        .map_err(|_| unavailable())?;
     let mut bytes = Vec::new();
     fs::File::open(file)
         .map_err(|_| integrity())?
@@ -205,7 +212,8 @@ impl VerifiedPaths {
         }
         #[cfg(not(windows))]
         for (path, directory) in &ordered {
-            private_permissions(path, *directory, true).map_err(|_| unavailable())?;
+            private_permissions_kind(path, *directory, true, PermissionCheckKind::BatchPath)
+                .map_err(|_| unavailable())?;
         }
         let count = ordered.len() as u64;
         let files = ordered
@@ -227,6 +235,7 @@ impl VerifiedPaths {
     ) -> Result<String, CommandError> {
         let file = verified_location(root, workspace, record, revision)?;
         if !self.files.contains(&file) {
+            crate::storage::record_permission_fallback(fs::symlink_metadata(&file).is_ok());
             return read(root, workspace, record, revision, expected);
         }
         if !file.exists() {
@@ -343,7 +352,7 @@ mod tests {
         widen(&file_b);
         assert!(proofs.read_verified(root, WS, REC_B, REV, &hash_b).is_ok());
         assert!(VerifiedPaths::verify(root, WS, &[(REC_B.to_string(), REV.to_string())]).is_err());
-        private_permissions(&file_b, false, false).unwrap();
+        crate::storage::private_permissions(&file_b, false, false).unwrap();
         assert!(VerifiedPaths::verify(root, WS, &[(REC_B.to_string(), REV.to_string())]).is_ok());
     }
 }

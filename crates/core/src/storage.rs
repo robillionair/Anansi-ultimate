@@ -31,32 +31,106 @@ const ROOT_MARKER: &[u8] = b"ANANSI workspace root v1\n";
 pub const DATABASE_NAME: &str = "workspaces.sqlite3";
 
 /// Diagnostic counters for permission-verification overhead. They change
-/// no behavior; tests use them to prove batching is actually wired in.
-/// `single_calls` counts individual `private_permissions` calls (one
-/// PowerShell spawn each on Windows). `batch_calls` counts completed
-/// batch verifications and `batch_paths` the paths they covered.
+/// no behavior; tests use them to account for every check during an
+/// Ask. `single_calls` counts individual `private_permissions` calls
+/// (one PowerShell spawn each on Windows). `batch_calls` counts
+/// completed batch verifications and `batch_paths` the paths they
+/// covered. The category counters split `single_calls` by call site;
+/// untagged call sites count as `other_checks`. No counter records
+/// paths, file contents, or credentials — only counts. On Linux,
+/// permission verification spawns no processes at all (metadata
+/// checks only); the Windows process count for an operation is, by
+/// construction, `single_calls + batch_calls`, and must be confirmed
+/// by running the diagnostic on Windows rather than inferred here.
 static PERMISSION_SINGLE_CALLS: AtomicU64 = AtomicU64::new(0);
 static PERMISSION_BATCH_CALLS: AtomicU64 = AtomicU64::new(0);
 static PERMISSION_BATCH_PATHS: AtomicU64 = AtomicU64::new(0);
+static PERMISSION_ROOT_CHECKS: AtomicU64 = AtomicU64::new(0);
+static PERMISSION_DATABASE_CHECKS: AtomicU64 = AtomicU64::new(0);
+static PERMISSION_CONTENT_READ_DIR_CHECKS: AtomicU64 = AtomicU64::new(0);
+static PERMISSION_CONTENT_READ_FILE_CHECKS: AtomicU64 = AtomicU64::new(0);
+static PERMISSION_CONTENT_WRITE_DIR_CHECKS: AtomicU64 = AtomicU64::new(0);
+static PERMISSION_CONTENT_WRITE_FILE_CHECKS: AtomicU64 = AtomicU64::new(0);
+static PERMISSION_BATCH_PATH_CHECKS: AtomicU64 = AtomicU64::new(0);
+static PERMISSION_OTHER_CHECKS: AtomicU64 = AtomicU64::new(0);
+static PERMISSION_FALLBACK_APPEARED: AtomicU64 = AtomicU64::new(0);
+static PERMISSION_FALLBACK_ABSENT: AtomicU64 = AtomicU64::new(0);
+
+/// Call-site category for a permission verification. Only the
+/// Ask-relevant sites are tagged; everything else is `Other`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PermissionCheckKind {
+    Root,
+    Database,
+    ContentReadDir,
+    ContentReadFile,
+    ContentWriteDir,
+    ContentWriteFile,
+    BatchPath,
+    Other,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PermissionVerificationStats {
     pub single_calls: u64,
     pub batch_calls: u64,
     pub batch_paths: u64,
+    pub root_checks: u64,
+    pub database_checks: u64,
+    pub content_read_dir_checks: u64,
+    pub content_read_file_checks: u64,
+    pub content_write_dir_checks: u64,
+    pub content_write_file_checks: u64,
+    pub batch_path_checks: u64,
+    pub other_checks: u64,
+    pub fallback_appeared: u64,
+    pub fallback_absent: u64,
 }
 
 pub fn permission_verification_stats() -> PermissionVerificationStats {
+    let load = |c: &AtomicU64| c.load(Ordering::Relaxed);
     PermissionVerificationStats {
-        single_calls: PERMISSION_SINGLE_CALLS.load(Ordering::Relaxed),
-        batch_calls: PERMISSION_BATCH_CALLS.load(Ordering::Relaxed),
-        batch_paths: PERMISSION_BATCH_PATHS.load(Ordering::Relaxed),
+        single_calls: load(&PERMISSION_SINGLE_CALLS),
+        batch_calls: load(&PERMISSION_BATCH_CALLS),
+        batch_paths: load(&PERMISSION_BATCH_PATHS),
+        root_checks: load(&PERMISSION_ROOT_CHECKS),
+        database_checks: load(&PERMISSION_DATABASE_CHECKS),
+        content_read_dir_checks: load(&PERMISSION_CONTENT_READ_DIR_CHECKS),
+        content_read_file_checks: load(&PERMISSION_CONTENT_READ_FILE_CHECKS),
+        content_write_dir_checks: load(&PERMISSION_CONTENT_WRITE_DIR_CHECKS),
+        content_write_file_checks: load(&PERMISSION_CONTENT_WRITE_FILE_CHECKS),
+        batch_path_checks: load(&PERMISSION_BATCH_PATH_CHECKS),
+        other_checks: load(&PERMISSION_OTHER_CHECKS),
+        fallback_appeared: load(&PERMISSION_FALLBACK_APPEARED),
+        fallback_absent: load(&PERMISSION_FALLBACK_ABSENT),
     }
 }
 
 pub(crate) fn record_permission_batch(path_count: u64) {
     PERMISSION_BATCH_CALLS.fetch_add(1, Ordering::Relaxed);
     PERMISSION_BATCH_PATHS.fetch_add(path_count, Ordering::Relaxed);
+}
+
+pub(crate) fn record_permission_fallback(appeared_after_batch: bool) {
+    if appeared_after_batch {
+        PERMISSION_FALLBACK_APPEARED.fetch_add(1, Ordering::Relaxed);
+    } else {
+        PERMISSION_FALLBACK_ABSENT.fetch_add(1, Ordering::Relaxed);
+    }
+}
+
+fn record_permission_kind(kind: PermissionCheckKind) {
+    let counter = match kind {
+        PermissionCheckKind::Root => &PERMISSION_ROOT_CHECKS,
+        PermissionCheckKind::Database => &PERMISSION_DATABASE_CHECKS,
+        PermissionCheckKind::ContentReadDir => &PERMISSION_CONTENT_READ_DIR_CHECKS,
+        PermissionCheckKind::ContentReadFile => &PERMISSION_CONTENT_READ_FILE_CHECKS,
+        PermissionCheckKind::ContentWriteDir => &PERMISSION_CONTENT_WRITE_DIR_CHECKS,
+        PermissionCheckKind::ContentWriteFile => &PERMISSION_CONTENT_WRITE_FILE_CHECKS,
+        PermissionCheckKind::BatchPath => &PERMISSION_BATCH_PATH_CHECKS,
+        PermissionCheckKind::Other => &PERMISSION_OTHER_CHECKS,
+    };
+    counter.fetch_add(1, Ordering::Relaxed);
 }
 
 pub fn unavailable() -> CommandError {
@@ -93,7 +167,17 @@ pub fn reject_links(path: &Path) -> io::Result<()> {
     Ok(())
 }
 pub fn private_permissions(path: &Path, directory: bool, verify_only: bool) -> io::Result<()> {
+    private_permissions_kind(path, directory, verify_only, PermissionCheckKind::Other)
+}
+
+pub(crate) fn private_permissions_kind(
+    path: &Path,
+    directory: bool,
+    verify_only: bool,
+    kind: PermissionCheckKind,
+) -> io::Result<()> {
     PERMISSION_SINGLE_CALLS.fetch_add(1, Ordering::Relaxed);
+    record_permission_kind(kind);
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
@@ -184,7 +268,8 @@ impl Storage {
             if !create {
                 return Ok(false);
             }
-            private_permissions(&self.root, true, false).map_err(|_| unavailable())?;
+            private_permissions_kind(&self.root, true, false, PermissionCheckKind::Root)
+                .map_err(|_| unavailable())?;
             let mut options = OpenOptions::new();
             options.write(true).create_new(true);
             #[cfg(unix)]
@@ -198,7 +283,8 @@ impl Storage {
                 .and_then(|_| file.sync_all())
                 .map_err(|_| unavailable())?;
         }
-        private_permissions(&self.root, true, true).map_err(|_| unavailable())?;
+        private_permissions_kind(&self.root, true, true, PermissionCheckKind::Root)
+            .map_err(|_| unavailable())?;
         if fs::metadata(&marker).map_err(|_| unavailable())?.len() != ROOT_MARKER.len() as u64
             || fs::read(&marker).map_err(|_| unavailable())? != ROOT_MARKER
         {
@@ -234,14 +320,16 @@ impl Storage {
             match options.open(&path) {
                 Ok(file) => {
                     drop(file);
-                    private_permissions(&path, false, false).map_err(|_| unavailable())?;
+                    private_permissions_kind(&path, false, false, PermissionCheckKind::Database)
+                        .map_err(|_| unavailable())?;
                     fresh = true;
                 }
                 Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}
                 Err(_) => return Err(unavailable()),
             }
         }
-        private_permissions(&path, false, true).map_err(|_| unavailable())?;
+        private_permissions_kind(&path, false, true, PermissionCheckKind::Database)
+            .map_err(|_| unavailable())?;
         // Inspect existing files read-only before allowing SQLite to recover or write them.
         if !fresh {
             let probe = Connection::open_with_flags(
