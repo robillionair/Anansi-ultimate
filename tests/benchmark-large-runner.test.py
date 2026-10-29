@@ -1,7 +1,13 @@
 """Offline checks: frozen benchmark tasks never transmit gold answers."""
 import importlib.util
+import contextlib
+import io
+import json
+import os
 from pathlib import Path
+import tempfile
 import unittest
+from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location(
     "large_runner", Path(__file__).resolve().parents[1] / "scripts" / "benchmark-large-openrouter.py"
@@ -51,6 +57,45 @@ class RunnerTests(unittest.TestCase):
         for approach in result["totals"].values():
             self.assertEqual(approach["denominator"], 1)
             self.assertEqual(approach["fact_correct"], 0)
+
+    def run_preflight_failure(self, priced=False):
+        with tempfile.TemporaryDirectory(dir=os.environ.get("TEMP")) as directory:
+            root = Path(directory)
+            fixture = root / "fixture.json"
+            fixture.write_text(json.dumps({"cases": [
+                {"id": f"Q{i}", "question": "value?", "approaches": {
+                    a: {"prompt": "synthetic"} for a in runner.APPROACHES}}
+                for i in range(100)]}), encoding="utf-8")
+            calls = []
+
+            def fake_open(request, **kwargs):
+                calls.append(request.full_url)
+                if request.full_url.endswith("/models"):
+                    data = {"data": [{"id": runner.MODEL,
+                        "pricing": {"prompt": "1" if priced else "0", "completion": "0"}}]}
+                else:
+                    data = {"model": runner.MODEL, "usage": {"cost": 1},
+                        "choices": [{"finish_reason": "stop", "message": {"content": '{"answers":[]}'}}]}
+                return contextlib.closing(io.StringIO(json.dumps(data)))
+
+            with patch.dict(os.environ, {"OPENROUTER_API_KEY": "TEST_SECRET_NOT_TO_BE_SAVED"}), \
+                 patch("sys.argv", ["runner", str(fixture), str(root / "out")]), \
+                 patch.object(runner.urllib.request, "urlopen", fake_open), \
+                 contextlib.redirect_stdout(io.StringIO()):
+                with self.assertRaises((ValueError, RuntimeError)):
+                    runner.main()
+            for artifact in (root / "out").glob("*"):
+                self.assertNotIn("TEST_SECRET_NOT_TO_BE_SAVED", artifact.read_text(encoding="utf-8"))
+            return calls
+
+    def test_nonfree_metadata_prevents_inference(self):
+        calls = self.run_preflight_failure(priced=True)
+        self.assertEqual(len(calls), 1)
+        self.assertTrue(calls[0].endswith("/models"))
+
+    def test_unexpected_nonzero_charge_stops_without_retry(self):
+        calls = self.run_preflight_failure()
+        self.assertEqual(sum(url.endswith("/chat/completions") for url in calls), 1)
 
 
 if __name__ == "__main__":

@@ -158,12 +158,20 @@ fn protect_seed(root: &Path, template_dir: &Path, template_file: &Path) {
     use std::os::windows::process::CommandExt;
     let script = r#"
 $ErrorActionPreference='Stop'
-$dirAcl=[IO.Directory]::GetAccessControl($env:ANANSI_TEMPLATE_DIR)
-$fileAcl=[IO.File]::GetAccessControl($env:ANANSI_TEMPLATE_FILE)
+$sections=[Security.AccessControl.AccessControlSections]::All
+$dirSddl=[IO.Directory]::GetAccessControl($env:ANANSI_TEMPLATE_DIR).GetSecurityDescriptorSddlForm($sections)
+$fileSddl=[IO.File]::GetAccessControl($env:ANANSI_TEMPLATE_FILE).GetSecurityDescriptorSddlForm($sections)
 $items=[IO.Directory]::EnumerateFileSystemEntries($env:ANANSI_CONTENT_ROOT,'*',[IO.SearchOption]::AllDirectories)
 foreach($item in $items) {
- if([IO.Directory]::Exists($item)) {[IO.Directory]::SetAccessControl($item,$dirAcl)}
- else {[IO.File]::SetAccessControl($item,$fileAcl)}
+ if([IO.Directory]::Exists($item)) {
+   $acl=New-Object Security.AccessControl.DirectorySecurity
+   $acl.SetSecurityDescriptorSddlForm($dirSddl)
+   [IO.Directory]::SetAccessControl($item,$acl)
+ } else {
+   $acl=New-Object Security.AccessControl.FileSecurity
+   $acl.SetSecurityDescriptorSddlForm($fileSddl)
+   [IO.File]::SetAccessControl($item,$acl)
+ }
 }
 "#;
     let output = std::process::Command::new("powershell.exe")

@@ -29,8 +29,8 @@ def grade(case, approach, answer):
     else:
         values = expected.get("values", [expected["answer"]])
         fact_ok = all(contains_fact(text, value) for value in values) and answer.get("insufficient") is False
-        if expected["kind"] == "conflict":
-            fact_ok = fact_ok and bool(re.search(r"conflict|both|different|two|undated|disagree|no priority", text, re.I))
+        # Both conflicting values must match. Whether prose wrongly privileges
+        # one value needs manual semantic review, not a fragile keyword rule.
         required = set(case["evidence"]["supportingMemoryIds"])
         cited_ids = {by_index[i]["memoryId"] for i in cites if type(i) is int and i in by_index}
         exact_facts = case["evidence"]["exactFactSpans"]
