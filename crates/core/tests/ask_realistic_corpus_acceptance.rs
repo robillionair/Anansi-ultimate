@@ -229,14 +229,63 @@ fn span_bound_to_source(
     if chunks.len() != citations.len() {
         return false;
     }
-    for (n, text) in chunks {
-        if text.contains(span) {
-            return citations
-                .iter()
-                .any(|c| c.index == *n && c.memory_id == source);
-        }
-    }
-    false
+    let source_by_index: std::collections::HashMap<usize, &str> = citations
+        .iter()
+        .map(|c| (c.index, c.memory_id.as_str()))
+        .collect();
+    chunks.iter().any(|(index, content)| {
+        source_by_index.get(index).is_some_and(|s| *s == source) && content.contains(span)
+    })
+}
+
+#[test]
+fn binding_helper_searches_all_matching_chunks() {
+    // Pure regression: a wrong-source occurrence precedes the
+    // correct-source occurrence of the same phrase. The old helper
+    // returned on the first match and reported false; the fixed
+    // helper examines every matching chunk.
+    use anansi_core::ask::GroundedCitation;
+    let citation = |index: usize, id: &str| GroundedCitation {
+        index,
+        memory_id: id.to_string(),
+        title: "T".to_string(),
+        kind: "note".to_string(),
+        section_heading: None,
+        line_number: None,
+        snippet: "s".to_string(),
+    };
+    let chunks = vec![
+        (1, "The wrong ledger records 10 crates.\n".to_string()),
+        (2, "The correct ledger records 10 crates.\n".to_string()),
+    ];
+    let citations = vec![citation(1, "wrong-id"), citation(2, "gold-id")];
+    assert!(span_bound_to_source(
+        &chunks,
+        &citations,
+        "10 crates",
+        "gold-id"
+    ));
+    assert!(!span_bound_to_source(
+        &chunks,
+        &citations,
+        "10 crates",
+        "absent-id"
+    ));
+    let only_wrong = vec![(1, "The wrong ledger records 10 crates.\n".to_string())];
+    let only_wrong_citations = vec![citation(1, "wrong-id")];
+    assert!(!span_bound_to_source(
+        &only_wrong,
+        &only_wrong_citations,
+        "10 crates",
+        "gold-id"
+    ));
+    // Chunk/citation count mismatch still fails closed.
+    assert!(!span_bound_to_source(
+        &chunks,
+        &only_wrong_citations,
+        "10 crates",
+        "gold-id"
+    ));
 }
 
 #[test]
