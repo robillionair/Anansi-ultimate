@@ -1,5 +1,17 @@
 # ANANSI Ultimate — Recovery Guide
 
+## Ask recall repair completed — 2026-10-29
+
+Use `E:/Anansi/worktrees/review-m8-benchmark`, branch `codex/ask-retrieval-recall`.
+Verified implementation `24d3df5c7`; read [repair evidence](reviews/ask-retrieval-recall-repair-2026-10-29.md).
+All 40 missing evidence sets recovered on the unchanged 100-case fixture; 90/90
+answerable cases contain all facts and 10/10 genuinely empty cases remain empty.
+No new model answers or API usage measurement. Preserve both immutable fixtures
+and original cloud results. Do not repeat cloud calls, claim 100% model accuracy,
+promote a preview or resume the external-audit monitor automatically.
+The owner's fix request supersedes historical no-production-change language below
+only for this bounded retrieval repair, not for unrelated milestone work.
+
 ## Large free-model benchmark completed — 2026-10-29
 
 The authorized 100-case test is complete. Measured protocol commit `21b1afb0b`.

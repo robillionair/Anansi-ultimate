@@ -1,5 +1,14 @@
 # ANANSI Ultimate — Requirements Matrix
 
+## Ask retrieval repair — 2026-10-29
+
+AN-005/006/010 focused remedial evidence: [Windows repair review](reviews/ask-retrieval-recall-repair-2026-10-29.md).
+Ranked partial Ask matching recovers the 40 missed evidence sets on the known
+100-case fixture; 90/90 answerable cases contain all required facts, within the
+same byte cap. Exact Search and privacy/integrity boundaries pass regressions.
+No new model-quality, token-usage or milestone-completion claim. AN-006 remains
+in progress; the prior benchmark's measured results and production gates remain.
+
 ## M8 Slice 3 focused Windows acceptance — 2026-10-28
 
 AN-013 remains in progress. Incoming Collider 19/19 and transfer 18/18 passed;

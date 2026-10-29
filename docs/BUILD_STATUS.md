@@ -1,3 +1,19 @@
+## 2026-10-29 — Ask recall repaired and locally verified
+
+Implementation `24d3df5c7cf7a90f849f7d16c08c9fe4fd3841dd` on
+`codex/ask-retrieval-recall`. [Exact evidence and limitations](reviews/ask-retrieval-recall-repair-2026-10-29.md).
+The unchanged 100-case fixture now supplies every required fact for 90/90 answerable
+questions (previously 50/90), with all ten genuinely empty cases still empty and
+no evidence regressions. Combined prompt bytes fall from 175,658 to 158,999 (9.48%).
+This is local retrieval evidence, NOT a new answer-accuracy/token measurement.
+
+82 focused Rust tests, 2/2 full offline fixture checks, 8 Python tests, strict
+all-target Clippy, formatting, TypeScript/contracts, web/API builds and the
+strengthened canonical browser Ask workflow pass on Windows. Sealed/foreign,
+lifecycle, current-revision, integrity, budget and exact Search boundaries retained.
+No new cloud calls, preview promotion, pushes or CI. Prior LinkedIn claim stays on
+hold pending model-quality/usage verification. Historical measured results follow.
+
 ## 2026-10-29 — Larger free-model benchmark completed; quality gap measured
 
 100 controlled question instances across ten templates, three approaches, 30 scored

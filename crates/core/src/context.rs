@@ -69,9 +69,9 @@ pub struct ContextCompilationRequest {
 
 /// Query terms for chunk relevance scoring: lowercase alphanumeric
 /// tokens, deduplicated, with a small stopword filter so question words
-/// and articles do not outrank content terms. Used only to ORDER chunks
-/// within a hit memory under the existing budget; it never changes the
-/// budget, the retrieval set, or which memories are cited.
+/// and articles do not outrank content terms. Used to order chunks and,
+/// for Ask, omit additional lexical chunks without overlap. This helper
+/// changes neither the retrieval set nor the evidence-byte budget.
 fn query_terms_for_scoring(query: &str) -> Vec<String> {
     const STOPWORDS: &[&str] = &[
         "a", "an", "the", "is", "are", "was", "were", "be", "been", "what", "where", "when", "how",
