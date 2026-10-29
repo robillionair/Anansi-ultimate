@@ -1,5 +1,15 @@
 # ANANSI Ultimate — Recovery Guide
 
+## Current benchmark review resume authority — 2026-10-29
+
+Use `E:/Anansi/worktrees/review-m8-benchmark`, branch
+`codex/review-m8-benchmark`, incoming `8639c44c30eb98848961dfd31fe1057e769d53e4`.
+Read [independent review](reviews/windows-m8-benchmark.md) and latest BUILD_STATUS.
+Reporting correction `655c4f615` changes no application behavior or raw measurements.
+Eight provider reasoning-counter anomalies remain open; do not claim independently
+verified total computation savings. No further cloud round is authorized. Preserve
+previews, personal data, reviewed ancestry and original delivery. Audit monitor stays off.
+
 ## Current M8 Slice 3 review resume authority — 2026-10-28
 
 Use `E:/Anansi/worktrees/review-m8-slice3`, branch `codex/review-m8-slice3`.

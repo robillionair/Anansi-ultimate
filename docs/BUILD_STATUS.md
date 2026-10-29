@@ -1,3 +1,27 @@
+## 2026-10-29 — Independent benchmark review (qualified measurement verdict)
+
+Incoming `8639c44c30eb98848961dfd31fe1057e769d53e4`, reviewed on
+`codex/review-m8-benchmark` in `E:/Anansi/worktrees/review-m8-benchmark`.
+The reporting-only correction is `655c4f615`; no application behavior changed.
+Read [review and measurement qualifications](reviews/windows-m8-benchmark.md)
+before reusing the historical Linux counts or token headlines below.
+
+Windows focused checks passed: context 10/10; workspace roundtrip 11/11 including
+20×16 concurrent migration stress; Ask 5/5; streaming/cancellation 1/1; synthetic
+Ask browser 1/1; UI/contracts 81/81; TypeScript, web/API builds, contracts drift,
+strict core all-target Clippy. Reporting CLI regressions 2/2. No full Windows
+suite or real-model replication is claimed. Synthetic benchmark harness pending.
+
+Offline sums reproduce 37.1% lower API-reported input and 30.9% lower reported
+total tokens, on eight questions/32 responses. Eight reasoning subcounter
+inconsistencies remain unresolved; the largest case contributes 70.5% of reported
+savings. Without it, input reduction is 19.4%, reported-total reduction 14.1%.
+Raw records preserved. The supplied final Linux log is 305 core plus 24 API
+passes, not 329 core passes. Public draft restricts its claim accordingly.
+
+Existing native acceptance/promotion, §32, external audit and production/CI gates
+remain open. No cloud calls, downloads, pushes, CI, publishing or preview changes.
+
 ## 2026-10-28 — M8 benchmark: automated Linux verification (real-model phase pending)
 
 Benchmark branch `muse/m8-benchmark-tokens` on reviewed baseline `df807259`

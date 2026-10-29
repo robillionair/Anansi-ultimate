@@ -1,3 +1,22 @@
+## Independent review correction — 2026-10-29
+
+The later independent review supersedes conflicting descriptions below; original
+measurements are preserved. See [Windows benchmark review](../reviews/windows-m8-benchmark.md).
+
+- Raw Nemotron usage reproduces 9,802 versus 15,584 input tokens (37.1022% lower)
+  and 12,138 versus 17,574 API-reported total tokens (30.9321% lower).
+  Eight responses have reasoning counters greater than completion counters;
+  visible-output subtraction is invalid for those records. Total-computation and
+  corrected reasoning claims remain unresolved; no counters were normalized.
+- The long-document A2 case supplies 70.4746% of total reported savings. Without
+  it, input reduction is 19.3629% and reported-total reduction is 14.0518%.
+  A claim that one example does not dominate is withdrawn.
+- The final Linux log reports 305 core plus 24 API passes, not 329 core passes;
+  59 test binaries plus two zero-test doctest summaries, not 61 binaries.
+  API was rerun on the final tree; providers' 120-pass result is earlier evidence.
+- The report CLI's replay parsing and unsupported quality denominators were
+  corrected under two focused regressions. No raw measurements changed.
+
 # ANANSI benchmark: token consumption and context efficiency — before/after report
 
 Branch `muse/m8-benchmark-tokens` from Windows-reviewed
