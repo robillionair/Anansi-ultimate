@@ -717,10 +717,50 @@ test('document load session drops stale reads, edits and clears; second selectio
   session.invalidate();
   third.resolve({ text: 'edited-away' });
   assert.equal((await thirdLoad).result, null);
-  // A failure propagates so the caller can show it and
-  // leave the previous beam untouched.
+  // A current failure is an outcome, not a throw, so the
+  // caller can show it and leave the previous beam
+  // untouched.
   const failing = session.load(() => Promise.reject(Error('boom')));
-  await assert.rejects(failing, /boom/);
+  const failed = await failing;
+  assert.equal(failed.result, null);
+  assert.equal(failed.error?.message, 'boom');
+  assert.equal(failed.generation, session.current);
+});
+
+test('document load session gates failures by generation: superseded failures change nothing', async () => {
+  const session = new DocumentLoadSession();
+  // Superseded by a newer selection: the old failure's
+  // generation is stale once the new load is current,
+  // and the new load's result still applies.
+  const oldFail = deferred<never>();
+  const oldLoad = session.load(() => oldFail.promise as never);
+  const newOk = deferred<{ text: string }>();
+  const newLoad = session.load(() => newOk.promise as never);
+  oldFail.reject(Error('obsolete failure'));
+  newOk.resolve({ text: 'new chosen content' });
+  const oldOutcome = await oldLoad;
+  assert.equal(oldOutcome.error?.message, 'obsolete failure');
+  assert.notEqual(oldOutcome.generation, session.current);
+  assert.equal((await newLoad).result?.text, 'new chosen content');
+  // Superseded by an edit: invalidate() is what the
+  // panel's edit path calls, so the pending failure is
+  // stale and must not surface.
+  const editFail = deferred<never>();
+  const editLoad = session.load(() => editFail.promise as never);
+  session.invalidate();
+  editFail.reject(Error('edited-away failure'));
+  const editOutcome = await editLoad;
+  assert.equal(editOutcome.error?.message, 'edited-away failure');
+  assert.notEqual(editOutcome.generation, session.current);
+  // Superseded by a clear: the panel's clear path calls
+  // the same invalidate(), with the same staleness.
+  const clearFail = deferred<never>();
+  const clearLoad = session.load(() => clearFail.promise as never);
+  session.invalidate();
+  clearFail.reject(Error('cleared-away failure'));
+  const clearOutcome = await clearLoad;
+  assert.equal(clearOutcome.error?.message, 'cleared-away failure');
+  assert.notEqual(clearOutcome.generation, session.current);
 });
 
 test('experiment body parser accepts valid document provenance and rejects malformed records', () => {

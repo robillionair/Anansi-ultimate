@@ -1449,34 +1449,39 @@ export function ColliderPanel({
     const setError = beam === 'a' ? setDocumentAError : setDocumentBError;
     const setSource = beam === 'a' ? setDocumentA : setDocumentB;
     const setBeam = beam === 'a' ? setBeamA : setBeamB;
-    setLoading(true);
-    setError('');
-    let loaded;
-    try {
-      loaded = await session.load(async () =>
-        decodeDocumentBytes(
-          new Uint8Array(await file.arrayBuffer()),
-          file.name,
-        ),
-      );
-    } catch (e) {
-      // A failed read changes nothing: the previous beam
-      // and attribution stay, and the error is visible
-      // with retry (pick the file again).
+    // Bound the read before allocating it: a file larger
+    // than the decoder's limit is refused on File.size
+    // alone and its contents are never read. The decoder
+    // keeps its own post-read length check for a file
+    // whose size changes between this check and the read.
+    if (file.size > MAX_DOCUMENT_BYTES) {
       if (mountedRef.current) {
-        setError(
-          e instanceof Error ? e.message : 'Reading the file failed.',
-        );
-        setLoading(false);
+        setError(`The file must be at most ${MAX_DOCUMENT_BYTES} bytes.`);
       }
       return;
     }
+    setLoading(true);
+    setError('');
+    const loaded = await session.load(async () =>
+      decodeDocumentBytes(
+        new Uint8Array(await file.arrayBuffer()),
+        file.name,
+      ),
+    );
     if (!mountedRef.current) return;
-    // Only the current generation applies; a superseded
-    // load resolves silently because the invalidating
-    // action already cleared the indicator.
+    // One generation gate for both paths: a superseded
+    // load — successful or failed — changes neither the
+    // error nor the loading flag, because the invalidating
+    // action (or the newer load) already owns them.
     if (loaded.generation !== session.current) return;
     setLoading(false);
+    if (loaded.error) {
+      // A failed read changes nothing else: the previous
+      // beam and attribution stay, and the error is
+      // visible with retry (pick the file again).
+      setError(loaded.error.message);
+      return;
+    }
     if (loaded.result) {
       setBeam(loaded.result.text);
       setSource(loaded.result.source);

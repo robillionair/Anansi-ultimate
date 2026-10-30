@@ -130,13 +130,29 @@ export async function decodeDocumentBytes(
 }
 
 /**
+ * The outcome of one document load. It never rejects: a
+ * failed read is an outcome like a successful one, so the
+ * caller can gate failures by the same generation identity
+ * as successes. An obsolete failure must change neither
+ * the error nor the loading state of a newer load.
+ */
+export type DocumentLoadOutcome = {
+  generation: number;
+  result: DocumentLoad | null;
+  error: Error | null;
+};
+
+/**
  * Per-beam load session. Every new selection, edit or clear
  * invalidates pending reads: `load` resolves to its result
  * only when its generation is still current, otherwise to
- * null, so a late file read can never overwrite newer user
- * intent. Callers own the loading indicator: a superseded
- * load resolves without effect, and the invalidating action
- * clears the indicator itself.
+ * null, and to its error for a failed read, so a late file
+ * read — successful or failed — can never overwrite newer
+ * user intent. Callers own the loading indicator: a
+ * superseded load resolves without effect, and the
+ * invalidating action clears the indicator itself. Callers
+ * must check the outcome's generation before applying
+ * either the result or the error.
  */
 export class DocumentLoadSession {
   private generation = 0;
@@ -151,12 +167,21 @@ export class DocumentLoadSession {
 
   async load(
     read: () => Promise<DocumentLoad>,
-  ): Promise<{ generation: number; result: DocumentLoad | null }> {
+  ): Promise<DocumentLoadOutcome> {
     const generation = ++this.generation;
-    const result = await read();
-    return {
-      generation,
-      result: generation === this.generation ? result : null,
-    };
+    try {
+      const result = await read();
+      return {
+        generation,
+        result: generation === this.generation ? result : null,
+        error: null,
+      };
+    } catch (e) {
+      return {
+        generation,
+        result: null,
+        error: e instanceof Error ? e : Error('Reading the file failed.'),
+      };
+    }
   }
 }
