@@ -71,9 +71,11 @@ crate's transport style.
   `.localhost`, `.local`, `.internal`, or `.home.arpa`.
   Blocked classes: unspecified, loopback, private
   (RFC 1918 + ULA), link-local, multicast, reserved,
-  documentation, benchmarking, and CGNAT ranges, plus
-  `std::is_global() == false` as a backstop. The
-  connection goes to a validated resolved address —
+  documentation, benchmarking, and CGNAT ranges, each
+  classified explicitly (including IPv4-mapped IPv6
+  addresses, which are classified by their embedded IPv4
+  address). The connection goes to a validated resolved
+  address —
   never to a re-resolved name — with `Host` set to the
   original host and, for HTTPS, TLS SNI set to the
   original host and certificate/hostname validation left

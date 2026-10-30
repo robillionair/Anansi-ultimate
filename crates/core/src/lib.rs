@@ -31,6 +31,7 @@ pub mod settings;
 pub mod snapshots;
 pub mod storage;
 pub mod transfer;
+pub mod url_fetch;
 pub mod vault;
 pub mod vector;
 #[cfg(windows)]
