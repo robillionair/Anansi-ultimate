@@ -17,7 +17,7 @@
 
 use anansi_core::Core;
 use anansi_core::content;
-use anansi_core::jobs::ExportSelection;
+use anansi_core::jobs::{ExportSelection, JobState};
 use anansi_core::readiness::CommandError;
 use anansi_core::storage::Storage;
 use serde_json::{Value, json};
@@ -306,20 +306,59 @@ fn versions(core: &Core, ws: &str, artifact_id: &str) -> Value {
     .unwrap()
 }
 
+/// Back up a workspace and return the archive bytes.
+///
+/// The helper enqueues an export and then drives it to completion
+/// whichever side owns the job: it claims and executes the job itself
+/// while it is still Queued, and waits for the process-global background
+/// export worker when the worker has already claimed it (the worker is
+/// armed by every job_command, including restore, so a backup enqueued
+/// immediately after a restore races the worker's claim). Waiting is
+/// state-driven with a bounded deadline, not a sleep masking a race:
+/// the loop exits on Completed, or panics on any other terminal state.
 fn backup_bytes(root: &Path, store: &Storage, ws: &str) -> Vec<u8> {
     let job = store
         .enqueue_export(ws, ExportSelection::Backup { application: false })
         .unwrap();
-    let lease = store.claim_export().unwrap().unwrap();
-    store.execute_backup(&lease).unwrap();
-    let done = store.read_job(ws, &job.id).unwrap();
-    let artifact = done.artifact_id.unwrap();
-    std::fs::read(
-        root.join("exports")
-            .join(ws)
-            .join(format!("{artifact}.tar")),
-    )
-    .unwrap()
+    let deadline = Instant::now() + Duration::from_secs(60);
+    loop {
+        let current = store.read_job(ws, &job.id).unwrap();
+        match current.state {
+            JobState::Completed => {
+                let artifact = current.artifact_id.clone().unwrap_or_else(|| {
+                    panic!(
+                        "backup job completed without artifact: state={:?} checkpoint={:?} log={:?}",
+                        current.state, current.checkpoint, current.log
+                    )
+                });
+                return std::fs::read(
+                    root.join("exports")
+                        .join(ws)
+                        .join(format!("{artifact}.tar")),
+                )
+                .unwrap();
+            }
+            JobState::Queued => {
+                if let Some(lease) = store.claim_export().unwrap()
+                    && lease.job.id == job.id
+                {
+                    store.execute_backup(&lease).unwrap();
+                }
+            }
+            JobState::Running => {}
+            other => panic!(
+                "backup job ended unexpectedly: state={other:?} checkpoint={:?} log={:?}",
+                current.checkpoint, current.log
+            ),
+        }
+        if Instant::now() > deadline {
+            panic!(
+                "backup job did not complete in time: state={:?} checkpoint={:?} log={:?}",
+                current.state, current.checkpoint, current.log
+            );
+        }
+        std::thread::sleep(Duration::from_millis(25));
+    }
 }
 
 fn upload_once(fresh: &Core, bytes: &[u8], tag: &str) -> (String, String, String, String) {
@@ -2386,4 +2425,902 @@ fn memory_list_skips_sealed_rows() {
         !ids.contains(&sealed_id.as_str()),
         "sealed memory must be excluded"
     );
+}
+
+// ---------------------------------------------------------------------------
+// Overnight hardening WP1: new-dispatch boundaries and
+// double-restore provenance. Criteria committed first in
+// docs/handoffs/M8-overnight-hardening-wp1-acceptance.md.
+// ---------------------------------------------------------------------------
+
+fn current_revision_id(root: &Path, ws: &str, id: &str) -> String {
+    let db = rusqlite::Connection::open(root.join(DATABASE_NAME)).unwrap();
+    db.query_row(
+        "SELECT current_revision FROM memories WHERE workspace_id=?1 AND id=?2",
+        [ws, id],
+        |r| r.get(0),
+    )
+    .unwrap()
+}
+
+fn revise_memory(
+    f: &Fixture,
+    id: &str,
+    expected: &str,
+    draft_json: Value,
+    lifecycle: Option<Value>,
+) -> String {
+    let mut req = json!({
+        "contractVersion": 1, "workspaceId": f.ws, "id": id,
+        "expectedRevision": expected, "draft": draft_json
+    });
+    if let Some(life) = lifecycle {
+        req["lifecycle"] = life;
+    }
+    f.core.memory_command("revise", req).unwrap();
+    current_revision_id(f._dir.path(), &f.ws, id)
+}
+
+fn archive_memory(f: &Fixture, id: &str, expected: &str, title: &str, body: &str) -> String {
+    revise_memory(
+        f,
+        id,
+        expected,
+        draft(title, body),
+        Some(json!({ "state": "archived", "confirmed": true, "successorId": null })),
+    )
+}
+
+fn set_lifecycle(
+    f: &Fixture,
+    id: &str,
+    expected: &str,
+    title: &str,
+    body: &str,
+    state: &str,
+    valid_until: Option<&str>,
+) -> String {
+    let mut d = draft(title, body);
+    if let Some(until) = valid_until {
+        d["validUntil"] = json!(until);
+    }
+    revise_memory(
+        f,
+        id,
+        expected,
+        d,
+        Some(json!({ "state": state, "confirmed": true, "successorId": null })),
+    )
+}
+
+/// Labeled SQL fixture: seal ONLY the head revision row,
+/// standing in for a vault seal of the current version.
+/// Older revision rows stay plaintext, which is exactly
+/// the bypass under test.
+fn seal_head_revision(root: &Path, revision_id: &str) {
+    let db = rusqlite::Connection::open(root.join(DATABASE_NAME)).unwrap();
+    db.execute(
+        "UPDATE memory_revisions SET metadata=json_set(metadata,'$.privacy','sealed') WHERE id=?1",
+        [revision_id],
+    )
+    .unwrap();
+}
+
+/// Labeled SQL fixture: move a revision's `validUntil`
+/// into the past, simulating time passing after a
+/// Temporary revision was written with a future expiry.
+fn expire_revision(root: &Path, revision_id: &str) {
+    let db = rusqlite::Connection::open(root.join(DATABASE_NAME)).unwrap();
+    db.execute(
+        "UPDATE memory_revisions SET metadata=json_set(metadata,'$.validUntil','2020-01-01T00:00:00Z') WHERE id=?1",
+        [revision_id],
+    )
+    .unwrap();
+}
+
+fn assert_refused_no_hits(fake: &Fake, result: Result<Value, CommandError>, label: &str) {
+    assert!(result.is_err(), "{label}: start must refuse");
+    assert_eq!(
+        fake.hits.load(Ordering::SeqCst),
+        0,
+        "{label}: refusal must not hit the provider"
+    );
+}
+
+#[test]
+fn boundary_pinned_archived_revision_refused_in_both_pickers() {
+    let fake = start_fake();
+    let f = fixture(&fake, "free");
+    let (src_id, _) = create_project(&f, "Source project", "Source body.");
+    let (m_id, m_rev, _) =
+        create_project_memory(&f, &src_id, "Doomed notes", "Archived content.");
+    let arch_rev = archive_memory(&f, &m_id, &m_rev, "Doomed notes", "Archived content.");
+    assert_refused_no_hits(
+        &fake,
+        start_collide_ctx(&f, "Trading.", "Mycelium.", json!([
+            { "memoryId": m_id, "revisionId": arch_rev }
+        ])),
+        "memoryContext pinned archived revision",
+    );
+    assert_refused_no_hits(
+        &fake,
+        start_collide_project(
+            &f,
+            json!({ "projectId": src_id, "items": [
+                { "kind": "memory", "memoryId": m_id, "revisionId": arch_rev }
+            ] }),
+        ),
+        "projectContext pinned archived revision",
+    );
+}
+
+#[test]
+fn boundary_archived_head_blocks_older_revision_in_both_pickers() {
+    let fake = start_fake();
+    let f = fixture(&fake, "free");
+    let (src_id, _) = create_project(&f, "Source project", "Source body.");
+    let (m_id, m_rev, _) =
+        create_project_memory(&f, &src_id, "Tide notes", "Revision A tide observations.");
+    let rev_b = revise_memory(
+        &f,
+        &m_id,
+        &m_rev,
+        draft("Tide notes", "Revision B tide observations."),
+        None,
+    );
+    let _arch = archive_memory(&f, &m_id, &rev_b, "Tide notes", "Revision B tide observations.");
+    assert_refused_no_hits(
+        &fake,
+        start_collide_ctx(&f, "Trading.", "Mycelium.", json!([
+            { "memoryId": m_id, "revisionId": m_rev }
+        ])),
+        "memoryContext older revision of archived head",
+    );
+    assert_refused_no_hits(
+        &fake,
+        start_collide_project(
+            &f,
+            json!({ "projectId": src_id, "items": [
+                { "kind": "memory", "memoryId": m_id, "revisionId": m_rev }
+            ] }),
+        ),
+        "projectContext older revision of archived head",
+    );
+}
+
+#[test]
+fn boundary_sealed_head_blocks_older_revision_in_both_pickers() {
+    let fake = start_fake();
+    let f = fixture(&fake, "free");
+    let (src_id, _) = create_project(&f, "Source project", "Source body.");
+    let (m_id, m_rev, _) =
+        create_project_memory(&f, &src_id, "Vault notes", "Revision A vault observations.");
+    let rev_b = revise_memory(
+        &f,
+        &m_id,
+        &m_rev,
+        draft("Vault notes", "Revision B vault observations."),
+        None,
+    );
+    seal_head_revision(f._dir.path(), &rev_b);
+    assert_refused_no_hits(
+        &fake,
+        start_collide_ctx(&f, "Trading.", "Mycelium.", json!([
+            { "memoryId": m_id, "revisionId": m_rev }
+        ])),
+        "memoryContext older revision of sealed head",
+    );
+    assert_refused_no_hits(
+        &fake,
+        start_collide_project(
+            &f,
+            json!({ "projectId": src_id, "items": [
+                { "kind": "memory", "memoryId": m_id, "revisionId": m_rev }
+            ] }),
+        ),
+        "projectContext older revision of sealed head",
+    );
+}
+
+#[test]
+fn boundary_archived_source_project_refused() {
+    let fake = start_fake();
+    let f = fixture(&fake, "free");
+    let (src_id, src_rev) = create_project(&f, "Source project", "Source body.");
+    let (m_id, m_rev, _) =
+        create_project_memory(&f, &src_id, "Tide notes", "Revision A tide observations.");
+    let _arch = archive_memory(&f, &src_id, &src_rev, "Source project", "Source body.");
+    assert_refused_no_hits(
+        &fake,
+        start_collide_project(
+            &f,
+            json!({ "projectId": src_id, "items": [
+                { "kind": "memory", "memoryId": m_id, "revisionId": m_rev }
+            ] }),
+        ),
+        "projectContext archived source project",
+    );
+}
+
+#[test]
+fn boundary_reassigned_member_refused_under_old_project() {
+    let fake = start_fake();
+    let f = fixture(&fake, "free");
+    let (src_id, _) = create_project(&f, "Old project", "Old body.");
+    let (other_id, _) = create_project(&f, "New project", "New body.");
+    let (m_id, m_rev, _) =
+        create_project_memory(&f, &src_id, "Tide notes", "Revision A tide observations.");
+    // Control first: the member dispatches while it still belongs to P.
+    let started = start_collide_project(
+        &f,
+        json!({ "projectId": src_id, "items": [
+            { "kind": "memory", "memoryId": m_id, "revisionId": m_rev }
+        ] }),
+    )
+    .unwrap();
+    let run_id = started["runId"].as_str().unwrap().to_string();
+    assert_eq!(poll_until(&f, &run_id)["status"], "complete");
+    let saved = f
+        .core
+        .ai_command(
+            "collider-save",
+            json!({ "contractVersion": 1, "workspaceId": f.ws, "runId": run_id }),
+        )
+        .unwrap();
+    let exp_id = saved["artifact"]["artifactId"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    // Reassign the member to the new project (new revision).
+    let moved = project_draft("Tide notes", "Revision A tide observations.", &other_id);
+    let rev_b = revise_memory(&f, &m_id, &m_rev, moved, None);
+    assert_refused_no_hits(
+        &fake,
+        start_collide_project(
+            &f,
+            json!({ "projectId": src_id, "items": [
+                { "kind": "memory", "memoryId": m_id, "revisionId": m_rev }
+            ] }),
+        ),
+        "projectContext reassigned member under old project",
+    );
+    // Control: the member dispatches under its new project at its new revision.
+    let started2 = start_collide_project(
+        &f,
+        json!({ "projectId": other_id, "items": [
+            { "kind": "memory", "memoryId": m_id, "revisionId": rev_b }
+        ] }),
+    )
+    .unwrap();
+    let run2 = started2["runId"].as_str().unwrap().to_string();
+    assert_eq!(poll_until(&f, &run2)["status"], "complete");
+    // History preserved: the saved experiment still restores and views verbatim.
+    let store = Storage::new(f._dir.path().to_path_buf()).unwrap();
+    let bytes = backup_bytes(f._dir.path(), &store, &f.ws);
+    let fresh_dir = tempfile::tempdir().unwrap();
+    let fresh = Core::with_storage_root(fresh_dir.path().to_path_buf());
+    let restored = try_upload_restore(&fresh, &bytes, "moved").unwrap();
+    let restored_ws = restored["workspaces"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let projects = fresh
+        .memory_command(
+            "list",
+            json!({ "contractVersion": 1, "workspaceId": restored_ws, "kind": "project" }),
+        )
+        .unwrap()["memories"]
+        .clone();
+    let restored_home = projects
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|m| m["title"] == "Collider Project")
+        .unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let arts = fresh
+        .artifacts_command(
+            "list",
+            json!({ "contractVersion": 1, "workspaceId": restored_ws, "projectId": restored_home }),
+        )
+        .unwrap();
+    let restored_exp = arts["artifacts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["type"] == "experiment")
+        .unwrap();
+    let restored_exp_id = restored_exp["artifactId"].as_str().unwrap();
+    let body: Value = serde_json::from_str(
+        read_version(&fresh, &restored_ws, restored_exp_id, 1)["body"]
+            .as_str()
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        body["projectContext"]["items"][0]["content"],
+        "Revision A tide observations."
+    );
+    assert!(!exp_id.is_empty(), "saved experiment must exist");
+}
+
+#[test]
+fn boundary_expired_revision_refused_in_both_pickers() {
+    let fake = start_fake();
+    let f = fixture(&fake, "free");
+    let (src_id, _) = create_project(&f, "Source project", "Source body.");
+    // Case 1: the pinned Temporary revision itself expired.
+    let (t_id, t_rev, _) = create_project_memory(&f, &src_id, "Temp notes", "Temporary content.");
+    let temp_rev = set_lifecycle(
+        &f,
+        &t_id,
+        &t_rev,
+        "Temp notes",
+        "Temporary content.",
+        "temporary",
+        Some("2030-01-01T00:00:00Z"),
+    );
+    expire_revision(f._dir.path(), &temp_rev);
+    assert_refused_no_hits(
+        &fake,
+        start_collide_ctx(&f, "Trading.", "Mycelium.", json!([
+            { "memoryId": t_id, "revisionId": temp_rev }
+        ])),
+        "memoryContext expired pinned revision",
+    );
+    assert_refused_no_hits(
+        &fake,
+        start_collide_project(
+            &f,
+            json!({ "projectId": src_id, "items": [
+                { "kind": "memory", "memoryId": t_id, "revisionId": temp_rev }
+            ] }),
+        ),
+        "projectContext expired pinned revision",
+    );
+    // Case 2: expired head, older durable pinned revision.
+    let (d_id, d_rev, _) =
+        create_project_memory(&f, &src_id, "Durable notes", "Durable content.");
+    let conf_rev = set_lifecycle(&f, &d_id, &d_rev, "Durable notes", "Durable content.", "confirmed", None);
+    let dur_rev = set_lifecycle(&f, &d_id, &conf_rev, "Durable notes", "Durable content.", "durable", None);
+    let temp_head = set_lifecycle(
+        &f,
+        &d_id,
+        &dur_rev,
+        "Durable notes",
+        "Durable content.",
+        "temporary",
+        Some("2030-01-01T00:00:00Z"),
+    );
+    expire_revision(f._dir.path(), &temp_head);
+    assert_refused_no_hits(
+        &fake,
+        start_collide_ctx(&f, "Trading.", "Mycelium.", json!([
+            { "memoryId": d_id, "revisionId": dur_rev }
+        ])),
+        "memoryContext older revision of expired head",
+    );
+    assert_refused_no_hits(
+        &fake,
+        start_collide_project(
+            &f,
+            json!({ "projectId": src_id, "items": [
+                { "kind": "memory", "memoryId": d_id, "revisionId": dur_rev }
+            ] }),
+        ),
+        "projectContext older revision of expired head",
+    );
+    // Control: an unexpired Temporary revision dispatches in both pickers.
+    let (u_id, u_rev, _) =
+        create_project_memory(&f, &src_id, "Live temp notes", "Live temporary content.");
+    let live_rev = set_lifecycle(
+        &f,
+        &u_id,
+        &u_rev,
+        "Live temp notes",
+        "Live temporary content.",
+        "temporary",
+        Some("2030-01-01T00:00:00Z"),
+    );
+    let started = start_collide_ctx(&f, "Trading.", "Mycelium.", json!([
+        { "memoryId": u_id, "revisionId": live_rev }
+    ]))
+    .unwrap();
+    let run_id = started["runId"].as_str().unwrap().to_string();
+    assert_eq!(poll_until(&f, &run_id)["status"], "complete");
+    let started2 = start_collide_project(
+        &f,
+        json!({ "projectId": src_id, "items": [
+            { "kind": "memory", "memoryId": u_id, "revisionId": live_rev }
+        ] }),
+    )
+    .unwrap();
+    let run2 = started2["runId"].as_str().unwrap().to_string();
+    assert_eq!(poll_until(&f, &run2)["status"], "complete");
+}
+
+#[test]
+fn boundary_eligible_older_revision_still_dispatches() {
+    let fake = start_fake();
+    let f = fixture(&fake, "free");
+    let (src_id, _) = create_project(&f, "Source project", "Source body.");
+    let (m_id, m_rev, _) =
+        create_project_memory(&f, &src_id, "Tide notes", "Revision A tide observations.");
+    let _rev_b = revise_memory(
+        &f,
+        &m_id,
+        &m_rev,
+        draft("Tide notes", "Revision B tide observations."),
+        None,
+    );
+    let started = start_collide_ctx(&f, "Trading.", "Mycelium.", json!([
+        { "memoryId": m_id, "revisionId": m_rev }
+    ]))
+    .unwrap();
+    let run_id = started["runId"].as_str().unwrap().to_string();
+    assert_eq!(poll_until(&f, &run_id)["status"], "complete");
+    assert!(
+        wire_text(&fake).contains("Revision A tide observations."),
+        "eligible older revision must reach the provider"
+    );
+    let started2 = start_collide_project(
+        &f,
+        json!({ "projectId": src_id, "items": [
+            { "kind": "memory", "memoryId": m_id, "revisionId": m_rev }
+        ] }),
+    )
+    .unwrap();
+    let run2 = started2["runId"].as_str().unwrap().to_string();
+    assert_eq!(poll_until(&f, &run2)["status"], "complete");
+}
+
+// ---------------------------------------------------------------------------
+// Overnight hardening WP1B: structured artifacts across
+// repeated recovery (failing before repair: the second
+// restore refuses a previously valid result because the
+// referenced artifact's body — and therefore its hash —
+// changed on the first restore while the experiment's
+// snapshot kept the original hash).
+// ---------------------------------------------------------------------------
+
+fn save_collision(f: &Fixture, run_id: &str) -> (String, String) {
+    let saved = f
+        .core
+        .ai_command(
+            "collider-save",
+            json!({ "contractVersion": 1, "workspaceId": f.ws, "runId": run_id }),
+        )
+        .unwrap();
+    (
+        saved["artifact"]["artifactId"].as_str().unwrap().to_string(),
+        saved["body"].as_str().unwrap().to_string(),
+    )
+}
+
+fn find_project_id(core: &Core, ws: &str, title: &str) -> String {
+    core.memory_command(
+        "list",
+        json!({ "contractVersion": 1, "workspaceId": ws, "kind": "project" }),
+    )
+    .unwrap()["memories"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|m| m["title"] == title)
+        .unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_string()
+}
+
+fn list_experiments(core: &Core, ws: &str, project: &str) -> Vec<(String, Value)> {
+    core.artifacts_command(
+        "list",
+        json!({ "contractVersion": 1, "workspaceId": ws, "projectId": project }),
+    )
+    .unwrap()["artifacts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|a| a["type"] == "experiment")
+        .map(|a| {
+            let id = a["artifactId"].as_str().unwrap().to_string();
+            let body: Value =
+                serde_json::from_str(read_version(core, ws, &id, 1)["body"].as_str().unwrap())
+                    .unwrap();
+            (id, body)
+        })
+        .collect()
+}
+
+fn restore_workspace(fresh_dir: &tempfile::TempDir, bytes: &[u8], name: &str) -> (Core, String) {
+    let fresh = Core::with_storage_root(fresh_dir.path().to_path_buf());
+    let restored = try_upload_restore(&fresh, bytes, name)
+        .unwrap_or_else(|e| panic!("restore {name} failed: {e:?}"));
+    let ws = restored["workspaces"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    (fresh, ws)
+}
+
+#[test]
+fn double_restore_keeps_experiment_context_provenance() {
+    let fake = start_fake();
+    let f = fixture(&fake, "free");
+    // Exp1 carries memory context, so its body embeds
+    // memory/revision ids and MUST change on restore.
+    let (src_id, _) = create_project(&f, "Source project", "Source body.");
+    let (m_id, m_rev, _) =
+        create_project_memory(&f, &src_id, "Member notes", "Member content.");
+    let started1 = start_collide_ctx(&f, "Trading.", "Mycelium.", json!([
+        { "memoryId": m_id, "revisionId": m_rev }
+    ]))
+    .unwrap();
+    let run1 = started1["runId"].as_str().unwrap().to_string();
+    assert_eq!(poll_until(&f, &run1)["status"], "complete");
+    let (exp1_id, exp1_body) = save_collision(&f, &run1);
+    // Exp2 selects Exp1 itself as project context.
+    let started2 = start_collide_project(
+        &f,
+        json!({ "projectId": f.project, "items": [
+            { "kind": "artifact", "artifactId": exp1_id, "version": 1 }
+        ] }),
+    )
+    .unwrap();
+    let run2 = started2["runId"].as_str().unwrap().to_string();
+    assert_eq!(poll_until(&f, &run2)["status"], "complete");
+    let (_exp2_id, exp2_body) = save_collision(&f, &run2);
+    let exp2_doc: Value = serde_json::from_str(&exp2_body).unwrap();
+    assert_eq!(
+        exp2_doc["projectContext"]["items"].as_array().unwrap().len(),
+        1
+    );
+    assert_eq!(
+        exp2_doc["projectContext"]["items"][0]["content"], exp1_body,
+        "Exp2 snapshot must carry Exp1's original body"
+    );
+    // Restore #1 succeeds (validation reads the original package rows).
+    let store = Storage::new(f._dir.path().to_path_buf()).unwrap();
+    let bytes1 = backup_bytes(f._dir.path(), &store, &f.ws);
+    let dir2 = tempfile::tempdir().unwrap();
+    let (fresh2, ws2) = restore_workspace(&dir2, &bytes1, "first");
+    let home2 = find_project_id(&fresh2, &ws2, "Collider Project");
+    let exps2 = list_experiments(&fresh2, &ws2, &home2);
+    let (_, exp2_body2) = exps2
+        .iter()
+        .find(|(_, b)| b.get("projectContext").is_some())
+        .unwrap();
+    let (_, exp1_body2) = exps2
+        .iter()
+        .find(|(_, b)| b.get("projectContext").is_none())
+        .unwrap();
+    assert_eq!(
+        exp2_body2["projectContext"]["items"][0]["content"], exp1_body,
+        "first restore must keep Exp2's snapshot verbatim"
+    );
+    assert_ne!(
+        exp1_body2.to_string(),
+        exp1_body,
+        "restored Exp1 body must differ (ids remapped): otherwise this test proves nothing"
+    );
+    // Restore #2: before repair this refuses, because the
+    // restored Exp1 row hash no longer matches Exp2's
+    // pinned original hash.
+    let store2 = Storage::new(dir2.path().to_path_buf()).unwrap();
+    let bytes2 = backup_bytes(dir2.path(), &store2, &ws2);
+    let dir3 = tempfile::tempdir().unwrap();
+    let (fresh3, ws3) = restore_workspace(&dir3, &bytes2, "second");
+    let home3 = find_project_id(&fresh3, &ws3, "Collider Project");
+    let exps3 = list_experiments(&fresh3, &ws3, &home3);
+    let (_, exp2_body3) = exps3
+        .iter()
+        .find(|(_, b)| b.get("projectContext").is_some())
+        .unwrap();
+    let (_, exp1_body3) = exps3
+        .iter()
+        .find(|(_, b)| b.get("projectContext").is_none())
+        .unwrap();
+    let item3 = &exp2_body3["projectContext"]["items"][0];
+    assert_eq!(
+        item3["content"], exp1_body,
+        "second restore must keep Exp2's snapshot verbatim"
+    );
+    assert_eq!(
+        exp2_body3["projectContext"]["items"].as_array().unwrap().len(),
+        1,
+        "no context item may be silently dropped"
+    );
+    let exp1_hash3 = content::hash(exp1_body3.to_string().as_bytes());
+    assert_eq!(
+        item3["restoredContentHash"], exp1_hash3,
+        "Exp2's binding must track the restored Exp1 row hash"
+    );
+    assert_eq!(
+        item3["contentHash"],
+        content::hash(exp1_body.as_bytes()),
+        "the original pinned hash must not be rewritten"
+    );
+    // Exp1 itself still reopens with valid provenance.
+    assert_eq!(
+        exp1_body3["memoryContext"][0]["content"], "Member content."
+    );
+}
+
+#[test]
+fn double_restore_keeps_evaluation_context_provenance() {
+    let fake = start_fake();
+    let f = fixture(&fake, "free");
+    // A real evaluation record through its product op:
+    // idea set + standard rubric + user assessments.
+    let (src_id, _) = create_project(&f, "Eval project", "Eval body.");
+    let eval_concept = |name: &str| json!({
+        "name": name, "problem": "A problem.", "targetCustomer": "Cafes",
+        "solution": "A tool.", "whyUseful": "Saves time.",
+        "differentiationHypothesis": "A hypothesis.", "revenueModel": "Subscription.",
+        "engineeringComplexity": "medium", "implementationCost": "3-5 weeks",
+        "keyRisks": ["Adoption"], "requiredValidation": "Interviews.",
+        "minimumViableVersion": "One workflow."
+    });
+    let idea_body = json!({
+        "topic": "harbor logistics",
+        "concepts": [
+            eval_concept("Alpha"), eval_concept("Beta"), eval_concept("Gamma"),
+            eval_concept("Delta"), eval_concept("Epsilon")
+        ]
+    })
+    .to_string();
+    let idea = f
+        .core
+        .artifacts_command(
+            "register",
+            json!({ "contractVersion": 1, "workspaceId": f.ws, "projectId": src_id,
+                    "type": "idea", "title": "Idea set: harbor logistics", "body": idea_body,
+                    "sourceReferences": [], "privacy": "private" }),
+        )
+        .unwrap();
+    let idea_id = idea["artifact"]["artifactId"].as_str().unwrap().to_string();
+    let standard = f
+        .core
+        .artifacts_command(
+            "evaluations-standard-rubric",
+            json!({ "contractVersion": 1, "workspaceId": f.ws, "projectId": src_id }),
+        )
+        .unwrap();
+    let rubric = f
+        .core
+        .artifacts_command(
+            "register",
+            json!({ "contractVersion": 1, "workspaceId": f.ws, "projectId": src_id,
+                    "type": "rubric", "title": "Standard evaluation rubric",
+                    "body": standard["rubric"].to_string(),
+                    "sourceReferences": [], "privacy": "private" }),
+        )
+        .unwrap();
+    let rubric_id = rubric["artifact"]["artifactId"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let saved_eval = f
+        .core
+        .artifacts_command(
+            "evaluations-save",
+            json!({
+                "contractVersion": 1, "workspaceId": f.ws, "projectId": src_id,
+                "sourceArtifactId": idea_id, "sourceVersion": 1,
+                "rubricArtifactId": rubric_id, "rubricVersion": 1,
+                "conceptIndices": [0],
+                "assessments": [
+                    { "conceptIndex": 0, "dimension": "problem-clarity", "score": 5, "rationale": "Sharp." },
+                    { "conceptIndex": 0, "dimension": "customer-specificity", "score": 4, "rationale": "" },
+                    { "conceptIndex": 0, "dimension": "mvp-feasibility", "score": 3, "rationale": "" },
+                    { "conceptIndex": 0, "dimension": "budget-tech-fit", "score": 4, "rationale": "" },
+                    { "conceptIndex": 0, "dimension": "validation-readiness", "score": 5, "rationale": "" }
+                ]
+            }),
+        )
+        .unwrap();
+    let eval_id = saved_eval["artifact"]["artifactId"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let eval_body = read_version(&f.core, &f.ws, &eval_id, 1)["body"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let started = start_collide_project(
+        &f,
+        json!({ "projectId": src_id, "items": [
+            { "kind": "artifact", "artifactId": eval_id, "version": 1 }
+        ] }),
+    )
+    .unwrap();
+    let run_id = started["runId"].as_str().unwrap().to_string();
+    assert_eq!(poll_until(&f, &run_id)["status"], "complete");
+    let (_exp_id, exp_body) = save_collision(&f, &run_id);
+    let exp_doc: Value = serde_json::from_str(&exp_body).unwrap();
+    assert_eq!(exp_doc["projectContext"]["items"][0]["content"], eval_body);
+    let store = Storage::new(f._dir.path().to_path_buf()).unwrap();
+    let bytes1 = backup_bytes(f._dir.path(), &store, &f.ws);
+    let dir2 = tempfile::tempdir().unwrap();
+    let (fresh2, ws2) = restore_workspace(&dir2, &bytes1, "eval-first");
+    let home2 = find_project_id(&fresh2, &ws2, "Collider Project");
+    let exps2 = list_experiments(&fresh2, &ws2, &home2);
+    assert_eq!(exps2.len(), 1);
+    assert_eq!(
+        exps2[0].1["projectContext"]["items"][0]["content"], eval_body,
+        "first restore must keep the evaluation snapshot verbatim"
+    );
+    let store2 = Storage::new(dir2.path().to_path_buf()).unwrap();
+    let bytes2 = backup_bytes(dir2.path(), &store2, &ws2);
+    let dir3 = tempfile::tempdir().unwrap();
+    let (fresh3, ws3) = restore_workspace(&dir3, &bytes2, "eval-second");
+    let home3 = find_project_id(&fresh3, &ws3, "Collider Project");
+    let src3 = find_project_id(&fresh3, &ws3, "Eval project");
+    let exps3 = list_experiments(&fresh3, &ws3, &home3);
+    assert_eq!(exps3.len(), 1);
+    let item3 = &exps3[0].1["projectContext"]["items"][0];
+    assert_eq!(item3["content"], eval_body, "snapshot must stay verbatim");
+    let evals3 = fresh3
+        .artifacts_command(
+            "list",
+            json!({ "contractVersion": 1, "workspaceId": ws3, "projectId": src3 }),
+        )
+        .unwrap()["artifacts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|a| a["type"] == "evaluation")
+        .cloned()
+        .collect::<Vec<_>>();
+    assert_eq!(evals3.len(), 1);
+    let eval_body3 = read_version(
+        &fresh3,
+        &ws3,
+        evals3[0]["artifactId"].as_str().unwrap(),
+        1,
+    )["body"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert_ne!(
+        eval_body3, eval_body,
+        "restored evaluation body must differ (ids remapped): otherwise this test proves nothing"
+    );
+    assert_eq!(
+        item3["restoredContentHash"],
+        content::hash(eval_body3.as_bytes()),
+        "binding must track the restored evaluation row hash"
+    );
+    let eval_doc3: Value = serde_json::from_str(&eval_body3).unwrap();
+    let ideas3 = fresh3
+        .artifacts_command(
+            "list",
+            json!({ "contractVersion": 1, "workspaceId": ws3, "projectId": src3 }),
+        )
+        .unwrap()["artifacts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|a| a["type"] == "idea")
+        .cloned()
+        .collect::<Vec<_>>();
+    assert_eq!(ideas3.len(), 1);
+    assert_eq!(
+        eval_doc3["sourceArtifactId"],
+        ideas3[0]["artifactId"],
+        "restored evaluation must reference the restored idea set"
+    );
+}
+
+#[test]
+fn double_restore_keeps_transferred_concept_admissible() {
+    let fake = start_fake();
+    let f = fixture(&fake, "free");
+    let (src_id, _) = create_project(&f, "Source project", "Source body.");
+    let (m_id, m_rev, _) =
+        create_project_memory(&f, &src_id, "Member notes", "Member content.");
+    let started1 = start_collide_ctx(&f, "Trading.", "Mycelium.", json!([
+        { "memoryId": m_id, "revisionId": m_rev }
+    ]))
+    .unwrap();
+    let run1 = started1["runId"].as_str().unwrap().to_string();
+    assert_eq!(poll_until(&f, &run1)["status"], "complete");
+    let (exp1_id, _exp1_body) = save_collision(&f, &run1);
+    let started2 = start_collide_project(
+        &f,
+        json!({ "projectId": f.project, "items": [
+            { "kind": "artifact", "artifactId": exp1_id, "version": 1 }
+        ] }),
+    )
+    .unwrap();
+    let run2 = started2["runId"].as_str().unwrap().to_string();
+    assert_eq!(poll_until(&f, &run2)["status"], "complete");
+    let (exp2_id, _exp2_body) = save_collision(&f, &run2);
+    let transferred = f
+        .core
+        .ai_command(
+            "collider-transfer",
+            json!({ "contractVersion": 1, "workspaceId": f.ws, "projectId": f.project,
+                    "experimentArtifactId": exp2_id, "experimentVersion": 1,
+                    "combinationIndex": 0, "approvedBrief": "Route venues by local congestion." }),
+        )
+        .unwrap();
+    let concept_id = transferred["artifact"]["artifactId"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let store = Storage::new(f._dir.path().to_path_buf()).unwrap();
+    let bytes1 = backup_bytes(f._dir.path(), &store, &f.ws);
+    let dir2 = tempfile::tempdir().unwrap();
+    let (_fresh2, ws2) = restore_workspace(&dir2, &bytes1, "transfer-first");
+    let store2 = Storage::new(dir2.path().to_path_buf()).unwrap();
+    let bytes2 = backup_bytes(dir2.path(), &store2, &ws2);
+    let dir3 = tempfile::tempdir().unwrap();
+    let (fresh3, ws3) = restore_workspace(&dir3, &bytes2, "transfer-second");
+    let home3 = find_project_id(&fresh3, &ws3, "Collider Project");
+    let concepts3 = fresh3
+        .artifacts_command(
+            "list",
+            json!({ "contractVersion": 1, "workspaceId": ws3, "projectId": home3 }),
+        )
+        .unwrap()["artifacts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|a| a["type"] == "concept")
+        .cloned()
+        .collect::<Vec<_>>();
+    assert_eq!(concepts3.len(), 1);
+    let restored_concept = concepts3[0]["artifactId"].as_str().unwrap().to_string();
+    fresh3
+        .ai_command(
+            "providers-configure",
+            json!({
+                "workspaceId": ws3,
+                "config": {
+                    "providers": [{
+                        "config": { "provider": "ollama", "baseUrl": fake.base_url, "credential": null, "enabled": true },
+                        "locality": "local",
+                        "models": [{
+                            "id": "llama-x", "provider": "ollama",
+                            "capabilities": { "chat": true, "streaming": true, "vision": false, "coding": true, "deepReasoning": false, "embeddings": false },
+                            "contextWindow": 8192, "cost": "free", "speed": "balanced"
+                        }]
+                    }],
+                    "budget": { "maxRequests": 50, "maxTotalTokens": 500000 }
+                }
+            }),
+        )
+        .unwrap();
+    let started = fresh3
+        .ai_command(
+            "forge-spec-start",
+            json!({ "contractVersion": 1, "workspaceId": ws3, "projectId": home3,
+                    "sourceArtifactId": restored_concept, "sourceVersion": 1, "conceptIndex": 0,
+                    "purpose": "Route flow.", "intendedUsers": "Desks.",
+                    "mustHave": "Score venues.", "zeroCostLock": true }),
+        )
+        .unwrap();
+    let spec_run = started["runId"].as_str().unwrap().to_string();
+    let deadline = Instant::now() + Duration::from_secs(30);
+    let status = loop {
+        let polled = fresh3
+            .ai_command(
+                "forge-spec-poll",
+                json!({ "contractVersion": 1, "workspaceId": ws3, "runId": spec_run }),
+            )
+            .unwrap();
+        let status = polled["status"].as_str().unwrap().to_string();
+        if matches!(status.as_str(), "complete" | "invalid" | "failed" | "cancelled")
+            || Instant::now() > deadline
+        {
+            break status;
+        }
+        std::thread::sleep(Duration::from_millis(25));
+    };
+    assert_eq!(status, "complete", "Forge admission must succeed after double restore");
+    assert_ne!(concept_id, restored_concept, "concept id must remap");
 }
