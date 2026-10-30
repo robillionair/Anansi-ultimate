@@ -13,7 +13,7 @@ use std::{
 };
 
 const APPLICATION_ID: i64 = 0x414e414e;
-pub(crate) const SCHEMA_VERSION: i64 = 10;
+pub(crate) const SCHEMA_VERSION: i64 = 11;
 pub(crate) const CURRENT_SCHEMA: &str = concat!(
     include_str!("../migrations/0001_workspace.sql"),
     "\n",
@@ -25,6 +25,30 @@ pub(crate) const CURRENT_SCHEMA: &str = concat!(
     include_str!("../migrations/0006_relationship_history.sql"),
     include_str!("../migrations/0007_jobs.sql"),
     include_str!("../migrations/0008_backups.sql"),
+    include_str!("../migrations/0010_artifacts.sql"),
+    "\n",
+    include_str!("../migrations/0011_restore_lineage.sql")
+);
+/// The schema as of version 10, used to validate v10
+/// backup catalogs exactly before their staging copy is
+/// migrated to the current schema.
+pub(crate) const SCHEMA_10: &str = concat!(
+    include_str!("../migrations/0001_workspace.sql"),
+    "\n",
+    include_str!("../migrations/0002_onboarding.sql"),
+    "\n",
+    include_str!("../migrations/0003_memory.sql"),
+    "\n",
+    include_str!("../migrations/0004_lifecycle.sql"),
+    "\n",
+    include_str!("../migrations/0005_entities.sql"),
+    "\n",
+    include_str!("../migrations/0006_relationship_history.sql"),
+    "\n",
+    include_str!("../migrations/0007_jobs.sql"),
+    "\n",
+    include_str!("../migrations/0008_backups.sql"),
+    "\n",
     include_str!("../migrations/0010_artifacts.sql")
 );
 const ROOT_MARKER: &[u8] = b"ANANSI workspace root v1\n";
@@ -445,6 +469,10 @@ impl Storage {
                 }
                 if locked_version < 10 {
                     tx.execute_batch(include_str!("../migrations/0010_artifacts.sql"))
+                        .map_err(|_| corrupt())?;
+                }
+                if locked_version < 11 {
+                    tx.execute_batch(include_str!("../migrations/0011_restore_lineage.sql"))
                         .map_err(|_| corrupt())?;
                 }
                 tx.pragma_update(None, "user_version", SCHEMA_VERSION)

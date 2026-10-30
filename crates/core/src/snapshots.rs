@@ -482,6 +482,7 @@ const LEGACY_SCHEMA_8: &str = concat!(
 );
 const VAULT_SCHEMA_9: &str = include_str!("../migrations/0009_vault.sql");
 const ARTIFACTS_SCHEMA_10: &str = include_str!("../migrations/0010_artifacts.sql");
+const LINEAGE_SCHEMA_11: &str = include_str!("../migrations/0011_restore_lineage.sql");
 
 fn in_memory_schema(ddl: &[&str]) -> Result<Connection, CommandError> {
     let db = Connection::open_in_memory().map_err(|_| invalid())?;
@@ -526,6 +527,7 @@ fn embeddings_fingerprint(db: &Connection) -> Result<String, CommandError> {
 /// recognised exactly - built from the same DDL the runtime
 /// executes - never ignored wholesale.
 struct SchemaGroups {
+    core11: std::collections::BTreeMap<String, SchemaRow>,
     core10: std::collections::BTreeMap<String, SchemaRow>,
     core8: std::collections::BTreeMap<String, SchemaRow>,
     vault: std::collections::BTreeMap<String, SchemaRow>,
@@ -535,7 +537,8 @@ struct SchemaGroups {
 }
 
 fn schema_groups() -> Result<SchemaGroups, CommandError> {
-    let core10 = schema_objects(&in_memory_schema(&[crate::storage::CURRENT_SCHEMA])?)?;
+    let core11 = schema_objects(&in_memory_schema(&[crate::storage::CURRENT_SCHEMA])?)?;
+    let core10 = schema_objects(&in_memory_schema(&[crate::storage::SCHEMA_10])?)?;
     let core8 = schema_objects(&in_memory_schema(&[LEGACY_SCHEMA_8])?)?;
     let v9 = schema_objects(&in_memory_schema(&[LEGACY_SCHEMA_8, VAULT_SCHEMA_9])?)?;
     let vault: std::collections::BTreeMap<_, _> = v9
@@ -548,6 +551,7 @@ fn schema_groups() -> Result<SchemaGroups, CommandError> {
     let embeddings_fingerprint = embeddings_fingerprint(&emb_db)?;
     let embeddings = schema_objects(&emb_db)?;
     Ok(SchemaGroups {
+        core11,
         core10,
         core8,
         vault,
@@ -610,9 +614,10 @@ fn check_schema(
 }
 
 /// Migrate an isolated staging catalog from schema 8/9 to
-/// 10 with the same step the storage migrator uses. Only
-/// ever called after the legacy structure has been fully
-/// validated; the source package is never touched.
+/// current with the same steps the storage migrator
+/// uses. Only ever called after the legacy structure
+/// has been fully validated; the source package is
+/// never touched.
 fn migrate_staging_catalog(path: &Path) -> Result<(), CommandError> {
     let mut connection = Connection::open(path).map_err(|_| invalid())?;
     connection
@@ -621,6 +626,24 @@ fn migrate_staging_catalog(path: &Path) -> Result<(), CommandError> {
     let tx = connection.transaction().map_err(|_| invalid())?;
     tx.execute_batch(ARTIFACTS_SCHEMA_10)
         .map_err(|_| invalid())?;
+    tx.execute_batch(LINEAGE_SCHEMA_11).map_err(|_| invalid())?;
+    tx.pragma_update(None, "user_version", SCHEMA_VERSION)
+        .map_err(|_| invalid())?;
+    tx.commit().map_err(|_| invalid())?;
+    Ok(())
+}
+
+/// Migrate an isolated staging catalog from schema 10 to
+/// current: only the lineage step is still missing, since
+/// the artifact registry is already present. Same
+/// call discipline as migrate_staging_catalog.
+fn migrate_staging_catalog_10_to_current(path: &Path) -> Result<(), CommandError> {
+    let mut connection = Connection::open(path).map_err(|_| invalid())?;
+    connection
+        .execute_batch("PRAGMA trusted_schema=OFF;")
+        .map_err(|_| invalid())?;
+    let tx = connection.transaction().map_err(|_| invalid())?;
+    tx.execute_batch(LINEAGE_SCHEMA_11).map_err(|_| invalid())?;
     tx.pragma_update(None, "user_version", SCHEMA_VERSION)
         .map_err(|_| invalid())?;
     tx.commit().map_err(|_| invalid())?;
@@ -776,7 +799,7 @@ impl Storage {
             crate::backup::MAX_MANIFEST_BYTES,
         )?)
         .map_err(|_| invalid())?;
-        if !matches!(info.schema_version, 8 | 9 | SCHEMA_VERSION)
+        if !matches!(info.schema_version, 8 | 9 | 10 | SCHEMA_VERSION)
             || info.workspaces.is_empty()
             || info.workspaces.len() > MAX_RECORDS as usize
             || !info.workspaces.contains(&checked.manifest.workspace_id)
@@ -857,7 +880,28 @@ impl Storage {
                 if actual_version != SCHEMA_VERSION {
                     return Err(invalid());
                 }
+                check_schema(&db, &groups, &groups.core11, &optional_current)?;
+            }
+            10 => {
+                // Bounded legacy path for the previous
+                // schema: the declared version must agree
+                // with the catalog, the v10 structure
+                // must be exact, and only then is the
+                // isolated staging copy migrated (lineage
+                // step only) - the package itself is
+                // never modified. Its single-hop origins
+                // rows validate exactly as before.
+                if actual_version != info.schema_version {
+                    return Err(invalid());
+                }
                 check_schema(&db, &groups, &groups.core10, &optional_current)?;
+                drop(db);
+                migrate_staging_catalog_10_to_current(&temporary.root.join("catalog.sqlite3"))?;
+                db = open_catalog(&temporary.root)?;
+                if catalog_version(&db)? != SCHEMA_VERSION {
+                    return Err(invalid());
+                }
+                check_schema(&db, &groups, &groups.core11, &optional_current)?;
             }
             8 | 9 => {
                 // Bounded legacy path: the declared version
@@ -889,7 +933,7 @@ impl Storage {
                 if catalog_version(&db)? != SCHEMA_VERSION {
                     return Err(invalid());
                 }
-                check_schema(&db, &groups, &groups.core10, &optional_current)?;
+                check_schema(&db, &groups, &groups.core11, &optional_current)?;
             }
             _ => return Err(invalid()),
         }
@@ -1483,5 +1527,63 @@ mod tests {
                 "link/directory/extension flag must be rejected"
             );
         }
+    }
+
+    #[test]
+    fn v10_and_current_schema_groups_differ_only_on_lineage_key() {
+        let groups = schema_groups().unwrap();
+        let optional = [&groups.vault, &groups.fts, &groups.embeddings];
+        let v10 = in_memory_schema(&[crate::storage::SCHEMA_10]).unwrap();
+        let current = in_memory_schema(&[crate::storage::CURRENT_SCHEMA]).unwrap();
+        assert!(check_schema(&v10, &groups, &groups.core10, &optional).is_ok());
+        assert!(check_schema(&v10, &groups, &groups.core11, &optional).is_err());
+        assert!(check_schema(&current, &groups, &groups.core11, &optional).is_ok());
+        assert!(check_schema(&current, &groups, &groups.core10, &optional).is_err());
+        // The difference is exactly the restore_origins key.
+        let v10_row = groups.core10.get("restore_origins").unwrap();
+        let current_row = groups.core11.get("restore_origins").unwrap();
+        assert_ne!(v10_row, current_row);
+        assert!(
+            groups
+                .core10
+                .iter()
+                .filter(|(name, _)| *name != "restore_origins")
+                .all(|(name, def)| groups.core11.get(name) == Some(def))
+        );
+    }
+
+    #[test]
+    fn staging_catalog_10_migrates_to_current_preserving_origins() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("catalog.sqlite3");
+        let db = Connection::open(&path).unwrap();
+        db.execute_batch(crate::storage::SCHEMA_10).unwrap();
+        db.execute_batch(
+            "INSERT INTO workspaces VALUES('ws-1', 'Legacy', 'legacy');
+             INSERT INTO restore_origins VALUES('ws-1', 'new-1', 'old-ws', 'orig-1', 'backup-1');
+             PRAGMA user_version = 10;",
+        )
+        .unwrap();
+        drop(db);
+        migrate_staging_catalog_10_to_current(&path).unwrap();
+        let db = Connection::open(&path).unwrap();
+        let version: i64 = db
+            .pragma_query_value(None, "user_version", |row| row.get(0))
+            .unwrap();
+        assert_eq!(version, SCHEMA_VERSION);
+        let count: i64 = db
+            .query_row("SELECT COUNT(*) FROM restore_origins", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(count, 1);
+        // The new key admits a second original for the same current id.
+        db.execute(
+            "INSERT INTO restore_origins VALUES('ws-1', 'new-1', 'old-ws', 'orig-2', 'backup-1')",
+            [],
+        )
+        .unwrap();
+        let count: i64 = db
+            .query_row("SELECT COUNT(*) FROM restore_origins", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(count, 2);
     }
 }

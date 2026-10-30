@@ -3706,3 +3706,103 @@ fn review_new_work_after_restore_survives_further_restore_generations() {
         "new work after a restore must remain recoverable at subsequent generations: {result:?}"
     );
 }
+
+fn configure_fake_providers(core: &Core, ws: &str, fake: &Fake) {
+    core.ai_command("providers-configure",json!({
+        "workspaceId":ws,"config":{
+            "providers":[{"config":{"provider":"ollama","baseUrl":fake.base_url,"credential":null,"enabled":true},
+                "locality":"local","models":[{"id":"llama-x","provider":"ollama",
+                "capabilities":{"chat":true,"streaming":true,"vision":false,"coding":true,"deepReasoning":false,"embeddings":false},
+                "contextWindow":8192,"cost":"free","speed":"balanced"}]}],
+            "budget":{"maxRequests":50,"maxTotalTokens":500000}}
+    })).unwrap();
+}
+
+fn memory_context_source(core: &Core, ws: &str, project: &str) -> String {
+    list_experiments(core, ws, project)
+        .into_iter()
+        .find(|(_, body)| body.get("projectContext").is_none())
+        .map(|(id, _)| id)
+        .expect("memory-context experiment present")
+}
+
+#[test]
+fn repair_lineage_chain_new_work_at_b_and_c_survives_further_restores() {
+    let fake = start_fake();
+    let original = fixture(&fake, "free");
+    let (memory, revision, _) = create_project_memory(
+        &original,
+        &original.project,
+        "Original note",
+        "Original source content.",
+    );
+    let started = start_collide_ctx(
+        &original,
+        "Trading.",
+        "Mycelium.",
+        json!([{"memoryId":memory,"revisionId":revision}]),
+    )
+    .unwrap();
+    let run = started["runId"].as_str().unwrap();
+    assert_eq!(poll_until(&original, run)["status"], "complete");
+    let (exp_a, _) = save_collision(&original, run);
+    // A-era snapshot: a second A experiment selecting the first.
+    let started = start_collide_project(&original, json!({"projectId":original.project,"items":[{"kind":"artifact","artifactId":exp_a,"version":1}]})).unwrap();
+    let run = started["runId"].as_str().unwrap();
+    assert_eq!(poll_until(&original, run)["status"], "complete");
+    save_collision(&original, run);
+    let store = Storage::new(original._dir.path().to_path_buf()).unwrap();
+    let bytes = backup_bytes(original._dir.path(), &store, &original.ws);
+    // A -> B.
+    let b_dir = tempfile::tempdir().unwrap();
+    let (b_core, b_ws) = restore_workspace(&b_dir, &bytes, "generation-B");
+    let b_project = find_project_id(&b_core, &b_ws, "Collider Project");
+    configure_fake_providers(&b_core, &b_ws, &fake);
+    let resumed_b = Fixture {
+        _dir: b_dir,
+        core: b_core,
+        ws: b_ws,
+        project: b_project,
+    };
+    // New work at B pins B-era ids.
+    let source_b = memory_context_source(&resumed_b.core, &resumed_b.ws, &resumed_b.project);
+    let started = start_collide_project(&resumed_b, json!({"projectId":resumed_b.project,"items":[{"kind":"artifact","artifactId":source_b,"version":1}]})).unwrap();
+    let run = started["runId"].as_str().unwrap();
+    assert_eq!(poll_until(&resumed_b, run)["status"], "complete");
+    save_collision(&resumed_b, run);
+    let store = Storage::new(resumed_b._dir.path().to_path_buf()).unwrap();
+    let bytes = backup_bytes(resumed_b._dir.path(), &store, &resumed_b.ws);
+    // B -> C.
+    let c_dir = tempfile::tempdir().unwrap();
+    let (c_core, c_ws) = restore_workspace(&c_dir, &bytes, "generation-C");
+    let c_project = find_project_id(&c_core, &c_ws, "Collider Project");
+    configure_fake_providers(&c_core, &c_ws, &fake);
+    let resumed_c = Fixture {
+        _dir: c_dir,
+        core: c_core,
+        ws: c_ws,
+        project: c_project,
+    };
+    // New work at C pins C-era ids; A-era and B-era snapshots coexist.
+    let source_c = memory_context_source(&resumed_c.core, &resumed_c.ws, &resumed_c.project);
+    let started = start_collide_project(&resumed_c, json!({"projectId":resumed_c.project,"items":[{"kind":"artifact","artifactId":source_c,"version":1}]})).unwrap();
+    let run = started["runId"].as_str().unwrap();
+    assert_eq!(poll_until(&resumed_c, run)["status"], "complete");
+    save_collision(&resumed_c, run);
+    let store = Storage::new(resumed_c._dir.path().to_path_buf()).unwrap();
+    let bytes = backup_bytes(resumed_c._dir.path(), &store, &resumed_c.ws);
+    // C -> D -> E: every further restore must succeed.
+    let d_dir = tempfile::tempdir().unwrap();
+    let (_d_core, d_ws) = restore_workspace(&d_dir, &bytes, "generation-D");
+    let store = Storage::new(d_dir.path().to_path_buf()).unwrap();
+    let bytes = backup_bytes(d_dir.path(), &store, &d_ws);
+    let e_dir = tempfile::tempdir().unwrap();
+    let (e_core, e_ws) = restore_workspace(&e_dir, &bytes, "generation-E");
+    let e_project = find_project_id(&e_core, &e_ws, "Collider Project");
+    let experiments = list_experiments(&e_core, &e_ws, &e_project);
+    assert_eq!(
+        experiments.len(),
+        4,
+        "A experiments, B work and C work must all survive to E"
+    );
+}

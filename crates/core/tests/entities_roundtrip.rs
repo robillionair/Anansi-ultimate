@@ -440,7 +440,77 @@ fn schema_four_migrates_forward_to_schema_five_preserving_records() {
     let user_version: i64 = verify_conn
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(user_version, 10); // current workspace schema (v9 is the vault step, v10 the artifact registry)
+    assert_eq!(user_version, 11); // current workspace schema (v9 is the vault step, v10 the artifact registry, v11 restore lineage)
+}
+
+#[test]
+fn schema_ten_migrates_to_eleven_preserving_origins_and_alias_key() {
+    let (temp, core, w) = setup();
+    let memory = core
+        .memory_command(
+            "create",
+            json!({
+                "contractVersion": 1,
+                "workspaceId": w,
+                "draft": {"title": "Lineage Memory", "body": "Preserved content"}
+            }),
+        )
+        .unwrap();
+    let path = temp.path().join("store").join(DATABASE_NAME);
+    let conn = rusqlite::Connection::open(&path).unwrap();
+    conn.execute_batch(
+        "DROP TABLE restore_origins;
+         CREATE TABLE restore_origins (
+            workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE RESTRICT,
+            new_id TEXT NOT NULL,
+            original_workspace TEXT NOT NULL,
+            original_id TEXT NOT NULL,
+            backup_id TEXT NOT NULL,
+            PRIMARY KEY(workspace_id,new_id)
+         ) STRICT;
+         PRAGMA user_version = 10;",
+    )
+    .unwrap();
+    conn.execute(
+        "INSERT INTO restore_origins VALUES (?1, 'new-1', 'old-ws', 'orig-1', 'backup-1')",
+        [&w],
+    )
+    .unwrap();
+    drop(conn);
+    // Reopen with Core; it should detect version 10, rebuild
+    // restore_origins with the alias key, and preserve the row.
+    let mem_read = core
+        .memory_command(
+            "read",
+            json!({
+                "contractVersion": 1,
+                "workspaceId": w,
+                "id": memory["memory"]["id"]
+            }),
+        )
+        .unwrap();
+    assert_eq!(mem_read["memory"]["title"], "Lineage Memory");
+    assert_eq!(mem_read["body"], "Preserved content");
+    let verify_conn = rusqlite::Connection::open(&path).unwrap();
+    let user_version: i64 = verify_conn
+        .pragma_query_value(None, "user_version", |r| r.get(0))
+        .unwrap();
+    assert_eq!(user_version, 11);
+    let count: i64 = verify_conn
+        .query_row("SELECT COUNT(*) FROM restore_origins", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(count, 1);
+    // The new key admits a second original for the same current id.
+    verify_conn
+        .execute(
+            "INSERT INTO restore_origins VALUES (?1, 'new-1', 'old-ws', 'orig-2', 'backup-1')",
+            [&w],
+        )
+        .unwrap();
+    let count: i64 = verify_conn
+        .query_row("SELECT COUNT(*) FROM restore_origins", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(count, 2);
 }
 
 #[test]

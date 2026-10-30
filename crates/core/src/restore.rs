@@ -1039,31 +1039,40 @@ fn restore_origin_pair(
     )
 }
 
-/// Resolve the ultimate origin of a source id through
-/// the source package's own restore_origins rows, so a
-/// destination package always carries direct
-/// ultimate-original -> current-id pairs and hop 3+
-/// validation stays a single pair lookup. No row, or a
-/// missing table, means the source id is itself the
-/// origin. This is what makes multi-hop restore
-/// provable without copying history rows or trusting
-/// any client-supplied mapping.
-fn ultimate_origin(
+/// Collect every prior original for a source id from
+/// the source package's own restore_origins rows, in
+/// original-id order. A snapshot may have been authored
+/// at any generation, so validation needs the full
+/// alias set — the source id itself plus every earlier
+/// id that was ever restored into it — not a single
+/// compressed ultimate origin. No rows, or a missing
+/// table, means the source id has no prior generation.
+/// The caller adds the source id itself as the latest
+/// hop; duplicates are impossible for genuine rows
+/// (one row per original under the new key) but are
+/// still de-duplicated defensively.
+fn lineage_aliases(
     source: &rusqlite::Connection,
     workspace_id: &str,
     id: &str,
-) -> (String, String) {
+) -> Vec<(String, String)> {
     let Ok(mut stmt) = source.prepare(
-        "SELECT original_id, original_workspace FROM restore_origins WHERE new_id = ?1 AND workspace_id = ?2 LIMIT 1",
+        "SELECT original_workspace, original_id FROM restore_origins WHERE workspace_id = ?1 AND new_id = ?2 ORDER BY original_id",
     ) else {
-        return (id.to_string(), workspace_id.to_string());
+        return Vec::new();
     };
-    match stmt.query_row(rusqlite::params![id, workspace_id], |r| {
+    let Ok(rows) = stmt.query_map(rusqlite::params![workspace_id, id], |r| {
         Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
-    }) {
-        Ok(pair) => pair,
-        Err(_) => (id.to_string(), workspace_id.to_string()),
+    }) else {
+        return Vec::new();
+    };
+    let mut aliases = Vec::new();
+    for row in rows.flatten() {
+        if !aliases.contains(&row) {
+            aliases.push(row);
+        }
     }
+    aliases
 }
 
 /// A differing id is an allowed remap only when the
@@ -2290,25 +2299,36 @@ impl crate::storage::Storage {
                     .map_err(|_| crate::jobs::invalid())?;
             }
         }
-        // R1 provenance: each new origins row records
-        // the ULTIMATE origin of its entity, resolved
-        // through the source package's own origins rows
-        // (see ultimate_origin), not merely the source
-        // id. A snapshot stays verbatim forever, so only
-        // ultimate -> current pairs can authorize a
-        // second, third or later restore; recording only
-        // the latest hop would break hop 3+. No history
-        // rows are copied, so the already-restored guard
-        // (keyed on the backup being restored) is
-        // unaffected, and no schema change is needed.
+        // R4 lineage: each restored entity records one
+        // origins row per generation that named it —
+        // the latest hop (source id -> fresh id) plus
+        // every prior alias from the source package's
+        // own origins rows (see lineage_aliases).
+        // Snapshots stay verbatim forever and may have
+        // been authored at any generation, so only the
+        // full alias set lets a later restore validate
+        // A-era, B-era and C-era snapshots alike. The
+        // table key (workspace_id, new_id, original_id)
+        // admits exactly this set. Alias rows carry the
+        // current backup's id, so the already-restored
+        // guard (keyed on the backup being restored)
+        // is unaffected, and alias counts grow linearly
+        // with restore history, never combinatorially.
         for old_workspace in &verified.info.workspaces {
             for (original, new) in &ids {
                 if owners.get(original) != Some(old_workspace) {
                     continue;
                 }
-                let (ultimate_id, ultimate_workspace) =
-                    ultimate_origin(&source, old_workspace, original);
-                tx.execute("INSERT INTO restore_origins(workspace_id,new_id,original_workspace,original_id,backup_id) VALUES(?1,?2,?3,?4,?5)",rusqlite::params![ids[old_workspace],new,ultimate_workspace,ultimate_id,artifact]).map_err(|_|crate::storage::unavailable())?;
+                let mut aliases = vec![(old_workspace.clone(), original.clone())];
+                for (prior_workspace, prior_id) in lineage_aliases(&source, old_workspace, original)
+                {
+                    if prior_id != *original && !aliases.iter().any(|(_, id)| id == &prior_id) {
+                        aliases.push((prior_workspace, prior_id));
+                    }
+                }
+                for (alias_workspace, alias_id) in aliases {
+                    tx.execute("INSERT INTO restore_origins(workspace_id,new_id,original_workspace,original_id,backup_id) VALUES(?1,?2,?3,?4,?5)",rusqlite::params![ids[old_workspace],new,alias_workspace,alias_id,artifact]).map_err(|_|crate::storage::unavailable())?;
+                }
             }
         }
         // Rebuild derived search state from the restored
@@ -3332,31 +3352,73 @@ mod experiment_binding_tests {
     }
 
     #[test]
-    fn ultimate_origin_resolves_through_source_rows() {
+    fn lineage_aliases_collect_every_prior_generation() {
         let db = transform_db();
         let source_id = "55555555555555555555555555555555";
-        let ultimate_id = "66666666666666666666666666666666";
-        assert_eq!(
-            ultimate_origin(&db, T_WS, source_id),
-            (source_id.to_string(), T_WS.to_string())
-        );
-        add_origin(&db, T_WS, ultimate_id, source_id);
+        let gen_a = "66666666666666666666666666666666";
+        let gen_b = "77777777777777777777777777777777";
+        assert!(lineage_aliases(&db, T_WS, source_id).is_empty());
+        add_origin(&db, T_WS, gen_a, source_id);
+        add_origin(&db, T_WS, gen_b, source_id);
         // add_origin records original_workspace as 'old-ws'.
         assert_eq!(
-            ultimate_origin(&db, T_WS, source_id),
-            (ultimate_id.to_string(), "old-ws".to_string())
+            lineage_aliases(&db, T_WS, source_id),
+            vec![
+                ("old-ws".to_string(), gen_a.to_string()),
+                ("old-ws".to_string(), gen_b.to_string()),
+            ]
         );
-        // A pair scoped to another workspace does not resolve.
-        assert_eq!(
-            ultimate_origin(&db, T_OTHER_WS, source_id),
-            (source_id.to_string(), T_OTHER_WS.to_string())
-        );
-        // A package without the table falls back to the source id.
+        // Aliases are scoped to their workspace.
+        assert!(lineage_aliases(&db, T_OTHER_WS, source_id).is_empty());
+        // A package without the table yields no aliases.
         let bare = Connection::open_in_memory().unwrap();
-        assert_eq!(
-            ultimate_origin(&bare, T_WS, source_id),
-            (source_id.to_string(), T_WS.to_string())
+        assert!(lineage_aliases(&bare, T_WS, source_id).is_empty());
+    }
+
+    #[test]
+    fn transform_alias_set_accepts_every_generation_and_refuses_unlisted() {
+        let db = transform_db();
+        let current = "88888888888888888888888888888888";
+        add_origin(&db, T_WS, T_OLD_ART, current);
+        add_origin(&db, T_WS, T_NEW_ART, current);
+        add_row(
+            &db,
+            current,
+            1,
+            &crate::content::hash("row body".as_bytes()),
         );
+        // An evaluation naming either genuine generation accepts.
+        for original_id in [T_OLD_ART, T_NEW_ART] {
+            let eval = serde_json::json!({
+                "format": "anansi-evaluation",
+                "sourceArtifactId": original_id,
+                "rubricArtifactId": original_id,
+                "summary": "original"
+            });
+            let mut transformed = eval.clone();
+            transformed["sourceArtifactId"] = serde_json::json!(current);
+            transformed["rubricArtifactId"] = serde_json::json!(current);
+            assert!(
+                allowed_restore_transform(&db, T_WS, &eval.to_string(), &transformed.to_string()),
+                "generation {original_id} should accept"
+            );
+        }
+        // An unlisted id pointing at the same current id refuses.
+        let eval = serde_json::json!({
+            "format": "anansi-evaluation",
+            "sourceArtifactId": T_FAKE,
+            "rubricArtifactId": T_FAKE,
+            "summary": "original"
+        });
+        let mut transformed = eval.clone();
+        transformed["sourceArtifactId"] = serde_json::json!(current);
+        transformed["rubricArtifactId"] = serde_json::json!(current);
+        assert!(!allowed_restore_transform(
+            &db,
+            T_WS,
+            &eval.to_string(),
+            &transformed.to_string()
+        ));
     }
 
     #[test]
