@@ -3909,12 +3909,7 @@ fn review_real_schema10_archive_restores_to_schema11() {
 /// reach the provider; the saved document pins the exact
 /// beams and provenance. Beam B carries prompt-like
 /// text, which stays data: the run completes normally.
-fn document_source(
-    label: &str,
-    kind: &str,
-    bom: bool,
-    text: &str,
-) -> Value {
+fn document_source(label: &str, kind: &str, bom: bool, text: &str) -> Value {
     let mut raw = Vec::new();
     if bom {
         raw.extend_from_slice(&[0xEF, 0xBB, 0xBF]);
@@ -3967,7 +3962,10 @@ fn document_start_saves_exact_provenance_and_wire_text() {
         .join("\n");
     assert!(content.contains(&format!("Beam A (data):\n{beam_a}")));
     assert!(content.contains(&format!("Beam B (data):\n{beam_b}")));
-    assert!(!wire_raw.contains("field-notes.md"), "label must not reach the provider");
+    assert!(
+        !wire_raw.contains("field-notes.md"),
+        "label must not reach the provider"
+    );
     assert!(!wire_raw.contains(doc_a["textHash"].as_str().unwrap()));
     assert!(!wire_raw.contains(doc_a["rawHash"].as_str().unwrap()));
     let (_id, body) = save_collision(&f, &run_id);
@@ -4014,9 +4012,7 @@ fn document_forged_or_stale_metadata_refuses_before_traffic() {
         );
     }
     // An edited beam invalidates the original record.
-    assert!(
-        start_collide_document(&f, "Field notes edited.\n", beam_b, good).is_err()
-    );
+    assert!(start_collide_document(&f, "Field notes edited.\n", beam_b, good).is_err());
     assert_eq!(fake.hits.load(Ordering::SeqCst), 0);
 }
 

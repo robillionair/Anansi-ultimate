@@ -465,10 +465,7 @@ const MAX_LABEL_CHARS: usize = 255;
 /// original file bytes (a stripped BOM included), the
 /// text hash covers the submitted text bytes, and both
 /// counts must match the beam exactly.
-pub fn validate_document_source(
-    source: &ColliderDocumentSource,
-    beam: &str,
-) -> Result<(), String> {
+pub fn validate_document_source(source: &ColliderDocumentSource, beam: &str) -> Result<(), String> {
     if source.kind != "txt" && source.kind != "md" {
         return Err(format!(
             "document kind must be txt or md, got {}",
@@ -479,10 +476,7 @@ pub fn validate_document_source(
     if label_chars == 0 || label_chars > MAX_LABEL_CHARS {
         return Err("document label must be 1 to 255 characters.".to_string());
     }
-    if source.label.contains('/')
-        || source.label.contains('\\')
-        || source.label.contains('\0')
-    {
+    if source.label.contains('/') || source.label.contains('\\') || source.label.contains('\0') {
         return Err("document label must be a file name, not a path.".to_string());
     }
     let suffix = source
@@ -491,9 +485,7 @@ pub fn validate_document_source(
         .next()
         .unwrap_or("")
         .to_ascii_lowercase();
-    if (source.kind == "txt" && suffix != "txt")
-        || (source.kind == "md" && suffix != "md")
-    {
+    if (source.kind == "txt" && suffix != "txt") || (source.kind == "md" && suffix != "md") {
         return Err("document label extension must match its kind.".to_string());
     }
     if source.raw_bytes > MAX_DOCUMENT_BYTES {
@@ -1652,12 +1644,10 @@ fn start(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
     // forged or stale record refuses here, never after
     // a model has seen the text.
     if let Some(document) = &req.document_a {
-        validate_document_source(document, &req.beam_a)
-            .map_err(|e| invalid(&e))?;
+        validate_document_source(document, &req.beam_a).map_err(|e| invalid(&e))?;
     }
     if let Some(document) = &req.document_b {
-        validate_document_source(document, &req.beam_b)
-            .map_err(|e| invalid(&e))?;
+        validate_document_source(document, &req.beam_b).map_err(|e| invalid(&e))?;
     }
     let workspace_id = logical(scope)?;
     let storage = storage(scope)?;
@@ -2076,7 +2066,18 @@ fn save(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
         },
     }
     let deadline = Instant::now() + Duration::from_secs(30);
-    let (project_id, beam_a, beam_b, controls, memory_context, project_context, document_a, document_b, result, disclosure) = loop {
+    let (
+        project_id,
+        beam_a,
+        beam_b,
+        controls,
+        memory_context,
+        project_context,
+        document_a,
+        document_b,
+        result,
+        disclosure,
+    ) = loop {
         let step = with_runs(|map| {
             let Some(run) = map.get_mut(&key).filter(|r| r.session == scope.session) else {
                 return Claim::Missing;
@@ -2424,7 +2425,10 @@ mod document_source_tests {
             );
         }
         // An edited beam invalidates the original record.
-        assert!(validate_document_source(&valid_source(), "  First line\r\n\tSecond line changed\r\n").is_err());
+        assert!(
+            validate_document_source(&valid_source(), "  First line\r\n\tSecond line changed\r\n")
+                .is_err()
+        );
         // A no-BOM source validates against its own bytes.
         let plain = "Plain text.\n";
         let source = ColliderDocumentSource {
@@ -2441,20 +2445,17 @@ mod document_source_tests {
 
     #[test]
     fn old_documents_without_fields_validate_and_documented_ones_pin() {
-        let doc: ColliderExperimentDoc =
-            serde_json::from_value(valid_doc_json()).unwrap();
+        let doc: ColliderExperimentDoc = serde_json::from_value(valid_doc_json()).unwrap();
         assert!(validate_experiment_doc(&doc).is_ok());
         let mut documented = valid_doc_json();
         documented["documentA"] = serde_json::to_value(valid_source()).unwrap();
-        let doc: ColliderExperimentDoc =
-            serde_json::from_value(documented).unwrap();
+        let doc: ColliderExperimentDoc = serde_json::from_value(documented).unwrap();
         assert!(validate_experiment_doc(&doc).is_ok());
         // The same document with an edited beam refuses.
         let mut edited = valid_doc_json();
         edited["documentA"] = serde_json::to_value(valid_source()).unwrap();
         edited["beamA"] = serde_json::json!("Edited beam.");
-        let doc: ColliderExperimentDoc =
-            serde_json::from_value(edited).unwrap();
+        let doc: ColliderExperimentDoc = serde_json::from_value(edited).unwrap();
         assert!(validate_experiment_doc(&doc).is_err());
     }
 }
