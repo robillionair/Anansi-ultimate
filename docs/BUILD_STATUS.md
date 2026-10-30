@@ -1,3 +1,54 @@
+## 2026-10-30 — M8 overnight hardening: context boundaries, picker reliability, pipeline overview (Linux; Windows pending)
+
+On branch `muse/m8-overnight-hardening` from Slice 4 tip
+`0b6ba0e8` (WP1 criteria `da9a10ea`, WP2 criteria
+`f60480da`, WP3 criteria `ee359c5c`; full record in
+the WP1–WP4 acceptance/addendum files). WP1: a new
+collision now re-checks current source eligibility —
+pinned revisions whose head was archived, sealed,
+expired or reassigned refuse before provider traffic in
+both pickers, while eligible older revisions still
+dispatch and saved history is untouched; experiments
+pinning structured artifacts now survive repeated
+restore via a recorded `restoredContentHash` on
+artifact items and a fix-up pass wired before the
+transfer fix-ups (fixpoint for chained experiments),
+with validation accepting the original or the recorded
+restored hash and refusing fabricated ones. WP2: the
+project picker pages memory lists past the 50-row
+default, shows list failures as errors with retry,
+shows privacy labels in both pre-send reviews, disables
+cross-picker duplicates and 9th items with notes,
+blocks overlong reviews with the bound named, retries
+failed reads without losing the selection, and counts
+hidden items. WP3: a pipeline overview (no new
+dependency) shows only real run states, the six
+sections with their relationships, section links when
+complete, a static diagram plus full text list, and a
+provenance link; 3D stays unfinished (no visualization
+dependency; SwarmTank 3D is M9). WP4 integrated browser
+spec chains selection → review → collision → save →
+approved transfer → restart → backup/restore → reopen
+→ second restore with snapshot and unapproved-brief
+negatives. Evidence (sequential, Linux): focused
+collider 34/34, transfer 19/19, forge_restore 4/4,
+backup_restore 7/7, node pass, strict Clippy/fmt/tsc/
+contracts/docs clean, API/web builds pass; 21 affected
+browser tests pass (7 collider specs, transfer ×3,
+forge ×4, backups, export); full core with
+`--no-fail-fast` 345 passed / 4 failed (only the known
+live-Ollama semantic_workflow environment failures;
+334 + 11 new tests); providers+API 144/0. Windows
+verification of Slice 4 is still in progress and
+Windows verification of this checkpoint has not
+started; Linux evidence must not be presented as
+closing either. No cloud, credential, download, push,
+merge, CI, or promotion. Details:
+[M8 WP1 criteria](handoffs/M8-overnight-hardening-wp1-acceptance.md),
+[M8 WP2 criteria](handoffs/M8-overnight-hardening-wp2-acceptance.md),
+[M8 WP3 criteria](handoffs/M8-overnight-hardening-wp3-acceptance.md),
+[M8 WP4 record](handoffs/M8-overnight-hardening-wp4-addendum.md).
+
 ## 2026-10-30 — M8 Slice 4: explicitly selected saved-project collider input (Linux; Windows pending)
 
 On branch `muse/m8-slice4-project-context` from `c7327bb7`
