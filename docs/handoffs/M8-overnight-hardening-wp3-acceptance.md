@@ -114,8 +114,13 @@ It renders:
   whole picture.
 - A provenance link to the disclosure section
   (`providers-disclosure-title`) whenever a disclosure
-  exists, and a saved line naming the artifact id once
-  the collision is saved.
+  exists. (Amendment during implementation: the criteria
+  first asked for a saved line naming the artifact id,
+  but the panel already renders exactly that line, so
+  the overview duplicating it produced two identical
+  lines and broke strict-mode locators. The overview
+  carries no saved line; saved state is shown by the
+  panel's own line and by the artifact view itself.)
 
 ## Accessibility
 
@@ -166,3 +171,45 @@ It renders:
 - Strict Clippy, fmt, tsc, contracts check clean.
 - The WP3 record (this file, updated with before/after
   evidence) is committed before WP4 begins.
+
+## WP3 evidence (before / after, Linux, sequential)
+
+Criteria committed as `ee359c5c` after the WP2 gate
+(`5ee51c84`). Implementation `50fcf11a`, tests
+`9eddbd4d`.
+
+- Before, the panel showed only scattered status lines
+  (running/cancelling/cancelled/failed alerts plus a
+  validating flash) and the six result sections with no
+  map of what they are, how they relate, or where the
+  run stands as a whole. After, `ColliderPipelineOverview`
+  renders in the panel and in the saved-experiment view:
+  one status line in the real vocabulary, a six-entry
+  navigation list (links only when complete, plain text
+  before), a static SVG flow diagram, the same
+  relationships as list text, and a provenance link
+  when a disclosure exists on the page.
+- No per-section progress, percentage, staged animation
+  or inferred timing exists anywhere in the slice; the
+  generating line labels its count as stream characters
+  received. The SVG carries no animation attributes and
+  the component has no motion in any mode.
+- Gate after implementation (sequential): new e2e spec
+  1/1 (not-started, slow-drip generating, complete with
+  working links, keyboard Tab/Enter, saved view);
+  prior project-context spec 1/1 and picker
+  reliability spec 5/5 (rerun after the overview
+  landed); collider 34/34, transfer 19/19,
+  forge_restore 4/4, backup_restore 7/7, node pass,
+  tsc/contracts/fmt clean. No assertion weakened.
+- Findings fixed during the gate, not hidden: the
+  overview's first saved line duplicated the panel's
+  own saved line (removed from the overview, criteria
+  amended above); the keyboard phase must focus
+  without activating, because fragment navigation moves
+  the sequential-focus starting point to the target;
+  the saved-view assertions must scope to the Artifacts
+  region because the panel's overview stays mounted.
+- 3D remains unfinished, as specified: no visualization
+  dependency exists in the UI, and SwarmTank 3D is the
+  M9 item (AN-014), not M8.
