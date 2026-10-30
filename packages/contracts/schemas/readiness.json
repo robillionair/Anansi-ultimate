@@ -1697,6 +1697,54 @@
         ],
         "type": "object"
       },
+      "ColliderUrlSource": {
+        "description": "URL provenance pinned on a beam at generation time.\nHonesty contract (see the M8 URL input design):\n`text_hash` is re-verifiable against the beam text at\nstart, restore, and transfer and is the trust anchor;\n`fetched_hash` is fetch-time evidence only — it proves\nwhat the fetch service returned, but it cannot be\nre-verified without refetching, and the backend never\nrefetches at start, restore, or transfer. URLs are\nshape-checked (HTTP(S), no credentials, host present,\ndefault port) but never re-resolved for a saved record:\nthe saved beam text is the generation-time truth.",
+        "properties": {
+          "bom": {
+            "type": "boolean"
+          },
+          "contentKind": {
+            "type": "string"
+          },
+          "extraction": {
+            "type": "string"
+          },
+          "fetchedBytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "fetchedHash": {
+            "type": "string"
+          },
+          "finalUrl": {
+            "type": "string"
+          },
+          "submittedUrl": {
+            "type": "string"
+          },
+          "textChars": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "textHash": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "submittedUrl",
+          "finalUrl",
+          "contentKind",
+          "extraction",
+          "fetchedBytes",
+          "fetchedHash",
+          "textHash",
+          "textChars",
+          "bom"
+        ],
+        "type": "object"
+      },
       "CostClass": {
         "description": "Cost knowledge about a model. `Unknown` is treated as paid everywhere\ncost is enforced (decision M5-D5).",
         "enum": [
@@ -1881,6 +1929,26 @@
       },
       "result": {
         "$ref": "#/$defs/ColliderResult"
+      },
+      "urlA": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/ColliderUrlSource"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "urlB": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/ColliderUrlSource"
+          },
+          {
+            "type": "null"
+          }
+        ]
       },
       "version": {
         "format": "uint32",
@@ -2700,6 +2768,54 @@
           "items"
         ],
         "type": "object"
+      },
+      "ColliderUrlSource": {
+        "description": "URL provenance pinned on a beam at generation time.\nHonesty contract (see the M8 URL input design):\n`text_hash` is re-verifiable against the beam text at\nstart, restore, and transfer and is the trust anchor;\n`fetched_hash` is fetch-time evidence only — it proves\nwhat the fetch service returned, but it cannot be\nre-verified without refetching, and the backend never\nrefetches at start, restore, or transfer. URLs are\nshape-checked (HTTP(S), no credentials, host present,\ndefault port) but never re-resolved for a saved record:\nthe saved beam text is the generation-time truth.",
+        "properties": {
+          "bom": {
+            "type": "boolean"
+          },
+          "contentKind": {
+            "type": "string"
+          },
+          "extraction": {
+            "type": "string"
+          },
+          "fetchedBytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "fetchedHash": {
+            "type": "string"
+          },
+          "finalUrl": {
+            "type": "string"
+          },
+          "submittedUrl": {
+            "type": "string"
+          },
+          "textChars": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "textHash": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "submittedUrl",
+          "finalUrl",
+          "contentKind",
+          "extraction",
+          "fetchedBytes",
+          "fetchedHash",
+          "textHash",
+          "textChars",
+          "bom"
+        ],
+        "type": "object"
       }
     },
     "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -2793,6 +2909,28 @@
           "string",
           "null"
         ]
+      },
+      "urlA": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/ColliderUrlSource"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "urlB": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/ColliderUrlSource"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
       },
       "workspaceId": {
         "type": "string"
@@ -2979,6 +3117,97 @@
       "runId"
     ],
     "title": "ColliderStartResponse",
+    "type": "object"
+  },
+  "ColliderUrlFetchRequest": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "description": "URL fetch request: one explicit Fetch action for one\nbeam. Fetching starts no inference and saves nothing;\nthe returned text is reviewed before any Collide press.",
+    "properties": {
+      "contractVersion": {
+        "default": 1,
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "projectId": {
+        "type": "string"
+      },
+      "url": {
+        "type": "string"
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "workspaceId",
+      "projectId",
+      "url"
+    ],
+    "title": "ColliderUrlFetchRequest",
+    "type": "object"
+  },
+  "ColliderUrlFetchResponse": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "description": "URL fetch response: the reviewed text plus its\nprovenance. The UI renders every field as inert text.",
+    "properties": {
+      "bom": {
+        "type": "boolean"
+      },
+      "contentKind": {
+        "type": "string"
+      },
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "extraction": {
+        "type": "string"
+      },
+      "fetchedBytes": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "fetchedHash": {
+        "type": "string"
+      },
+      "finalUrl": {
+        "type": "string"
+      },
+      "submittedUrl": {
+        "type": "string"
+      },
+      "text": {
+        "type": "string"
+      },
+      "textChars": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "textHash": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "submittedUrl",
+      "finalUrl",
+      "contentKind",
+      "extraction",
+      "fetchedBytes",
+      "fetchedHash",
+      "textHash",
+      "textChars",
+      "bom",
+      "text"
+    ],
+    "title": "ColliderUrlFetchResponse",
     "type": "object"
   },
   "CommandError": {

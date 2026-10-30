@@ -820,6 +820,7 @@ impl Core {
             | "collider-poll"
             | "collider-cancel"
             | "collider-save"
+            | "collider-fetch-url"
             | "collider-transfer"
             | "ideas-generate-start"
             | "ideas-generate-poll"

@@ -8,6 +8,7 @@ use anansi_core::collider::{
     ColliderCombination, ColliderControls, ColliderExperimentDoc, ColliderFeasibility,
     ColliderPollResponse, ColliderProductization, ColliderResult, ColliderRunRequest,
     ColliderSaveResponse, ColliderStartRequest, ColliderStartResponse,
+    ColliderUrlFetchRequest, ColliderUrlFetchResponse,
 };
 use anansi_core::evaluations::{
     AssessmentInput, ConceptSummary, EvaluationsSaveRequest, EvaluationsSaveResponse,
@@ -95,6 +96,8 @@ fn main() {
         "ColliderFeasibility":schemars::schema_for!(ColliderFeasibility),
         "ColliderProductization":schemars::schema_for!(ColliderProductization),
         "ColliderExperimentDoc":schemars::schema_for!(ColliderExperimentDoc),
+        "ColliderUrlFetchRequest":schemars::schema_for!(ColliderUrlFetchRequest),
+        "ColliderUrlFetchResponse":schemars::schema_for!(ColliderUrlFetchResponse),
         "TransferRequest":schemars::schema_for!(TransferRequest),
         "TransferResponse":schemars::schema_for!(TransferResponse),
         "TransferConceptDoc":schemars::schema_for!(TransferConceptDoc),

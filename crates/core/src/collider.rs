@@ -294,6 +294,10 @@ pub struct ColliderStartRequest {
     pub document_a: Option<ColliderDocumentSource>,
     #[serde(default)]
     pub document_b: Option<ColliderDocumentSource>,
+    #[serde(default)]
+    pub url_a: Option<ColliderUrlSource>,
+    #[serde(default)]
+    pub url_b: Option<ColliderUrlSource>,
     pub model: Option<String>,
     pub provider: Option<String>,
     pub mode: Option<String>,
@@ -378,6 +382,62 @@ pub struct ColliderDocumentSource {
     pub text_chars: u64,
 }
 
+/// URL provenance pinned on a beam at generation time.
+/// Honesty contract (see the M8 URL input design):
+/// `text_hash` is re-verifiable against the beam text at
+/// start, restore, and transfer and is the trust anchor;
+/// `fetched_hash` is fetch-time evidence only — it proves
+/// what the fetch service returned, but it cannot be
+/// re-verified without refetching, and the backend never
+/// refetches at start, restore, or transfer. URLs are
+/// shape-checked (HTTP(S), no credentials, host present,
+/// default port) but never re-resolved for a saved record:
+/// the saved beam text is the generation-time truth.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ColliderUrlSource {
+    pub submitted_url: String,
+    pub final_url: String,
+    pub content_kind: String,
+    pub extraction: String,
+    pub fetched_bytes: u64,
+    pub fetched_hash: String,
+    pub text_hash: String,
+    pub text_chars: u64,
+    pub bom: bool,
+}
+
+/// URL fetch request: one explicit Fetch action for one
+/// beam. Fetching starts no inference and saves nothing;
+/// the returned text is reviewed before any Collide press.
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ColliderUrlFetchRequest {
+    #[serde(default = "one")]
+    pub contract_version: u8,
+    pub workspace_id: String,
+    pub project_id: String,
+    pub url: String,
+}
+
+/// URL fetch response: the reviewed text plus its
+/// provenance. The UI renders every field as inert text.
+#[derive(Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ColliderUrlFetchResponse {
+    pub contract_version: u8,
+    pub submitted_url: String,
+    pub final_url: String,
+    pub content_kind: String,
+    pub extraction: String,
+    pub fetched_bytes: u64,
+    pub fetched_hash: String,
+    pub text_hash: String,
+    pub text_chars: u64,
+    pub bom: bool,
+    pub text: String,
+}
+
 /// The saved experiment body (format
 /// `anansi-collider-experiment` v1): exact beams,
 /// resolved controls, validated result, and
@@ -404,6 +464,10 @@ pub struct ColliderExperimentDoc {
     pub document_a: Option<ColliderDocumentSource>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub document_b: Option<ColliderDocumentSource>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url_a: Option<ColliderUrlSource>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url_b: Option<ColliderUrlSource>,
     pub result: ColliderResult,
     pub provider: String,
     pub model: String,
@@ -512,6 +576,80 @@ pub fn validate_document_source(source: &ColliderDocumentSource, beam: &str) -> 
     }
     if source.raw_bytes != raw.len() as u64 {
         return Err("document file size must match the submitted beam.".to_string());
+    }
+    Ok(())
+}
+
+/// Validate one beam's URL provenance against the exact
+/// submitted beam text. The text hash and char count are
+/// recomputed here and are the trust anchor; the fetched
+/// hash is format-checked only (fetch-time evidence, not
+/// re-verifiable without refetching); both URLs are
+/// shape-checked but never re-resolved or re-fetched.
+pub fn validate_url_source(source: &ColliderUrlSource, beam: &str) -> Result<(), String> {
+    if source.content_kind != "text" && source.content_kind != "html" {
+        return Err(format!(
+            "URL content kind must be text or html, got {}",
+            source.content_kind
+        ));
+    }
+    let expected_extraction = if source.content_kind == "text" {
+        "plain"
+    } else {
+        "html-conservative"
+    };
+    if source.extraction != expected_extraction {
+        return Err(format!(
+            "URL extraction must be {expected_extraction} for kind {}, got {}",
+            source.content_kind, source.extraction
+        ));
+    }
+    for (label, raw) in [
+        ("submitted URL", &source.submitted_url),
+        ("final URL", &source.final_url),
+    ] {
+        if raw.is_empty() || raw.chars().count() > 2_048 {
+            return Err(format!("URL {label} must be 1 to 2048 characters."));
+        }
+        let parsed = url::Url::parse(raw)
+            .map_err(|_| format!("URL {label} could not be parsed."))?;
+        let scheme = parsed.scheme();
+        if scheme != "http" && scheme != "https" {
+            return Err(format!("URL {label} scheme must be http or https."));
+        }
+        if !parsed.username().is_empty() || parsed.password().is_some() {
+            return Err(format!("URL {label} must not carry credentials."));
+        }
+        if parsed.host_str().map(|h| h.is_empty()).unwrap_or(true) {
+            return Err(format!("URL {label} must have a host."));
+        }
+        let default_port = if scheme == "http" { 80 } else { 443 };
+        if parsed.port_or_known_default().unwrap_or(default_port) != default_port {
+            return Err(format!("URL {label} port must be the scheme default port."));
+        }
+    }
+    if source.fetched_bytes > crate::url_fetch::MAX_FETCH_BYTES {
+        return Err(format!(
+            "URL fetched size must be at most {}, got {}",
+            crate::url_fetch::MAX_FETCH_BYTES,
+            source.fetched_bytes
+        ));
+    }
+    if source.fetched_hash.len() != 64
+        || !source
+            .fetched_hash
+            .chars()
+            .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase())
+    {
+        return Err("URL fetched hash must be 64 lowercase hex characters.".to_string());
+    }
+    let beam_bytes = beam.as_bytes();
+    let beam_chars = beam.chars().count() as u64;
+    if source.text_chars != beam_chars || beam_chars > MAX_BEAM_CHARS as u64 {
+        return Err("URL text length must match the submitted beam.".to_string());
+    }
+    if crate::content::hash(beam_bytes) != source.text_hash {
+        return Err("URL text hash must match the submitted beam.".to_string());
     }
     Ok(())
 }
@@ -683,6 +821,12 @@ pub fn validate_experiment_doc(doc: &ColliderExperimentDoc) -> Result<(), String
     }
     if let Some(document) = &doc.document_b {
         validate_document_source(document, &doc.beam_b)?;
+    }
+    if let Some(url) = &doc.url_a {
+        validate_url_source(url, &doc.beam_a)?;
+    }
+    if let Some(url) = &doc.url_b {
+        validate_url_source(url, &doc.beam_b)?;
     }
     check_controls(&doc.controls).map_err(|e| e.message.clone())?;
     validate_memory_context(&doc.memory_context)?;
@@ -1420,6 +1564,8 @@ struct ColliderRun {
     project_context: Option<ColliderProjectContext>,
     document_a: Option<ColliderDocumentSource>,
     document_b: Option<ColliderDocumentSource>,
+    url_a: Option<ColliderUrlSource>,
+    url_b: Option<ColliderUrlSource>,
     stream_run_id: String,
     capability: String,
     disclosure: Option<DisclosureRecord>,
@@ -1599,10 +1745,59 @@ pub fn collider_command(
         "collider-poll" => poll(value, scope),
         "collider-cancel" => cancel(value, scope),
         "collider-save" => save(value, scope),
+        "collider-fetch-url" => fetch_url(value, scope),
         // M8 Slice 2: model-free transfer, no run.
         "collider-transfer" => crate::transfer::transfer(value, scope),
         _ => Err(invalid("Use a supported collider operation.")),
     }
+}
+
+/// One explicit Fetch action: fetch URL text through the
+/// backend-owned bounded service and return it for review.
+/// Fetching starts no inference, saves nothing, and
+/// registers no memory or document. The project gate
+/// mirrors `start`: the fetch belongs to a writable
+/// project in the workspace. The loopback allowance is
+/// test-only (see the M8 URL input design): it is off by
+/// default, allows loopback destinations only, and never
+/// weakens TLS validation or the other address classes.
+fn fetch_url(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
+    let req: ColliderUrlFetchRequest =
+        serde_json::from_value(value).map_err(|_| invalid("Use a supported URL fetch request."))?;
+    if req.contract_version != 1 {
+        return Err(CommandError::new(
+            ErrorCode::UnsupportedContract,
+            "Use contract version 1.",
+        ));
+    }
+    let workspace_id = logical(scope)?;
+    let storage = storage(scope)?;
+    let connection = storage
+        .connection(false)?
+        .ok_or_else(crate::storage::unavailable)?;
+    crate::artifacts::require_project_writable(&connection, &workspace_id, &req.project_id)?;
+    drop(connection);
+    let policy = if std::env::var("ANANSI_URL_FETCH_ALLOW_LOOPBACK").as_deref() == Ok("1") {
+        crate::url_fetch::UrlFetchPolicy::test_loopback()
+    } else {
+        crate::url_fetch::UrlFetchPolicy::strict()
+    };
+    let fetched = crate::url_fetch::fetch_url_text(&req.url, policy, &[])
+        .map_err(|e| invalid(&e))?;
+    serde_json::to_value(ColliderUrlFetchResponse {
+        contract_version: 1,
+        submitted_url: fetched.submitted_url,
+        final_url: fetched.final_url,
+        content_kind: fetched.content_kind,
+        extraction: fetched.extraction,
+        fetched_bytes: fetched.fetched_bytes,
+        fetched_hash: fetched.fetched_hash,
+        text_hash: fetched.text_hash,
+        text_chars: fetched.text_chars,
+        bom: fetched.bom,
+        text: fetched.text,
+    })
+    .map_err(|_| crate::storage::unavailable())
 }
 
 fn storage(scope: &CallerScope) -> Result<Storage, CommandError> {
@@ -1648,6 +1843,15 @@ fn start(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
     }
     if let Some(document) = &req.document_b {
         validate_document_source(document, &req.beam_b).map_err(|e| invalid(&e))?;
+    }
+    // URL provenance is verified the same way, before any
+    // provider traffic: a forged or stale record refuses
+    // here, never after a model has seen the text.
+    if let Some(url) = &req.url_a {
+        validate_url_source(url, &req.beam_a).map_err(|e| invalid(&e))?;
+    }
+    if let Some(url) = &req.url_b {
+        validate_url_source(url, &req.beam_b).map_err(|e| invalid(&e))?;
     }
     let workspace_id = logical(scope)?;
     let storage = storage(scope)?;
@@ -1798,6 +2002,8 @@ fn start(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
                 project_context: project_context.clone(),
                 document_a: req.document_a.clone(),
                 document_b: req.document_b.clone(),
+                url_a: req.url_a.clone(),
+                url_b: req.url_b.clone(),
                 stream_run_id: String::new(),
                 capability: String::new(),
                 disclosure: None,
@@ -1838,6 +2044,8 @@ fn start(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
         project_context,
         document_a: req.document_a.clone(),
         document_b: req.document_b.clone(),
+        url_a: req.url_a.clone(),
+        url_b: req.url_b.clone(),
         stream_run_id: started
             .get("runId")
             .and_then(|v| v.as_str())
@@ -2059,6 +2267,8 @@ fn save(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
             // this variant past the lint threshold.
             document_a: Option<Box<ColliderDocumentSource>>,
             document_b: Option<Box<ColliderDocumentSource>>,
+            url_a: Option<Box<ColliderUrlSource>>,
+            url_b: Option<Box<ColliderUrlSource>>,
             // Boxed: the result struct is large by value
             // and would otherwise trip large-enum-variant.
             result: Option<Box<ColliderResult>>,
@@ -2075,6 +2285,8 @@ fn save(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
         project_context,
         document_a,
         document_b,
+        url_a,
+        url_b,
         result,
         disclosure,
     ) = loop {
@@ -2103,6 +2315,8 @@ fn save(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
                 project_context: run.project_context.clone().map(Box::new),
                 document_a: run.document_a.clone().map(Box::new),
                 document_b: run.document_b.clone().map(Box::new),
+                url_a: run.url_a.clone().map(Box::new),
+                url_b: run.url_b.clone().map(Box::new),
                 result: run.result.clone().map(Box::new),
                 disclosure: run.disclosure.clone(),
             }
@@ -2138,6 +2352,8 @@ fn save(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
                 project_context,
                 document_a,
                 document_b,
+                url_a,
+                url_b,
                 result,
                 disclosure,
             } => {
@@ -2150,6 +2366,8 @@ fn save(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
                     project_context.map(|boxed| *boxed),
                     document_a.map(|boxed| *boxed),
                     document_b.map(|boxed| *boxed),
+                    url_a.map(|boxed| *boxed),
+                    url_b.map(|boxed| *boxed),
                     result,
                     disclosure,
                 );
@@ -2170,6 +2388,8 @@ fn save(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
         project_context,
         document_a,
         document_b,
+        url_a,
+        url_b,
         result,
         provider: disclosure.provider.clone(),
         model: disclosure.model.clone(),
@@ -2263,6 +2483,8 @@ mod eviction_tests {
             project_context: None,
             document_a: None,
             document_b: None,
+            url_a: None,
+            url_b: None,
             stream_run_id: stream.to_string(),
             capability: "cap".to_string(),
             disclosure: None,

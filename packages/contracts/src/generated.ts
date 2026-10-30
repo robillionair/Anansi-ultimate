@@ -375,6 +375,8 @@ export interface ColliderExperimentDoc {
   projectContext?: ColliderProjectContext | null;
   provider: string;
   result: ColliderResult;
+  urlA?: ColliderUrlSource | null;
+  urlB?: ColliderUrlSource | null;
   version: number;
 }
 /**
@@ -539,6 +541,30 @@ export interface ColliderProductization {
   prototypeProposal: string;
   roadmap: string;
   testPlan: string;
+}
+/**
+ * URL provenance pinned on a beam at generation time.
+ * Honesty contract (see the M8 URL input design):
+ * `text_hash` is re-verifiable against the beam text at
+ * start, restore, and transfer and is the trust anchor;
+ * `fetched_hash` is fetch-time evidence only — it proves
+ * what the fetch service returned, but it cannot be
+ * re-verified without refetching, and the backend never
+ * refetches at start, restore, or transfer. URLs are
+ * shape-checked (HTTP(S), no credentials, host present,
+ * default port) but never re-resolved for a saved record:
+ * the saved beam text is the generation-time truth.
+ */
+export interface ColliderUrlSource {
+  bom: boolean;
+  contentKind: string;
+  extraction: string;
+  fetchedBytes: number;
+  fetchedHash: string;
+  finalUrl: string;
+  submittedUrl: string;
+  textChars: number;
+  textHash: string;
 }
 /**
  * Feasibility review (§25 stage 5). Hypotheses,
@@ -741,6 +767,8 @@ export interface ColliderStartRequest {
   projectContext?: ColliderProjectSelection | null;
   projectId: string;
   provider?: string | null;
+  urlA?: ColliderUrlSource | null;
+  urlB?: ColliderUrlSource | null;
   workspaceId: string;
   zeroCostLock?: boolean;
 }
@@ -821,6 +849,30 @@ export interface ColliderProjectItemSelection {
   version?: number | null;
 }
 /**
+ * URL provenance pinned on a beam at generation time.
+ * Honesty contract (see the M8 URL input design):
+ * `text_hash` is re-verifiable against the beam text at
+ * start, restore, and transfer and is the trust anchor;
+ * `fetched_hash` is fetch-time evidence only — it proves
+ * what the fetch service returned, but it cannot be
+ * re-verified without refetching, and the backend never
+ * refetches at start, restore, or transfer. URLs are
+ * shape-checked (HTTP(S), no credentials, host present,
+ * default port) but never re-resolved for a saved record:
+ * the saved beam text is the generation-time truth.
+ */
+export interface ColliderUrlSource {
+  bom: boolean;
+  contentKind: string;
+  extraction: string;
+  fetchedBytes: number;
+  fetchedHash: string;
+  finalUrl: string;
+  submittedUrl: string;
+  textChars: number;
+  textHash: string;
+}
+/**
  * Cost knowledge about a model. `Unknown` is treated as paid everywhere
  * cost is enforced (decision M5-D5).
  */
@@ -861,6 +913,34 @@ export interface AttemptRecord {
 export interface Usage {
   inputTokens: number;
   outputTokens: number;
+}
+/**
+ * URL fetch request: one explicit Fetch action for one
+ * beam. Fetching starts no inference and saves nothing;
+ * the returned text is reviewed before any Collide press.
+ */
+export interface ColliderUrlFetchRequest {
+  contractVersion?: number;
+  projectId: string;
+  url: string;
+  workspaceId: string;
+}
+/**
+ * URL fetch response: the reviewed text plus its
+ * provenance. The UI renders every field as inert text.
+ */
+export interface ColliderUrlFetchResponse {
+  bom: boolean;
+  contentKind: string;
+  contractVersion: number;
+  extraction: string;
+  fetchedBytes: number;
+  fetchedHash: string;
+  finalUrl: string;
+  submittedUrl: string;
+  text: string;
+  textChars: number;
+  textHash: string;
 }
 
 export interface CommandError {
