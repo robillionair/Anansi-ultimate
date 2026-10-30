@@ -453,10 +453,7 @@ impl DeadlineTcpStream {
     }
 
     fn timeout_error(&self) -> std::io::Error {
-        std::io::Error::new(
-            std::io::ErrorKind::TimedOut,
-            "Fetching the URL timed out.",
-        )
+        std::io::Error::new(std::io::ErrorKind::TimedOut, "Fetching the URL timed out.")
     }
 }
 
@@ -470,14 +467,11 @@ impl Read for DeadlineTcpStream {
             .set_read_timeout(Some(self.deadline.socket_timeout()))
             .is_err()
         {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "Could not configure the connection.",
-            ));
+            return Err(std::io::Error::other("Could not configure the connection."));
         }
         match self.inner.read(buf) {
             Ok(n) => Ok(n),
-            Err(e) if self.deadline.past() => Err(self.timeout_error()),
+            Err(_) if self.deadline.past() => Err(self.timeout_error()),
             Err(e) => Err(e),
         }
     }
@@ -493,14 +487,11 @@ impl Write for DeadlineTcpStream {
             .set_write_timeout(Some(self.deadline.socket_timeout()))
             .is_err()
         {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "Could not configure the connection.",
-            ));
+            return Err(std::io::Error::other("Could not configure the connection."));
         }
         match self.inner.write(buf) {
             Ok(n) => Ok(n),
-            Err(e) if self.deadline.past() => Err(self.timeout_error()),
+            Err(_) if self.deadline.past() => Err(self.timeout_error()),
             Err(e) => Err(e),
         }
     }
@@ -511,7 +502,7 @@ impl Write for DeadlineTcpStream {
         }
         match self.inner.flush() {
             Ok(()) => Ok(()),
-            Err(e) if self.deadline.past() => Err(self.timeout_error()),
+            Err(_) if self.deadline.past() => Err(self.timeout_error()),
             Err(e) => Err(e),
         }
     }
