@@ -734,10 +734,17 @@ export function Providers({ client, workspaceId }: { client: Client; workspaceId
  * backend recorded about a dispatch — provider, model, endpoint,
  * locality, cost class, routing decision, content shape,
  * redactions, usage and every attempt. */
-export function DisclosurePanel({ disclosure }: { disclosure: DisclosureRecord }) {
+export function DisclosurePanel({
+  disclosure,
+  headingId = 'providers-disclosure-title',
+}: {
+  disclosure: DisclosureRecord;
+  /** R3: an instance-scoped heading id; other panels keep the legacy id. */
+  headingId?: string;
+}) {
   return (
-    <section className="card disclosure" aria-labelledby="providers-disclosure-title">
-      <h2 id="providers-disclosure-title">View what ANANSI sent</h2>
+    <section className="card disclosure" aria-labelledby={headingId}>
+      <h2 id={headingId}>View what ANANSI sent</h2>
       <dl>
         <div><dt>Provider</dt><dd>{disclosure.provider}</dd></div>
         <div><dt>Model</dt><dd>{disclosure.model}</dd></div>

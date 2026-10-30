@@ -11,7 +11,11 @@ import type {
 } from '@anansi/contracts';
 import { DisclosurePanel } from './Providers';
 import { ColliderRunController } from './colliderRun';
-import { ColliderPipelineOverview, pipelineStateForRun } from './ColliderOverview';
+import {
+  ColliderPipelineOverview,
+  colliderResultHeadingId,
+  pipelineStateForRun,
+} from './ColliderOverview';
 
 // ---------------------------------------------------------------------------
 // Strict client-side parsing (mirrors the backend bounds in
@@ -433,7 +437,15 @@ export function parseColliderExperimentBody(
 // ---------------------------------------------------------------------------
 // Result rendering
 
-export function ColliderResultView({ result }: { result: ColliderResult }) {
+export function ColliderResultView({
+  result,
+  instanceScope,
+}: {
+  result: ColliderResult;
+  /** Instance scope for heading ids (see colliderResultHeadingId). */
+  instanceScope?: string;
+}) {
+  const heading = (slug: string) => colliderResultHeadingId(instanceScope, slug);
   return (
     <div>
       <p className="help">
@@ -441,28 +453,28 @@ export function ColliderResultView({ result }: { result: ColliderResult }) {
         assumptions — not researched facts. Nothing here establishes novelty,
         patentability, technical validation or market evidence.
       </p>
-      <section aria-labelledby="collider-understanding-heading">
-        <h4 id="collider-understanding-heading">Source understanding</h4>
+      <section aria-labelledby={heading('understanding')}>
+        <h4 id={heading('understanding')}>Source understanding</h4>
         <p>{result.sourceUnderstanding}</p>
       </section>
-      <section aria-labelledby="collider-primitives-heading">
-        <h4 id="collider-primitives-heading">Conceptual primitives</h4>
+      <section aria-labelledby={heading('primitives')}>
+        <h4 id={heading('primitives')}>Conceptual primitives</h4>
         <ul>
           {result.conceptualPrimitives.map((primitive, i) => (
             <li key={i}>{primitive}</li>
           ))}
         </ul>
       </section>
-      <section aria-labelledby="collider-mappings-heading">
-        <h4 id="collider-mappings-heading">Cross-domain mappings</h4>
+      <section aria-labelledby={heading('mappings')}>
+        <h4 id={heading('mappings')}>Cross-domain mappings</h4>
         <ul>
           {result.crossDomainMappings.map((mapping, i) => (
             <li key={i}>{mapping}</li>
           ))}
         </ul>
       </section>
-      <section aria-labelledby="collider-combinations-heading">
-        <h4 id="collider-combinations-heading">
+      <section aria-labelledby={heading('combinations')}>
+        <h4 id={heading('combinations')}>
           Proposed combinations or architectures
         </h4>
         <ul>
@@ -473,8 +485,8 @@ export function ColliderResultView({ result }: { result: ColliderResult }) {
           ))}
         </ul>
       </section>
-      <section aria-labelledby="collider-feasibility-heading">
-        <h4 id="collider-feasibility-heading">
+      <section aria-labelledby={heading('feasibility')}>
+        <h4 id={heading('feasibility')}>
           Feasibility hypotheses, dependencies, unknown costs, risks and
           testability
         </h4>
@@ -510,8 +522,8 @@ export function ColliderResultView({ result }: { result: ColliderResult }) {
           <strong>Testability.</strong> {result.feasibility.testability}
         </p>
       </section>
-      <section aria-labelledby="collider-productization-heading">
-        <h4 id="collider-productization-heading">Productization proposals</h4>
+      <section aria-labelledby={heading('productization')}>
+        <h4 id={heading('productization')}>Productization proposals</h4>
         <p>
           <strong>Concept brief.</strong> {result.productization.conceptBrief}
         </p>
@@ -533,7 +545,14 @@ export function ColliderResultView({ result }: { result: ColliderResult }) {
   );
 }
 
-export function ColliderExperimentView({ doc }: { doc: ColliderExperimentDoc }) {
+export function ColliderExperimentView({
+  doc,
+  instanceScope,
+}: {
+  doc: ColliderExperimentDoc;
+  /** Instance scope for overview links and result headings. */
+  instanceScope?: string;
+}) {
   return (
     <div>
       <p>
@@ -542,7 +561,7 @@ export function ColliderExperimentView({ doc }: { doc: ColliderExperimentDoc }) 
         immutable. It was structurally validated when generated, not factually
         verified.
       </p>
-      <ColliderPipelineOverview state="complete" />
+      <ColliderPipelineOverview state="complete" instanceScope={instanceScope} />
       <p>
         <strong>Controls.</strong> Creativity {doc.controls.creativity} ·
         technical depth {doc.controls.technicalDepth} · practicality{' '}
@@ -603,7 +622,7 @@ export function ColliderExperimentView({ doc }: { doc: ColliderExperimentDoc }) 
           ))}
         </section>
       )}
-      <ColliderResultView result={doc.result} />
+      <ColliderResultView result={doc.result} instanceScope={instanceScope} />
     </div>
   );
 }
@@ -1342,6 +1361,7 @@ export function ColliderPanel({
         partialChars={run?.partialChars ?? 0}
         error={run?.error ?? null}
         hasDisclosure={disclosure !== null}
+        disclosureId="collider-providers-disclosure-title"
       />
       <form
         onSubmit={e => {
@@ -1746,7 +1766,12 @@ export function ColliderPanel({
         </p>
       )}
       {validating && <p role="status">Validating output…</p>}
-      {disclosure && <DisclosurePanel disclosure={disclosure} />}
+      {disclosure && (
+        <DisclosurePanel
+          disclosure={disclosure}
+          headingId="collider-providers-disclosure-title"
+        />
+      )}
       {result && (
         <div>
           <ColliderResultView result={result} />

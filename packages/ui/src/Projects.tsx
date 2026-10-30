@@ -963,6 +963,7 @@ export function Projects({ client, workspaceId }: { client: Client; workspaceId:
                             <ColliderExperimentView
                               key={`collider:${workspaceId}:${current?.memory.id ?? ''}:${viewedArtifact.artifact.artifactId}:${viewedArtifact.artifact.version}`}
                               doc={parsedExperiment}
+                              instanceScope={`saved-${viewedArtifact.artifact.artifactId}-v${viewedArtifact.artifact.version}`}
                             />
                             {current && (
                               <ColliderTransferPanel

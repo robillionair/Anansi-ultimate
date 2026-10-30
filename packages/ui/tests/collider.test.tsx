@@ -15,6 +15,7 @@ import {
 } from '../src/Collider';
 import {
   ColliderPipelineOverview,
+  colliderResultHeadingId,
   pipelineStateForRun,
 } from '../src/ColliderOverview';
 
@@ -613,4 +614,21 @@ test('saved experiment view shows the complete pipeline overview', () => {
   assert.match(html, /Collision pipeline/);
   assert.match(html, /Complete/);
   assert.match(html, /href="#collider-combinations-heading"/);
+});
+
+test('R3: saved result headings and overview links share one instance scope', () => {
+  assert.equal(colliderResultHeadingId(undefined, 'combinations'), 'collider-combinations-heading');
+  const scope = 'saved-abcdef0123456789abcdef0123456789-v1';
+  assert.equal(
+    colliderResultHeadingId(scope, 'combinations'),
+    'collider-saved-abcdef0123456789abcdef0123456789-v1-combinations-heading',
+  );
+  const doc = parseColliderExperimentBody(validExperimentBody())!;
+  const html = renderToStaticMarkup(<ColliderExperimentView doc={doc} instanceScope={scope} />);
+  assert.match(html, /href="#collider-saved-abcdef0123456789abcdef0123456789-v1-combinations-heading"/);
+  assert.match(html, /id="collider-saved-abcdef0123456789abcdef0123456789-v1-combinations-heading"/);
+  assert.match(html, /aria-labelledby="collider-saved-abcdef0123456789abcdef0123456789-v1-combinations-heading"/);
+  assert.doesNotMatch(html, /href="#collider-combinations-heading"/);
+  const live = renderToStaticMarkup(<ColliderResultView result={validResult()} />);
+  assert.match(live, /id="collider-combinations-heading"/);
 });

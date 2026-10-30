@@ -56,6 +56,9 @@ export function pipelineStateForRun(
 }
 
 export type ColliderPipelineSection = {
+  /** Stable slug used to build an instance-scoped heading id. */
+  slug: string;
+  /** Legacy live-instance heading id (empty instance scope). */
   headingId: string;
   title: string;
   /** How this section relates to the others, in output order. */
@@ -64,36 +67,60 @@ export type ColliderPipelineSection = {
 
 export const COLLIDER_PIPELINE_SECTIONS: ColliderPipelineSection[] = [
   {
+    slug: 'understanding',
     headingId: 'collider-understanding-heading',
     title: 'Source understanding',
     relation: 'The shared patterns across the two beams; grounds everything below.',
   },
   {
+    slug: 'primitives',
     headingId: 'collider-primitives-heading',
     title: 'Conceptual primitives',
     relation: 'Distilled concepts from that understanding.',
   },
   {
+    slug: 'mappings',
     headingId: 'collider-mappings-heading',
     title: 'Cross-domain mappings',
     relation: 'Connections between the primitives across the two domains.',
   },
   {
+    slug: 'combinations',
     headingId: 'collider-combinations-heading',
     title: 'Proposed combinations',
     relation: 'Built from the mappings (at least two).',
   },
   {
+    slug: 'feasibility',
     headingId: 'collider-feasibility-heading',
     title: 'Feasibility',
     relation: 'Hypotheses, dependencies, unknown costs, risks and testability for the combinations.',
   },
   {
+    slug: 'productization',
     headingId: 'collider-productization-heading',
     title: 'Productization',
     relation: 'Brief, architecture, roadmap, test plan and prototype proposal for the path forward.',
   },
 ];
+
+/**
+ * R3: the heading id for one result instance. An empty
+ * scope is the live panel and keeps the legacy ids, so
+ * live URLs and locators are unchanged. A saved view
+ * passes `saved-{artifactId}-v{version}`, so its headings
+ * (and the overview links that point at them) can never
+ * resolve to the still-mounted live panel. The result
+ * view must use this same function for its heading ids.
+ */
+export function colliderResultHeadingId(
+  instanceScope: string | undefined,
+  slug: string,
+): string {
+  return instanceScope
+    ? `collider-${instanceScope}-${slug}-heading`
+    : `collider-${slug}-heading`;
+}
 
 const STATE_LABELS: Record<ColliderPipelineState, string> = {
   'not-started': 'Not started',
@@ -146,14 +173,30 @@ export function ColliderPipelineOverview({
   partialChars = 0,
   error = null,
   hasDisclosure = false,
+  instanceScope,
+  disclosureId = 'providers-disclosure-title',
 }: {
   state: ColliderPipelineState;
   partialChars?: number;
   error?: string | null;
   /** Render the provenance link only when a disclosure section exists on this page. */
   hasDisclosure?: boolean;
+  /**
+   * Instance scope for the section links (see
+   * colliderResultHeadingId). Empty for the live panel;
+   * a saved view passes its artifact scope.
+   */
+  instanceScope?: string;
+  /** Heading id of this instance's disclosure panel. */
+  disclosureId?: string;
 }) {
   const stateLabel = STATE_LABELS[state];
+  // R3 exception, deliberate: this heading id is not a
+  // link target and stays at its legacy value in both
+  // instances, because the saved-overview probe locates
+  // the saved overview by this id inside the Artifacts
+  // region. Navigation correctness is carried by the
+  // six scoped section targets, not by this heading.
   return (
     <section aria-labelledby="collider-pipeline-heading">
       <h3 id="collider-pipeline-heading">Collision pipeline</h3>
@@ -169,7 +212,9 @@ export function ColliderPipelineOverview({
           {COLLIDER_PIPELINE_SECTIONS.map(section => (
             <li key={section.headingId}>
               {state === 'complete' ? (
-                <a href={`#${section.headingId}`}>{section.title}</a>
+                <a href={`#${colliderResultHeadingId(instanceScope, section.slug)}`}>
+                  {section.title}
+                </a>
               ) : (
                 <span>{section.title}</span>
               )}
@@ -204,7 +249,7 @@ export function ColliderPipelineOverview({
       </svg>
       {hasDisclosure && (
         <p>
-          <a href="#providers-disclosure-title">
+          <a href={`#${disclosureId}`}>
             View what ANANSI sent (provenance)
           </a>
         </p>
