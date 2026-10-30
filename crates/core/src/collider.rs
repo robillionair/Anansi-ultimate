@@ -1780,11 +1780,15 @@ fn fetch_url(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
         .ok_or_else(crate::storage::unavailable)?;
     crate::artifacts::require_project_writable(&connection, &workspace_id, &req.project_id)?;
     drop(connection);
-    let policy = if std::env::var("ANANSI_URL_FETCH_ALLOW_LOOPBACK").as_deref() == Ok("1") {
-        crate::url_fetch::UrlFetchPolicy::test_loopback()
-    } else {
-        crate::url_fetch::UrlFetchPolicy::strict()
-    };
+    // The loopback test policy is available only in test
+    // and debug builds. In any other build the variable
+    // is not even read and the policy is unconditionally
+    // strict, so an ambient variable cannot relax a
+    // production build.
+    let allow_test_policy = cfg!(any(test, debug_assertions));
+    let env_flag = allow_test_policy
+        && std::env::var("ANANSI_URL_FETCH_ALLOW_LOOPBACK").as_deref() == Ok("1");
+    let policy = crate::url_fetch::policy_for_fetch(env_flag, allow_test_policy);
     let fetched =
         crate::url_fetch::fetch_url_text(&req.url, policy, &[]).map_err(|e| invalid(&e))?;
     serde_json::to_value(ColliderUrlFetchResponse {

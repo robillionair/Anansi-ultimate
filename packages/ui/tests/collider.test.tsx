@@ -153,6 +153,8 @@ test('panel renders both beams, defaults, deferred scope and starts nothing on r
   assert.match(html, /do not guarantee novelty/);
   assert.match(html, /Saved-project selection is available below/);
   assert.match(html, /URL fetching for either beam/);
+  assert.match(html, /Cancelling a fetch drops its outcome/);
+  assert.match(html, /bounded total time and saves nothing/);
   assert.match(html, /3D visualization remains deferred/);
 });
 

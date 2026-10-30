@@ -18,13 +18,16 @@
 //! no JavaScript runs: HTML extraction reads the single
 //! response body only and never requests external resources.
 //!
-//! Bounds (see the M8 URL input design): at most 5 redirects,
-//! 5s connect, 10s per socket read, a 20s total budget
-//! enforced between reads and hops (a single blocked read
-//! may extend it by at most one socket timeout), 32 KiB of
-//! headers, 1 MiB of body, extracted text 1–8,000 chars.
-//! Anything outside the bounds refuses with a generic error
-//! that never includes resolved addresses or response bodies.
+//! Bounds (see the M8 URL input design and the URL input
+//! repair design): at most 5 redirects, 5s connect, one
+//! 20s total deadline across DNS, connect, TLS handshake,
+//! writes, headers, bodies, trailers, and redirects —
+//! every socket wait uses min(remaining, 10s), so elapsed
+//! time past the deadline is bounded by scheduling
+//! granularity only — 32 KiB of headers, 1 MiB of body,
+//! extracted text 1–8,000 chars. Anything outside the
+//! bounds refuses with a generic error that never includes
+//! resolved addresses or response bodies.
 
 use rustls::pki_types::{CertificateDer, ServerName};
 use rustls::{ClientConfig, ClientConnection, RootCertStore, StreamOwned};
@@ -62,6 +65,10 @@ const DNS_TIMEOUT: Duration = Duration::from_secs(5);
 pub struct UrlFetchPolicy {
     pub allow_loopback: bool,
     pub allow_non_default_ports: bool,
+    /// Total deadline budget for one fetch. Production
+    /// uses 20s; tests may shorten it to prove deadline
+    /// enforcement quickly (never lengthened).
+    pub total_timeout: Duration,
 }
 
 impl UrlFetchPolicy {
@@ -69,6 +76,7 @@ impl UrlFetchPolicy {
         Self {
             allow_loopback: false,
             allow_non_default_ports: false,
+            total_timeout: TOTAL_BUDGET,
         }
     }
 
@@ -77,7 +85,70 @@ impl UrlFetchPolicy {
         Self {
             allow_loopback: true,
             allow_non_default_ports: true,
+            total_timeout: TOTAL_BUDGET,
         }
+    }
+
+    /// Shorten (never lengthen) the total budget. Test
+    /// use only: it proves the deadline mechanism without
+    /// waiting out the production budget.
+    pub fn with_total_timeout(mut self, total: Duration) -> Self {
+        self.total_timeout = total.min(TOTAL_BUDGET);
+        self
+    }
+}
+
+/// Select the fetch policy for one operation. The
+/// loopback test policy is available only when the
+/// caller build allows it (test or debug builds); in
+/// any other build the policy is unconditionally
+/// strict, so an ambient environment variable cannot
+/// relax a production build.
+pub fn policy_for_fetch(env_flag: bool, allow_test_policy: bool) -> UrlFetchPolicy {
+    if env_flag && allow_test_policy {
+        UrlFetchPolicy::test_loopback()
+    } else {
+        UrlFetchPolicy::strict()
+    }
+}
+
+/// One total deadline spanning every phase of a fetch:
+/// DNS, connect, TLS handshake, request write, header
+/// lines, chunk headers and bodies, trailers,
+/// close-delimited bodies, and every redirect hop.
+#[derive(Debug, Clone, Copy)]
+struct Deadline {
+    end: Instant,
+}
+
+impl Deadline {
+    fn new(total: Duration) -> Self {
+        Self {
+            end: Instant::now() + total,
+        }
+    }
+
+    fn remaining(&self) -> Duration {
+        self.end.saturating_duration_since(Instant::now())
+    }
+
+    fn check(&self) -> Result<(), String> {
+        if Instant::now() >= self.end {
+            Err(err("Fetching the URL timed out."))
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Socket timeout for the next wait: the per-call
+    /// cap, shrunk to the remaining budget, so a wait
+    /// that starts late cannot run past the deadline.
+    fn socket_timeout(&self) -> Duration {
+        self.remaining().min(READ_TIMEOUT)
+    }
+
+    fn past(&self) -> bool {
+        Instant::now() >= self.end
     }
 }
 
@@ -113,10 +184,18 @@ fn err(message: impl Into<String>) -> String {
 
 /// Whether an address is a public destination under the policy.
 ///
-/// Explicit IANA special-range classification. The ranges
-/// cover every special-use block, so anything outside them
-/// is treated as public; the classification is auditable
-/// without depending on standard-library stability.
+/// IPv4 uses an explicit deny-list audited against the
+/// IANA IPv4 Special-Purpose Address Registry. IPv6 uses
+/// an allowlist: only ordinary global unicast inside
+/// 2000::/3 (IANA IPv6 Address Space Registry) minus the
+/// special-purpose exclusions inside that range (IANA
+/// IPv6 Special-Purpose Address Registry) is public, so
+/// reserved space needs no enumeration to be refused.
+/// Transition forms are classified by what they name:
+/// IPv4-mapped by the embedded IPv4 address, 6to4 by its
+/// embedded IPv4 address. The prefix table below is the
+/// auditable record; it does not depend on
+/// standard-library stability.
 pub fn is_public_address(ip: IpAddr, policy: UrlFetchPolicy) -> bool {
     if policy.allow_loopback && ip.is_loopback() {
         return true;
@@ -125,6 +204,13 @@ pub fn is_public_address(ip: IpAddr, policy: UrlFetchPolicy) -> bool {
         IpAddr::V4(v4) => is_public_v4(v4),
         IpAddr::V6(v6) => is_public_v6(v6),
     }
+}
+
+/// Whether every address in a DNS answer is public. A
+/// mixed answer is refused: one non-public address is
+/// enough to reject the whole name.
+fn all_public(addrs: &[SocketAddr], policy: UrlFetchPolicy) -> bool {
+    addrs.iter().all(|a| is_public_address(a.ip(), policy))
 }
 
 fn is_public_v4(ip: Ipv4Addr) -> bool {
@@ -173,9 +259,6 @@ fn is_public_v4(ip: Ipv4Addr) -> bool {
 }
 
 fn is_public_v6(ip: Ipv6Addr) -> bool {
-    if ip.is_unspecified() || ip.is_loopback() || ip.is_multicast() {
-        return false;
-    }
     // IPv4-mapped addresses embed an IPv4 address: classify
     // the embedded address, so ::ffff:127.0.0.1 cannot
     // bypass the IPv4 rules.
@@ -183,33 +266,45 @@ fn is_public_v6(ip: Ipv6Addr) -> bool {
         return is_public_v4(v4);
     }
     let s = ip.segments();
-    // Link-local fe80::/10, ULA fc00::/7, documentation
-    // 2001:db8::/32, discard 100::/64, NAT64 well-known
-    // prefixes, Teredo 2001::/32, benchmarking 2001:2::/48,
-    // ORCHID 2001:10::/28.
-    if (s[0] & 0xffc0) == 0xfe80 {
+    // 6to4 2002::/16 embeds an IPv4 address in bits
+    // 16..48: classify it by the IPv4 rules, so a 6to4
+    // address naming a private IPv4 address is refused.
+    if s[0] == 0x2002 {
+        let embedded = Ipv4Addr::new(
+            (s[1] >> 8) as u8,
+            (s[1] & 0xff) as u8,
+            (s[2] >> 8) as u8,
+            (s[2] & 0xff) as u8,
+        );
+        return is_public_v4(embedded);
+    }
+    // Global-unicast allowlist: only 2000::/3 can be
+    // public. Everything outside it — loopback,
+    // unspecified, link-local, ULA, deprecated site-local
+    // fec0::/10 (RFC 3879), multicast, discard 100::/64,
+    // NAT64 prefixes, and all other reserved space — is
+    // refused by this rule alone, with no enumeration.
+    if (s[0] & 0xe000) != 0x2000 {
         return false;
     }
-    if (s[0] & 0xfe00) == 0xfc00 {
+    // Special-purpose exclusions inside 2000::/3.
+    // The whole IANA-special 2001::/23 block is refused
+    // at once, which covers Teredo 2001::/32, PCP/TURN
+    // anycast 2001:1::/32, benchmarking 2001:2::/48,
+    // ORCHID 2001:10::/28, ORCHIDv2 2001:20::/28, and
+    // AS112 2001:4:112::/48, plus any future special
+    // assignment inside that block.
+    if s[0] == 0x2001 && (s[1] & 0xfe00) == 0x0000 {
         return false;
     }
     if s[0] == 0x2001 && s[1] == 0x0db8 {
-        return false;
+        return false; // Documentation 2001:db8::/32
     }
-    if s[0] == 0x0100 {
-        return false;
+    if s[0] == 0x3fff && (s[1] & 0xf000) == 0x0000 {
+        return false; // Documentation 3fff::/20
     }
-    if s[0] == 0x0064 && s[1] == 0xff9b {
-        return false;
-    }
-    if s[0] == 0x2001 && s[1] == 0x0000 {
-        return false;
-    }
-    if s[0] == 0x2001 && s[1] == 0x0002 {
-        return false;
-    }
-    if s[0] == 0x2001 && (s[1] & 0xfff0) == 0x0010 {
-        return false;
+    if s[0] == 0x2620 && s[1] == 0x004d && s[2] == 0x4000 {
+        return false; // AS112 2620:4d:4000::/48
     }
     true
 }
@@ -227,7 +322,11 @@ struct HopTarget {
 /// port, host class, and — for DNS names — resolution with
 /// every resolved address classified. Returns the address
 /// to connect to, so the caller never re-resolves.
-fn validate_target(url: &url::Url, policy: UrlFetchPolicy) -> Result<HopTarget, String> {
+fn validate_target(
+    url: &url::Url,
+    policy: UrlFetchPolicy,
+    deadline: &Deadline,
+) -> Result<HopTarget, String> {
     let scheme = url.scheme();
     if scheme != "http" && scheme != "https" {
         return Err(err("URL scheme must be http or https."));
@@ -269,14 +368,12 @@ fn validate_target(url: &url::Url, policy: UrlFetchPolicy) -> Result<HopTarget, 
             SocketAddr::new(ip, port)
         }
         _ => {
-            let addrs = resolve(&host, port)?;
+            let addrs = resolve(&host, port, deadline)?;
             if addrs.is_empty() {
                 return Err(err("URL host did not resolve."));
             }
-            for addr in &addrs {
-                if !is_public_address(addr.ip(), policy) {
-                    return Err(err("URL host resolves to a non-public address."));
-                }
+            if !all_public(&addrs, policy) {
+                return Err(err("URL host resolves to a non-public address."));
             }
             // Every resolved address passed, so connecting
             // to the first cannot reach an unvalidated one.
@@ -295,17 +392,28 @@ fn validate_target(url: &url::Url, policy: UrlFetchPolicy) -> Result<HopTarget, 
 /// has no timeout, so resolution runs on a thread the
 /// caller abandons on timeout; the thread itself is
 /// harmless and exits when the resolver returns.
-fn resolve(host: &str, port: u16) -> Result<Vec<SocketAddr>, String> {
+fn resolve(host: &str, port: u16, deadline: &Deadline) -> Result<Vec<SocketAddr>, String> {
+    deadline.check()?;
     let host = host.to_string();
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
         let result = (host.as_str(), port).to_socket_addrs().map(|i| i.collect());
         let _ = tx.send(result);
     });
-    match rx.recv_timeout(DNS_TIMEOUT) {
+    // The resolver thread cannot be killed, so on timeout
+    // it is abandoned: it carries no socket and exits
+    // when the resolver returns, while this worker still
+    // returns by the deadline.
+    match rx.recv_timeout(deadline.remaining().min(DNS_TIMEOUT)) {
         Ok(Ok(addrs)) => Ok(addrs),
         Ok(Err(_)) => Err(err("URL host did not resolve.")),
-        Err(_) => Err(err("URL host resolution timed out.")),
+        Err(_) => {
+            if deadline.past() {
+                Err(err("Fetching the URL timed out."))
+            } else {
+                Err(err("URL host resolution timed out."))
+            }
+        }
     }
 }
 
@@ -327,6 +435,23 @@ impl Read for FetchStream {
     }
 }
 
+impl FetchStream {
+    /// Set both socket timeouts on the underlying TCP
+    /// stream (through the TLS layer when present), so
+    /// the next wait honors the remaining budget.
+    fn set_timeouts(&self, timeout: Duration) -> Result<(), String> {
+        let tcp = match self {
+            FetchStream::Plain(s) => s,
+            FetchStream::Tls(s) => s.get_ref(),
+        };
+        tcp.set_read_timeout(Some(timeout))
+            .map_err(|_| err("Could not configure the connection."))?;
+        tcp.set_write_timeout(Some(timeout))
+            .map_err(|_| err("Could not configure the connection."))?;
+        Ok(())
+    }
+}
+
 impl Write for FetchStream {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         match self {
@@ -344,16 +469,23 @@ impl Write for FetchStream {
 }
 
 /// Small buffered reader with caps, over a fetch stream.
+/// Every fill re-checks the total deadline and shrinks
+/// the socket timeout to the remaining budget first, so
+/// a dribbled stream cannot outlive the deadline: each
+/// read returns data or waits at most the remaining time,
+/// and the next fill re-checks before waiting again.
 struct CappedReader<'a> {
     inner: &'a mut FetchStream,
+    deadline: Deadline,
     buf: Vec<u8>,
     pos: usize,
 }
 
 impl<'a> CappedReader<'a> {
-    fn new(inner: &'a mut FetchStream) -> Self {
+    fn new(inner: &'a mut FetchStream, deadline: Deadline) -> Self {
         Self {
             inner,
+            deadline,
             buf: Vec::new(),
             pos: 0,
         }
@@ -363,6 +495,8 @@ impl<'a> CappedReader<'a> {
         if self.pos < self.buf.len() {
             return Ok(true);
         }
+        self.deadline.check()?;
+        self.inner.set_timeouts(self.deadline.socket_timeout())?;
         self.buf.clear();
         self.pos = 0;
         let mut chunk = [0u8; 8192];
@@ -372,7 +506,13 @@ impl<'a> CappedReader<'a> {
                 self.buf.extend_from_slice(&chunk[..n]);
                 Ok(true)
             }
-            Err(e) => Err(err(format!("Failed reading the response: {e}"))),
+            Err(e) => {
+                if self.deadline.past() {
+                    Err(err("Fetching the URL timed out."))
+                } else {
+                    Err(err(format!("Failed reading the response: {e}")))
+                }
+            }
         }
     }
 
@@ -453,15 +593,13 @@ impl ResponseHead {
 /// Read one HTTP/1.x response, retaining headers.
 fn read_response_inner(
     stream: &mut FetchStream,
-    deadline: Instant,
+    deadline: Deadline,
 ) -> Result<ResponseHead, String> {
-    let mut reader = CappedReader::new(stream);
+    let mut reader = CappedReader::new(stream, deadline);
     let mut header_bytes = 0usize;
     let mut lines: Vec<String> = Vec::new();
     loop {
-        if Instant::now() > deadline {
-            return Err(err("Fetching the URL timed out."));
-        }
+        deadline.check()?;
         let line = reader.read_line(MAX_HEADER_BYTES)?;
         header_bytes += line.len();
         if header_bytes > MAX_HEADER_BYTES {
@@ -510,9 +648,7 @@ fn read_response_inner(
     let body = if chunked {
         let mut out = Vec::new();
         loop {
-            if Instant::now() > deadline {
-                return Err(err("Fetching the URL timed out."));
-            }
+            deadline.check()?;
             let size_line = reader.read_line(256)?;
             let size_text = size_line.trim().split(';').next().unwrap_or("").trim();
             let size = usize::from_str_radix(size_text, 16)
@@ -574,13 +710,20 @@ fn build_tls_config(extra_roots: &[CertificateDer<'static>]) -> Arc<ClientConfig
 fn request_once(
     target: &HopTarget,
     tls_config: &Arc<ClientConfig>,
-    deadline: Instant,
+    deadline: Deadline,
 ) -> Result<ResponseHead, String> {
-    let tcp = TcpStream::connect_timeout(&target.addr, CONNECT_TIMEOUT)
-        .map_err(|e| err(format!("Could not connect to the URL host: {e}")))?;
-    tcp.set_read_timeout(Some(READ_TIMEOUT))
+    deadline.check()?;
+    let tcp = TcpStream::connect_timeout(&target.addr, deadline.remaining().min(CONNECT_TIMEOUT))
+        .map_err(|e| {
+            if deadline.past() {
+                err("Fetching the URL timed out.")
+            } else {
+                err(format!("Could not connect to the URL host: {e}"))
+            }
+        })?;
+    tcp.set_read_timeout(Some(deadline.socket_timeout()))
         .map_err(|_| err("Could not configure the connection."))?;
-    tcp.set_write_timeout(Some(READ_TIMEOUT))
+    tcp.set_write_timeout(Some(deadline.socket_timeout()))
         .map_err(|_| err("Could not configure the connection."))?;
     let mut stream = if target.url.scheme() == "https" {
         let server_name = if let Ok(ip) = target.host.parse::<IpAddr>() {
@@ -589,8 +732,47 @@ fn request_once(
             ServerName::try_from(target.host.clone())
                 .map_err(|_| err("URL host is not a valid TLS server name."))?
         };
-        let conn = ClientConnection::new(tls_config.clone(), server_name)
-            .map_err(|e| err(format!("Could not start TLS: {e}")))?;
+        let mut conn = ClientConnection::new(tls_config.clone(), server_name)
+            .map_err(|_| err("Could not start TLS."))?;
+        // Drive the handshake explicitly so every wait
+        // honors the remaining budget: a stalled or
+        // dribbled handshake cannot outlive the deadline.
+        // Certificate and hostname validation are rustls
+        // defaults inside process_new_packets.
+        let mut tcp = tcp;
+        loop {
+            deadline.check()?;
+            tcp.set_read_timeout(Some(deadline.socket_timeout()))
+                .map_err(|_| err("Could not configure the connection."))?;
+            tcp.set_write_timeout(Some(deadline.socket_timeout()))
+                .map_err(|_| err("Could not configure the connection."))?;
+            while conn.wants_write() {
+                conn.write_tls(&mut tcp).map_err(|_| {
+                    if deadline.past() {
+                        err("Fetching the URL timed out.")
+                    } else {
+                        err("Could not complete TLS.")
+                    }
+                })?;
+            }
+            if !conn.is_handshaking() {
+                break;
+            }
+            conn.read_tls(&mut tcp).map_err(|_| {
+                if deadline.past() {
+                    err("Fetching the URL timed out.")
+                } else {
+                    err("Could not complete TLS.")
+                }
+            })?;
+            conn.process_new_packets().map_err(|_| {
+                if deadline.past() {
+                    err("Fetching the URL timed out.")
+                } else {
+                    err("Could not complete TLS.")
+                }
+            })?;
+        }
         FetchStream::Tls(Box::new(StreamOwned::new(conn, tcp)))
     } else {
         FetchStream::Plain(tcp)
@@ -623,15 +805,27 @@ fn request_once(
     let request = format!(
         "GET {target_text} HTTP/1.1\r\nHost: {host_header}\r\nUser-Agent: ANANSI-url-fetch/1\r\nAccept: text/plain, text/html\r\nAccept-Encoding: identity\r\nConnection: close\r\n\r\n"
     );
+    deadline.check()?;
+    stream.set_timeouts(deadline.socket_timeout())?;
     stream
         .write_all(request.as_bytes())
-        .map_err(|e| err(format!("Failed sending the request: {e}")))?;
+        .map_err(|_| {
+            if deadline.past() {
+                err("Fetching the URL timed out.")
+            } else {
+                err("Failed sending the request.")
+            }
+        })?;
     stream
         .flush()
-        .map_err(|e| err(format!("Failed sending the request: {e}")))?;
-    if Instant::now() > deadline {
-        return Err(err("Fetching the URL timed out."));
-    }
+        .map_err(|_| {
+            if deadline.past() {
+                err("Fetching the URL timed out.")
+            } else {
+                err("Failed sending the request.")
+            }
+        })?;
+    deadline.check()?;
     read_response_inner(&mut stream, deadline)
 }
 
@@ -830,14 +1024,12 @@ pub fn fetch_url_text(
         url::Url::parse(submitted_trimmed).map_err(|_| err("URL could not be parsed."))?;
     current.set_fragment(None);
     let tls_config = build_tls_config(extra_roots);
-    let deadline = Instant::now() + TOTAL_BUDGET;
+    let deadline = Deadline::new(policy.total_timeout);
     let mut final_url = String::new();
     let mut fetched: Option<ResponseHead> = None;
     for hop in 0..=MAX_REDIRECTS {
-        if Instant::now() > deadline {
-            return Err(err("Fetching the URL timed out."));
-        }
-        let target = validate_target(&current, policy)?;
+        deadline.check()?;
+        let target = validate_target(&current, policy, &deadline)?;
         let response = request_once(&target, &tls_config, deadline)?;
         match response.status {
             200 => {
@@ -947,24 +1139,67 @@ mod url_fetch_tests {
         for blocked in [
             "::",
             "::1",
+            "::2",
             "fe80::1",
+            "fec0::1",
             "fc00::1",
             "fd00::1",
             "ff02::1",
-            "2001:db8::1",
+            "100::1",
+            "64:ff9b::1",
+            "64:ff9b:1::1",
             "2001::1",
+            "2001:1::1",
+            "2001:2::1",
+            "2001:10::1",
+            "2001:1f::1",
+            "2001:20::1",
+            "2001:2f::1",
+            "2001:db8::1",
+            "2001:4:112::1",
+            "2620:4d:4000::1",
+            "3fff::1",
+            "5f00::1",
             "::ffff:127.0.0.1",
             "::ffff:10.0.0.1",
+            // 6to4 naming a private or loopback IPv4 address.
+            "2002:0a00:0001::",
+            "2002:7f00:0001::",
         ] {
             assert!(
                 !is_public_address(blocked.parse().unwrap(), policy),
                 "{blocked} must be blocked"
             );
         }
-        assert!(is_public_address(
-            "2001:4860:4860::8888".parse().unwrap(),
-            policy
-        ));
+        for public in [
+            "2001:4860:4860::8888",
+            "2606:4700:4700::1111",
+            // Mapped and 6to4 forms of public IPv4 addresses.
+            "::ffff:8.8.8.8",
+            "2002:0808:0808::",
+            // Just outside the private/CGNAT/benchmarking edges.
+            "172.32.0.1",
+            "100.128.0.1",
+        ] {
+            assert!(
+                is_public_address(public.parse().unwrap(), policy),
+                "{public} must be public"
+            );
+        }
+        for blocked in [
+            "0.1.2.3",
+            "172.31.255.255",
+            "100.127.255.255",
+            "198.19.255.255",
+            "192.0.0.170",
+            "192.0.0.171",
+            "255.255.255.255",
+        ] {
+            assert!(
+                !is_public_address(blocked.parse().unwrap(), policy),
+                "{blocked} must be blocked"
+            );
+        }
         // Loopback passes only under the test policy.
         assert!(is_public_address(
             "127.0.0.1".parse().unwrap(),
@@ -977,8 +1212,50 @@ mod url_fetch_tests {
     }
 
     #[test]
+    fn policy_selection_is_strict_without_a_test_build() {
+        // Both branches of the pure selector: the test
+        // policy needs the flag AND a test/debug build.
+        assert!(policy_for_fetch(true, true).allow_loopback);
+        assert!(!policy_for_fetch(true, false).allow_loopback);
+        assert!(!policy_for_fetch(false, true).allow_loopback);
+        assert!(!policy_for_fetch(false, false).allow_loopback);
+    }
+
+    #[test]
+    fn mixed_dns_answers_are_refused() {
+        let policy = strict();
+        let public: SocketAddr = "8.8.8.8:80".parse().unwrap();
+        let private: SocketAddr = "10.0.0.1:80".parse().unwrap();
+        assert!(all_public(&[public], policy));
+        assert!(!all_public(&[public, private], policy));
+        assert!(!all_public(&[private, public], policy));
+    }
+
+    #[test]
+    fn numeric_ipv4_literal_encodings_are_classified() {
+        // The WHATWG URL parser normalizes hex, decimal,
+        // and octal IPv4 forms to dotted-decimal before
+        // classification, so none of these reaches DNS or
+        // a socket as anything but 127.0.0.1.
+        let policy = strict();
+        let deadline = Deadline::new(TOTAL_BUDGET);
+        for literal in ["0x7f000001", "2130706433", "0177.0.0.1"] {
+            let url = url::Url::parse(&format!("http://{literal}/")).unwrap();
+            assert!(
+                matches!(url.host(), Some(url::Host::Ipv4(v4)) if v4.octets() == [127, 0, 0, 1]),
+                "{literal} must parse as IPv4 loopback"
+            );
+            assert!(
+                validate_target(&url, policy, &deadline).is_err(),
+                "{literal} must be refused"
+            );
+        }
+    }
+
+    #[test]
     fn target_validation_refuses_shapes_without_connecting() {
         let policy = strict();
+        let deadline = Deadline::new(TOTAL_BUDGET);
         for bad in [
             "ftp://example.com/file.txt",
             "https://user:secret@example.com/",
@@ -996,18 +1273,18 @@ mod url_fetch_tests {
                 continue;
             };
             assert!(
-                validate_target(&url, policy).is_err(),
+                validate_target(&url, policy, &deadline).is_err(),
                 "{bad} must be refused"
             );
         }
         // A public literal target validates (no connection made).
         let url = url::Url::parse("https://8.8.8.8/").unwrap();
-        let target = validate_target(&url, policy).unwrap();
+        let target = validate_target(&url, policy, &deadline).unwrap();
         assert_eq!(target.port, 443);
         // Test policy allows loopback with any port.
         let test = UrlFetchPolicy::test_loopback();
         let url = url::Url::parse("http://127.0.0.1:45111/page").unwrap();
-        let target = validate_target(&url, test).unwrap();
+        let target = validate_target(&url, test, &deadline).unwrap();
         assert_eq!(target.port, 45111);
     }
 

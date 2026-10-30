@@ -1878,6 +1878,8 @@ export function ColliderPanel({
         instructions to the model. Nothing starts until you press Collide Ideas.
         Saved-project selection is available below, as is .txt/.md
         document input for either beam, and URL fetching for either beam.
+        Cancelling a fetch drops its outcome; any in-flight backend fetch
+        still ends within its bounded total time and saves nothing.
         3D visualization remains deferred.
       </p>
       <ColliderPipelineOverview

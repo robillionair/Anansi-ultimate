@@ -25,11 +25,12 @@ address is public only when it is ordinary global unicast:
   address naming a private IPv4 address is refused.
 - Otherwise: inside `2000::/3` (the global unicast
   allocation) AND outside every special-purpose exclusion
-  inside that range: Teredo `2001::/32`, benchmarking
-  `2001:2::/48`, ORCHID `2001:10::/28`, ORCHIDv2
-  `2001:20::/28`, documentation `2001:db8::/32`,
-  AS112 `2001:4:112::/48` and `2620:4d:4000::/48`,
-  PCP/TURN anycast `2001:1::/32`.
+  inside that range: the whole IANA-special `2001::/23`
+  block (covering Teredo `2001::/32`, PCP/TURN anycast
+  `2001:1::/32`, benchmarking `2001:2::/48`, ORCHID
+  `2001:10::/28`, ORCHIDv2 `2001:20::/28`, and AS112
+  `2001:4:112::/48`), documentation `2001:db8::/32`
+  and `3fff::/20`, and AS112 `2620:4d:4000::/48`.
 
 Everything outside `2000::/3` is refused by the rule
 itself, which covers loopback, unspecified, link-local,
