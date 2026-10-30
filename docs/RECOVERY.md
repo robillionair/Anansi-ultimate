@@ -1,5 +1,19 @@
 # ANANSI Ultimate — Recovery Guide
 
+## Current M8 lineage repair — 2026-10-30
+
+Use branch `muse/m8-lineage-repair`, from reviewer tip `e03c9bde`.
+The resumed-work lineage regression is repaired on Linux (see the
+repair design and addendum in `docs/handoffs/` and the BUILD_STATUS
+entry): restore writes the full alias set under a widened
+`restore_origins` key, schema 10 → 11, with a v10 legacy
+verification path that migrates only the staging copy. Validation
+is unchanged (exact pair lookup). Independent Windows rerun by
+ChatGPT is still pending and is the next review step, including a
+real v10 backup restore; do not treat Linux evidence as closing
+it. Owner previews/data and reviewer worktrees remain untouched.
+No cloud calls, pushes, CI or promotion.
+
 ## Current provenance Windows review — 2026-10-30
 
 Use `E:/Anansi/worktrees/review-m8-overnight`, branch `codex/review-m8-r1-provenance`, incoming `b6a3251c`. [Verified outcomes and R4](reviews/windows-m8-r1-provenance.md): original four probes pass, but new work created after a restore loses intermediate identity authority on a later recovery. Do not promote; preserve exact mapping authority, immutable snapshots and prior R1–R3 fixes. Muse owns the bounded lineage implementation; reviewer additions only test/document the failure. Antigravity tooling and owner previews/data are separate. No automatic cloud, CI, pushes or audit-monitor activation.

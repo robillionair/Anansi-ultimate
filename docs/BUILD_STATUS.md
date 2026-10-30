@@ -6,6 +6,33 @@ Incoming `b6a3251c4d6fe68c97ca57b461e60f44586850bb`; [Windows provenance review]
 
 Incoming `d0a6c1e1dd8612c954e9aceee9d735f5653780c8`; [independent Windows repair review](reviews/windows-m8-overnight-repair.md). Original Rust probes 2/2 and browser reviewer/instance/project/integrated specs 4/4 pass; source boundary 7/7, UI/contracts 90/90 and static/build checks pass. Two added generic-revision attacks remain accepted by restore: missing optional project context skips the final immutable comparison, and unknown-old/present-new IDs are accepted without actual restore-origin mapping (including a never-restored package). R2 final-hash ordering and R3 source-scoped navigation are verified in focused scope; R1 and promotion stay blocked. Reviewer changes only add tests/docs; no runtime implementation, cloud, downloads, pushes or CI.
 
+## 2026-10-30 — M8 lineage repair: resumed-work multi-generation recovery repaired (Linux; independent Windows rerun pending)
+
+On branch `muse/m8-lineage-repair` from reviewer tip `e03c9bde`
+(incoming `b6a3251c` plus reviewer probe/docs only; design committed
+before code in `docs/handoffs/M8-lineage-repair-design.md`, record
+in `docs/handoffs/M8-lineage-repair-addendum.md`). Restore now
+writes the full alias set (latest hop plus every prior generation
+from the source package's own origins rows) under a widened
+`restore_origins` key `(workspace_id, new_id, original_id)`;
+schema 10 → 11 with a v10 legacy verification path that migrates
+only the staging copy. Validation is unchanged (exact pair
+lookup), so A-era, B-era and C-era snapshots all validate while
+wrong/bogus/foreign pairs still refuse. Before: reviewer probes
+4/5 (R4 fails at C → D). After (sequential, Linux): reviewer
+probes 5/5, collider 41/41, transfer 19/19, forge_restore 4/4,
+backup_restore 7/7, backup_artifacts 5/5, opportunities_restore
+3/3, entities_roundtrip 7/7, lib 74/74, node 90/90, 23 affected
+browser tests passing, strict Clippy/fmt/tsc/contracts/docs/
+builds clean, full core and providers+API totals in the delivery
+MANIFEST (only the known live-Ollama semantic_workflow environment
+failures expected). Pre-R1b multi-hop packages remain
+fail-closed (see addendum); a real v10 backup restore end to end
+is a Windows checklist item. This does not close Windows
+verification of this repair or of Slice 4, M7 native acceptance +
+preview promotion, M5 gates, G1 audit, or the §32 sandbox. No
+cloud, credential, download, push, merge, CI, or promotion.
+
 ## 2026-10-30 — M8 R1 provenance repair: remaining two probes repaired (Linux; independent Windows rerun pending)
 
 On branch `muse/m8-r1-provenance-repair` from reviewer tip `7388b7fa`

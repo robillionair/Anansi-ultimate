@@ -1,5 +1,16 @@
 # ANANSI Ultimate — Requirements Matrix
 
+## M8 lineage repair — 2026-10-30
+
+AN-013/018/019/024 remain in progress. The resumed-work lineage
+regression (R4: new work after a restore losing its intermediate
+generation's provenance) is repaired on Linux on branch
+`muse/m8-lineage-repair` (design + addendum in `docs/handoffs/`);
+independent Windows rerun is pending and is required before any
+acceptance claim, including a real v10 backup restore. Do not
+infer complete M8, recovery or native certification from Linux or
+passing happy paths.
+
 ## R1 repair Windows review and resumed-work lineage — 2026-10-30
 
 AN-013/018/019/024 remain in progress. [Focused Windows review](reviews/windows-m8-r1-provenance.md) confirms the four earlier probes and browser/UI/static checks pass; a new valid resumed-work/multi-generation restore case fails because intermediate provenance is lost. Preserve repaired forgery controls; recovery/promotion and native/production certification remain open.
