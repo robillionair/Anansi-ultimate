@@ -623,10 +623,13 @@ pub fn validate_url_source(source: &ColliderUrlSource, beam: &str) -> Result<(),
         if parsed.host_str().map(|h| h.is_empty()).unwrap_or(true) {
             return Err(format!("URL {label} must have a host."));
         }
-        let default_port = if scheme == "http" { 80 } else { 443 };
-        if parsed.port_or_known_default().unwrap_or(default_port) != default_port {
-            return Err(format!("URL {label} port must be the scheme default port."));
-        }
+        // No port restriction here: the port is a fetch-
+        // policy matter (the production policy allows only
+        // default ports), and a saved record is never
+        // fetched or connected to — it is inert text.
+        // Restricting the record would refuse records the
+        // fetch service legitimately produced under a
+        // wider test policy.
     }
     if source.fetched_bytes > crate::url_fetch::MAX_FETCH_BYTES {
         return Err(format!(

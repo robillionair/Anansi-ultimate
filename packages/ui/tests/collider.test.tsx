@@ -922,7 +922,9 @@ test('experiment body parser accepts valid url provenance and rejects malformed 
   };
   assert.deepEqual(parseColliderUrlSource(source), source);
   assert.equal(parseColliderUrlSource({ ...source, submittedUrl: 'https://user:pw@example.com/' }), null);
-  assert.equal(parseColliderUrlSource({ ...source, finalUrl: 'https://example.com:8443/' }), null);
+  // A non-default port is not a forgery: the record is
+  // inert text and the port is a fetch-policy matter.
+  assert.equal(parseColliderUrlSource({ ...source, finalUrl: 'https://example.com:8443/' })?.finalUrl, 'https://example.com:8443/');
   assert.equal(parseColliderUrlSource({ ...source, contentKind: 'pdf' }), null);
   assert.equal(parseColliderUrlSource({ ...source, extraction: 'plain' }), null);
   assert.equal(parseColliderUrlSource({ ...source, fetchedHash: 'xyz' }), null);

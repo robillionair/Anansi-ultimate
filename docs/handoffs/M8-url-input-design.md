@@ -168,9 +168,15 @@ enforced by `validate_url_source` and stated in the UI:
   never trusted as a beam-text anchor.
 - `submittedUrl`/`finalUrl` are shape-checked at
   start/restore/transfer (HTTP(S), no credentials, host
-  present, default port, length at most 2048 chars),
-  but a saved record is not re-resolved or re-fetched:
-  the saved beam text is the generation-time truth.
+  present, length at most 2048 chars), but a saved
+  record is not re-resolved or re-fetched: the saved
+  beam text is the generation-time truth. The port is
+  deliberately not restricted here: it is a fetch-policy
+  matter (the production fetch policy allows only
+  default ports), and a saved record is never fetched
+  or connected to, so restricting the record would
+  refuse records the fetch service legitimately
+  produced under a wider test policy.
 
 `ColliderStartRequest` gains optional `urlA`/`urlB`
 (serde defaults), `ColliderExperimentDoc` gains optional

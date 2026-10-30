@@ -472,8 +472,8 @@ export function parseColliderUrlSource(
     }
     if (parsed.username !== '' || parsed.password !== '') return null;
     if (parsed.hostname === '') return null;
-    const defaultPort = parsed.protocol === 'http:' ? '80' : '443';
-    if (parsed.port !== '' && parsed.port !== defaultPort) return null;
+    // No port restriction: see the backend's
+    // validate_url_source — the record is inert text.
   }
   if (
     value.contentKind !== 'text' &&
@@ -1949,7 +1949,6 @@ export function ColliderPanel({
         />
         <button
           type="button"
-          disabled={urlALoading}
           onClick={() => void fetchUrl('a')}
         >
           Fetch for the first beam
@@ -2039,7 +2038,6 @@ export function ColliderPanel({
         />
         <button
           type="button"
-          disabled={urlBLoading}
           onClick={() => void fetchUrl('b')}
         >
           Fetch for the second beam

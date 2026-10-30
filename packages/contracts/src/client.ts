@@ -146,11 +146,15 @@ function failure(value:unknown,operation=''):Error {
         case 'FORBIDDEN':return new Error('This vault request does not match the workspace or application process.');
       }
     }
-    if(operation.startsWith('ai/ideas-')||operation.startsWith('ai/opportunities-')){
-      // Idea-generation and opportunity-discovery refusals
-      // and outcomes are composed for the user at the core
-      // (archived project, model not configured, gates) -
-      // surface them verbatim.
+    if(operation.startsWith('ai/ideas-')||operation.startsWith('ai/opportunities-')||operation==='ai/collider-fetch-url'){
+      // Idea-generation, opportunity-discovery, and
+      // collider URL-fetch refusals and outcomes are
+      // composed for the user at the core (archived
+      // project, model not configured, gates, private
+      // destination, oversized or non-text fetch) -
+      // surface them verbatim, so the user can act on
+      // the specific reason. Other collider operations
+      // keep the generic mapping below.
       if(typeof value.message==='string'&&value.message)return new Error(value.message);
     }
     if(operation.startsWith('artifacts/')){

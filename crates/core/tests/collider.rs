@@ -4168,9 +4168,6 @@ fn url_forged_or_stale_metadata_refuses_before_traffic() {
     let mut credentialed = good.clone();
     credentialed["submittedUrl"] = json!("https://user:pw@example.com/page");
     variants.push(credentialed);
-    let mut non_default_port = good.clone();
-    non_default_port["finalUrl"] = json!("https://example.com:8443/page");
-    variants.push(non_default_port);
     let mut wrong_fetched_hash = good.clone();
     wrong_fetched_hash["fetchedHash"] = json!("xyz");
     variants.push(wrong_fetched_hash);
