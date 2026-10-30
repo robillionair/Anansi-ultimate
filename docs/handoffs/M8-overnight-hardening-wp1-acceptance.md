@@ -177,3 +177,78 @@ Acceptance:
 - Strict Clippy, fmt, tsc, contracts check clean.
 - The WP1 record (this file, updated with before/after
   evidence) is committed before WP2 criteria are written.
+
+## WP1 evidence (before / after, Linux, sequential)
+
+Failing-before commit: `50fd2c2f` (reproduction tests
+only, on top of criteria `da9a10ea`).
+
+- Boundary battery (`boundary_`, collider suite):
+  before 2/7 pass (archived source project already
+  enforced; eligible older revision already dispatches),
+  5 fail with the bypass reproduced (pinned archived,
+  archived head, sealed head, reassigned member, expired
+  pinned/head). After repair: 7/7 pass.
+- Double-restore battery (`double_restore_`, collider
+  suite): before 0/3, each failing at the second restore
+  with the jobs invalid error from experiment-binding
+  validation. After repair: 3/3 pass — experiment as
+  context (snapshot verbatim, item count 1,
+  `restoredContentHash` equals the restored Exp1 row
+  hash, original pinned hash untouched), real evaluation
+  as context (same checks, restored evaluation's
+  `sourceArtifactId` equals the restored idea id), and
+  transferred concept admissible after double restore
+  (Forge spec run reaches complete).
+- B5 restore unit test
+  (`experiment_project_artifact_bindings_accept_restored_and_refuse_fabricated`,
+  restore.rs lib tests): valid original, valid restored
+  and fabricated-restored (row diverged, restored hash
+  matching neither) plus restored-on-memory refusal.
+  A bogus restored value alongside a row that still
+  matches the original is accepted at validation and
+  dropped by the fix-up on restore, since the row has
+  not diverged; that behavior is asserted by
+  construction in the test comment, not by a passing
+  case claiming a refusal.
+- Focused gate after repair (sequential, this VM):
+  collider 34/34, transfer 19/19, forge_restore 4/4,
+  backup_restore 7/7, restore lib binding tests 3/3,
+  node suite pass, strict Clippy `--workspace
+  --all-targets -D warnings` clean, `cargo fmt --check`
+  clean, tsc clean, contracts `--check` clean.
+- No assertion weakened. Two genuine test defects found
+  and fixed in the test code, not in production: the
+  reassignment test's zero-baseline hit helper could not
+  apply after a legitimate control dispatch (now
+  baseline-aware), and the transfer test's Forge leg fed
+  collider JSON to spec parsing (now a forge-spec fake
+  mode, set only for that leg).
+- Harness finding (not a product defect): the
+  process-global background export worker, armed by
+  every job_command including restore, races a manual
+  claim when a backup is enqueued immediately after a
+  restore; `backup_bytes` is now worker-aware (claims
+  while Queued, waits state-driven with a bounded
+  deadline when the worker claimed the job). In
+  production the worker is the sole executor of enqueued
+  exports, so this race does not affect the app.
+- Regression caught by the gate itself: the first
+  version of the new fix-up errored on non-JSON manual
+  experiment bodies (`restore_refuses_tampered_collider_experiment`
+  failed deterministically); fixed to leave non-collider
+  bodies untouched, matching validation, before the
+  repair commit.
+- Repair commits: `97898f22` (core: eligibility gate,
+  restored-hash tracking, fix-up, validation, contracts)
+  and `ecc14b14` (integration/UI tests and parser).
+  Final WP1 tip: `ecc14b14`.
+- Deliberately NOT gated here (out of the committed A1–A7
+  scope, noted for the reviewer): expiry of the source
+  project's own head record is not a dispatch refusal;
+  project archival and project sealing already refuse via
+  `require_project_writable` plus the project title read.
+  A Temporary project head with a past expiry could
+  still be selected by a direct API call; the picker
+  never offers it because list excludes expired current
+  rows.
