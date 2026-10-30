@@ -13,6 +13,10 @@ import {
   loadProjectReviewEntries,
   countHiddenProjectItems,
 } from '../src/Collider';
+import {
+  ColliderPipelineOverview,
+  pipelineStateForRun,
+} from '../src/ColliderOverview';
 
 /**
  * M8 Slice 1: the collider panel states its bargain and starts
@@ -549,4 +553,64 @@ test('picker hidden-item counts cover project records and ineligible artifacts',
     { hiddenMembers: 1, hiddenArtifacts: 1 },
   );
   assert.deepEqual(countHiddenProjectItems([], []), { hiddenMembers: 0, hiddenArtifacts: 0 });
+});
+
+test('pipeline overview maps every genuine run state and never invents progress', () => {
+  assert.equal(pipelineStateForRun(null, false), 'not-started');
+  assert.equal(pipelineStateForRun({ status: 'running' } as any, false), 'generating');
+  assert.equal(pipelineStateForRun({ status: 'complete' } as any, true), 'validating');
+  assert.equal(pipelineStateForRun({ status: 'complete' } as any, false), 'complete');
+  assert.equal(pipelineStateForRun({ status: 'failed' } as any, false), 'failed');
+  assert.equal(pipelineStateForRun({ status: 'invalid' } as any, false), 'invalid');
+  assert.equal(pipelineStateForRun({ status: 'cancelling' } as any, false), 'cancelling');
+  assert.equal(pipelineStateForRun({ status: 'cancelled' } as any, false), 'cancelled');
+  assert.equal(pipelineStateForRun({ status: 'weird' } as any, false), 'failed');
+});
+
+test('pipeline overview renders states, links only when complete, and no animation', () => {
+  const notStarted = renderToStaticMarkup(<ColliderPipelineOverview state="not-started" />);
+  assert.match(notStarted, /Not started/);
+  assert.match(notStarted, /Source understanding/);
+  assert.match(notStarted, /Proposed combinations/);
+  assert.doesNotMatch(notStarted, /href="#collider-/);
+  assert.match(notStarted, /<svg/);
+  assert.doesNotMatch(notStarted, /<animate|animation/);
+  const generating = renderToStaticMarkup(
+    <ColliderPipelineOverview state="generating" partialChars={123} />,
+  );
+  assert.match(generating, /Generating/);
+  assert.match(generating, /123 stream characters received/);
+  assert.match(generating, /no per-section progress/);
+  const complete = renderToStaticMarkup(<ColliderPipelineOverview state="complete" />);
+  assert.match(complete, /Complete/);
+  for (const id of [
+    'collider-understanding-heading',
+    'collider-primitives-heading',
+    'collider-mappings-heading',
+    'collider-combinations-heading',
+    'collider-feasibility-heading',
+    'collider-productization-heading',
+  ]) {
+    assert.match(complete, new RegExp(`href="#${id}"`));
+  }
+  const invalid = renderToStaticMarkup(
+    <ColliderPipelineOverview state="invalid" error="combinations: too few" />,
+  );
+  assert.match(invalid, /did not pass validation/);
+  assert.match(invalid, /too few/);
+  const saved = renderToStaticMarkup(
+    <ColliderPipelineOverview state="complete" hasDisclosure />,
+  );
+  assert.match(saved, /href="#providers-disclosure-title"/);
+  assert.doesNotMatch(saved, /Saved as artifact/);
+  const noDisclosure = renderToStaticMarkup(<ColliderPipelineOverview state="complete" />);
+  assert.doesNotMatch(noDisclosure, /providers-disclosure-title/);
+});
+
+test('saved experiment view shows the complete pipeline overview', () => {
+  const doc = parseColliderExperimentBody(validExperimentBody())!;
+  const html = renderToStaticMarkup(<ColliderExperimentView doc={doc} />);
+  assert.match(html, /Collision pipeline/);
+  assert.match(html, /Complete/);
+  assert.match(html, /href="#collider-combinations-heading"/);
 });
