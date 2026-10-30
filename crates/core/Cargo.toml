@@ -36,3 +36,5 @@ keyring = { version = "=3.6.3", default-features = false, features = ["apple-nat
 keyring = { version = "=3.6.3", default-features = false }
 [dev-dependencies]
 tempfile = "=3.27.0"
+# Synthetic HTTPS servers: test-only certificates.
+rcgen = "=0.13.2"
