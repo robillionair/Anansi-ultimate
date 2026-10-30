@@ -359,3 +359,331 @@ fn https_fetch_validates_certificates() {
     assert!(!error.is_empty(), "wrong-name certificate must refuse");
     handle.join().unwrap();
 }
+
+// ---- Total-deadline regressions (repair of URL-02) ----
+
+use std::time::Duration as StdDuration;
+use std::time::Instant as StdInstant;
+
+/// One-shot server that drips raw response bytes on a
+/// schedule: each part is written, then the thread
+/// sleeps. When the client gives up and closes, the next
+/// write fails and the thread returns.
+fn drip_once(parts: Vec<(Vec<u8>, u64)>) -> (SocketAddr, JoinHandle<()>) {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    let handle = std::thread::spawn(move || {
+        let Ok((mut stream, _)) = listener.accept() else {
+            return;
+        };
+        stream
+            .set_read_timeout(Some(StdDuration::from_secs(5)))
+            .ok();
+        let mut buf = [0u8; 4096];
+        let mut request = Vec::new();
+        loop {
+            match stream.read(&mut buf) {
+                Ok(0) => return,
+                Ok(n) => {
+                    request.extend_from_slice(&buf[..n]);
+                    if request.windows(4).any(|w| w == b"\r\n\r\n") {
+                        break;
+                    }
+                }
+                Err(_) => return,
+            }
+        }
+        for (bytes, sleep_ms) in parts {
+            if stream.write_all(&bytes).is_err() {
+                return;
+            }
+            let _ = stream.flush();
+            std::thread::sleep(StdDuration::from_millis(sleep_ms));
+        }
+        std::thread::sleep(StdDuration::from_millis(100));
+    });
+    (addr, handle)
+}
+
+fn drip_bytes(bytes: &[u8], per_byte_ms: u64) -> Vec<(Vec<u8>, u64)> {
+    bytes.iter().map(|b| (vec![*b], per_byte_ms)).collect()
+}
+
+fn short_policy() -> UrlFetchPolicy {
+    policy().with_total_timeout(StdDuration::from_secs(2))
+}
+
+fn assert_deadline_refusal(
+    result: Result<anansi_core::url_fetch::UrlFetchResult, String>,
+    elapsed: StdDuration,
+) {
+    let error = result.unwrap_err();
+    assert!(
+        error.contains("timed out"),
+        "dribbled stream must fail on the deadline, got: {error}"
+    );
+    assert!(
+        elapsed < StdDuration::from_secs(4),
+        "deadline overrun: {elapsed:?}"
+    );
+}
+
+#[test]
+fn dribbled_headers_obey_total_deadline() {
+    let head = b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 5\r\nConnection: close\r\n\r\n";
+    let mut parts = drip_bytes(head, 50);
+    parts.push((b"Hello".to_vec(), 0));
+    let (addr, handle) = drip_once(parts);
+    let start = StdInstant::now();
+    let result = fetch_url_text(&format!("http://127.0.0.1:{}/", addr.port()), short_policy(), &[]);
+    let elapsed = start.elapsed();
+    handle.join().unwrap();
+    assert_deadline_refusal(result, elapsed);
+}
+
+#[test]
+fn dribbled_content_length_body_obeys_short_deadline() {
+    let head = b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 120\r\nConnection: close\r\n\r\n";
+    let mut parts = vec![(head.to_vec(), 0)];
+    parts.extend(drip_bytes(&[b'x'; 120], 50));
+    let (addr, handle) = drip_once(parts);
+    let start = StdInstant::now();
+    let result = fetch_url_text(&format!("http://127.0.0.1:{}/", addr.port()), short_policy(), &[]);
+    let elapsed = start.elapsed();
+    handle.join().unwrap();
+    assert_deadline_refusal(result, elapsed);
+}
+
+#[test]
+fn dribbled_chunk_body_obeys_total_deadline() {
+    let head = b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n800\r\n";
+    let mut parts = vec![(head.to_vec(), 0)];
+    parts.extend(drip_bytes(&[b'y'; 2000], 5));
+    let (addr, handle) = drip_once(parts);
+    let start = StdInstant::now();
+    let result = fetch_url_text(&format!("http://127.0.0.1:{}/", addr.port()), short_policy(), &[]);
+    let elapsed = start.elapsed();
+    handle.join().unwrap();
+    assert_deadline_refusal(result, elapsed);
+}
+
+#[test]
+fn dribbled_close_delimited_body_obeys_total_deadline() {
+    let head = b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\n";
+    let mut parts = vec![(head.to_vec(), 0)];
+    parts.extend(drip_bytes(&[b'z'; 100], 50));
+    let (addr, handle) = drip_once(parts);
+    let start = StdInstant::now();
+    let result = fetch_url_text(&format!("http://127.0.0.1:{}/", addr.port()), short_policy(), &[]);
+    let elapsed = start.elapsed();
+    handle.join().unwrap();
+    assert_deadline_refusal(result, elapsed);
+}
+
+#[test]
+fn dribbled_trailers_obey_total_deadline() {
+    let head = b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n5\r\nHello\r\n0\r\n";
+    let mut parts = vec![(head.to_vec(), 0)];
+    parts.extend(drip_bytes(b"X-Check: value\r\n\r\n", 150));
+    let (addr, handle) = drip_once(parts);
+    let start = StdInstant::now();
+    let result = fetch_url_text(&format!("http://127.0.0.1:{}/", addr.port()), short_policy(), &[]);
+    let elapsed = start.elapsed();
+    handle.join().unwrap();
+    assert_deadline_refusal(result, elapsed);
+}
+
+#[test]
+fn slow_but_legal_stream_still_succeeds() {
+    // A stream that finishes inside the budget must not
+    // be refused: the deadline bounds total time, it does
+    // not punish steady progress.
+    let head = b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 50\r\nConnection: close\r\n\r\n";
+    let mut parts = vec![(head.to_vec(), 0)];
+    parts.extend(drip_bytes(&[b'q'; 50], 20));
+    let (addr, handle) = drip_once(parts);
+    let fetched = fetch_url_text(&format!("http://127.0.0.1:{}/", addr.port()), short_policy(), &[])
+        .unwrap();
+    assert_eq!(fetched.text, "q".repeat(50));
+    handle.join().unwrap();
+}
+
+#[test]
+fn redirect_to_reserved_ipv6_refuses() {
+    let server = RouteServer::start(move |path| match path {
+        "/to-reserved" => response(
+            302,
+            "Found",
+            &[("Location", "http://[fec0::1]/")],
+            b"",
+        ),
+        "/to-mapped" => response(
+            302,
+            "Found",
+            &[("Location", "http://[::ffff:10.0.0.1]/")],
+            b"",
+        ),
+        _ => response(404, "Not Found", &[], b""),
+    });
+    for path in ["/to-reserved", "/to-mapped"] {
+        let error = fetch_url_text(&server.url(path), policy(), &[]).unwrap_err();
+        assert!(
+            error.contains("not a public destination"),
+            "{path} refusal must come from validation: {error}"
+        );
+    }
+}
+
+#[test]
+fn stalled_tls_handshake_obeys_total_deadline() {
+    // The server reads the ClientHello and then sends
+    // nothing: the client's explicit handshake loop must
+    // fail at the deadline instead of waiting forever.
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    let handle = std::thread::spawn(move || {
+        let Ok((mut stream, _)) = listener.accept() else {
+            return;
+        };
+        stream
+            .set_read_timeout(Some(StdDuration::from_secs(10)))
+            .ok();
+        let mut buf = [0u8; 4096];
+        loop {
+            match stream.read(&mut buf) {
+                Ok(0) => return,
+                Ok(_) => continue,
+                Err(_) => return,
+            }
+        }
+    });
+    let start = StdInstant::now();
+    let result = fetch_url_text(
+        &format!("https://127.0.0.1:{}/", addr.port()),
+        short_policy(),
+        &[],
+    );
+    let elapsed = start.elapsed();
+    assert!(result.is_err(), "stalled handshake must refuse");
+    assert!(
+        elapsed < StdDuration::from_secs(4),
+        "handshake deadline overrun: {elapsed:?}"
+    );
+    handle.join().unwrap();
+}
+
+#[test]
+fn dribbled_tls_record_header_obeys_total_deadline() {
+    // A valid TLS record header dripped one byte at a
+    // time, then silence: the client has a header but no
+    // record body, so only the deadline can end it.
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    let handle = std::thread::spawn(move || {
+        let Ok((mut stream, _)) = listener.accept() else {
+            return;
+        };
+        stream
+            .set_read_timeout(Some(StdDuration::from_secs(10)))
+            .ok();
+        let mut buf = [0u8; 4096];
+        let _ = stream.read(&mut buf);
+        for byte in [0x16u8, 0x03, 0x03, 0x00, 0x2e] {
+            if stream.write_all(&[byte]).is_err() {
+                return;
+            }
+            let _ = stream.flush();
+            std::thread::sleep(StdDuration::from_millis(300));
+        }
+        loop {
+            match stream.read(&mut buf) {
+                Ok(0) => return,
+                Ok(_) => continue,
+                Err(_) => return,
+            }
+        }
+    });
+    let start = StdInstant::now();
+    let result = fetch_url_text(
+        &format!("https://127.0.0.1:{}/", addr.port()),
+        short_policy(),
+        &[],
+    );
+    let elapsed = start.elapsed();
+    assert!(result.is_err(), "dribbled handshake must refuse");
+    assert!(
+        elapsed < StdDuration::from_secs(4),
+        "handshake deadline overrun: {elapsed:?}"
+    );
+    handle.join().unwrap();
+}
+
+#[test]
+fn dribbled_tls_body_obeys_total_deadline() {
+    // A real TLS session whose body is dripped: the
+    // encrypted reads must obey the same deadline.
+    use rcgen::{CertificateParams, SanType};
+    use rustls::pki_types::CertificateDer;
+    use rustls::{ServerConfig, ServerConnection, StreamOwned};
+    use std::net::TcpListener as StdListener;
+
+    let mut params = CertificateParams::new(vec!["test".to_string()]).unwrap();
+    params.subject_alt_names = vec![SanType::IpAddress("127.0.0.1".parse().unwrap())];
+    let key = rcgen::KeyPair::generate().unwrap();
+    let cert = params.self_signed(&key).unwrap();
+    let der = cert.der().to_vec();
+    let key_der = key.serialize_der();
+    let root = CertificateDer::from(der.clone());
+
+    let listener = StdListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    let handle = std::thread::spawn(move || {
+        let (stream, _) = listener.accept().unwrap();
+        let cert = rustls::pki_types::CertificateDer::from(der);
+        let key = rustls::pki_types::PrivateKeyDer::try_from(key_der).unwrap();
+        let provider = Arc::new(rustls::crypto::ring::default_provider());
+        let config = ServerConfig::builder_with_provider(provider)
+            .with_safe_default_protocol_versions()
+            .unwrap()
+            .with_no_client_auth()
+            .with_single_cert(vec![cert], key)
+            .unwrap();
+        let conn = ServerConnection::new(Arc::new(config)).unwrap();
+        let mut tls = StreamOwned::new(conn, stream);
+        let mut buf = [0u8; 4096];
+        let mut request = Vec::new();
+        loop {
+            match tls.read(&mut buf) {
+                Ok(0) => return,
+                Ok(n) => {
+                    request.extend_from_slice(&buf[..n]);
+                    if request.windows(4).any(|w| w == b"\r\n\r\n") {
+                        break;
+                    }
+                }
+                Err(_) => return,
+            }
+        }
+        let head = b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 100\r\nConnection: close\r\n\r\n";
+        if tls.write_all(head).is_err() {
+            return;
+        }
+        let _ = tls.flush();
+        for _ in 0..100 {
+            if tls.write_all(b"w").is_err() {
+                return;
+            }
+            let _ = tls.flush();
+            std::thread::sleep(StdDuration::from_millis(50));
+        }
+    });
+    let start = StdInstant::now();
+    let result = fetch_url_text(
+        &format!("https://127.0.0.1:{}/", addr.port()),
+        short_policy(),
+        &[root],
+    );
+    let elapsed = start.elapsed();
+    handle.join().unwrap();
+    assert_deadline_refusal(result, elapsed);
+}
