@@ -1,3 +1,31 @@
+## 2026-10-30 — M8 URL input repair 2: deadline beneath rustls (Linux; independent Windows rerun pending)
+
+On branch `muse/m8-url-input-repair2` from reviewer
+tip `239dc58e` (incoming `947b87b53`; design
+committed before code, record in
+`docs/handoffs/M8-url-input-repair2-design.md` and
+`docs/handoffs/M8-url-input-repair2-addendum.md`).
+Closes the remaining URL-02b finding: the first
+repair's deadline sat above TLS record assembly, so
+one dripped encrypted record bypassed it (2.228s
+under a 500ms policy). The TLS and plain transports
+are now a deadline-aware wrapper that re-checks the
+deadline and shrinks the socket timeout before every
+underlying socket read/write, so record assembly,
+alerts, post-handshake traffic, and fragmented writes
+are all bounded; reviewer probes preserved unchanged
+and passing (`review_url_tls_record` 1/1 at 0.53s,
+`review_url_fetch` 2/2). No timeout increased, no
+UI-only workaround. Linux verification: url_fetch
+21/21, lib 84/84, node 99/99, browser battery 25/25
+across 21 specs, strict Clippy/fmt/tsc/contracts/
+docs/builds clean, full core 405/4 (only the 4 known live-Ollama semantic_workflow environment failures),
+providers+API 144/0. Windows rerun of this
+repair is pending; Slice 4 Windows verification, M7
+native acceptance + preview promotion, M5 gates and
+the §32 sandbox remain open. M8 is NOT complete: 3D
+remains deferred.
+
 ## 2026-10-30 — URL repair Windows follow-up
 
 Runtime `947b87b53` passes original reviewer probes2/2, URL integration18/18, UI/contracts99/99, TypeScript/docs. Remaining URL-02b: fragmented bytes inside one encrypted TLS record bypass the total deadline; new synthetic probe fails. [Review](reviews/windows-m8-url-input-repair.md). No browser/native acceptance or promotion.

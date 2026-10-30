@@ -48,6 +48,24 @@ is pending. Owner previews/data and Antigravity
 tooling remain untouched. No cloud calls, pushes, CI
 or promotion.
 
+## Current M8 URL input repair 2 — 2026-10-30
+
+On branch `muse/m8-url-input-repair2`, from reviewer
+tip `239dc58e`. The fetch deadline is now enforced
+beneath rustls: a deadline-aware transport re-checks
+the deadline and shrinks the socket timeout before
+every underlying socket read/write, so assembling one
+encrypted record, alerts, post-handshake traffic, and
+fragmented writes cannot outlive the deadline (the
+first repair's deadline sat above `StreamOwned::read`
+and one dripped record bypassed it). Certificate
+validation, address pinning, size bounds, and the 20s
+production deadline are unchanged; no timeout was
+increased. Linux verification only; independent
+Windows rerun is pending. Owner previews/data and
+Antigravity tooling remain untouched. No cloud calls,
+pushes, CI or promotion.
+
 ## Current M8 document input repair 2 — 2026-10-30
 
 On branch `muse/m8-document-input-repair2`, from reviewer
