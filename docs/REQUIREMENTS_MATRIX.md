@@ -1,5 +1,9 @@
 # ANANSI Ultimate — Requirements Matrix
 
+## M8 overnight Windows review — 2026-10-30
+
+AN-013/018/019/024 remain in progress. [Independent review](reviews/windows-m8-overnight.md) verifies current-source refusal and focused UI/build behavior, but forged restored provenance, stale context hashes after transfer fix-ups and saved/live overview anchor collisions block acceptance. Do not infer complete M8, recovery or native certification from Linux or passing happy paths.
+
 ## Windows Ask/storage verification — 2026-10-30
 
 AN-005/006/010/018 focused evidence: [Windows native integration](reviews/windows-ask-findings-verified-2026-10-30.md).

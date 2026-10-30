@@ -1,5 +1,10 @@
 # ANANSI Ultimate — Recovery Guide
 
+## Current M8 overnight review — 2026-10-30
+
+Use `E:/Anansi/worktrees/review-m8-overnight`, branch `codex/review-m8-overnight`, incoming `edba7ed3`. Read [Windows findings](reviews/windows-m8-overnight.md). Acceptance is blocked by R1 forged restored-hash provenance, R2 post-fixup stale context hash, and R3 saved/live anchor collision. Reviewer changes only add expected-failing probes/docs. Muse owns repairs; preserve assertions and do not promote. Current-source boundary and focused UI/build checks pass, but this does not close recovery/native/production gates. The older Slice 4 review worktree and its uncommitted probes remain preserved separately. No automatic cloud calls, audit monitoring, pushes or CI.
+
+
 ## Current verified Windows integration — 2026-10-30
 
 Use `E:/Anansi/worktrees/review-m8-benchmark`, branch

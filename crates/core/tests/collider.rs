@@ -3439,3 +3439,91 @@ fn double_restore_keeps_transferred_concept_admissible() {
     );
     assert_ne!(concept_id, restored_concept, "concept id must remap");
 }
+
+// Independent Windows reviewer probes: expected-success/refusal assertions.
+#[test]
+fn review_forged_snapshot_cannot_self_authorize_with_target_restored_hash() {
+    let fake = start_fake();
+    let f = fixture(&fake, "free");
+    let (body, artifact_id, _, _, _) = build_saved_project_experiment(&f);
+    let mut doc: Value = serde_json::from_str(&body).unwrap();
+    let item = &mut doc["projectContext"]["items"][1];
+    let actual_source_hash = item["contentHash"].clone();
+    let forged = "Invented generation-time source text that never existed.";
+    item["content"] = json!(forged);
+    item["contentHash"] = json!(content::hash(forged.as_bytes()));
+    item["restoredContentHash"] = actual_source_hash;
+    f.core
+        .artifacts_command(
+            "revise",
+            json!({
+                "contractVersion": 1, "workspaceId": f.ws, "artifactId": artifact_id,
+                "expectedVersion": 1, "title": "Forged historical provenance",
+                "body": serde_json::to_string(&doc).unwrap(), "sourceReferences": []
+            }),
+        )
+        .unwrap();
+    let store = Storage::new(f._dir.path().to_path_buf()).unwrap();
+    let bytes = backup_bytes(f._dir.path(), &store, &f.ws);
+    let fresh_dir = tempfile::tempdir().unwrap();
+    let fresh = Core::with_storage_root(fresh_dir.path().to_path_buf());
+    assert_restore_refused(&fresh, &bytes, "forged-restored-hash");
+}
+
+#[test]
+fn review_concept_context_pins_final_hash_after_transfer_fixups_and_restores_twice() {
+    let fake = start_fake();
+    let f = fixture(&fake, "free");
+    let (memory, revision, _) =
+        create_project_memory(&f, &f.project, "Source note", "Pinned memory source.");
+    let started = start_collide_ctx(
+        &f,
+        "Trading.",
+        "Mycelium.",
+        json!([{"memoryId": memory, "revisionId": revision}]),
+    )
+    .unwrap();
+    let run = started["runId"].as_str().unwrap();
+    assert_eq!(poll_until(&f, run)["status"], "complete");
+    let (experiment, _) = save_collision(&f, run);
+    let transferred = f
+        .core
+        .ai_command(
+            "collider-transfer",
+            json!({
+                "contractVersion": 1, "workspaceId": f.ws, "projectId": f.project,
+                "experimentArtifactId": experiment, "experimentVersion": 1,
+                "combinationIndex": 0, "approvedBrief": "Route venues by congestion."
+            }),
+        )
+        .unwrap();
+    let concept = transferred["artifact"]["artifactId"].as_str().unwrap();
+    let started = start_collide_project(&f, json!({"projectId": f.project, "items": [{"kind":"artifact", "artifactId": concept,"version":1}]})).unwrap();
+    let run = started["runId"].as_str().unwrap();
+    assert_eq!(poll_until(&f, run)["status"], "complete");
+    save_collision(&f, run);
+    let store = Storage::new(f._dir.path().to_path_buf()).unwrap();
+    let bytes = backup_bytes(f._dir.path(), &store, &f.ws);
+    let fresh_dir = tempfile::tempdir().unwrap();
+    let (fresh, ws) = restore_workspace(&fresh_dir, &bytes, "concept-context-first");
+    let home = find_project_id(&fresh, &ws, "Collider Project");
+    let experiments = list_experiments(&fresh, &ws, &home);
+    let (_, outer) = experiments
+        .iter()
+        .find(|(_, doc)| doc.get("projectContext").is_some())
+        .unwrap();
+    let item = &outer["projectContext"]["items"][0];
+    let actual = read_version(&fresh, &ws, item["artifactId"].as_str().unwrap(), 1);
+    let hash_matches = item["restoredContentHash"] == actual["artifact"]["contentHash"];
+    println!("selected concept pins final restored target hash: {hash_matches}");
+    let store = Storage::new(fresh_dir.path().to_path_buf()).unwrap();
+    let bytes2 = backup_bytes(fresh_dir.path(), &store, &ws);
+    let again_dir = tempfile::tempdir().unwrap();
+    let again = Core::with_storage_root(again_dir.path().to_path_buf());
+    let second = try_upload_restore(&again, &bytes2, "concept-context-second");
+    assert!(
+        hash_matches && second.is_ok(),
+        "post-fixup target hash mismatch={}; second fresh restore={second:?}",
+        !hash_matches
+    );
+}

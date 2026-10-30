@@ -1,3 +1,7 @@
+## 2026-10-30 — M8 overnight Windows review: progress verified; three findings block acceptance
+
+Incoming `edba7ed32db2f7c5ea999466061c4e1c3966b2e7`; [independent Windows review](reviews/windows-m8-overnight.md). Current-source boundary 7/7 and UI/contracts 89/89 pass; strict Clippy, formatting, TypeScript/contracts/docs and API/web builds pass. Main integrated browser and project-context specs pass. Two additive restore probes fail: editable restored-hash metadata admits forged provenance, and a selected transferred concept receives a stale hash before a later fix-up, breaking the second restore. Additive browser probe fails: saved overview anchors resolve into the mounted live result. Acceptance/promotion stays blocked; runtime unchanged by reviewer. Preserve all original assertions and use the reviewed branch for Muse's repair. No cloud, credentials, downloads, pushes or CI.
+
 ## 2026-10-30 — M8 overnight hardening: context boundaries, picker reliability, pipeline overview (Linux; Windows pending)
 
 On branch `muse/m8-overnight-hardening` from Slice 4 tip
