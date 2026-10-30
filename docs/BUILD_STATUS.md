@@ -1,3 +1,33 @@
+## 2026-10-30 — M8 URL input repair (Linux; independent Windows rerun pending)
+
+On branch `muse/m8-url-input-repair` from reviewer
+tip `db8d4cb93` (incoming `8cf6ff86f`; design
+committed before code, record in
+`docs/handoffs/M8-url-input-repair-design.md` and
+`docs/handoffs/M8-url-input-repair-addendum.md`).
+Closes the focused Windows security review's three
+items with reviewer probes preserved unchanged and
+passing: URL-01 globally-routable classification
+(IPv6 allowlist over `2000::/3` minus special-purpose
+exclusions, mapped/6to4 by embedded IPv4, mixed DNS
+answers refused, literal encodings classified),
+URL-02 one total deadline across DNS/connect/TLS/
+writes/headers/bodies/trailers/redirects (20s
+unchanged, every socket wait uses min(remaining,
+10s), explicit TLS handshake loop), and the loopback
+test allowance compile-gated to test/debug builds
+(release builds never read the variable and are
+unconditionally strict). Linux verification:
+reviewer probes 2/2, url_fetch 18/18, lib 84/84,
+node 99/99, browser battery 25/25 across 21 specs,
+strict Clippy/fmt/tsc/contracts/docs/builds clean,
+full core 401/4 (only the 4 known live-Ollama semantic_workflow environment failures), providers+API 144/0.
+Windows rerun of this repair (including native
+behavior) is pending; Slice 4 Windows verification,
+M7 native acceptance + preview promotion, M5 gates
+and the §32 sandbox remain open. M8 is NOT complete:
+3D remains deferred.
+
 ## 2026-10-30 — URL input focused Windows review: changes required
 
 Runtime `8cf6ff86` passes incoming URL suite8/8 and UI/contracts99/99; independent probes expose reserved IPv6 admission and missing total deadline inside dribbling response reads0/2. [Review](reviews/windows-m8-url-input.md). No browser/native acceptance, promotion or production certification.

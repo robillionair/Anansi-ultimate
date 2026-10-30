@@ -28,6 +28,26 @@ independent Windows rerun is pending. Owner
 previews/data and Antigravity tooling remain untouched.
 No cloud calls, pushes, CI or promotion.
 
+## Current M8 URL input repair — 2026-10-30
+
+On branch `muse/m8-url-input-repair`, from reviewer
+tip `db8d4cb93`. Three focused security repairs over
+the URL slice, reviewer probes preserved unchanged:
+globally-routable address classification (IPv6
+allowlist over `2000::/3` minus special-purpose
+exclusions; mapped/6to4 by embedded IPv4; mixed DNS
+answers refused; connection still pinned to the
+validated address; redirect targets re-validated),
+one total deadline across DNS/connect/TLS/writes/
+headers/bodies/trailers/redirects (20s unchanged;
+every socket wait uses the remaining budget), and the
+loopback test allowance compile-gated to test/debug
+builds (release builds are unconditionally strict).
+Linux verification only; independent Windows rerun
+is pending. Owner previews/data and Antigravity
+tooling remain untouched. No cloud calls, pushes, CI
+or promotion.
+
 ## Current M8 document input repair 2 — 2026-10-30
 
 On branch `muse/m8-document-input-repair2`, from reviewer
