@@ -2,6 +2,29 @@
 
 Incoming `faafa1c26` has two frontend findings: file contents read before the size guard, and obsolete read rejection clearing a newer load's dispatch guard. Backend document tests 4/4, UI/contracts 94/94, TypeScript, strict core all-target Clippy, contracts, docs and builds pass. Focused evidence and reproduction: [review](reviews/windows-m8-document-input.md). No native acceptance or promotion.
 
+## 2026-10-30 — M8 document input Windows findings repaired (Linux; independent Windows rerun pending)
+
+On branch `muse/m8-document-input-repair` from reviewer
+tip `97ab19b4` (incoming `faafa1c26`; design committed
+before code, record in
+`docs/handoffs/M8-document-input-repair-addendum.md`).
+DI-01: oversized files are refused on `File.size` before
+any read, with the decoder's post-read check retained.
+DI-02: document load outcomes never reject; one
+generation gate covers successes and failures, so an
+obsolete failure changes neither error nor loading state
+and cannot enable dispatch while a newer read pends.
+Reviewer probe unchanged: before repair 1 failed (both
+finding assertions); after repair 1/1 passed including
+save/restart/backup-restore. Canonical document spec 1/1,
+affected browser battery passing, node 95/95, collider
+45/45, strict Clippy/fmt/tsc/contracts/docs/builds clean.
+No backend, schema, or contract change. Windows rerun of
+this repair (including native file-picker behavior) is
+pending; Slice 4 Windows verification, M7 native
+acceptance + preview promotion, M5 gates and the §32
+sandbox remain open.
+
 ## 2026-10-30 — M8 document input vertical slice (Linux; independent Windows rerun pending)
 
 On branch `muse/m8-document-input` from reviewer tip `c50d6b03`
