@@ -1,5 +1,17 @@
 # ANANSI Ultimate — Recovery Guide
 
+## Current M8 overnight Windows repair — 2026-10-30
+
+Use branch `muse/m8-overnight-windows-repair`, from reviewer tip
+`240af4ef`. The three Windows findings are repaired on Linux (see the
+repair design and addendum in `docs/handoffs/` and the BUILD_STATUS
+entry): forged restored-hash provenance refuses, selected concepts pin
+final restored hashes after all fix-ups, and saved overview links
+resolve to their own saved result. Independent Windows rerun by ChatGPT
+is still pending and is the next review step; do not treat Linux
+evidence as closing it. Owner previews/data and reviewer worktrees
+remain untouched. No cloud calls, pushes, CI or promotion.
+
 ## Current M8 overnight review — 2026-10-30
 
 Use `E:/Anansi/worktrees/review-m8-overnight`, branch `codex/review-m8-overnight`, incoming `edba7ed3`. Read [Windows findings](reviews/windows-m8-overnight.md). Acceptance is blocked by R1 forged restored-hash provenance, R2 post-fixup stale context hash, and R3 saved/live anchor collision. Reviewer changes only add expected-failing probes/docs. Muse owns repairs; preserve assertions and do not promote. Current-source boundary and focused UI/build checks pass, but this does not close recovery/native/production gates. The older Slice 4 review worktree and its uncommitted probes remain preserved separately. No automatic cloud calls, audit monitoring, pushes or CI.

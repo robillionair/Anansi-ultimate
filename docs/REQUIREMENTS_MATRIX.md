@@ -1,5 +1,15 @@
 # ANANSI Ultimate — Requirements Matrix
 
+## M8 overnight Windows repair — 2026-10-30
+
+AN-013/018/019/024 remain in progress. The three overnight-review
+findings (forged restored provenance, stale concept hash after transfer
+fix-ups, saved/live anchor collision) are repaired on Linux on branch
+`muse/m8-overnight-windows-repair` (design + addendum in
+`docs/handoffs/`); independent Windows rerun is pending and is required
+before any acceptance claim. Do not infer complete M8, recovery or
+native certification from Linux or passing happy paths.
+
 ## M8 overnight Windows review — 2026-10-30
 
 AN-013/018/019/024 remain in progress. [Independent review](reviews/windows-m8-overnight.md) verifies current-source refusal and focused UI/build behavior, but forged restored provenance, stale context hashes after transfer fix-ups and saved/live overview anchor collisions block acceptance. Do not infer complete M8, recovery or native certification from Linux or passing happy paths.

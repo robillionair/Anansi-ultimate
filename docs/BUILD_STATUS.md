@@ -1,3 +1,28 @@
+## 2026-10-30 — M8 overnight Windows repair: R1–R3 repaired (Linux; independent Windows rerun pending)
+
+On branch `muse/m8-overnight-windows-repair` from reviewer tip `240af4ef`
+(incoming `edba7ed3` plus reviewer probes/docs only; design committed
+before code in `docs/handoffs/M8-overnight-windows-repair-design.md`,
+record in `docs/handoffs/M8-overnight-windows-repair-addendum.md`). R1:
+restored-hash provenance is no longer trusted — pristine rows must be
+byte-identical to the snapshot and diverged rows must be a
+package-verified allowed transformation (id substitutions and pinned-hash
+rewrites only). R2: all pinned-hash fix-ups run to a bounded global
+fixpoint, so a selected concept pins its final restored hash after
+transfer fix-ups and a same-version cycle refuses at the cap. R3: result
+headings, overview links and the collider disclosure are instance-scoped
+(live keeps legacy ids; saved uses `saved-{artifactId}-v{version}`), with
+the pipeline heading itself left legacy as a documented, non-target
+exception. Before: Rust reviewer probes 0/2, browser reviewer probe 0/1.
+After (sequential, Linux): reviewer probes 2/2 + 1/1, collider 37/37,
+transfer 19/19, forge_restore 4/4, backup_restore 7/7, node 90/90, 23
+affected browser tests passing, strict Clippy/fmt/tsc/contracts/docs
+(173 files)/builds clean, full core 349/4 (only the 4 known live-Ollama
+semantic_workflow environment failures), providers+API 144/0. This does
+not close Windows verification of this repair or of Slice 4, M7 native
+acceptance + preview promotion, M5 gates, G1 audit, or the §32 sandbox.
+No cloud, credential, download, push, merge, CI, or promotion.
+
 ## 2026-10-30 — M8 overnight Windows review: progress verified; three findings block acceptance
 
 Incoming `edba7ed32db2f7c5ea999466061c4e1c3966b2e7`; [independent Windows review](reviews/windows-m8-overnight.md). Current-source boundary 7/7 and UI/contracts 89/89 pass; strict Clippy, formatting, TypeScript/contracts/docs and API/web builds pass. Main integrated browser and project-context specs pass. Two additive restore probes fail: editable restored-hash metadata admits forged provenance, and a selected transferred concept receives a stale hash before a later fix-up, breaking the second restore. Additive browser probe fails: saved overview anchors resolve into the mounted live result. Acceptance/promotion stays blocked; runtime unchanged by reviewer. Preserve all original assertions and use the reviewed branch for Muse's repair. No cloud, credentials, downloads, pushes or CI.
