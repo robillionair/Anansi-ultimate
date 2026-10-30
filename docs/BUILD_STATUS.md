@@ -1,3 +1,7 @@
+## 2026-10-30 — document input repairs verified on Windows
+
+Runtime `0c62533c` passes canonical document workflow and both unchanged reviewer probes3/3, UI/contracts96/96, TypeScript, contracts, docs and web build. DI-01/02/03 closed in focused scope. [Evidence](reviews/windows-m8-document-input-verified.md). Native picker acceptance, preview promotion and standing production gates remain open. Earlier red sections describe superseded checkpoints.
+
 ## 2026-10-30 — document repair Windows follow-up
 
 Incoming `ef0b9843` closes DI-01/DI-02 under unchanged Windows probes. Canonical workflow passes; UI/contracts95/95, TypeScript/contracts/docs/web build pass. New DI-03: rejected oversized selection fails to invalidate an older pending read, which later overwrites the beam. [Evidence](reviews/windows-m8-document-input-repair.md). Changes required; no native acceptance or promotion.
