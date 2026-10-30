@@ -1,3 +1,40 @@
+## 2026-10-30 — M8 document input vertical slice (Linux; independent Windows rerun pending)
+
+On branch `muse/m8-document-input` from reviewer tip `c50d6b03`
+(incoming `06a3f573a`, the Windows-verified lineage runtime;
+design committed before code in
+`docs/handoffs/M8-document-input-design.md`, record in
+`docs/handoffs/M8-document-input-addendum.md`). Explicit
+`.txt`/`.md` document input for either Collider beam through
+the existing M5 machinery: strict UTF-8 decode (one leading
+BOM stripped and recorded, no other normalization), file ≤
+65,536 bytes, text 1–8,000 characters, backend-recomputed
+label/kind/hash/count provenance pinned on the saved
+experiment, forged or stale records refused before provider
+traffic, labels/hashes never sent to the provider, editing a
+loaded beam clears its attribution, race-safe per-beam loads
+(generation counters; stale reads dropped), same-name
+reselect and clear/retry covered. No schema change; old
+experiments without document fields restore unchanged.
+After (sequential, Linux): collider 45/45, transfer 19/19,
+forge_restore 4/4, backup_restore 7/7, backup_artifacts 5/5,
+opportunities_restore 3/3, entities_roundtrip 7/7, lib 76/76,
+node 94/94, 24 affected browser tests passing (including the
+new canonical document-input spec: review → race → reselect
+→ rejections → collide → save → restart → backup/restore),
+strict Clippy/fmt/tsc/contracts/docs (182 files)/builds
+clean, full core 369/4 (only the known live-Ollama
+semantic_workflow environment failures), providers+API 144/0.
+One regression found and fixed in-slice: the first file-input
+labels collided with beam labels in existing specs
+(renamed to first/second beam wording; no existing spec
+touched). This does not close Windows verification of this
+slice (native file-picker behavior in particular), Windows
+verification of Slice 4, M7 native acceptance + preview
+promotion, M5 gates, G1 audit, or the §32 sandbox. URL
+fetching, other document formats, OCR/transcription and 3D
+remain unfinished.
+
 ## 2026-10-30 — M8 lineage repair passes focused Windows acceptance
 
 Incoming runtime `06a3f573af1cda51dab9fa1e0959b93c5897fd6a`; [independent Windows acceptance](reviews/windows-m8-lineage.md). All five prior reviewer probes pass, including resumed work after restore; extended A→B→C→D→E chain passes. Core library 74/74, vault increment-2 9/9 (both legacy/current crash matrices), genuine API-produced v10 archive import 1/1, live migration 1/1, UI/contracts 90/90 and browser 4/4 pass; strict Clippy, TypeScript/contracts/fmt/docs and API/web builds pass. 91 scoped Rust cases passed in total; no full-workspace/native/release claim. The real v10 archive preserves both memory/artifact versions on schema11 restore, stays byte-identical and refuses duplicate restore. Reviewer adds only optional fixture acceptance and docs; no runtime implementation, cloud, CI, pushes or preview promotion. Old missing-history archives retain their documented fail-closed limitation. M8 remaining feature and production gates stay open; continue from this verified runtime rather than restarting completed R1–R4 repairs.

@@ -4,6 +4,25 @@
 
 Use `E:/Anansi/worktrees/review-m8-overnight`, branch `codex/review-m8-lineage`, verified incoming runtime `06a3f573a`. [Focused Windows evidence](reviews/windows-m8-lineage.md): five old probes, extended resumed-work chain, 74 library cases, nine vault cases, real v10 import/live migration, UI/contracts 90/90 and browser 4/4 pass. R1–R4 tested defects are closed in this scope. Do not restart those repairs without new evidence. Preserve genuine v10 fixture/inspection and prior failure records; schema11 data roots stay separate from older builds. No preview/native/release promotion or automatic cloud/CI/push/audit monitoring. Antigravity tooling integration remains separate and must not overwrite this newer runtime with its older baseline.
 
+## Current M8 document input — 2026-10-30
+
+On branch `muse/m8-document-input`, from reviewer tip
+`c50d6b03`. Saved collider experiments may carry optional
+per-beam document provenance (`documentA`/`documentB`:
+label, kind, BOM flag, file bytes, file/text SHA-256,
+text chars). Restore and transfer validation recompute
+every field against the saved beam text: forged, stale
+(edited-beam) or inconsistent records refuse before
+destination publication, exactly like the R1 provenance
+guards. Experiments without document fields restore
+unchanged, and later changes to a source file never rewrite
+a saved experiment — the record is generation-time only.
+No schema change accompanies this slice. Linux verification
+only; independent Windows rerun is pending, including
+native file-picker behavior. Owner previews/data and
+Antigravity tooling remain untouched. No cloud calls,
+pushes, CI or promotion.
+
 ## Current M8 lineage repair — 2026-10-30
 
 Use branch `muse/m8-lineage-repair`, from reviewer tip `e03c9bde`.
