@@ -1,5 +1,7 @@
 # M8 — LEXI-COLLIDER
 
+Latest lineage checkpoint: incoming `06a3f573a` passes [focused Windows acceptance](../docs/reviews/windows-m8-lineage.md), closing tested R1–R4 context/recovery/anchor findings with genuine v10 compatibility and schema11 vault checks. Preserve the verified runtime for further integration. M8 remains incomplete; document/URL inputs, 3D, native promotion and production gates are still retained. Earlier pending/red sections below are historical for their named checkpoints.
+
 Current checkpoint: Slice 3 has focused Windows acceptance on
 `codex/review-m8-slice3`, including local correction `f54e46695` (reviewed revision
 consent and source revision-label validation), regression strengthening and exact

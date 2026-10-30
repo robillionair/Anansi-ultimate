@@ -1,5 +1,9 @@
 # ANANSI Ultimate — Requirements Matrix
 
+## M8 lineage focused Windows acceptance — 2026-10-30
+
+AN-013/018/019/024 gain [verified lineage/compatibility evidence](reviews/windows-m8-lineage.md): prior forgery/resumed-work probes, new-work-at-multiple-generations chain, genuine v10 import to v11 with history intact, migration/vault and affected UI/browser checks pass. These rows remain in progress for their full scope. No native/G1/remote-CI/release certification or completion of deferred M8 document/URL/3D features is implied.
+
 ## M8 lineage repair — 2026-10-30
 
 AN-013/018/019/024 remain in progress. The resumed-work lineage

@@ -3806,3 +3806,98 @@ fn repair_lineage_chain_new_work_at_b_and_c_survives_further_restores() {
         "A experiments, B work and C work must all survive to E"
     );
 }
+
+/// External fixture was produced by the preserved schema-10 API through public
+/// operations. Run explicitly with ANANSI_SCHEMA10_ARCHIVE and --ignored.
+#[test]
+#[ignore = "requires the independently generated real schema-10 archive"]
+fn review_real_schema10_archive_restores_to_schema11() {
+    let file = std::path::PathBuf::from(
+        std::env::var("ANANSI_SCHEMA10_ARCHIVE").expect("set ANANSI_SCHEMA10_ARCHIVE"),
+    );
+    let bytes = std::fs::read(&file).unwrap();
+    assert_eq!(
+        content::hash(&bytes),
+        "834505445db994e138f662b5a758b40a4a81e1276775b06db94a1cef1dea6ee7"
+    );
+    let fresh_dir = tempfile::tempdir().unwrap();
+    let core = Core::with_storage_root(fresh_dir.path().to_path_buf());
+    let (landing, job, artifact, hash) = upload_once(&core, &bytes, "real-schema10");
+    let request = json!({"contractVersion":1,"workspaceId":landing,"jobId":job,
+        "artifactId":artifact,"name":"Restored real schema10","expectedHash":hash,"confirm":true});
+    let restored = core.job_command("restore", request.clone()).unwrap();
+    let ws = restored["workspaces"][0]["id"].as_str().unwrap();
+    let project = find_project_id(&core, ws, "Schema10 project");
+    let list = core
+        .memory_command("list", json!({"contractVersion":1,"workspaceId":ws}))
+        .unwrap();
+    let note = list["memories"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|m| m["title"] == "Schema10 note")
+        .unwrap();
+    let id = note["id"].as_str().unwrap();
+    let history = core
+        .memory_command(
+            "list",
+            json!({"contractVersion":1,"workspaceId":ws,"id":id}),
+        )
+        .unwrap();
+    assert_eq!(history["memories"].as_array().unwrap().len(), 2);
+    for revision in history["memories"].as_array().unwrap() {
+        let read = core.memory_command("read",json!({"contractVersion":1,"workspaceId":ws,"id":id,"revisionId":revision["revisionId"]})).unwrap();
+        let expected = match revision["version"].as_u64().unwrap() {
+            1 => "Schema10 memory revision one.",
+            2 => "Schema10 memory revision two.",
+            _ => panic!("unexpected revision"),
+        };
+        assert_eq!(read["body"], expected);
+        assert_eq!(read["memory"]["projectId"], project);
+    }
+    let list = core
+        .artifacts_command(
+            "list",
+            json!({"contractVersion":1,"workspaceId":ws,"projectId":project}),
+        )
+        .unwrap();
+    let artifact_id = list["artifacts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["title"] == "Schema10 artifact")
+        .unwrap()["artifactId"]
+        .as_str()
+        .unwrap();
+    assert_eq!(
+        versions(&core, ws, artifact_id)["versions"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+    for (version, expected) in [
+        (1, "Schema10 artifact version one."),
+        (2, "Schema10 artifact version two."),
+    ] {
+        let read = read_version(&core, ws, artifact_id, version);
+        assert_eq!(read["body"], expected);
+        assert_eq!(read["artifact"]["projectId"], project);
+    }
+    let db = rusqlite::Connection::open(fresh_dir.path().join(DATABASE_NAME)).unwrap();
+    let schema: i64 = db
+        .pragma_query_value(None, "user_version", |row| row.get(0))
+        .unwrap();
+    assert_eq!(schema, 11);
+    drop(db);
+    let repeated = core.job_command("restore", request).unwrap_err();
+    assert_eq!(repeated.code, anansi_core::ErrorCode::RevisionConflict);
+    assert_eq!(
+        std::fs::read(file).unwrap(),
+        bytes,
+        "original v10 archive must stay unchanged"
+    );
+    println!(
+        "real schema10 archive restored to schema11; both memory revisions and artifact versions survive; repeat restore refused; source archive unchanged"
+    );
+}

@@ -1,5 +1,9 @@
 # ANANSI Ultimate — Architecture
 
+## Restore lineage across authored generations — 2026-10-30
+
+Schema11 retains backend-owned source-to-current alias pairs for all prior generations, keyed by workspace/current/original identity. New snapshots authored after a restore keep their generation-time bytes while later restores verify exact lineage pairs; missing history is not reconstructed from editable content. Pristine v10 catalogs validate against their exact legacy schema before only the staging copy migrates to v11. [Windows evidence](reviews/windows-m8-lineage.md) covers genuine v10 import, mixed-generation recovery and vault ladder preservation; it does not certify all legacy missing-history packages or native/release security.
+
 ## Windows permission verification — 2026-10-30
 
 Verify-only storage and operation batches use native current-user owner/protected
