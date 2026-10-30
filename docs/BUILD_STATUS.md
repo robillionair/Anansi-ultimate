@@ -1,3 +1,7 @@
+## 2026-10-30 — M8 document input Windows review: changes required
+
+Incoming `faafa1c26` has two frontend findings: file contents read before the size guard, and obsolete read rejection clearing a newer load's dispatch guard. Backend document tests 4/4, UI/contracts 94/94, TypeScript, strict core all-target Clippy, contracts, docs and builds pass. Focused evidence and reproduction: [review](reviews/windows-m8-document-input.md). No native acceptance or promotion.
+
 ## 2026-10-30 — M8 document input vertical slice (Linux; independent Windows rerun pending)
 
 On branch `muse/m8-document-input` from reviewer tip `c50d6b03`
