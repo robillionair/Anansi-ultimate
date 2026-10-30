@@ -156,7 +156,7 @@ fn schema_six_upgrade_is_forward_only_and_failure_atomic() {
     assert_eq!(
         db.pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))
             .unwrap(),
-        10
+        11
     );
     db.execute_batch("DROP TABLE jobs; CREATE TABLE jobs(wrong TEXT); DROP TABLE IF EXISTS artifact_versions; PRAGMA user_version=6;")
         .unwrap();

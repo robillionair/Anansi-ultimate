@@ -299,7 +299,7 @@ fn crash_matrix(
         let committed = !case.starts_with("seal/") || case.ends_with("PostSwitch");
         // A pre-switch crash retains the starting schema
         // exactly; a committed generation change lands on the
-        // ladder's sealed version (9 from a legacy start, 10
+        // ladder's sealed version (9 from a legacy start, 11
         // from a current one — the counter never moves
         // backwards). The vault's own tables appear exactly
         // when a generation change commits, never before it.
@@ -396,9 +396,9 @@ fn deterministic_process_crash_cutover_and_rollback_matrix() {
 }
 
 #[test]
-fn deterministic_process_crash_matrix_on_schema_10() {
-    // The current ladder: a schema-10 workspace (M6 artifact
-    // registry) sealing at schema 10 — the vault applies its
+fn deterministic_process_crash_matrix_on_schema_11() {
+    // The current ladder: a schema-11 workspace (restore
+    // lineage) sealing at schema 11 — the vault applies its
     // tables without moving the counter backwards — with the
     // workspace's artifact data preserved across every crash
     // boundary, committed or not.
@@ -430,7 +430,7 @@ fn deterministic_process_crash_matrix_on_schema_10() {
     let artifacts = artifact_rows(&db);
     assert_eq!(artifacts.len(), 1);
     drop(db);
-    crash_matrix(&f, 10, 10, Some(&artifacts));
+    crash_matrix(&f, 11, 11, Some(&artifacts));
 }
 struct Fixture {
     _temp: tempfile::TempDir,
@@ -585,7 +585,7 @@ fn acknowledgement_and_stale_backup_refuse_activation() {
     assert_eq!(
         db.pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))
             .unwrap(),
-        10
+        11
     );
     assert_eq!(
         db.query_row("SELECT count(*) FROM memories", [], |r| r.get::<_, i64>(0))
@@ -682,17 +682,17 @@ fn canonical_history_graph_epoch_rotation_and_explicit_rollback() {
             0
         );
     }
-    // Sealing a current workspace keeps schema 10: since M6
-    // Slice 1 the workspace chain owns version 10 and the
-    // vault applies its tables at the current version without
-    // moving the counter backwards (vault::catalog::upgrade).
-    // A legacy schema-8 workspace still lands on the schema-9
-    // barrier — that ladder is covered by the legacy crash
-    // matrix above.
+    // Sealing a current workspace keeps schema 11: since M6
+    // Slice 1 the workspace chain owns the current version
+    // and the vault applies its tables at the current version
+    // without moving the counter backwards
+    // (vault::catalog::upgrade). A legacy schema-8 workspace
+    // still lands on the schema-9 barrier — that ladder is
+    // covered by the legacy crash matrix above.
     assert_eq!(
         db.pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))
             .unwrap(),
-        10
+        11
     );
     let invalid_switch = db.unchecked_transaction().unwrap();
     invalid_switch
@@ -714,7 +714,7 @@ fn canonical_history_graph_epoch_rotation_and_explicit_rollback() {
     // form of this check expected the list itself to fail:
     // at the time, a sealed catalog was schema 9, newer than
     // the schema-8 Core, and was refused as an unknown newer
-    // catalog. At schema 10 that refusal no longer applies;
+    // catalog. At schema 11 that refusal no longer applies;
     // the protection is the absence of plaintext, asserted
     // here and by the table counts above.)
     let coexisting = Core::with_storage_root(f.root.clone());
