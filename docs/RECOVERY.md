@@ -4,6 +4,30 @@
 
 Use `E:/Anansi/worktrees/review-m8-overnight`, branch `codex/review-m8-lineage`, verified incoming runtime `06a3f573a`. [Focused Windows evidence](reviews/windows-m8-lineage.md): five old probes, extended resumed-work chain, 74 library cases, nine vault cases, real v10 import/live migration, UI/contracts 90/90 and browser 4/4 pass. R1–R4 tested defects are closed in this scope. Do not restart those repairs without new evidence. Preserve genuine v10 fixture/inspection and prior failure records; schema11 data roots stay separate from older builds. No preview/native/release promotion or automatic cloud/CI/push/audit monitoring. Antigravity tooling integration remains separate and must not overwrite this newer runtime with its older baseline.
 
+## Current M8 URL input — 2026-10-30
+
+On branch `muse/m8-url-input`, from reviewer tip
+`144acc715`. Explicit URL entry plus a separate Fetch
+action for either collider beam: a backend-owned
+bounded fetch service (public HTTP/HTTPS only, no
+credentials in URLs, loopback/private/link-local/
+reserved addresses refused, every resolved address
+validated, connection to the validated destination,
+redirect/time/byte/text bounds, normal TLS validation,
+no cookies/authorization headers/JavaScript/external
+resources, plain text + conservatively extracted HTML
+only). Fetching saves nothing and starts no inference;
+only the explicit Collide press sends the reviewed
+text, and generation-time text + provenance survive
+save, restart, approved Forge transfer, and
+backup/restore. A saved URL record is inert text: its
+URLs are shape-checked and its text hash re-verified,
+but it is never re-resolved or re-fetched at
+start/restore/transfer. Linux verification only;
+independent Windows rerun is pending. Owner
+previews/data and Antigravity tooling remain untouched.
+No cloud calls, pushes, CI or promotion.
+
 ## Current M8 document input repair 2 — 2026-10-30
 
 On branch `muse/m8-document-input-repair2`, from reviewer

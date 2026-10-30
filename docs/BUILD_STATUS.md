@@ -1,3 +1,33 @@
+## 2026-10-30 — M8 URL text input (Linux; independent Windows rerun pending)
+
+On branch `muse/m8-url-input` from reviewer tip
+`144acc715` (the reviewed tip of the document-input
+repair2 slice; design committed before code, record in
+`docs/handoffs/M8-url-input-design.md` and
+`docs/handoffs/M8-url-input-addendum.md`). Explicit URL
+entry plus a separate Fetch action for either beam:
+backend-owned bounded public-only fetch (per-hop
+validation, DNS-rebinding prevention by connecting to
+the validated address, redirect/time/byte/text bounds,
+TLS validation, plain + conservatively extracted HTML),
+fetch saves nothing and starts no inference, only the
+explicit Collide press sends the reviewed text, and
+generation-time text + provenance survive save,
+restart, approved Forge transfer, and backup/restore.
+One correction during the slice: the saved-record port
+restriction was removed (the port is a fetch-policy
+matter; a saved record is inert text), since it refused
+records the fetch service legitimately produces under
+its test policy. Linux verification: url_fetch 8/8,
+collider URL tests 4/4, lib 81/81, node 99/99, browser
+battery 25/25 across 21 specs, strict Clippy/fmt/tsc/
+contracts/docs/builds clean, full core 386/4 (only the 4 known live-Ollama semantic_workflow environment failures),
+providers+API 144/0. Windows rerun of this slice
+(including no real external site contact) is pending;
+Slice 4 Windows verification, M7 native acceptance +
+preview promotion, M5 gates and the §32 sandbox remain
+open. M8 is NOT complete: 3D remains deferred.
+
 ## 2026-10-30 — document input repairs verified on Windows
 
 Runtime `0c62533c` passes canonical document workflow and both unchanged reviewer probes3/3, UI/contracts96/96, TypeScript, contracts, docs and web build. DI-01/02/03 closed in focused scope. [Evidence](reviews/windows-m8-document-input-verified.md). Native picker acceptance, preview promotion and standing production gates remain open. Earlier red sections describe superseded checkpoints.
