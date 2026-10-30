@@ -706,3 +706,139 @@ fn dribbled_tls_body_obeys_total_deadline() {
     handle.join().unwrap();
     assert_deadline_refusal(result, elapsed);
 }
+
+// ---- Intra-record TLS fragmentation regressions (repair 2) ----
+// These use the reviewer's own technique: encrypt a complete
+// HTTP response into ONE TLS record with a real trusted
+// synthetic CA, then send the raw record bytes on a
+// schedule. That distinguishes raw encrypted bytes from
+// separate complete plaintext/TLS records, which the
+// earlier dribbled-TLS-body test flushed one by one.
+
+/// Serve one HTTP response as a single TLS record whose
+/// raw bytes are sent on a schedule. Returns the server
+/// address, its thread, and the test root to trust.
+fn serve_fragmented_record(
+    per_byte_ms: u64,
+    body: &[u8],
+) -> (
+    SocketAddr,
+    JoinHandle<()>,
+    rustls::pki_types::CertificateDer<'static>,
+) {
+    use rcgen::{CertificateParams, SanType};
+    use rustls::pki_types::CertificateDer;
+    use rustls::{ServerConfig, ServerConnection, StreamOwned};
+    use std::net::TcpListener as StdListener;
+
+    let mut params = CertificateParams::new(vec!["test".to_string()]).unwrap();
+    params.subject_alt_names = vec![SanType::IpAddress("127.0.0.1".parse().unwrap())];
+    let key = rcgen::KeyPair::generate().unwrap();
+    let cert = params.self_signed(&key).unwrap();
+    let root = CertificateDer::from(cert.der().to_vec());
+    let der = cert.der().to_vec();
+    let key_der = key.serialize_der();
+    let body = body.to_vec();
+
+    let listener = StdListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    let handle = std::thread::spawn(move || {
+        let (sock, _) = listener.accept().unwrap();
+        sock.set_read_timeout(Some(StdDuration::from_secs(10))).ok();
+        let provider = Arc::new(rustls::crypto::ring::default_provider());
+        let config = ServerConfig::builder_with_provider(provider)
+            .with_safe_default_protocol_versions()
+            .unwrap()
+            .with_no_client_auth()
+            .with_single_cert(
+                vec![CertificateDer::from(der)],
+                rustls::pki_types::PrivateKeyDer::try_from(key_der).unwrap(),
+            )
+            .unwrap();
+        let mut tls = StreamOwned::new(ServerConnection::new(Arc::new(config)).unwrap(), sock);
+        let mut buf = [0u8; 4096];
+        let mut req = Vec::new();
+        loop {
+            match tls.read(&mut buf) {
+                Ok(0) | Err(_) => return,
+                Ok(n) => {
+                    req.extend_from_slice(&buf[..n]);
+                    if req.windows(4).any(|w| w == b"\r\n\r\n") {
+                        break;
+                    }
+                }
+            }
+        }
+        let response = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+            body.len()
+        );
+        tls.conn.writer().write_all(response.as_bytes()).unwrap();
+        tls.conn.writer().write_all(&body).unwrap();
+        let mut encrypted = Vec::new();
+        while tls.conn.wants_write() {
+            tls.conn.write_tls(&mut encrypted).unwrap();
+        }
+        for byte in encrypted {
+            if tls.sock.write_all(&[byte]).is_err() {
+                return;
+            }
+            if per_byte_ms > 0 {
+                std::thread::sleep(StdDuration::from_millis(per_byte_ms));
+            }
+        }
+    });
+    (addr, handle, root)
+}
+
+#[test]
+fn fragmented_record_sent_fast_still_succeeds() {
+    // One record, fragmented across TCP segments but
+    // delivered promptly: reassembly must still work.
+    let body = b"Fragmented but fast.";
+    let (addr, handle, root) = serve_fragmented_record(0, body);
+    let fetched = fetch_url_text(
+        &format!("https://127.0.0.1:{}/", addr.port()),
+        policy(),
+        &[root],
+    )
+    .unwrap();
+    assert_eq!(fetched.text, "Fragmented but fast.");
+    handle.join().unwrap();
+}
+
+#[test]
+fn fragmented_record_dripped_past_deadline_refuses() {
+    // Same single record, dripped past a 2s budget: the
+    // deadline beneath rustls must end it, not the
+    // record's eventual completion.
+    let body = vec![b'v'; 100];
+    let (addr, handle, root) = serve_fragmented_record(50, &body);
+    let start = StdInstant::now();
+    let result = fetch_url_text(
+        &format!("https://127.0.0.1:{}/", addr.port()),
+        short_policy(),
+        &[root],
+    );
+    let elapsed = start.elapsed();
+    handle.join().unwrap();
+    assert_deadline_refusal(result, elapsed);
+}
+
+#[test]
+fn slow_but_valid_fragmented_record_succeeds() {
+    // The probe's 20ms cadence, but a record small
+    // enough to finish inside its 3s budget: steady
+    // progress within budget is not punished.
+    let body = b"tiny";
+    let (addr, handle, root) = serve_fragmented_record(20, body);
+    let budget = policy().with_total_timeout(StdDuration::from_secs(3));
+    let fetched = fetch_url_text(
+        &format!("https://127.0.0.1:{}/", addr.port()),
+        budget,
+        &[root],
+    )
+    .unwrap();
+    assert_eq!(fetched.text, "tiny");
+    handle.join().unwrap();
+}
