@@ -1,3 +1,7 @@
+## 2026-10-30 — M8 repair Windows review: R2/R3 pass; R1 remains open
+
+Incoming `d0a6c1e1dd8612c954e9aceee9d735f5653780c8`; [independent Windows repair review](reviews/windows-m8-overnight-repair.md). Original Rust probes 2/2 and browser reviewer/instance/project/integrated specs 4/4 pass; source boundary 7/7, UI/contracts 90/90 and static/build checks pass. Two added generic-revision attacks remain accepted by restore: missing optional project context skips the final immutable comparison, and unknown-old/present-new IDs are accepted without actual restore-origin mapping (including a never-restored package). R2 final-hash ordering and R3 source-scoped navigation are verified in focused scope; R1 and promotion stay blocked. Reviewer changes only add tests/docs; no runtime implementation, cloud, downloads, pushes or CI.
+
 ## 2026-10-30 — M8 overnight Windows repair: R1–R3 repaired (Linux; independent Windows rerun pending)
 
 On branch `muse/m8-overnight-windows-repair` from reviewer tip `240af4ef`

@@ -3562,3 +3562,85 @@ fn repair_swapped_legitimate_snapshot_body_refuses_restore() {
     let fresh = Core::with_storage_root(fresh_dir.path().to_path_buf());
     assert_restore_refused(&fresh, &bytes, "swapped-snapshot");
 }
+
+#[test]
+fn review_forged_structured_snapshot_without_project_context_refuses_restore() {
+    let fake = start_fake();
+    let f = fixture(&fake, "free");
+    let started = start_collide(&f, "Trading.", "Mycelium.");
+    let run = started["runId"].as_str().unwrap();
+    assert_eq!(poll_until(&f, run)["status"], "complete");
+    let (source_id, source_body) = save_collision(&f, run);
+    let started = start_collide_project(&f, json!({"projectId":f.project,"items":[{"kind":"artifact","artifactId":source_id,"version":1}]})).unwrap();
+    let run = started["runId"].as_str().unwrap();
+    assert_eq!(poll_until(&f, run)["status"], "complete");
+    let (outer_id, outer_body) = save_collision(&f, run);
+    let mut doc: Value = serde_json::from_str(&outer_body).unwrap();
+    let mut forged: Value = serde_json::from_str(&source_body).unwrap();
+    assert!(forged.get("projectContext").is_none());
+    forged["result"]["sourceUnderstanding"] =
+        json!("Invented source understanding that the original provider never returned.");
+    let text = serde_json::to_string(&forged).unwrap();
+    let item = &mut doc["projectContext"]["items"][0];
+    item["content"] = json!(text);
+    item["contentHash"] = json!(content::hash(text.as_bytes()));
+    f.core.artifacts_command("revise",json!({
+        "contractVersion":1,"workspaceId":f.ws,"artifactId":outer_id,"expectedVersion":1,
+        "title":"Forged structured snapshot","body":serde_json::to_string(&doc).unwrap(),"sourceReferences":[]
+    })).unwrap();
+    let store = Storage::new(f._dir.path().to_path_buf()).unwrap();
+    let bytes = backup_bytes(f._dir.path(), &store, &f.ws);
+    let fresh_dir = tempfile::tempdir().unwrap();
+    let fresh = Core::with_storage_root(fresh_dir.path().to_path_buf());
+    assert_restore_refused(&fresh, &bytes, "forged-context-free-structured-snapshot");
+}
+
+#[test]
+fn review_fabricated_original_project_id_without_restore_mapping_refuses_restore() {
+    let fake = start_fake();
+    let f = fixture(&fake, "free");
+    let (memory, revision, _) = create_project_memory(&f, &f.project, "Member", "Source content.");
+    let started = start_collide_project(&f, json!({"projectId":f.project,"items":[{"kind":"memory","memoryId":memory,"revisionId":revision}]})).unwrap();
+    let run = started["runId"].as_str().unwrap();
+    assert_eq!(poll_until(&f, run)["status"], "complete");
+    let (source_id, source_body) = save_collision(&f, run);
+    let started = start_collide_project(&f, json!({"projectId":f.project,"items":[{"kind":"artifact","artifactId":source_id,"version":1}]})).unwrap();
+    let run = started["runId"].as_str().unwrap();
+    assert_eq!(poll_until(&f, run)["status"], "complete");
+    let (outer_id, outer_body) = save_collision(&f, run);
+    let mut doc: Value = serde_json::from_str(&outer_body).unwrap();
+    let mut forged: Value = serde_json::from_str(&source_body).unwrap();
+    let fake_original = "f".repeat(32);
+    let db = rusqlite::Connection::open(f._dir.path().join(DATABASE_NAME)).unwrap();
+    let origins: i64 = db
+        .query_row("SELECT COUNT(*) FROM restore_origins", [], |row| row.get(0))
+        .unwrap();
+    let exists: i64 = db
+        .query_row(
+            "SELECT COUNT(*) FROM memories WHERE id=?1",
+            [&fake_original],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(origins, 0, "fixture has never been restored");
+    assert_eq!(exists, 0, "fabricated original has never existed");
+    drop(db);
+    forged["projectContext"]["projectId"] = json!(fake_original);
+    let text = serde_json::to_string(&forged).unwrap();
+    let item = &mut doc["projectContext"]["items"][0];
+    item["content"] = json!(text);
+    item["contentHash"] = json!(content::hash(text.as_bytes()));
+    f.core.artifacts_command("revise",json!({
+        "contractVersion":1,"workspaceId":f.ws,"artifactId":outer_id,"expectedVersion":1,
+        "title":"Fabricated historical project identity","body":serde_json::to_string(&doc).unwrap(),"sourceReferences":[]
+    })).unwrap();
+    let store = Storage::new(f._dir.path().to_path_buf()).unwrap();
+    let bytes = backup_bytes(f._dir.path(), &store, &f.ws);
+    let fresh_dir = tempfile::tempdir().unwrap();
+    let fresh = Core::with_storage_root(fresh_dir.path().to_path_buf());
+    assert_restore_refused(
+        &fresh,
+        &bytes,
+        "fabricated-original-project-without-mapping",
+    );
+}

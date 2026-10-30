@@ -1,5 +1,9 @@
 # ANANSI Ultimate — Requirements Matrix
 
+## M8 repair focused Windows review — 2026-10-30
+
+AN-013/018/019/024 remain in progress. [Repair review](reviews/windows-m8-overnight-repair.md) verifies R2/R3 and current-source boundaries; R1 remains blocked by optional-context early acceptance and missing original-to-restored identity authority. Passing old probes and happy paths do not close these added attacks, native or production gates.
+
 ## M8 overnight Windows repair — 2026-10-30
 
 AN-013/018/019/024 remain in progress. The three overnight-review

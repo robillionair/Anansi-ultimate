@@ -1,5 +1,9 @@
 # ANANSI Ultimate — Recovery Guide
 
+## Current M8 repair review — 2026-10-30
+
+Use `E:/Anansi/worktrees/review-m8-overnight`, branch `codex/review-m8-overnight-repair`, incoming `d0a6c1e1`. [Exact findings](reviews/windows-m8-overnight-repair.md): original three reviewer probes now pass on Windows, but two added R1 attacks still accept fabricated structured text/identities. Preserve R2/R3 fixes and all assertions; Muse owns the remaining bounded R1 implementation. Do not promote or claim native/security/release completion. Antigravity release tooling is separate; do not modify its worktree. No automatic cloud, CI, push or monitor activation.
+
 ## Current M8 overnight Windows repair — 2026-10-30
 
 Use branch `muse/m8-overnight-windows-repair`, from reviewer tip
