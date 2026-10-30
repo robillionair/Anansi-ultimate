@@ -152,7 +152,7 @@ test('panel renders both beams, defaults, deferred scope and starts nothing on r
   assert.match(html, /Defaults work without configuration/);
   assert.match(html, /do not guarantee novelty/);
   assert.match(html, /Saved-project selection is available below/);
-  assert.match(html, /URL fetching, document ingestion and 3D visualization remain deferred/);
+  assert.match(html, /URL fetching and 3D visualization remain deferred/);
 });
 
 test('result view renders all six sections and never claims validation or novelty', () => {
@@ -631,4 +631,130 @@ test('R3: saved result headings and overview links share one instance scope', ()
   assert.doesNotMatch(html, /href="#collider-combinations-heading"/);
   const live = renderToStaticMarkup(<ColliderResultView result={validResult()} />);
   assert.match(live, /id="collider-combinations-heading"/);
+});
+
+/**
+ * M8 document input: strict decode, provenance parsing
+ * and race-safe load sessions. Decode tests use Node's
+ * WebCrypto (the same globalThis.crypto.subtle the
+ * browser path uses); load-session races use deferred
+ * promises, never sleeps.
+ */
+import {
+  DocumentLoadSession,
+  decodeDocumentBytes,
+} from '../src/documentInput';
+import { parseColliderDocumentSource } from '../src/Collider';
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
+test('document decode strips one BOM, preserves CRLF/indent/terminal newline, and hashes both byte views', async () => {
+  const bom = new Uint8Array([0xef, 0xbb, 0xbf]);
+  const body = new TextEncoder().encode('  First line\r\n\tSecond line\r\n');
+  const bytes = new Uint8Array(bom.length + body.length);
+  bytes.set(bom, 0);
+  bytes.set(body, bom.length);
+  const loaded = await decodeDocumentBytes(bytes, 'field-notes.MD');
+  assert.equal(loaded.text, '  First line\r\n\tSecond line\r\n');
+  assert.equal(loaded.source.label, 'field-notes.MD');
+  assert.equal(loaded.source.kind, 'md');
+  assert.equal(loaded.source.bom, true);
+  assert.equal(loaded.source.rawBytes, bytes.length);
+  assert.equal(loaded.source.textChars, [...loaded.text].length);
+  assert.match(loaded.source.rawHash, /^[0-9a-f]{64}$/);
+  assert.match(loaded.source.textHash, /^[0-9a-f]{64}$/);
+  assert.notEqual(loaded.source.rawHash, loaded.source.textHash);
+  // The raw hash covers the picked bytes (BOM included):
+  // recomputing it here with Node crypto must agree.
+  const { createHash } = await import('node:crypto');
+  assert.equal(
+    loaded.source.rawHash,
+    createHash('sha256').update(bytes).digest('hex'),
+  );
+  assert.equal(
+    loaded.source.textHash,
+    createHash('sha256').update(new TextEncoder().encode(loaded.text)).digest('hex'),
+  );
+});
+
+test('document decode refuses invalid UTF-8, empty, whitespace-only, oversized and wrong-kind files', async () => {
+  const encode = (s: string) => new TextEncoder().encode(s);
+  await assert.rejects(decodeDocumentBytes(new Uint8Array([0xff, 0xfe, 0x61]), 'bad.txt'), /not valid UTF-8/);
+  await assert.rejects(decodeDocumentBytes(new Uint8Array(0), 'empty.txt'), /empty/);
+  await assert.rejects(decodeDocumentBytes(encode('   \n\t '), 'blank.md'), /empty/);
+  await assert.rejects(decodeDocumentBytes(encode('x'.repeat(8001)), 'long.txt'), /at most 8000/);
+  await assert.rejects(decodeDocumentBytes(encode('x'), 'notes.pdf'), /Only .txt and .md/);
+  await assert.rejects(decodeDocumentBytes(encode('x'), 'notes'), /Only .txt and .md/);
+  await assert.rejects(decodeDocumentBytes(new Uint8Array(65537), 'big.txt'), /at most 65536/);
+  await assert.rejects(decodeDocumentBytes(encode('x'), 'a/b.txt'), /not a path/);
+  // A replacement character in the file is content, not a
+  // decode error: strict decoding accepts it verbatim.
+  const withReplacement = await decodeDocumentBytes(encode('a\uFFFD b'), 'ok.txt');
+  assert.equal(withReplacement.text, 'a\uFFFD b');
+});
+
+test('document load session drops stale reads, edits and clears; second selection wins', async () => {
+  const session = new DocumentLoadSession();
+  const first = deferred<{ text: string }>();
+  const firstLoad = session.load(() => first.promise as never);
+  const second = deferred<{ text: string }>();
+  const secondLoad = session.load(() => second.promise as never);
+  first.resolve({ text: 'stale' });
+  second.resolve({ text: 'current' });
+  assert.equal((await firstLoad).result, null);
+  assert.equal((await secondLoad).result?.text, 'current');
+  // An edit invalidates a pending read.
+  const third = deferred<{ text: string }>();
+  const thirdLoad = session.load(() => third.promise as never);
+  session.invalidate();
+  third.resolve({ text: 'edited-away' });
+  assert.equal((await thirdLoad).result, null);
+  // A failure propagates so the caller can show it and
+  // leave the previous beam untouched.
+  const failing = session.load(() => Promise.reject(Error('boom')));
+  await assert.rejects(failing, /boom/);
+});
+
+test('experiment body parser accepts valid document provenance and rejects malformed records', () => {
+  const source = {
+    label: 'field-notes.md',
+    kind: 'md',
+    bom: true,
+    rawBytes: 29,
+    rawHash: 'a'.repeat(64),
+    textHash: 'b'.repeat(64),
+    textChars: 26,
+  };
+  assert.deepEqual(parseColliderDocumentSource(source), source);
+  assert.equal(parseColliderDocumentSource({ ...source, kind: 'pdf' }), null);
+  assert.equal(parseColliderDocumentSource({ ...source, label: 'x/y.md' }), null);
+  assert.equal(parseColliderDocumentSource({ ...source, label: 'notes.txt' }), null);
+  assert.equal(parseColliderDocumentSource({ ...source, rawHash: 'xyz' }), null);
+  assert.equal(parseColliderDocumentSource({ ...source, textChars: 0 }), null);
+  assert.equal(parseColliderDocumentSource({ ...source, surprise: 1 }), null);
+  const withDoc = JSON.parse(validExperimentBody());
+  withDoc.documentA = source;
+  const parsed = parseColliderExperimentBody(JSON.stringify(withDoc));
+  assert.ok(parsed);
+  assert.equal(parsed!.documentA!.label, 'field-notes.md');
+  const html = renderToStaticMarkup(<ColliderExperimentView doc={parsed!} />);
+  assert.match(html, /Document: field-notes\.md/);
+  assert.match(html, /Markdown/);
+  assert.match(html, /29 bytes/);
+  assert.match(html, /generation-time record/);
+  // Documents without the fields still parse as before.
+  const plain = parseColliderExperimentBody(validExperimentBody())!;
+  assert.equal(plain.documentA, undefined);
+  assert.doesNotMatch(
+    renderToStaticMarkup(<ColliderExperimentView doc={plain} />),
+    /Document:/,
+  );
 });

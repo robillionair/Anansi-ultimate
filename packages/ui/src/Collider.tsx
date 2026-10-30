@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type {
   Client,
   ColliderControls,
+  ColliderDocumentSource,
   ColliderExperimentDoc,
   ColliderMemoryContext,
   ColliderProjectContext,
@@ -11,6 +12,11 @@ import type {
 } from '@anansi/contracts';
 import { DisclosurePanel } from './Providers';
 import { ColliderRunController } from './colliderRun';
+import {
+  DocumentLoadSession,
+  MAX_DOCUMENT_BYTES,
+  decodeDocumentBytes,
+} from './documentInput';
 import {
   ColliderPipelineOverview,
   colliderResultHeadingId,
@@ -351,6 +357,79 @@ export function parseColliderProjectContext(
   return { projectId: value.projectId, projectTitle, items };
 }
 
+/**
+ * Strict parse of one beam's document provenance. Mirrors
+ * the backend's `validate_document_source` shape checks
+ * (hash consistency against the beam is the backend's
+ * job at start/restore/transfer time); a malformed record
+ * never renders as provenance.
+ */
+export function parseColliderDocumentSource(
+  value: unknown,
+): ColliderDocumentSource | null {
+  if (!isRecord(value)) return null;
+  if (
+    !exactKeys(value, [
+      'label',
+      'kind',
+      'bom',
+      'rawBytes',
+      'rawHash',
+      'textHash',
+      'textChars',
+    ])
+  ) {
+    return null;
+  }
+  if (
+    typeof value.label !== 'string' ||
+    value.label.length === 0 ||
+    [...value.label].length > 255 ||
+    value.label.includes('/') ||
+    value.label.includes('\\') ||
+    value.label.includes('\0')
+  ) {
+    return null;
+  }
+  const dot = value.label.lastIndexOf('.');
+  const suffix =
+    dot > 0 ? value.label.slice(dot + 1).toLowerCase() : '';
+  if (
+    (value.kind !== 'txt' && value.kind !== 'md') ||
+    (value.kind === 'txt' && suffix !== 'txt') ||
+    (value.kind === 'md' && suffix !== 'md')
+  ) {
+    return null;
+  }
+  if (typeof value.bom !== 'boolean') return null;
+  if (
+    typeof value.rawBytes !== 'number' ||
+    !Number.isInteger(value.rawBytes) ||
+    value.rawBytes < 0 ||
+    value.rawBytes > MAX_DOCUMENT_BYTES
+  ) {
+    return null;
+  }
+  const hash = /^[0-9a-f]{64}$/;
+  if (
+    typeof value.rawHash !== 'string' ||
+    !hash.test(value.rawHash) ||
+    typeof value.textHash !== 'string' ||
+    !hash.test(value.textHash)
+  ) {
+    return null;
+  }
+  if (
+    typeof value.textChars !== 'number' ||
+    !Number.isInteger(value.textChars) ||
+    value.textChars < 1 ||
+    value.textChars > 8000
+  ) {
+    return null;
+  }
+  return value as unknown as ColliderDocumentSource;
+}
+
 export function parseColliderExperimentBody(
   body: string,
 ): ColliderExperimentDoc | null {
@@ -376,7 +455,15 @@ export function parseColliderExperimentBody(
   // Slice 3 carry no context and must still parse.
   // projectContext is likewise optional: experiments
   // saved before Slice 4 carry none and must parse.
-  const allowed = [...required, 'memoryContext', 'projectContext'];
+  // documentA/documentB are likewise optional: manual
+  // beams and older experiments carry none.
+  const allowed = [
+    ...required,
+    'memoryContext',
+    'projectContext',
+    'documentA',
+    'documentB',
+  ];
   if (
     !required.every(key => Object.keys(parsed).includes(key)) ||
     !Object.keys(parsed).every(key => allowed.includes(key))
@@ -393,6 +480,16 @@ export function parseColliderExperimentBody(
       ? undefined
       : parseColliderProjectContext(parsed.projectContext);
   if (projectContext === null) return null;
+  const documentA =
+    parsed.documentA === undefined
+      ? undefined
+      : parseColliderDocumentSource(parsed.documentA);
+  if (documentA === null) return null;
+  const documentB =
+    parsed.documentB === undefined
+      ? undefined
+      : parseColliderDocumentSource(parsed.documentB);
+  if (documentB === null) return null;
   if (parsed.format !== 'anansi-collider-experiment' || parsed.version !== 1) {
     return null;
   }
@@ -431,6 +528,8 @@ export function parseColliderExperimentBody(
     ...parsed,
     memoryContext,
     projectContext,
+    documentA,
+    documentB,
   } as unknown as ColliderExperimentDoc;
 }
 
@@ -572,10 +671,42 @@ export function ColliderExperimentView({
       </p>
       <details>
         <summary>Beam A (as supplied)</summary>
+        {doc.documentA && (
+          <p>
+            Document: {doc.documentA.label} ·{' '}
+            {doc.documentA.kind === 'md' ? 'Markdown' : 'Plain text'} ·{' '}
+            {doc.documentA.rawBytes} bytes · {doc.documentA.textChars}{' '}
+            characters · Text SHA-256:{' '}
+            <span
+              title={`Text SHA-256 ${doc.documentA.textHash}\nFile SHA-256 ${doc.documentA.rawHash}`}
+            >
+              {doc.documentA.textHash.slice(0, 16)}…
+            </span>
+            {doc.documentA.bom ? ' · leading BOM stripped' : ''}. This is
+            the generation-time record: later changes to the source file
+            do not change it.
+          </p>
+        )}
         <pre>{doc.beamA}</pre>
       </details>
       <details>
         <summary>Beam B (as supplied)</summary>
+        {doc.documentB && (
+          <p>
+            Document: {doc.documentB.label} ·{' '}
+            {doc.documentB.kind === 'md' ? 'Markdown' : 'Plain text'} ·{' '}
+            {doc.documentB.rawBytes} bytes · {doc.documentB.textChars}{' '}
+            characters · Text SHA-256:{' '}
+            <span
+              title={`Text SHA-256 ${doc.documentB.textHash}\nFile SHA-256 ${doc.documentB.rawHash}`}
+            >
+              {doc.documentB.textHash.slice(0, 16)}…
+            </span>
+            {doc.documentB.bom ? ' · leading BOM stripped' : ''}. This is
+            the generation-time record: later changes to the source file
+            do not change it.
+          </p>
+        )}
         <pre>{doc.beamB}</pre>
       </details>
       {doc.memoryContext && doc.memoryContext.length > 0 && (
@@ -826,6 +957,21 @@ export function ColliderPanel({
 }) {
   const [beamA, setBeamA] = useState('');
   const [beamB, setBeamB] = useState('');
+  // Document sources, one per beam. A source describes
+  // exactly the beam text it was loaded with; any edit
+  // clears it (the backend's hash check would refuse a
+  // stale record anyway). A failed read leaves the
+  // previous beam and source untouched.
+  const [documentA, setDocumentA] =
+    useState<ColliderDocumentSource | null>(null);
+  const [documentB, setDocumentB] =
+    useState<ColliderDocumentSource | null>(null);
+  const [documentALoading, setDocumentALoading] = useState(false);
+  const [documentBLoading, setDocumentBLoading] = useState(false);
+  const [documentAError, setDocumentAError] = useState('');
+  const [documentBError, setDocumentBError] = useState('');
+  const documentSessionA = useRef(new DocumentLoadSession());
+  const documentSessionB = useRef(new DocumentLoadSession());
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [review, setReview] = useState<ColliderMemoryReviewEntry[] | null>(null);
   const [reviewLoading, setReviewLoading] = useState(false);
@@ -1256,8 +1402,89 @@ export function ColliderPanel({
     };
   }, []);
 
+  function editBeam(
+    beam: 'a' | 'b',
+    value: string,
+  ) {
+    // Editing invalidates any pending file read for this
+    // beam and drops its document attribution: the beam
+    // is manual text from here on, and a stale load can
+    // never overwrite the edit.
+    const session =
+      beam === 'a' ? documentSessionA.current : documentSessionB.current;
+    session.invalidate();
+    if (beam === 'a') {
+      setDocumentALoading(false);
+      setDocumentA(null);
+      setBeamA(value);
+    } else {
+      setDocumentBLoading(false);
+      setDocumentB(null);
+      setBeamB(value);
+    }
+  }
+
+  function clearDocument(beam: 'a' | 'b') {
+    const session =
+      beam === 'a' ? documentSessionA.current : documentSessionB.current;
+    session.invalidate();
+    if (beam === 'a') {
+      setDocumentALoading(false);
+      setDocumentA(null);
+      setDocumentAError('');
+      setBeamA('');
+    } else {
+      setDocumentBLoading(false);
+      setDocumentB(null);
+      setDocumentBError('');
+      setBeamB('');
+    }
+  }
+
+  async function pickDocument(beam: 'a' | 'b', file: File) {
+    const session =
+      beam === 'a' ? documentSessionA.current : documentSessionB.current;
+    const setLoading =
+      beam === 'a' ? setDocumentALoading : setDocumentBLoading;
+    const setError = beam === 'a' ? setDocumentAError : setDocumentBError;
+    const setSource = beam === 'a' ? setDocumentA : setDocumentB;
+    const setBeam = beam === 'a' ? setBeamA : setBeamB;
+    setLoading(true);
+    setError('');
+    let loaded;
+    try {
+      loaded = await session.load(async () =>
+        decodeDocumentBytes(
+          new Uint8Array(await file.arrayBuffer()),
+          file.name,
+        ),
+      );
+    } catch (e) {
+      // A failed read changes nothing: the previous beam
+      // and attribution stay, and the error is visible
+      // with retry (pick the file again).
+      if (mountedRef.current) {
+        setError(
+          e instanceof Error ? e.message : 'Reading the file failed.',
+        );
+        setLoading(false);
+      }
+      return;
+    }
+    if (!mountedRef.current) return;
+    // Only the current generation applies; a superseded
+    // load resolves silently because the invalidating
+    // action already cleared the indicator.
+    if (loaded.generation !== session.current) return;
+    setLoading(false);
+    if (loaded.result) {
+      setBeam(loaded.result.text);
+      setSource(loaded.result.source);
+    }
+  }
+
   async function collide() {
-    if (!mountedRef.current || startingRef.current || busy || running || !reviewReady || !projectReviewReady || !reviewBoundsOk || !projectReviewBoundsOk) return;
+    if (!mountedRef.current || startingRef.current || busy || running || documentALoading || documentBLoading || !reviewReady || !projectReviewReady || !reviewBoundsOk || !projectReviewBoundsOk) return;
     // The immutable revisions already displayed are the consent boundary.
     // Re-reading current heads here could transmit an unseen newer revision.
     // The same holds for project items: only the reviewed refs are sent.
@@ -1296,6 +1523,12 @@ export function ColliderPanel({
         controls,
         memoryContext,
         projectContext,
+        // Only the currently attributed sources are sent;
+        // an edited beam carries no document record, and
+        // the backend re-verifies every record against
+        // the submitted text before any provider traffic.
+        documentA: documentA ?? undefined,
+        documentB: documentB ?? undefined,
         zeroCostLock: lock,
       });
     } catch (e) {
@@ -1353,8 +1586,9 @@ export function ColliderPanel({
         Collide two ideas, technologies, principles or industries and explore
         useful combinations. Supplied text is treated as private data, never as
         instructions to the model. Nothing starts until you press Collide Ideas.
-        Saved-project selection is available below; URL fetching, document
-        ingestion and 3D visualization remain deferred.
+        Saved-project selection is available below, as is .txt/.md
+        document input for either beam. URL fetching and 3D visualization
+        remain deferred.
       </p>
       <ColliderPipelineOverview
         state={pipelineStateForRun(run, validating)}
@@ -1373,20 +1607,88 @@ export function ColliderPanel({
         <textarea
           id="collider-beam-a"
           value={beamA}
-          onChange={e => setBeamA(e.target.value)}
+          onChange={e => editBeam('a', e.target.value)}
           required
           maxLength={8000}
           rows={5}
         />
+        <label htmlFor="collider-document-a">
+          Document for Beam A (.txt or .md)
+        </label>
+        <input
+          id="collider-document-a"
+          type="file"
+          accept=".txt,.md,text/plain,text/markdown"
+          onChange={e => {
+            const file = e.target.files?.[0];
+            // Reset so reselecting the same file name
+            // with changed content fires again.
+            e.target.value = '';
+            if (file) void pickDocument('a', file);
+          }}
+        />
+        {documentALoading && <p>Loading document…</p>}
+        {documentAError && <p role="alert">{documentAError}</p>}
+        {documentA && (
+          <p>
+            Document: {documentA.label} ·{' '}
+            {documentA.kind === 'md' ? 'Markdown' : 'Plain text'} ·{' '}
+            {documentA.rawBytes} bytes · {documentA.textChars} characters ·{' '}
+            Text SHA-256:{' '}
+            <span
+              title={`Text SHA-256 ${documentA.textHash}\nFile SHA-256 ${documentA.rawHash}`}
+            >
+              {documentA.textHash.slice(0, 16)}…
+            </span>
+            {documentA.bom ? ' · leading BOM stripped' : ''}. Editing this
+            beam clears this attribution.{' '}
+            <button type="button" onClick={() => clearDocument('a')}>
+              Clear document source
+            </button>
+          </p>
+        )}
         <label htmlFor="collider-beam-b">Beam B</label>
         <textarea
           id="collider-beam-b"
           value={beamB}
-          onChange={e => setBeamB(e.target.value)}
+          onChange={e => editBeam('b', e.target.value)}
           required
           maxLength={8000}
           rows={5}
         />
+        <label htmlFor="collider-document-b">
+          Document for Beam B (.txt or .md)
+        </label>
+        <input
+          id="collider-document-b"
+          type="file"
+          accept=".txt,.md,text/plain,text/markdown"
+          onChange={e => {
+            const file = e.target.files?.[0];
+            e.target.value = '';
+            if (file) void pickDocument('b', file);
+          }}
+        />
+        {documentBLoading && <p>Loading document…</p>}
+        {documentBError && <p role="alert">{documentBError}</p>}
+        {documentB && (
+          <p>
+            Document: {documentB.label} ·{' '}
+            {documentB.kind === 'md' ? 'Markdown' : 'Plain text'} ·{' '}
+            {documentB.rawBytes} bytes · {documentB.textChars} characters ·{' '}
+            Text SHA-256:{' '}
+            <span
+              title={`Text SHA-256 ${documentB.textHash}\nFile SHA-256 ${documentB.rawHash}`}
+            >
+              {documentB.textHash.slice(0, 16)}…
+            </span>
+            {documentB.bom ? ' · leading BOM stripped' : ''}. Editing this
+            beam clears this attribution.{' '}
+            <button type="button" onClick={() => clearDocument('b')}>
+              Clear document source
+            </button>
+          </p>
+        )}
         <fieldset>
           <legend>Memory context (optional)</legend>
           <p className="help">
@@ -1740,7 +2042,7 @@ export function ColliderPanel({
             Zero-Cost Lock (never spend)
           </label>
         </fieldset>
-        <button type="submit" disabled={busy || running || starting || !reviewReady || !projectReviewReady || !reviewBoundsOk || !projectReviewBoundsOk}>
+        <button type="submit" disabled={busy || running || starting || documentALoading || documentBLoading || !reviewReady || !projectReviewReady || !reviewBoundsOk || !projectReviewBoundsOk}>
           Collide Ideas
         </button>
         {run?.status === 'running' && (
