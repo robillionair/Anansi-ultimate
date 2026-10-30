@@ -4,6 +4,21 @@
 
 Use `E:/Anansi/worktrees/review-m8-overnight`, branch `codex/review-m8-lineage`, verified incoming runtime `06a3f573a`. [Focused Windows evidence](reviews/windows-m8-lineage.md): five old probes, extended resumed-work chain, 74 library cases, nine vault cases, real v10 import/live migration, UI/contracts 90/90 and browser 4/4 pass. R1–R4 tested defects are closed in this scope. Do not restart those repairs without new evidence. Preserve genuine v10 fixture/inspection and prior failure records; schema11 data roots stay separate from older builds. No preview/native/release promotion or automatic cloud/CI/push/audit monitoring. Antigravity tooling integration remains separate and must not overwrite this newer runtime with its older baseline.
 
+## Current M8 document input repair 2 — 2026-10-30
+
+On branch `muse/m8-document-input-repair2`, from reviewer
+tip `d3f004bc`. DI-03 repair, frontend only: every new
+document selection invalidates the beam's load session
+before any early return, so even a pre-read refusal
+(oversized file) retires older pending reads; the
+rejection clears obsolete loading state and shows the
+current error, and the last applied beam and attribution
+are preserved. DI-01/DI-02 fixes, restore, transfer and
+provenance behavior are unchanged. Linux verification
+only; independent Windows rerun is pending. Owner
+previews/data and Antigravity tooling remain untouched.
+No cloud calls, pushes, CI or promotion.
+
 ## Current M8 document input repair — 2026-10-30
 
 On branch `muse/m8-document-input-repair`, from reviewer

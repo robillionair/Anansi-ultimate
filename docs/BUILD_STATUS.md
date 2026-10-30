@@ -6,6 +6,29 @@ Incoming `ef0b9843` closes DI-01/DI-02 under unchanged Windows probes. Canonical
 
 Incoming `faafa1c26` has two frontend findings: file contents read before the size guard, and obsolete read rejection clearing a newer load's dispatch guard. Backend document tests 4/4, UI/contracts 94/94, TypeScript, strict core all-target Clippy, contracts, docs and builds pass. Focused evidence and reproduction: [review](reviews/windows-m8-document-input.md). No native acceptance or promotion.
 
+## 2026-10-30 — M8 document input repair 2: rejected-selection invalidation (Linux; independent Windows rerun pending)
+
+On branch `muse/m8-document-input-repair2` from reviewer
+tip `d3f004bc` (incoming `ef0b9843`; DI-01/DI-02 closed
+and preserved; design committed before code, record in
+`docs/handoffs/M8-document-input-repair2-addendum.md`).
+DI-03: every new document selection invalidates the
+beam's load session before any early return, so a
+rejected (oversized) selection retires a gated read
+instead of letting it land afterward; the rejection
+clears obsolete loading state and shows the current
+error while the last applied beam and attribution stay
+untouched. Before repair the new probe failed only its
+identity assertion; after repair all three document
+probes pass unchanged (rejected-selection, DI-01/DI-02,
+canonical), affected browser battery passing, node 96/96,
+collider 45/45, strict Clippy/fmt/tsc/contracts/docs/
+builds clean. No backend, schema, or contract change.
+Windows rerun of this repair (including native
+file-picker behavior) is pending; Slice 4 Windows
+verification, M7 native acceptance + preview promotion,
+M5 gates and the §32 sandbox remain open.
+
 ## 2026-10-30 — M8 document input Windows findings repaired (Linux; independent Windows rerun pending)
 
 On branch `muse/m8-document-input-repair` from reviewer
