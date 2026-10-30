@@ -624,7 +624,144 @@ export type ColliderMemoryReviewEntry = {
   version: number;
   title: string;
   body: string;
+  /** Privacy label of the revision that will be sent. */
+  privacy: string;
 };
+
+// ---------------------------------------------------------------------------
+// Picker loading helpers (exported for tests). The component
+// wires them to epochs and effect cancellation; the helpers
+// themselves are plain async functions over the client, so
+// node tests can drive them with deferred fake responses.
+
+export type MemoryListOptions = {
+  id?: string;
+  kind?: string;
+  projectId?: string;
+  includeArchived?: boolean;
+  includeExpired?: boolean;
+};
+
+/** Backend page size for memory lists (limit is capped at 100). */
+const MEMORY_LIST_PAGE_LIMIT = 100;
+/** Hard page cap: hitting it is a visible error, never a silent truncation. */
+const MEMORY_LIST_MAX_PAGES = 200;
+
+/**
+ * Follow a memory list to exhaustion, in order. The picker
+ * calls list endpoints without a limit by default, which
+ * silently truncates at the backend's 50-row page; this
+ * helper pages at the 100-row maximum instead. A page
+ * that does not advance, or the page cap, is an error.
+ * Cancellation is cooperative: the loop checks
+ * `isCancelled` between pages and returns what it has,
+ * which the caller discards.
+ */
+export async function listAllMemories(
+  client: Client,
+  workspaceId: string,
+  options: MemoryListOptions,
+  isCancelled: () => boolean = () => false,
+): Promise<MemoryMetadata[]> {
+  const all: MemoryMetadata[] = [];
+  let offset = 0;
+  for (let page = 0; page < MEMORY_LIST_MAX_PAGES; page += 1) {
+    if (isCancelled()) return all;
+    const list = await client.listMemories(workspaceId, {
+      ...options,
+      offset,
+      limit: MEMORY_LIST_PAGE_LIMIT,
+    });
+    all.push(...list.memories);
+    if (list.nextOffset === null || list.nextOffset === undefined) return all;
+    if (list.nextOffset <= offset) {
+      throw new Error('Memory list pagination did not advance.');
+    }
+    offset = list.nextOffset;
+  }
+  throw new Error('Memory list is too large to load completely.');
+}
+
+/**
+ * Read each selected memory's current revision, in order,
+ * capturing the privacy label the pre-send review must
+ * show. Any failed read rejects the whole review: a
+ * partial review must never authorize a send.
+ */
+export async function loadMemoryReviewEntries(
+  client: Client,
+  workspaceId: string,
+  ids: string[],
+): Promise<ColliderMemoryReviewEntry[]> {
+  const entries: ColliderMemoryReviewEntry[] = [];
+  for (const id of ids) {
+    const read = await client.readMemory(workspaceId, id);
+    entries.push({
+      memoryId: read.memory.id,
+      revisionId: read.memory.revisionId,
+      version: read.memory.version,
+      title: read.memory.title,
+      body: read.body,
+      privacy: read.memory.privacy,
+    });
+  }
+  return entries;
+}
+
+/**
+ * Read each chosen project item at its pinned version, in
+ * order, capturing the privacy label the pre-send review
+ * must show. Any failed read rejects the whole review.
+ */
+export async function loadProjectReviewEntries(
+  client: Client,
+  workspaceId: string,
+  choices: ColliderProjectChoice[],
+): Promise<ColliderProjectReviewEntry[]> {
+  const entries: ColliderProjectReviewEntry[] = [];
+  for (const choice of choices) {
+    if (choice.kind === 'memory') {
+      const read = await client.readMemory(workspaceId, choice.id, choice.versionId);
+      entries.push({
+        kind: 'memory',
+        memoryId: read.memory.id,
+        revisionId: read.memory.revisionId,
+        version: read.memory.version,
+        title: read.memory.title,
+        body: read.body,
+        privacy: read.memory.privacy,
+      });
+    } else {
+      const read = await client.readProjectArtifact(workspaceId, choice.id, choice.version);
+      entries.push({
+        kind: 'artifact',
+        artifactId: read.artifact.artifactId,
+        version: read.artifact.version,
+        title: read.artifact.title,
+        body: read.body,
+        privacy: read.artifact.privacy,
+      });
+    }
+  }
+  return entries;
+}
+
+/**
+ * Count list items the picker deliberately hides: project
+ * records among a project's members (containers, not
+ * content) and ineligible artifact types (approval rows
+ * are never offered as context). Counts only — the panel
+ * never shows hidden titles or bodies.
+ */
+export function countHiddenProjectItems(
+  members: MemoryMetadata[],
+  artifacts: { type: string }[],
+): { hiddenMembers: number; hiddenArtifacts: number } {
+  return {
+    hiddenMembers: members.filter(m => m.kind === 'project').length,
+    hiddenArtifacts: artifacts.filter(a => !ELIGIBLE_PROJECT_ARTIFACT_TYPES.has(a.type)).length,
+  };
+}
 
 export type ColliderProjectChoice = {
   kind: 'memory' | 'artifact';
@@ -644,6 +781,8 @@ export type ColliderProjectReviewEntry = {
   version: number;
   title: string;
   body: string;
+  /** Privacy label of the pinned revision or version that will be sent. */
+  privacy: string;
 };
 
 export function ColliderPanel({
@@ -689,6 +828,20 @@ export function ColliderPanel({
   >(null);
   const [projectReviewLoading, setProjectReviewLoading] = useState(false);
   const [projectReviewError, setProjectReviewError] = useState('');
+  // List failures are their own state, never an empty
+  // list: an empty list means "nothing to offer", an
+  // error means "could not load". Retry counters reload
+  // the same lists and reviews without changing the
+  // selection.
+  const [projectOptionsError, setProjectOptionsError] = useState('');
+  const [projectMembersError, setProjectMembersError] = useState('');
+  const [projectArtifactsError, setProjectArtifactsError] = useState('');
+  const [projectListsLoaded, setProjectListsLoaded] = useState(false);
+  const [projectListRetry, setProjectListRetry] = useState(0);
+  const [memoryReviewRetry, setMemoryReviewRetry] = useState(0);
+  const [projectReviewRetry, setProjectReviewRetry] = useState(0);
+  const [projectHiddenMembers, setProjectHiddenMembers] = useState(0);
+  const [projectHiddenArtifacts, setProjectHiddenArtifacts] = useState(0);
   const [starting, setStarting] = useState(false);
   const startingRef = useRef(false);
   const mountedRef = useRef(true);
@@ -712,6 +865,19 @@ export function ColliderPanel({
       return entry.artifactId === choice.id && String(entry.version) === choice.versionId;
     })
   );
+  // Bounds mirror the backend exactly (8 items, 8000 chars
+  // per item, 32000 chars total, per picker). A review
+  // that violates them blocks submission with the bound
+  // named, instead of failing at the backend after the
+  // user pressed Collide Ideas. Nothing is truncated.
+  const reviewBoundsOk =
+    review === null ||
+    (review.every(entry => entry.body.length <= 8000) &&
+      review.reduce((total, entry) => total + entry.body.length, 0) <= 32000);
+  const projectReviewBoundsOk =
+    projectReview === null ||
+    (projectReview.every(entry => entry.body.length <= 8000) &&
+      projectReview.reduce((total, entry) => total + entry.body.length, 0) <= 32000);
   const [controls, setControls] = useState<ColliderControls>(
     DEFAULT_COLLIDER_CONTROLS,
   );
@@ -741,22 +907,6 @@ export function ColliderPanel({
   // superseded selection, so a stale review can never
   // describe a different selection than the one shown.
   const reviewEpoch = useRef(0);
-  async function loadReview(
-    ids: string[],
-  ): Promise<ColliderMemoryReviewEntry[]> {
-    const entries: ColliderMemoryReviewEntry[] = [];
-    for (const id of ids) {
-      const read = await client.readMemory(workspaceId, id);
-      entries.push({
-        memoryId: read.memory.id,
-        revisionId: read.memory.revisionId,
-        version: read.memory.version,
-        title: read.memory.title,
-        body: read.body,
-      });
-    }
-    return entries;
-  }
   useEffect(() => {
     const epoch = ++reviewEpoch.current;
     setReview(null);
@@ -766,7 +916,7 @@ export function ColliderPanel({
       return;
     }
     setReviewLoading(true);
-    void loadReview(selectedIds)
+    void loadMemoryReviewEntries(client, workspaceId, selectedIds)
       .then(entries => {
         if (epoch !== reviewEpoch.current) return;
         setReview(entries);
@@ -776,7 +926,7 @@ export function ColliderPanel({
         if (epoch !== reviewEpoch.current) return;
         setReview(null);
         setReviewError(
-          'A selected memory could not be read; refresh the selection and try again.',
+          'A selected memory could not be read; retry below or refresh the selection.',
         );
         setReviewLoading(false);
       });
@@ -784,7 +934,7 @@ export function ColliderPanel({
       if (reviewEpoch.current === epoch) reviewEpoch.current += 1;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedIds.join(',')]);
+  }, [selectedIds.join(','), memoryReviewRetry]);
 
   // Project context loading and review. Two separate
   // disciplines: option lists are render-only data
@@ -799,98 +949,95 @@ export function ColliderPanel({
   const projectListEpoch = useRef(0);
   useEffect(() => {
     let cancelled = false;
-    void client
-      .listMemories(workspaceId, { kind: 'project' })
+    setProjectOptionsError('');
+    void listAllMemories(
+      client,
+      workspaceId,
+      { kind: 'project' },
+      () => cancelled,
+    )
       .then(list => {
-        if (!cancelled) setProjectOptions(list.memories);
+        if (!cancelled) setProjectOptions(list);
       })
       .catch(() => {
-        if (!cancelled) setProjectOptions([]);
+        if (!cancelled) {
+          setProjectOptions([]);
+          setProjectOptionsError(
+            'Saved projects could not be listed; retry below.',
+          );
+        }
       });
     return () => {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspaceId]);
+  }, [workspaceId, projectListRetry]);
   useEffect(() => {
     if (!selectedProjectId) {
       setProjectMembers([]);
       setProjectArtifacts([]);
+      setProjectMembersError('');
+      setProjectArtifactsError('');
+      setProjectHiddenMembers(0);
+      setProjectHiddenArtifacts(0);
+      setProjectListsLoaded(true);
       return;
     }
     let cancelled = false;
-    void client
-      .listMemories(workspaceId, { projectId: selectedProjectId })
-      .then(list => {
+    setProjectListsLoaded(false);
+    setProjectMembersError('');
+    setProjectArtifactsError('');
+    void (async () => {
+      try {
+        const members = await listAllMemories(
+          client,
+          workspaceId,
+          { projectId: selectedProjectId },
+          () => cancelled,
+        );
+        if (cancelled) return;
+        const hidden = countHiddenProjectItems(members, []);
+        setProjectHiddenMembers(hidden.hiddenMembers);
+        setProjectMembers(members.filter(m => m.kind !== 'project'));
+      } catch {
         if (!cancelled) {
-          setProjectMembers(
-            list.memories.filter(m => m.kind !== 'project'),
+          setProjectMembers([]);
+          setProjectMembersError(
+            'This project\u2019s members could not be listed; retry below.',
           );
         }
-      })
-      .catch(() => {
-        if (!cancelled) setProjectMembers([]);
-      });
-    void client
-      .listProjectArtifacts(workspaceId, selectedProjectId)
-      .then(list => {
+      }
+      if (cancelled) return;
+      try {
+        const list = await client.listProjectArtifacts(workspaceId, selectedProjectId);
+        if (cancelled) return;
+        const hidden = countHiddenProjectItems([], list.artifacts);
+        setProjectHiddenArtifacts(hidden.hiddenArtifacts);
+        setProjectArtifacts(
+          list.artifacts
+            .filter(a => ELIGIBLE_PROJECT_ARTIFACT_TYPES.has(a.type))
+            .map(a => ({
+              artifactId: a.artifactId,
+              title: a.title,
+              version: a.version,
+              type: a.type,
+            })),
+        );
+      } catch {
         if (!cancelled) {
-          setProjectArtifacts(
-            list.artifacts
-              .filter(a => ELIGIBLE_PROJECT_ARTIFACT_TYPES.has(a.type))
-              .map(a => ({
-                artifactId: a.artifactId,
-                title: a.title,
-                version: a.version,
-                type: a.type,
-              })),
+          setProjectArtifacts([]);
+          setProjectArtifactsError(
+            'This project\u2019s artifacts could not be listed; retry below.',
           );
         }
-      })
-      .catch(() => {
-        if (!cancelled) setProjectArtifacts([]);
-      });
+      }
+      if (!cancelled) setProjectListsLoaded(true);
+    })();
     return () => {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedProjectId]);
-  async function loadProjectReview(
-    choices: ColliderProjectChoice[],
-  ): Promise<ColliderProjectReviewEntry[]> {
-    const entries: ColliderProjectReviewEntry[] = [];
-    for (const choice of choices) {
-      if (choice.kind === 'memory') {
-        const read = await client.readMemory(
-          workspaceId,
-          choice.id,
-          choice.versionId,
-        );
-        entries.push({
-          kind: 'memory',
-          memoryId: read.memory.id,
-          revisionId: read.memory.revisionId,
-          version: read.memory.version,
-          title: read.memory.title,
-          body: read.body,
-        });
-      } else {
-        const read = await client.readProjectArtifact(
-          workspaceId,
-          choice.id,
-          choice.version,
-        );
-        entries.push({
-          kind: 'artifact',
-          artifactId: read.artifact.artifactId,
-          version: read.artifact.version,
-          title: read.artifact.title,
-          body: read.body,
-        });
-      }
-    }
-    return entries;
-  }
+  }, [selectedProjectId, projectListRetry]);
   const projectChoicesKey = projectChoices
     .map(c => `${c.kind}:${c.id}@${c.versionId}`)
     .join(',');
@@ -903,7 +1050,7 @@ export function ColliderPanel({
       return;
     }
     setProjectReviewLoading(true);
-    void loadProjectReview(projectChoices)
+    void loadProjectReviewEntries(client, workspaceId, projectChoices)
       .then(entries => {
         if (epoch !== projectReviewEpoch.current) return;
         setProjectReview(entries);
@@ -913,7 +1060,7 @@ export function ColliderPanel({
         if (epoch !== projectReviewEpoch.current) return;
         setProjectReview(null);
         setProjectReviewError(
-          'A selected project item could not be read; refresh the selection and try again.',
+          'A selected project item could not be read; retry below or refresh the selection.',
         );
         setProjectReviewLoading(false);
       });
@@ -921,7 +1068,7 @@ export function ColliderPanel({
       if (projectReviewEpoch.current === epoch) projectReviewEpoch.current += 1;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectChoicesKey]);
+  }, [projectChoicesKey, projectReviewRetry]);
 
   function changeSelectedProject(id: string) {
     // Invalidate in the input event, before any old
@@ -958,13 +1105,15 @@ export function ColliderPanel({
       },
     ]);
     const epoch = projectListEpoch.current;
-    void client
-      .listMemories(workspaceId, { id: m.id, projectId: selectedProjectId })
+    void listAllMemories(client, workspaceId, {
+      id: m.id,
+      projectId: selectedProjectId,
+    })
       .then(list => {
         if (epoch !== projectListEpoch.current) return;
         setProjectVersions(previous => ({
           ...previous,
-          [`memory:${m.id}`]: list.memories.map(r => ({
+          [`memory:${m.id}`]: list.map(r => ({
             id: r.revisionId,
             version: r.version,
           })),
@@ -1087,7 +1236,7 @@ export function ColliderPanel({
   }, []);
 
   async function collide() {
-    if (!mountedRef.current || startingRef.current || busy || running || !reviewReady || !projectReviewReady) return;
+    if (!mountedRef.current || startingRef.current || busy || running || !reviewReady || !projectReviewReady || !reviewBoundsOk || !projectReviewBoundsOk) return;
     // The immutable revisions already displayed are the consent boundary.
     // Re-reading current heads here could transmit an unseen newer revision.
     // The same holds for project items: only the reviewed refs are sent.
@@ -1221,27 +1370,41 @@ export function ColliderPanel({
           {contextMemories.length === 0 && (
             <p className="help">No other memories in this workspace yet.</p>
           )}
-          {contextMemories.map(m => (
-            <label key={m.id}>
-              <input
-                type="checkbox"
-                checked={selectedIds.includes(m.id)}
-                onChange={e => {
-                  // Invalidate in the input event, before an old read can
-                  // settle or an immediate submit can reuse the previous review.
-                  reviewEpoch.current += 1;
-                  setReview(null);
-                  setReviewError('');
-                  setSelectedIds(previous =>
-                    e.target.checked
-                      ? [...previous, m.id]
-                      : previous.filter(id => id !== m.id),
-                  );
-                }}
-              />{' '}
-              {m.title} · Revision {m.version} · {m.privacy}
-            </label>
-          ))}
+          {selectedIds.length >= 8 && (
+            <p className="help">8 memories maximum for memory context.</p>
+          )}
+          {contextMemories.map(m => {
+            const checked = selectedIds.includes(m.id);
+            const inProjectContext = projectChoices.some(
+              c => c.kind === 'memory' && c.id === m.id,
+            );
+            const disabled =
+              !checked && (inProjectContext || selectedIds.length >= 8);
+            return (
+              <label key={m.id}>
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  disabled={disabled}
+                  onChange={e => {
+                    // Invalidate in the input event, before an old read can
+                    // settle or an immediate submit can reuse the previous review.
+                    reviewEpoch.current += 1;
+                    setReview(null);
+                    setReviewError('');
+                    setSelectedIds(previous =>
+                      e.target.checked
+                        ? [...previous, m.id]
+                        : previous.filter(id => id !== m.id),
+                    );
+                  }}
+                />{' '}
+                {m.title} · Revision {m.version} · {m.privacy}
+                {inProjectContext && ' · already selected in project context'}
+                {!checked && !inProjectContext && selectedIds.length >= 8 && ' · 8 maximum'}
+              </label>
+            );
+          })}
         </fieldset>
         {selectedIds.length > 0 && (
           <section aria-label="Memory context to send">
@@ -1251,11 +1414,23 @@ export function ColliderPanel({
             </p>
             {reviewLoading && <p role="status">Loading the selected memory review…</p>}
             {reviewError && <p role="alert">{reviewError}</p>}
+            {reviewError && (
+              <button type="button" onClick={() => setMemoryReviewRetry(r => r + 1)}>
+                Retry loading the memory review
+              </button>
+            )}
+            {review && !reviewBoundsOk && (
+              <p role="alert">
+                A reviewed memory exceeds the 8000-character item limit, or
+                the memory context exceeds 32000 characters in total;
+                remove an item before colliding. Nothing is truncated.
+              </p>
+            )}
             {review &&
               review.map(entry => (
                 <details key={entry.memoryId}>
                   <summary>
-                    {entry.title} · revision {entry.version}
+                    {entry.title} · revision {entry.version} · {entry.privacy}
                   </summary>
                   <pre>{entry.body}</pre>
                 </details>
@@ -1287,7 +1462,35 @@ export function ColliderPanel({
               ))}
             </select>
           </label>
-          {selectedProjectId && projectMembers.length === 0 && projectArtifacts.length === 0 && (
+          {projectOptionsError && <p role="alert">{projectOptionsError}</p>}
+          {projectOptionsError && (
+            <button type="button" onClick={() => setProjectListRetry(r => r + 1)}>
+              Retry loading saved projects
+            </button>
+          )}
+          {projectMembersError && <p role="alert">{projectMembersError}</p>}
+          {projectArtifactsError && <p role="alert">{projectArtifactsError}</p>}
+          {(projectMembersError || projectArtifactsError) && (
+            <button type="button" onClick={() => setProjectListRetry(r => r + 1)}>
+              Retry loading project items
+            </button>
+          )}
+          {projectHiddenMembers > 0 && (
+            <p className="help">
+              {projectHiddenMembers} project record(s) in this project are
+              containers, not content, and are not offered.
+            </p>
+          )}
+          {projectHiddenArtifacts > 0 && (
+            <p className="help">
+              {projectHiddenArtifacts} artifact(s) have ineligible types
+              (approval records are never offered) and are not shown.
+            </p>
+          )}
+          {projectChoices.length >= 8 && (
+            <p className="help">8 items maximum for project context.</p>
+          )}
+          {selectedProjectId && projectListsLoaded && !projectMembersError && !projectArtifactsError && projectMembers.length === 0 && projectArtifacts.length === 0 && (
             <p className="help">This project has no selectable items yet.</p>
           )}
           {projectMembers.map(m => {
@@ -1295,15 +1498,22 @@ export function ColliderPanel({
               c => c.kind === 'memory' && c.id === m.id,
             );
             const versions = projectVersions[`memory:${m.id}`];
+            const inMemoryContext = selectedIds.includes(m.id);
             return (
               <div key={`memory:${m.id}`}>
                 <label>
                   <input
                     type="checkbox"
                     checked={choice !== undefined}
+                    disabled={
+                      choice === undefined &&
+                      (inMemoryContext || projectChoices.length >= 8)
+                    }
                     onChange={e => toggleProjectMemory(m, e.target.checked)}
                   />{' '}
                   {m.title} · memory · Revision {m.version} · {m.privacy}
+                  {inMemoryContext && ' · already selected in memory context'}
+                  {choice === undefined && !inMemoryContext && projectChoices.length >= 8 && ' · 8 maximum'}
                 </label>
                 {choice && versions && versions.length > 0 && (
                   <label>
@@ -1340,9 +1550,11 @@ export function ColliderPanel({
                   <input
                     type="checkbox"
                     checked={choice !== undefined}
+                    disabled={choice === undefined && projectChoices.length >= 8}
                     onChange={e => toggleProjectArtifact(a, e.target.checked)}
                   />{' '}
                   {a.title} · artifact ({a.type}) · Version {a.version}
+                  {choice === undefined && projectChoices.length >= 8 && ' · 8 maximum'}
                 </label>
                 {choice && versions && versions.length > 0 && (
                   <label>
@@ -1379,6 +1591,18 @@ export function ColliderPanel({
               <p role="status">Loading the selected project review…</p>
             )}
             {projectReviewError && <p role="alert">{projectReviewError}</p>}
+            {projectReviewError && (
+              <button type="button" onClick={() => setProjectReviewRetry(r => r + 1)}>
+                Retry loading the project review
+              </button>
+            )}
+            {projectReview && !projectReviewBoundsOk && (
+              <p role="alert">
+                A reviewed project item exceeds the 8000-character item
+                limit, or the project context exceeds 32000 characters in
+                total; remove an item before colliding. Nothing is truncated.
+              </p>
+            )}
             {projectReview &&
               projectReview.map(entry => (
                 <details
@@ -1391,7 +1615,7 @@ export function ColliderPanel({
                   <summary>
                     {entry.title} ·{' '}
                     {entry.kind === 'memory' ? 'memory revision' : 'artifact version'}{' '}
-                    {entry.version}
+                    {entry.version} · {entry.privacy}
                   </summary>
                   <pre>{entry.body}</pre>
                 </details>
@@ -1488,7 +1712,7 @@ export function ColliderPanel({
             Zero-Cost Lock (never spend)
           </label>
         </fieldset>
-        <button type="submit" disabled={busy || running || starting || !reviewReady || !projectReviewReady}>
+        <button type="submit" disabled={busy || running || starting || !reviewReady || !projectReviewReady || !reviewBoundsOk || !projectReviewBoundsOk}>
           Collide Ideas
         </button>
         {run?.status === 'running' && (
