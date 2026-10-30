@@ -3644,3 +3644,65 @@ fn review_fabricated_original_project_id_without_restore_mapping_refuses_restore
         "fabricated-original-project-without-mapping",
     );
 }
+
+#[test]
+fn review_new_work_after_restore_survives_further_restore_generations() {
+    let fake = start_fake();
+    let original = fixture(&fake, "free");
+    let (memory, revision, _) = create_project_memory(
+        &original,
+        &original.project,
+        "Original note",
+        "Original source content.",
+    );
+    let started = start_collide_ctx(
+        &original,
+        "Trading.",
+        "Mycelium.",
+        json!([{"memoryId":memory,"revisionId":revision}]),
+    )
+    .unwrap();
+    let run = started["runId"].as_str().unwrap();
+    assert_eq!(poll_until(&original, run)["status"], "complete");
+    save_collision(&original, run);
+    let store = Storage::new(original._dir.path().to_path_buf()).unwrap();
+    let bytes = backup_bytes(original._dir.path(), &store, &original.ws);
+    let restored_dir = tempfile::tempdir().unwrap();
+    let (restored_core, restored_ws) = restore_workspace(&restored_dir, &bytes, "generation-B");
+    let restored_project = find_project_id(&restored_core, &restored_ws, "Collider Project");
+    let source = list_experiments(&restored_core, &restored_ws, &restored_project)[0]
+        .0
+        .clone();
+    restored_core.ai_command("providers-configure",json!({
+        "workspaceId":restored_ws,"config":{
+            "providers":[{"config":{"provider":"ollama","baseUrl":fake.base_url,"credential":null,"enabled":true},
+                "locality":"local","models":[{"id":"llama-x","provider":"ollama",
+                "capabilities":{"chat":true,"streaming":true,"vision":false,"coding":true,"deepReasoning":false,"embeddings":false},
+                "contextWindow":8192,"cost":"free","speed":"balanced"}]}],
+            "budget":{"maxRequests":50,"maxTotalTokens":500000}}
+    })).unwrap();
+    let resumed = Fixture {
+        _dir: restored_dir,
+        core: restored_core,
+        ws: restored_ws,
+        project: restored_project,
+    };
+    // New user work in B pins B's generation-time source, not A's old ids.
+    let started = start_collide_project(&resumed,json!({"projectId":resumed.project,"items":[{"kind":"artifact","artifactId":source,"version":1}]})).unwrap();
+    let run = started["runId"].as_str().unwrap();
+    assert_eq!(poll_until(&resumed, run)["status"], "complete");
+    save_collision(&resumed, run);
+    let store = Storage::new(resumed._dir.path().to_path_buf()).unwrap();
+    let bytes = backup_bytes(resumed._dir.path(), &store, &resumed.ws);
+    let second_dir = tempfile::tempdir().unwrap();
+    let (_second, second_ws) = restore_workspace(&second_dir, &bytes, "generation-C");
+    let store = Storage::new(second_dir.path().to_path_buf()).unwrap();
+    let bytes = backup_bytes(second_dir.path(), &store, &second_ws);
+    let final_dir = tempfile::tempdir().unwrap();
+    let final_core = Core::with_storage_root(final_dir.path().to_path_buf());
+    let result = try_upload_restore(&final_core, &bytes, "generation-D");
+    assert!(
+        result.is_ok(),
+        "new work after a restore must remain recoverable at subsequent generations: {result:?}"
+    );
+}

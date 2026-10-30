@@ -1,5 +1,9 @@
 # ANANSI Ultimate — Requirements Matrix
 
+## R1 repair Windows review and resumed-work lineage — 2026-10-30
+
+AN-013/018/019/024 remain in progress. [Focused Windows review](reviews/windows-m8-r1-provenance.md) confirms the four earlier probes and browser/UI/static checks pass; a new valid resumed-work/multi-generation restore case fails because intermediate provenance is lost. Preserve repaired forgery controls; recovery/promotion and native/production certification remain open.
+
 ## M8 R1 provenance repair — 2026-10-30
 
 AN-013/018/019/024 remain in progress. The two remaining R1

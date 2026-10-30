@@ -1,5 +1,9 @@
 # ANANSI Ultimate — Recovery Guide
 
+## Current provenance Windows review — 2026-10-30
+
+Use `E:/Anansi/worktrees/review-m8-overnight`, branch `codex/review-m8-r1-provenance`, incoming `b6a3251c`. [Verified outcomes and R4](reviews/windows-m8-r1-provenance.md): original four probes pass, but new work created after a restore loses intermediate identity authority on a later recovery. Do not promote; preserve exact mapping authority, immutable snapshots and prior R1–R3 fixes. Muse owns the bounded lineage implementation; reviewer additions only test/document the failure. Antigravity tooling and owner previews/data are separate. No automatic cloud, CI, pushes or audit-monitor activation.
+
 ## Current M8 R1 provenance repair — 2026-10-30
 
 Use branch `muse/m8-r1-provenance-repair`, from reviewer tip
