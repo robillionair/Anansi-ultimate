@@ -1,3 +1,7 @@
+## 2026-10-30 — URL repair Windows follow-up
+
+Runtime `947b87b53` passes original reviewer probes2/2, URL integration18/18, UI/contracts99/99, TypeScript/docs. Remaining URL-02b: fragmented bytes inside one encrypted TLS record bypass the total deadline; new synthetic probe fails. [Review](reviews/windows-m8-url-input-repair.md). No browser/native acceptance or promotion.
+
 ## 2026-10-30 — M8 URL input repair (Linux; independent Windows rerun pending)
 
 On branch `muse/m8-url-input-repair` from reviewer
