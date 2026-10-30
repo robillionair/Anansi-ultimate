@@ -8,6 +8,10 @@ import {
   parseColliderResult,
   parseColliderExperimentBody,
   DEFAULT_COLLIDER_CONTROLS,
+  listAllMemories,
+  loadMemoryReviewEntries,
+  loadProjectReviewEntries,
+  countHiddenProjectItems,
 } from '../src/Collider';
 
 /**
@@ -403,4 +407,146 @@ test('panel offers unselected memory context and starts nothing on render', () =
   assert.match(html, /Memory context \(optional\)/);
   assert.match(html, /Tide notes · Revision 2/);
   assert.match(html, /Nothing is selected automatically/);
+});
+
+test('picker list helper pages memory lists to exhaustion without silent truncation', async () => {
+  const total = 250;
+  const rows = Array.from({ length: total }, (_, i) => ({
+    id: `m${i}`,
+    kind: i === 0 ? 'project' : 'note',
+    revisionId: `r${i}`,
+    version: 1,
+    title: `Item ${i}`,
+    privacy: 'private',
+  }));
+  let calls = 0;
+  const client = {
+    listMemories: async (_ws: string, options: { offset?: number; limit?: number }) => {
+      calls += 1;
+      const offset = options.offset ?? 0;
+      const limit = options.limit ?? 50;
+      const page = rows.slice(offset, offset + limit);
+      return {
+        memories: page,
+        nextOffset: offset + limit < total ? offset + limit : null,
+      };
+    },
+  } as any;
+  const all = await listAllMemories(client, 'w'.repeat(32), { kind: 'project' });
+  assert.equal(all.length, total);
+  assert.equal(all[0].id, 'm0');
+  assert.equal(all[249].id, 'm249');
+  assert.equal(calls, 3);
+  // Exact page boundary: 200 rows take exactly 2 pages, no extra call.
+  const rows200 = rows.slice(0, 200);
+  let calls200 = 0;
+  const client200 = {
+    listMemories: async (_ws: string, options: { offset?: number; limit?: number }) => {
+      calls200 += 1;
+      const offset = options.offset ?? 0;
+      const limit = options.limit ?? 50;
+      const page = rows200.slice(offset, offset + limit);
+      return {
+        memories: page,
+        nextOffset: offset + limit < 200 ? offset + limit : null,
+      };
+    },
+  } as any;
+  const all200 = await listAllMemories(client200, 'w'.repeat(32), {});
+  assert.equal(all200.length, 200);
+  assert.equal(calls200, 2);
+  // Empty list stays empty with a single call.
+  const empty = {
+    listMemories: async () => ({ memories: [], nextOffset: null }),
+  } as any;
+  assert.deepEqual(await listAllMemories(empty, 'w'.repeat(32), {}), []);
+  // A failure mid-pages rejects: the caller gets an error, never a
+  // partial list presented as complete.
+  const failing = {
+    listMemories: async (_ws: string, options: { offset?: number; limit?: number }) => {
+      if ((options.offset ?? 0) > 0) throw new Error('page two exploded');
+      return { memories: rows.slice(0, 100), nextOffset: 100 };
+    },
+  } as any;
+  await assert.rejects(listAllMemories(failing, 'w'.repeat(32), {}), /page two exploded/);
+  // A page that does not advance rejects instead of looping forever.
+  const stuck = {
+    listMemories: async () => ({ memories: rows.slice(0, 100), nextOffset: 0 }),
+  } as any;
+  await assert.rejects(listAllMemories(stuck, 'w'.repeat(32), {}), /did not advance/);
+  // Cancellation between pages returns what was loaded without
+  // fetching further pages; the effect discards it.
+  let cancelled = false;
+  let cancelCalls = 0;
+  const cancellable = {
+    listMemories: async (_ws: string, options: { offset?: number; limit?: number }) => {
+      cancelCalls += 1;
+      if ((options.offset ?? 0) === 0) cancelled = true;
+      const offset = options.offset ?? 0;
+      const limit = options.limit ?? 50;
+      const page = rows.slice(offset, offset + limit);
+      return {
+        memories: page,
+        nextOffset: offset + limit < total ? offset + limit : null,
+      };
+    },
+  } as any;
+  const partial = await listAllMemories(cancellable, 'w'.repeat(32), {}, () => cancelled);
+  assert.equal(partial.length, 100);
+  assert.equal(cancelCalls, 1);
+});
+
+test('picker review loaders capture privacy labels and fail on any unread item', async () => {
+  const client = {
+    readMemory: async (_ws: string, id: string, revisionId?: string) => ({
+      memory: {
+        id,
+        revisionId: revisionId ?? 'r-current',
+        version: revisionId ? 2 : 3,
+        title: `Memory ${id}`,
+        privacy: id === 'm-sealed-never' ? 'sealed' : 'standard',
+      },
+      body: `Body ${id}.`,
+    }),
+    readProjectArtifact: async (_ws: string, artifactId: string, version?: number) => ({
+      artifact: { artifactId, version: version ?? 1, title: `Artifact ${artifactId}`, privacy: 'private' },
+      body: `Artifact body ${artifactId}.`,
+    }),
+  } as any;
+  const memoryEntries = await loadMemoryReviewEntries(client, 'w'.repeat(32), ['m1', 'm2']);
+  assert.equal(memoryEntries.length, 2);
+  assert.equal(memoryEntries[0].privacy, 'standard');
+  assert.equal(memoryEntries[1].body, 'Body m2.');
+  const projectEntries = await loadProjectReviewEntries(client, 'w'.repeat(32), [
+    { kind: 'memory', id: 'm1', versionId: 'r2', version: 2, title: 'M1' },
+    { kind: 'artifact', id: 'a1', versionId: '3', version: 3, title: 'A1' },
+  ]);
+  assert.equal(projectEntries.length, 2);
+  assert.equal(projectEntries[0].privacy, 'standard');
+  assert.equal(projectEntries[0].revisionId, 'r2');
+  assert.equal(projectEntries[1].privacy, 'private');
+  assert.equal(projectEntries[1].version, 3);
+  const failing = {
+    ...client,
+    readMemory: async (_ws: string, id: string) => {
+      if (id === 'm2') throw new Error('unreadable');
+      return client.readMemory(_ws, id);
+    },
+  } as any;
+  await assert.rejects(loadMemoryReviewEntries(failing, 'w'.repeat(32), ['m1', 'm2']), /unreadable/);
+});
+
+test('picker hidden-item counts cover project records and ineligible artifacts', () => {
+  assert.deepEqual(
+    countHiddenProjectItems(
+      [
+        { kind: 'project', id: 'p' },
+        { kind: 'note', id: 'n1' },
+        { kind: 'note', id: 'n2' },
+      ] as any,
+      [{ type: 'note' }, { type: 'transfer-approval' }, { type: 'evaluation' }],
+    ),
+    { hiddenMembers: 1, hiddenArtifacts: 1 },
+  );
+  assert.deepEqual(countHiddenProjectItems([], []), { hiddenMembers: 0, hiddenArtifacts: 0 });
 });
