@@ -149,7 +149,12 @@ fn is_public_v4(ip: Ipv4Addr) -> bool {
     if o[0] == 192 && o[1] == 0 && (o[2] == 0 || o[2] == 2) {
         return false;
     }
-    if o[0] == 192 && ((o[1] == 31 && o[2] == 196) || (o[1] == 52 && o[2] == 193) || (o[1] == 88 && o[2] == 99) || (o[1] == 175 && o[2] == 48)) {
+    if o[0] == 192
+        && ((o[1] == 31 && o[2] == 196)
+            || (o[1] == 52 && o[2] == 193)
+            || (o[1] == 88 && o[2] == 99)
+            || (o[1] == 175 && o[2] == 48))
+    {
         return false;
     }
     if o[0] == 192 && o[1] == 168 {
@@ -222,10 +227,7 @@ struct HopTarget {
 /// port, host class, and — for DNS names — resolution with
 /// every resolved address classified. Returns the address
 /// to connect to, so the caller never re-resolves.
-fn validate_target(
-    url: &url::Url,
-    policy: UrlFetchPolicy,
-) -> Result<HopTarget, String> {
+fn validate_target(url: &url::Url, policy: UrlFetchPolicy) -> Result<HopTarget, String> {
     let scheme = url.scheme();
     if scheme != "http" && scheme != "https" {
         return Err(err("URL scheme must be http or https."));
@@ -310,7 +312,10 @@ fn resolve(host: &str, port: u16) -> Result<Vec<SocketAddr>, String> {
 /// A readable byte stream: plain TCP or rustls over TCP.
 enum FetchStream {
     Plain(TcpStream),
-    Tls(StreamOwned<ClientConnection, TcpStream>),
+    // Boxed: StreamOwned is large, and the plain variant
+    // would otherwise trip the large-enum-variant lint
+    // (the same boxing the save-claim enum uses).
+    Tls(Box<StreamOwned<ClientConnection, TcpStream>>),
 }
 
 impl Read for FetchStream {
@@ -509,12 +514,7 @@ fn read_response_inner(
                 return Err(err("Fetching the URL timed out."));
             }
             let size_line = reader.read_line(256)?;
-            let size_text = size_line
-                .trim()
-                .split(';')
-                .next()
-                .unwrap_or("")
-                .trim();
+            let size_text = size_line.trim().split(';').next().unwrap_or("").trim();
             let size = usize::from_str_radix(size_text, 16)
                 .map_err(|_| err("The server returned a malformed chunked body."))?;
             if size == 0 {
@@ -591,7 +591,7 @@ fn request_once(
         };
         let conn = ClientConnection::new(tls_config.clone(), server_name)
             .map_err(|e| err(format!("Could not start TLS: {e}")))?;
-        FetchStream::Tls(StreamOwned::new(conn, tcp))
+        FetchStream::Tls(Box::new(StreamOwned::new(conn, tcp)))
     } else {
         FetchStream::Plain(tcp)
     };
@@ -637,8 +637,8 @@ fn request_once(
 
 /// Strict UTF-8 decode with one leading BOM stripped.
 fn decode_plain(body: &[u8]) -> Result<(String, bool), String> {
-    let text = String::from_utf8(body.to_vec())
-        .map_err(|_| err("Fetched content is not valid UTF-8."))?;
+    let text =
+        String::from_utf8(body.to_vec()).map_err(|_| err("Fetched content is not valid UTF-8."))?;
     let (text, bom) = match text.strip_prefix('\u{feff}') {
         Some(rest) => (rest.to_string(), true),
         None => (text, false),
@@ -690,8 +690,23 @@ fn extract_html(body: &[u8]) -> Result<(String, bool), String> {
     let rest = current.as_str();
     // Strip tags; block-level tags become newlines.
     const BLOCK: [&str; 17] = [
-        "p", "div", "section", "article", "h1", "h2", "h3", "h4", "h5", "h6", "li", "ul", "ol",
-        "blockquote", "pre", "tr", "br",
+        "p",
+        "div",
+        "section",
+        "article",
+        "h1",
+        "h2",
+        "h3",
+        "h4",
+        "h5",
+        "h6",
+        "li",
+        "ul",
+        "ol",
+        "blockquote",
+        "pre",
+        "tr",
+        "br",
     ];
     let mut text = String::with_capacity(rest.len());
     let bytes = rest.as_bytes();
@@ -771,7 +786,10 @@ fn decode_entities(text: &str) -> String {
             "apos" => Some("'".to_string()),
             "nbsp" => Some(" ".to_string()),
             _ => {
-                if let Some(hex) = entity.strip_prefix("#x").or_else(|| entity.strip_prefix("#X")) {
+                if let Some(hex) = entity
+                    .strip_prefix("#x")
+                    .or_else(|| entity.strip_prefix("#X"))
+                {
                     u32::from_str_radix(hex, 16)
                         .ok()
                         .and_then(char::from_u32)
@@ -808,8 +826,8 @@ pub fn fetch_url_text(
     if submitted_trimmed.is_empty() || submitted_trimmed.chars().count() > MAX_URL_CHARS {
         return Err(err("URL must be 1 to 2048 characters."));
     }
-    let mut current = url::Url::parse(submitted_trimmed)
-        .map_err(|_| err("URL could not be parsed."))?;
+    let mut current =
+        url::Url::parse(submitted_trimmed).map_err(|_| err("URL could not be parsed."))?;
     current.set_fragment(None);
     let tls_config = build_tls_config(extra_roots);
     let deadline = Instant::now() + TOTAL_BUDGET;
@@ -845,10 +863,7 @@ pub fn fetch_url_text(
         }
     }
     let response = fetched.ok_or_else(|| err("Fetching the URL failed."))?;
-    let content_type = response
-        .header("content-type")
-        .unwrap_or("")
-        .to_string();
+    let content_type = response.header("content-type").unwrap_or("").to_string();
     let mut parts = content_type.split(';');
     let media = parts.next().unwrap_or("").trim().to_ascii_lowercase();
     let charset = parts
@@ -872,9 +887,7 @@ pub fn fetch_url_text(
             ("html", "html-conservative", text, bom)
         }
         _ => {
-            return Err(err(
-                "Only plain text and HTML pages can be fetched.",
-            ));
+            return Err(err("Only plain text and HTML pages can be fetched."));
         }
     };
     let text_chars = text.chars().count() as u64;
@@ -948,7 +961,10 @@ mod url_fetch_tests {
                 "{blocked} must be blocked"
             );
         }
-        assert!(is_public_address("2001:4860:4860::8888".parse().unwrap(), policy));
+        assert!(is_public_address(
+            "2001:4860:4860::8888".parse().unwrap(),
+            policy
+        ));
         // Loopback passes only under the test policy.
         assert!(is_public_address(
             "127.0.0.1".parse().unwrap(),
@@ -1001,7 +1017,7 @@ mod url_fetch_tests {
         assert_eq!(text, "hi");
         assert!(bom);
         assert!(decode_plain(&[0xff, 0xfe]).is_err());
-        assert!(decode_plain(b"plain").unwrap().1 == false);
+        assert!(!decode_plain(b"plain").unwrap().1);
     }
 
     #[test]

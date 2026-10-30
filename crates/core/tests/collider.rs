@@ -4070,7 +4070,14 @@ fn document_experiment_transfers_and_survives_backup_restore() {
 /// the saved experiment pins the exact beams and URL
 /// provenance. Beam B carries prompt-like text, which
 /// stays data: the run completes normally.
-fn url_source(submitted: &str, final_url: &str, kind: &str, extraction: &str, text: &str, fetched: &[u8]) -> Value {
+fn url_source(
+    submitted: &str,
+    final_url: &str,
+    kind: &str,
+    extraction: &str,
+    text: &str,
+    fetched: &[u8],
+) -> Value {
     json!({
         "submittedUrl": submitted, "finalUrl": final_url,
         "contentKind": kind, "extraction": extraction,
@@ -4081,7 +4088,12 @@ fn url_source(submitted: &str, final_url: &str, kind: &str, extraction: &str, te
     })
 }
 
-fn start_collide_url(f: &Fixture, beam_a: &str, beam_b: &str, url_a: Value) -> Result<Value, CommandError> {
+fn start_collide_url(
+    f: &Fixture,
+    beam_a: &str,
+    beam_b: &str,
+    url_a: Value,
+) -> Result<Value, CommandError> {
     f.core.ai_command(
         "collider-start",
         json!({

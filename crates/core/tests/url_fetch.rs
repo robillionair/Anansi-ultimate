@@ -43,7 +43,9 @@ impl RouteServer {
                         std::thread::spawn(move || {
                             let mut buf = [0u8; 8192];
                             let mut request = Vec::new();
-                            stream.set_read_timeout(Some(std::time::Duration::from_secs(5))).ok();
+                            stream
+                                .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+                                .ok();
                             loop {
                                 match stream.read(&mut buf) {
                                     Ok(0) => break,
@@ -166,18 +168,8 @@ fn html_fetch_extracts_conservatively() {
 #[test]
 fn redirect_chain_updates_final_url() {
     let server = RouteServer::start(move |path| match path {
-        "/old" => response(
-            302,
-            "Found",
-            &[("Location", "/new")],
-            b"",
-        ),
-        "/new" => response(
-            200,
-            "OK",
-            &[("Content-Type", "text/plain")],
-            b"New page.",
-        ),
+        "/old" => response(302, "Found", &[("Location", "/new")], b""),
+        "/new" => response(200, "OK", &[("Content-Type", "text/plain")], b"New page."),
         _ => response(404, "Not Found", &[], b""),
     });
     let fetched = fetch_url_text(&server.url("/old"), policy(), &[]).unwrap();
@@ -190,12 +182,7 @@ fn redirect_chain_updates_final_url() {
 #[test]
 fn redirect_to_private_refuses_without_connecting() {
     let server = RouteServer::start(move |path| match path {
-        "/to-private" => response(
-            302,
-            "Found",
-            &[("Location", "http://10.0.0.1/")],
-            b"",
-        ),
+        "/to-private" => response(302, "Found", &[("Location", "http://10.0.0.1/")], b""),
         _ => response(404, "Not Found", &[], b""),
     });
     let error = fetch_url_text(&server.url("/to-private"), policy(), &[]).unwrap_err();
@@ -222,7 +209,12 @@ fn redirect_loop_refuses_after_the_bound() {
 #[test]
 fn adversarial_targets_refuse_with_zero_server_hits() {
     let server = RouteServer::start(move |_| {
-        response(200, "OK", &[("Content-Type", "text/plain")], b"should not arrive")
+        response(
+            200,
+            "OK",
+            &[("Content-Type", "text/plain")],
+            b"should not arrive",
+        )
     });
     let port = server.addr.port();
     let strict = UrlFetchPolicy::strict();
@@ -238,11 +230,12 @@ fn adversarial_targets_refuse_with_zero_server_hits() {
         "ftp://127.0.0.1/file".to_string(),
         "http://[::1]/".to_string(),
     ] {
-        let policy = if bad.contains("user:secret") || bad.contains("10.0.0.1") || bad.contains("169.254") {
-            policy()
-        } else {
-            strict
-        };
+        let policy =
+            if bad.contains("user:secret") || bad.contains("10.0.0.1") || bad.contains("169.254") {
+                policy()
+            } else {
+                strict
+            };
         assert!(
             fetch_url_text(&bad, policy, &[]).is_err(),
             "{bad} must be refused"
@@ -255,12 +248,7 @@ fn adversarial_targets_refuse_with_zero_server_hits() {
 fn body_and_type_bounds_refuse() {
     let big = "x".repeat(1_048_577);
     let server = RouteServer::start(move |path| match path {
-        "/big" => response(
-            200,
-            "OK",
-            &[("Content-Type", "text/plain")],
-            big.as_bytes(),
-        ),
+        "/big" => response(200, "OK", &[("Content-Type", "text/plain")], big.as_bytes()),
         "/pdf" => response(
             200,
             "OK",
@@ -273,12 +261,7 @@ fn body_and_type_bounds_refuse() {
             &[("Content-Type", "text/plain; charset=iso-8859-1")],
             &[0xe9],
         ),
-        "/bad-utf8" => response(
-            200,
-            "OK",
-            &[("Content-Type", "text/plain")],
-            &[0xff, 0xfe],
-        ),
+        "/bad-utf8" => response(200, "OK", &[("Content-Type", "text/plain")], &[0xff, 0xfe]),
         "/missing" => response(404, "Not Found", &[], b"nope"),
         "/chunked" => {
             let mut out = b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n".to_vec();
@@ -314,10 +297,7 @@ fn https_fetch_validates_certificates() {
         (der.clone(), key.serialize_der(), CertificateDer::from(der))
     }
 
-    fn serve_https_once(
-        cert_der: Vec<u8>,
-        key_der: Vec<u8>,
-    ) -> (SocketAddr, JoinHandle<()>) {
+    fn serve_https_once(cert_der: Vec<u8>, key_der: Vec<u8>) -> (SocketAddr, JoinHandle<()>) {
         let listener = StdListener::bind("127.0.0.1:0").unwrap();
         let addr = listener.local_addr().unwrap();
         let handle = std::thread::spawn(move || {
@@ -359,9 +339,8 @@ fn https_fetch_validates_certificates() {
         (addr, handle)
     }
 
-    let (good_der, good_key, good_root) = make_cert(vec![SanType::IpAddress(
-        "127.0.0.1".parse().unwrap(),
-    )]);
+    let (good_der, good_key, good_root) =
+        make_cert(vec![SanType::IpAddress("127.0.0.1".parse().unwrap())]);
     let (addr, handle) = serve_https_once(good_der, good_key);
     let url = format!("https://127.0.0.1:{}/secure", addr.port());
     let fetched = fetch_url_text(&url, policy(), &[good_root]).unwrap();
@@ -370,9 +349,8 @@ fn https_fetch_validates_certificates() {
     handle.join().unwrap();
 
     // A certificate for a different name must refuse.
-    let (bad_der, bad_key, bad_root) = make_cert(vec![SanType::DnsName(
-        "example.com".try_into().unwrap(),
-    )]);
+    let (bad_der, bad_key, bad_root) =
+        make_cert(vec![SanType::DnsName("example.com".try_into().unwrap())]);
     let (addr, handle) = serve_https_once(bad_der, bad_key);
     let url = format!("https://127.0.0.1:{}/secure", addr.port());
     // The chain trusts this root, so the only possible

@@ -611,8 +611,8 @@ pub fn validate_url_source(source: &ColliderUrlSource, beam: &str) -> Result<(),
         if raw.is_empty() || raw.chars().count() > 2_048 {
             return Err(format!("URL {label} must be 1 to 2048 characters."));
         }
-        let parsed = url::Url::parse(raw)
-            .map_err(|_| format!("URL {label} could not be parsed."))?;
+        let parsed =
+            url::Url::parse(raw).map_err(|_| format!("URL {label} could not be parsed."))?;
         let scheme = parsed.scheme();
         if scheme != "http" && scheme != "https" {
             return Err(format!("URL {label} scheme must be http or https."));
@@ -1785,8 +1785,8 @@ fn fetch_url(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
     } else {
         crate::url_fetch::UrlFetchPolicy::strict()
     };
-    let fetched = crate::url_fetch::fetch_url_text(&req.url, policy, &[])
-        .map_err(|e| invalid(&e))?;
+    let fetched =
+        crate::url_fetch::fetch_url_text(&req.url, policy, &[]).map_err(|e| invalid(&e))?;
     serde_json::to_value(ColliderUrlFetchResponse {
         contract_version: 1,
         submitted_url: fetched.submitted_url,
