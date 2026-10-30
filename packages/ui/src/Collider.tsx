@@ -1449,6 +1449,13 @@ export function ColliderPanel({
     const setError = beam === 'a' ? setDocumentAError : setDocumentBError;
     const setSource = beam === 'a' ? setDocumentA : setDocumentB;
     const setBeam = beam === 'a' ? setBeamA : setBeamB;
+    // Every new selection supersedes older pending reads,
+    // including a selection that is itself rejected before
+    // reading: invalidate first, before any early return,
+    // so a gated read can never land after newer intent.
+    // A rejection touches only loading state and error —
+    // never the last applied beam or attribution.
+    session.invalidate();
     // Bound the read before allocating it: a file larger
     // than the decoder's limit is refused on File.size
     // alone and its contents are never read. The decoder
@@ -1456,6 +1463,9 @@ export function ColliderPanel({
     // whose size changes between this check and the read.
     if (file.size > MAX_DOCUMENT_BYTES) {
       if (mountedRef.current) {
+        // The invalidated read resolves silently without
+        // clearing the flag itself, so clear it here.
+        setLoading(false);
         setError(`The file must be at most ${MAX_DOCUMENT_BYTES} bytes.`);
       }
       return;

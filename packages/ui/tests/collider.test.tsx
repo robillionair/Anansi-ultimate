@@ -763,6 +763,39 @@ test('document load session gates failures by generation: superseded failures ch
   assert.notEqual(clearOutcome.generation, session.current);
 });
 
+test('document load session: a rejected selection invalidates older pending reads', async () => {
+  const session = new DocumentLoadSession();
+  // A rejected selection is a bare invalidate with no new
+  // load: this is what the panel does before returning
+  // from the pre-read size refusal. An obsolete success
+  // after it must not apply.
+  const oldOk = deferred<{ text: string }>();
+  const oldLoad = session.load(() => oldOk.promise as never);
+  session.invalidate();
+  oldOk.resolve({ text: 'Obsolete content must not win' });
+  const oldOutcome = await oldLoad;
+  assert.equal(oldOutcome.result, null);
+  assert.notEqual(oldOutcome.generation, session.current);
+  // The same holds for an obsolete failure: its error is
+  // carried but stale, so the caller must not display it
+  // over the current rejection.
+  const oldFail = deferred<never>();
+  const oldFailLoad = session.load(() => oldFail.promise as never);
+  session.invalidate();
+  oldFail.reject(Error('obsolete failure'));
+  const oldFailOutcome = await oldFailLoad;
+  assert.equal(oldFailOutcome.error?.message, 'obsolete failure');
+  assert.notEqual(oldFailOutcome.generation, session.current);
+  // The session is not broken by the bare invalidate: a
+  // fresh load afterward still applies.
+  const fresh = deferred<{ text: string }>();
+  const freshLoad = session.load(() => fresh.promise as never);
+  fresh.resolve({ text: 'fresh content' });
+  const freshOutcome = await freshLoad;
+  assert.equal(freshOutcome.result?.text, 'fresh content');
+  assert.equal(freshOutcome.generation, session.current);
+});
+
 test('experiment body parser accepts valid document provenance and rejects malformed records', () => {
   const source = {
     label: 'field-notes.md',
