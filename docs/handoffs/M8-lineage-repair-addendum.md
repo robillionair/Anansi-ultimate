@@ -104,10 +104,13 @@ longer existed. A-era and B-era snapshots coexist legitimately.
   lock, not separate defects. After the fix, jobs_recovery
   7/7, title_search 1/1, vault_increment2 9/9 and
   vault_runtime 2/2 pass. The broad suites were then
-  re-run to completion; totals are recorded in the delivery
-  MANIFEST (see evidence logs). The only remaining failures
-  are the known live-Ollama `semantic_workflow` environment
-  failures.
+  re-run to completion: full core `--no-fail-fast
+  -- --test-threads=1` 363 passed / 4 failed — reconciliation
+  357 (prior repair) + R4 probe + chain test + migration test
+  + alias-set unit test + 2 snapshot unit tests = 363,
+  failures only the known live-Ollama `semantic_workflow`
+  environment failures; providers+API 144/0. Evidence logs
+  are in the delivery ZIP.
 - Not rerun: the full canonical e2e battery end to end — only the
   affected specs above, as in prior rounds. A real v10 backup
   restored end to end is a Windows rerun checklist item (the

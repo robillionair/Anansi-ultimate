@@ -24,11 +24,11 @@ probes 5/5, collider 41/41, transfer 19/19, forge_restore 4/4,
 backup_restore 7/7, backup_artifacts 5/5, opportunities_restore
 3/3, entities_roundtrip 7/7, lib 74/74, node 90/90, 23 affected
 browser tests passing, strict Clippy/fmt/tsc/contracts/docs/
-builds clean, full core and providers+API totals in the delivery
-MANIFEST (only the known live-Ollama semantic_workflow environment
-failures; the first broad run's seven schema-bump failures —
-vault version gates and current-version assertions — were fixed
-in a follow-up commit and the suites re-run). Pre-R1b multi-hop
+builds clean, full core 363/4 (only the known live-Ollama
+semantic_workflow environment failures; the first broad run's
+seven schema-bump failures — vault version gates and
+current-version assertions — were fixed in a follow-up commit
+and the suites re-run), providers+API 144/0. Pre-R1b multi-hop
 packages remain
 fail-closed (see addendum); a real v10 backup restore end to end
 is a Windows checklist item. This does not close Windows
