@@ -1,3 +1,7 @@
+## 2026-10-30 — document repair Windows follow-up
+
+Incoming `ef0b9843` closes DI-01/DI-02 under unchanged Windows probes. Canonical workflow passes; UI/contracts95/95, TypeScript/contracts/docs/web build pass. New DI-03: rejected oversized selection fails to invalidate an older pending read, which later overwrites the beam. [Evidence](reviews/windows-m8-document-input-repair.md). Changes required; no native acceptance or promotion.
+
 ## 2026-10-30 — M8 document input Windows review: changes required
 
 Incoming `faafa1c26` has two frontend findings: file contents read before the size guard, and obsolete read rejection clearing a newer load's dispatch guard. Backend document tests 4/4, UI/contracts 94/94, TypeScript, strict core all-target Clippy, contracts, docs and builds pass. Focused evidence and reproduction: [review](reviews/windows-m8-document-input.md). No native acceptance or promotion.
