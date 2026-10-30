@@ -1,3 +1,7 @@
+## 2026-10-30 — URL input focused Windows review: changes required
+
+Runtime `8cf6ff86` passes incoming URL suite8/8 and UI/contracts99/99; independent probes expose reserved IPv6 admission and missing total deadline inside dribbling response reads0/2. [Review](reviews/windows-m8-url-input.md). No browser/native acceptance, promotion or production certification.
+
 ## 2026-10-30 — M8 URL text input (Linux; independent Windows rerun pending)
 
 On branch `muse/m8-url-input` from reviewer tip
