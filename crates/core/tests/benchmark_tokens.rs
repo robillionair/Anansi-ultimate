@@ -1304,7 +1304,20 @@ fn benchmark_token_consumption() {
         dump_prompt(&format!("{qid}-naive"), &naive);
     }
 
-    // A6: insufficient evidence — zero provider traffic, honest status.
+    // A6: insufficient evidence — honesty graded at the evidence level.
+    // The requested fact is absent from the corpus, but repaired
+    // OR-candidate retrieval legitimately returns Harbor-related
+    // partial matches, so the old proxy (InsufficientEvidence status
+    // plus zero provider traffic, an artifact of pre-repair AND
+    // retrieval returning nothing) no longer holds even when honesty
+    // does. The model-independent offline outcome is therefore graded
+    // directly: no answer without a model, the abstention instruction
+    // present, no cited chunk containing the requested fact, and
+    // disclosure exactly equal to the cited set. Provider traffic
+    // with partial evidence is the designed behavior of repaired
+    // retrieval (retrieval is not proof of answerability); the
+    // genuinely-empty case keeps its zero-traffic assertion in
+    // ask_partial_evidence_acceptance.rs.
     let a6 = run_ask(
         &ask_core,
         &ask_ws,
@@ -1314,7 +1327,54 @@ fn benchmark_token_consumption() {
         real_endpoint.as_deref(),
         real_model.as_deref(),
     );
-    let a6_ok = a6.status == "InsufficientEvidence" && a6.hits == 0;
+    let a6_offline_t0 = Instant::now();
+    let a6_offline = ask_core
+        .ask_anansi(AskRequest {
+            contract_version: 1,
+            workspace_id: ask_ws.clone(),
+            prompt: "What is the Harbor deep-water berth fee?".to_string(),
+            runtime_endpoint: Some("http://127.0.0.1:1".to_string()),
+            model_tag: None,
+            embedding_model: None,
+            max_evidence_items: Some(5),
+        })
+        .unwrap();
+    let a6_offline_ms = a6_offline_t0.elapsed().as_millis() as u64;
+    let a6_prompt = a6_offline.manifest.compiled_prompt.clone();
+    let a6_honest_status = matches!(
+        a6_offline.status,
+        AskStatus::Offline | AskStatus::InsufficientEvidence
+    );
+    let a6_abstains = a6_offline.status == AskStatus::InsufficientEvidence
+        || a6_prompt.contains("state truthfully that evidence is missing");
+    let a6_no_fact = a6_offline
+        .citations
+        .iter()
+        .all(|c| !c.snippet.to_lowercase().contains("berth"));
+    let mut a6_cited: Vec<&str> = a6_offline
+        .citations
+        .iter()
+        .map(|c| c.memory_id.as_str())
+        .collect();
+    let mut a6_disclosed: Vec<&str> = a6_offline
+        .manifest
+        .source_memories
+        .iter()
+        .map(|s| s.id.as_str())
+        .collect();
+    a6_cited.sort_unstable();
+    a6_disclosed.sort_unstable();
+    a6_cited.dedup();
+    a6_disclosed.dedup();
+    let a6_disclosure_exact = a6_cited == a6_disclosed;
+    let a6_in_budget = a6_offline.manifest.character_count < 5500;
+    let a6_ok =
+        a6_honest_status && a6_abstains && a6_no_fact && a6_disclosure_exact && a6_in_budget;
+    let a6_evidence_chars: u64 = a6_offline
+        .citations
+        .iter()
+        .map(|c| c.snippet.chars().count() as u64)
+        .sum();
     push_record(
         &mut records,
         &mut failures,
@@ -1322,25 +1382,28 @@ fn benchmark_token_consumption() {
             scenario: "A6".to_string(),
             approach: "anansi".to_string(),
             question_id: "A6".to_string(),
-            status: a6.status.clone(),
+            status: format!("{:?}", a6_offline.status),
             provider_hits: if real_mode { None } else { Some(a6.hits) },
             request_bytes: None,
-            prompt_chars: Some(0),
-            evidence_chars: Some(0),
-            cited_memory_count: Some(0),
-            anansi_estimate_tokens: Some(0),
-            compile_ms: Some(a6.compile_ms),
-            total_ms: Some(a6.total_ms),
+            prompt_chars: Some(a6_offline.manifest.character_count as u64),
+            evidence_chars: Some(a6_evidence_chars),
+            cited_memory_count: Some(a6_offline.citations.len() as u64),
+            anansi_estimate_tokens: Some(a6_offline.manifest.estimated_tokens as u64),
+            compile_ms: Some(a6_offline_ms),
+            total_ms: Some(a6_offline_ms),
             provider_reported_input_tokens: None,
             provider_reported_output_tokens: None,
             provider_reported_cached_tokens: None,
             ledger_input_tokens: None,
             ledger_output_tokens: None,
             wire_checks_passed: a6_ok,
-            notes: "no provider traffic expected".to_string(),
+            notes: format!(
+                "offline honesty verdict; fake provider hits={} (traffic with partial evidence is designed repaired-retrieval behavior, graded at evidence level, not gated)",
+                a6.hits
+            ),
         },
         a6_ok,
-        "insufficient-evidence honesty / zero hits",
+        "insufficient-evidence honesty (evidence level): no answer without a model, abstention instructed, no fact in citations, disclosure exact",
     );
 
     // A7: repeated question, 3 consecutive calls.

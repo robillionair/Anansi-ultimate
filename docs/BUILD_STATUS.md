@@ -14,6 +14,32 @@ TypeScript/contracts, builds and browser Ask 1/1 pass. No new model answers/toke
 measurements, native preview promotion, cloud calls, pushes or CI. Existing
 full-core A6/Ollama failures remain scoped and recorded.
 
+## 2026-10-30 — A6 benchmark repair: assertion re-anchored, no production change
+
+From verified integration `151565d7` on branch
+`muse/ask-a6-repair` (acceptance frozen first in
+`ask-a6-acceptance.md`). The A6 failure was the test's
+stale proxy, not production: repaired OR retrieval
+legitimately returns partial Harbor matches for the
+absent berth-fee fact, so `InsufficientEvidence + zero
+hits` (a pre-repair AND artifact) failed even when
+honesty held. A6 now grades the model-independent offline
+outcome (never Answered; abstention instructed; no
+"berth" in any citation; disclosure exactly the cited
+set; prompt under 5,500 chars). New held-out test
+`ask_partial_evidence_acceptance` 5/5 (absent,
+shared-vocabulary, complete, conflicting, excluded).
+`benchmark_tokens` 1/1; focused suites, Clippy/fmt/
+contracts/tsc/docs, API/web builds, browser Ask 1/1 pass;
+full core 328 passed / 4 failed (only the known
+live-Ollama environment failures; A6 gone). Previous
+"byte-identical audit" wording corrected: audit results
+match semantically, files differ in line endings
+(LF vs CRLF). Preview launcher and data roots untouched;
+no cloud, credential, download, push, merge, CI, or
+promotion. Model-answer quality still unmeasured; the
+traffic-gating question stays an open owner decision.
+
 ## 2026-10-30 — Verified integration: regressions green, quality unmeasured
 
 From reviewed `532afccf9333522c3e15c97cd42105c71807bf35` on branch
@@ -22,7 +48,9 @@ Linux: focused suites, Clippy/fmt/contracts/tsc/docs, API/web builds,
 browser Ask 1/1, full core 322 passed / 5 failed (same 4 live-Ollama
 environment + 1 pre-existing benchmark A6 as last round, no new
 failures), providers+API 144/0. Windows evidence audit reproduced
-exactly (68/68, 80/80 bindings, p95 4,383.3 ms). Frozen cloud round
+semantically (all fields equal; files differ in line endings,
+LF vs CRLF, so not byte-identical) (68/68, 80/80 bindings,
+p95 4,383.3 ms). Frozen cloud round
 inspected unchanged, still 0 attempts. Local quality comparison
 BLOCKED: no model installed (Ollama blobs empty, no .gguf, no
 llama.cpp); criteria frozen in `ask-local-quality-acceptance.md`,

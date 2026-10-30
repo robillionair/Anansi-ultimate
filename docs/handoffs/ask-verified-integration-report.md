@@ -62,13 +62,21 @@ publication in this round.
 - Canonical browser Ask workflow: 1/1 (isolated lease
   harness, test data only — not the owner's preview).
 
-## 2. Offline audit of the Windows evidence: reproduced exactly
+## 2. Offline audit of the Windows evidence: reproduced semantically, not byte-identically
 
-Ran `scripts/audit-realistic-evidence.py` on the package's
+Correction (2026-10-30, A6 round): an earlier delivery
+message described this reproduction as "byte-identical".
+That wording was wrong. Ran
+`scripts/audit-realistic-evidence.py` on the package's
 `windows-evidence/realistic-evidence.json` (SHA-256
 `71ae70c2511d92231a10c0404a55e55b52fad18c15bfaa64ceda14bb50a82528`).
-The output is identical in every field to the supplied
-independent audit: 80 cases, 68 complete, 80 bound facts,
+The output matches the supplied independent audit in every
+field (all 15 values identical), but the two files differ
+in formatting: the reproduced file uses LF line endings
+(515 bytes) while the supplied file uses CRLF (530 bytes;
+`cmp` first differs at char 2). The results match
+semantically; the files are not byte-identical. Values:
+80 cases, 68 complete, 80 bound facts,
 6 empty disjoint, 6 natural negative context checks, max
 evidence 1,554 bytes, combined prompt bytes 121,280, 600
 additional source appearances, mean 4,124.0 ms, p95
