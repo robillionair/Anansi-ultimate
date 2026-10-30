@@ -979,7 +979,8 @@ fn validate_original_transfer_bindings(source: &rusqlite::Connection) -> Result<
 /// is an allowed restore transformation of a snapshot
 /// only when it differs from that snapshot in exactly
 /// the ways restore itself transforms a body — id
-/// substitutions through the restore identity map and
+/// substitutions evidenced by a backend-recorded
+/// restore_origins pair for the owning workspace, and
 /// pinned-hash rewrites to a referenced package row's
 /// hash — and every such difference is verified against
 /// the source package's own rows. The experiment item's
@@ -1011,36 +1012,78 @@ fn package_artifact_hash(
         .ok()
 }
 
-fn package_id_exists(source: &rusqlite::Connection, id: &str) -> bool {
-    for (table, column) in [
-        ("artifact_versions", "artifact_id"),
-        ("memories", "id"),
-        ("memory_revisions", "id"),
-        ("workspaces", "id"),
-    ] {
-        if let Ok(mut stmt) = source.prepare(&format!(
-            "SELECT 1 FROM {table} WHERE {column} = ?1 LIMIT 1"
-        )) && let Ok(true) = stmt.exists(rusqlite::params![id])
-        {
-            return true;
-        }
-    }
-    false
+/// A differing id is an allowed remap only when the
+/// source package's own `restore_origins` table —
+/// written by restore itself, never by any client API —
+/// records that exact original → restored pair for the
+/// workspace owning the validated artifact. Package
+/// membership alone proves nothing: a fabricated
+/// original that never existed plus a real package id
+/// matches the old membership test exactly. A missing
+/// table (older packages, unit fixtures) means no
+/// mapping exists, so a differing id refuses.
+fn restore_origin_pair(
+    source: &rusqlite::Connection,
+    workspace_id: &str,
+    original: &str,
+    transformed: &str,
+) -> bool {
+    let Ok(mut stmt) = source.prepare(
+        "SELECT 1 FROM restore_origins WHERE original_id = ?1 AND new_id = ?2 AND workspace_id = ?3 LIMIT 1",
+    ) else {
+        return false;
+    };
+    matches!(
+        stmt.exists(rusqlite::params![original, transformed, workspace_id]),
+        Ok(true)
+    )
 }
 
-/// A differing id is an allowed remap only when the new
-/// id is a package id and the old id is not: a genuine
-/// restore always replaces an old id with a new package
-/// id, never with another id already in the package.
-fn check_id_change(source: &rusqlite::Connection, original: &str, transformed: &str) -> bool {
+/// Resolve the ultimate origin of a source id through
+/// the source package's own restore_origins rows, so a
+/// destination package always carries direct
+/// ultimate-original -> current-id pairs and hop 3+
+/// validation stays a single pair lookup. No row, or a
+/// missing table, means the source id is itself the
+/// origin. This is what makes multi-hop restore
+/// provable without copying history rows or trusting
+/// any client-supplied mapping.
+fn ultimate_origin(
+    source: &rusqlite::Connection,
+    workspace_id: &str,
+    id: &str,
+) -> (String, String) {
+    let Ok(mut stmt) = source.prepare(
+        "SELECT original_id, original_workspace FROM restore_origins WHERE new_id = ?1 AND workspace_id = ?2 LIMIT 1",
+    ) else {
+        return (id.to_string(), workspace_id.to_string());
+    };
+    match stmt.query_row(rusqlite::params![id, workspace_id], |r| {
+        Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+    }) {
+        Ok(pair) => pair,
+        Err(_) => (id.to_string(), workspace_id.to_string()),
+    }
+}
+
+/// A differing id is an allowed remap only when the
+/// backend-recorded restore pair above evidences it.
+/// Equal ids pass; anything else without a pair refuses.
+fn check_id_change(
+    source: &rusqlite::Connection,
+    workspace_id: &str,
+    original: &str,
+    transformed: &str,
+) -> bool {
     original == transformed
-        || (is_lower_hex(transformed, 32)
-            && package_id_exists(source, transformed)
-            && !package_id_exists(source, original))
+        || (is_lower_hex(original, 32)
+            && is_lower_hex(transformed, 32)
+            && restore_origin_pair(source, workspace_id, original, transformed))
 }
 
 fn check_id_field(
     source: &rusqlite::Connection,
+    workspace_id: &str,
     original: &serde_json::Value,
     transformed: &serde_json::Value,
     key: &str,
@@ -1050,7 +1093,7 @@ fn check_id_field(
         transformed.get(key).and_then(|v| v.as_str()),
     ) {
         (None, None) => true,
-        (Some(old), Some(new)) => check_id_change(source, old, new),
+        (Some(old), Some(new)) => check_id_change(source, workspace_id, old, new),
         _ => false,
     }
 }
@@ -1114,6 +1157,7 @@ fn version_field(doc: &serde_json::Value, key: &str) -> Option<i64> {
 /// length mismatch or on any element the caller rejects.
 fn check_id_array(
     source: &rusqlite::Connection,
+    workspace_id: &str,
     original: &serde_json::Value,
     normalized: &mut serde_json::Value,
     field: &str,
@@ -1130,7 +1174,7 @@ fn check_id_array(
     }
     for (orig, norm) in orig_items.iter().zip(norm_items.iter_mut()) {
         for key in keys {
-            if !check_id_field(source, orig, norm, key) {
+            if !check_id_field(source, workspace_id, orig, norm, key) {
                 return false;
             }
             normalize_field(norm, orig, key);
@@ -1141,6 +1185,7 @@ fn check_id_array(
 
 fn allowed_restore_transform(
     source: &rusqlite::Connection,
+    workspace_id: &str,
     original_body: &str,
     transformed_body: &str,
 ) -> bool {
@@ -1176,6 +1221,7 @@ fn allowed_restore_transform(
         "anansi-collider-experiment" => {
             if !check_id_array(
                 source,
+                workspace_id,
                 &original,
                 &mut normalized,
                 "memoryContext",
@@ -1183,71 +1229,110 @@ fn allowed_restore_transform(
             ) {
                 return false;
             }
-            let Some(orig_ctx) = original.get("projectContext") else {
-                return normalized.get("projectContext").is_none();
-            };
-            let Some(norm_ctx) = normalized.get_mut("projectContext") else {
-                return false;
-            };
-            if !check_id_field(source, orig_ctx, norm_ctx, "projectId") {
-                return false;
-            }
-            normalize_field(norm_ctx, orig_ctx, "projectId");
-            let Some(orig_items) = orig_ctx.get("items").and_then(|v| v.as_array()) else {
-                return norm_ctx.get("items").is_none();
-            };
-            let Some(norm_items) = norm_ctx.get_mut("items").and_then(|v| v.as_array_mut()) else {
-                return false;
-            };
-            if orig_items.len() != norm_items.len() {
-                return false;
-            }
-            for (orig, norm) in orig_items.iter().zip(norm_items.iter_mut()) {
-                for key in ["memoryId", "revisionId", "artifactId"] {
-                    if !check_id_field(source, orig, norm, key) {
-                        return false;
-                    }
-                    normalize_field(norm, orig, key);
-                }
-                // A restored item hash in the transformed
-                // body must name the package row it
-                // points at; the field itself is then
-                // normalized away, so it cannot authorize
-                // any other difference.
-                if let Some(restored) = str_field(norm, "restoredContentHash")
-                    && !is_lower_hex(restored, 64)
-                {
-                    return false;
-                }
-                if let Some(restored) = str_field(norm, "restoredContentHash") {
-                    let ref_id = str_field(norm, "artifactId");
-                    let ref_version = version_field(norm, "version");
-                    if ref_id.is_none()
-                        || ref_version.is_none()
-                        || package_artifact_hash(
-                            source,
-                            ref_id.unwrap_or_default(),
-                            ref_version.unwrap_or_default(),
-                        )
-                        .as_deref()
-                            != Some(restored)
-                    {
+            // R1a: absence of an optional field must
+            // never return success early. Both-absent
+            // continues to the final whole-document
+            // equality below, which is the only gate
+            // for result text, controls and every other
+            // field; any absent/present mismatch refuses.
+            match original.get("projectContext") {
+                None => {
+                    if normalized.get("projectContext").is_some() {
                         return false;
                     }
                 }
-                normalize_field(norm, orig, "restoredContentHash");
+                Some(orig_ctx) => {
+                    let Some(norm_ctx) = normalized.get_mut("projectContext") else {
+                        return false;
+                    };
+                    if !check_id_field(source, workspace_id, orig_ctx, norm_ctx, "projectId") {
+                        return false;
+                    }
+                    normalize_field(norm_ctx, orig_ctx, "projectId");
+                    match orig_ctx.get("items").and_then(|v| v.as_array()) {
+                        None => {
+                            if norm_ctx.get("items").is_some() {
+                                return false;
+                            }
+                        }
+                        Some(orig_items) => {
+                            let Some(norm_items) =
+                                norm_ctx.get_mut("items").and_then(|v| v.as_array_mut())
+                            else {
+                                return false;
+                            };
+                            if orig_items.len() != norm_items.len() {
+                                return false;
+                            }
+                            for (orig, norm) in orig_items.iter().zip(norm_items.iter_mut()) {
+                                // Capture the transformed
+                                // body's own references
+                                // before normalizing them
+                                // to the original ids: a
+                                // restored item hash must
+                                // name the restored row
+                                // the transformed body
+                                // points at, not the
+                                // original id (which is
+                                // absent from a restored
+                                // package).
+                                let ref_id = str_field(norm, "artifactId").map(str::to_string);
+                                let ref_version = version_field(norm, "version");
+                                for key in ["memoryId", "revisionId", "artifactId"] {
+                                    if !check_id_field(source, workspace_id, orig, norm, key) {
+                                        return false;
+                                    }
+                                    normalize_field(norm, orig, key);
+                                }
+                                // A restored item hash in
+                                // the transformed body
+                                // must name the package
+                                // row it points at; the
+                                // field itself is then
+                                // normalized away, so it
+                                // cannot authorize any
+                                // other difference.
+                                if let Some(restored) = str_field(norm, "restoredContentHash")
+                                    && !is_lower_hex(restored, 64)
+                                {
+                                    return false;
+                                }
+                                if let Some(restored) = str_field(norm, "restoredContentHash")
+                                    && (ref_id.is_none()
+                                        || ref_version.is_none()
+                                        || package_artifact_hash(
+                                            source,
+                                            ref_id.as_deref().unwrap_or_default(),
+                                            ref_version.unwrap_or_default(),
+                                        )
+                                        .as_deref()
+                                            != Some(restored))
+                                {
+                                    return false;
+                                }
+                                normalize_field(norm, orig, "restoredContentHash");
+                            }
+                        }
+                    }
+                }
             }
         }
         "anansi-evaluation" => {
             for key in ["sourceArtifactId", "rubricArtifactId"] {
-                if !check_id_field(source, &original, &normalized, key) {
+                if !check_id_field(source, workspace_id, &original, &normalized, key) {
                     return false;
                 }
                 normalize_field(&mut normalized, &original, key);
             }
         }
         "anansi-product-spec" => {
-            if !check_id_field(source, &original, &normalized, "sourceArtifactId") {
+            if !check_id_field(
+                source,
+                workspace_id,
+                &original,
+                &normalized,
+                "sourceArtifactId",
+            ) {
                 return false;
             }
             normalize_field(&mut normalized, &original, "sourceArtifactId");
@@ -1258,7 +1343,7 @@ fn allowed_restore_transform(
                 "sourceArtifactId",
                 "parentPackageArtifactId",
             ] {
-                if !check_id_field(source, &original, &normalized, key) {
+                if !check_id_field(source, workspace_id, &original, &normalized, key) {
                     return false;
                 }
                 normalize_field(&mut normalized, &original, key);
@@ -1266,7 +1351,7 @@ fn allowed_restore_transform(
         }
         "anansi-deliverable" | "anansi-source-review" => {
             for key in ["packageArtifactId", "specArtifactId"] {
-                if !check_id_field(source, &original, &normalized, key) {
+                if !check_id_field(source, workspace_id, &original, &normalized, key) {
                     return false;
                 }
                 normalize_field(&mut normalized, &original, key);
@@ -1292,7 +1377,13 @@ fn allowed_restore_transform(
             normalize_field(&mut normalized, &original, "specContentHash");
         }
         "anansi-specification-approval" => {
-            if !check_id_field(source, &original, &normalized, "specArtifactId") {
+            if !check_id_field(
+                source,
+                workspace_id,
+                &original,
+                &normalized,
+                "specArtifactId",
+            ) {
                 return false;
             }
             normalize_field(&mut normalized, &original, "specArtifactId");
@@ -1310,7 +1401,7 @@ fn allowed_restore_transform(
         }
         "anansi-transfer-approval" => {
             for key in ["conceptArtifactId", "sourceExperimentArtifactId"] {
-                if !check_id_field(source, &original, &normalized, key) {
+                if !check_id_field(source, workspace_id, &original, &normalized, key) {
                     return false;
                 }
                 normalize_field(&mut normalized, &original, key);
@@ -1336,7 +1427,13 @@ fn allowed_restore_transform(
             normalize_field(&mut normalized, &original, "sourceExperimentContentHash");
         }
         "anansi-forge-concept" => {
-            if !check_id_field(source, &original, &normalized, "sourceExperimentArtifactId") {
+            if !check_id_field(
+                source,
+                workspace_id,
+                &original,
+                &normalized,
+                "sourceExperimentArtifactId",
+            ) {
                 return false;
             }
             normalize_field(&mut normalized, &original, "sourceExperimentArtifactId");
@@ -1355,6 +1452,7 @@ fn allowed_restore_transform(
         "anansi-opportunity-set" => {
             if !check_id_array(
                 source,
+                workspace_id,
                 &original,
                 &mut normalized,
                 "sources",
@@ -1561,7 +1659,12 @@ fn validate_original_experiment_bindings(
                         let binding_ok = if row_hash == entry.content_hash {
                             entry.content == row_body
                         } else {
-                            allowed_restore_transform(source, &entry.content, &row_body)
+                            allowed_restore_transform(
+                                source,
+                                &artifact_workspace,
+                                &entry.content,
+                                &row_body,
+                            )
                         };
                         if row_workspace != artifact_workspace
                             || row_project != *project_id
@@ -2187,12 +2290,25 @@ impl crate::storage::Storage {
                     .map_err(|_| crate::jobs::invalid())?;
             }
         }
+        // R1 provenance: each new origins row records
+        // the ULTIMATE origin of its entity, resolved
+        // through the source package's own origins rows
+        // (see ultimate_origin), not merely the source
+        // id. A snapshot stays verbatim forever, so only
+        // ultimate -> current pairs can authorize a
+        // second, third or later restore; recording only
+        // the latest hop would break hop 3+. No history
+        // rows are copied, so the already-restored guard
+        // (keyed on the backup being restored) is
+        // unaffected, and no schema change is needed.
         for old_workspace in &verified.info.workspaces {
             for (original, new) in &ids {
                 if owners.get(original) != Some(old_workspace) {
                     continue;
                 }
-                tx.execute("INSERT INTO restore_origins(workspace_id,new_id,original_workspace,original_id,backup_id) VALUES(?1,?2,?3,?4,?5)",rusqlite::params![ids[old_workspace],new,old_workspace,original,artifact]).map_err(|_|crate::storage::unavailable())?;
+                let (ultimate_id, ultimate_workspace) =
+                    ultimate_origin(&source, old_workspace, original);
+                tx.execute("INSERT INTO restore_origins(workspace_id,new_id,original_workspace,original_id,backup_id) VALUES(?1,?2,?3,?4,?5)",rusqlite::params![ids[old_workspace],new,ultimate_workspace,ultimate_id,artifact]).map_err(|_|crate::storage::unavailable())?;
             }
         }
         // Rebuild derived search state from the restored
@@ -2747,6 +2863,500 @@ mod experiment_binding_tests {
             ],
         ];
         assert!(apply_pinned_hash_fixups(&names, &mut values).is_err());
+    }
+
+    // R1 provenance audit: direct allowed_restore_transform
+    // cases. All ids below are 32-hex, as real ids are.
+    const T_WS: &str = "cccccccccccccccccccccccccccccccc";
+    const T_OTHER_WS: &str = "ffffffffffffffffffffffffffffffff";
+    const T_OLD_PROJ: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const T_NEW_PROJ: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    const T_OLD_ART: &str = "dddddddddddddddddddddddddddddddd";
+    const T_NEW_ART: &str = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
+    const T_OLD_MEM: &str = "11111111111111111111111111111111";
+    const T_NEW_MEM: &str = "22222222222222222222222222222222";
+    const T_OLD_REV: &str = "33333333333333333333333333333333";
+    const T_NEW_REV: &str = "44444444444444444444444444444444";
+    const T_FAKE: &str = "ffffffffffffffffffffffffffffffff";
+
+    fn transform_db() -> Connection {
+        let db = Connection::open_in_memory().unwrap();
+        db.execute_batch(
+            "CREATE TABLE artifact_versions (artifact_id TEXT, version INTEGER, content_hash TEXT);
+             CREATE TABLE restore_origins (workspace_id TEXT, new_id TEXT, original_workspace TEXT, original_id TEXT, backup_id TEXT);",
+        )
+        .unwrap();
+        db
+    }
+
+    fn add_origin(db: &Connection, workspace: &str, original: &str, new: &str) {
+        db.execute(
+            "INSERT INTO restore_origins VALUES (?1, ?2, 'old-ws', ?3, 'backup-1')",
+            rusqlite::params![workspace, new, original],
+        )
+        .unwrap();
+    }
+
+    fn add_row(db: &Connection, artifact: &str, version: i64, hash: &str) {
+        db.execute(
+            "INSERT INTO artifact_versions VALUES (?1, ?2, ?3)",
+            rusqlite::params![artifact, version, hash],
+        )
+        .unwrap();
+    }
+
+    fn collider_doc() -> serde_json::Value {
+        let hash = crate::content::hash("hello context".as_bytes());
+        let mut doc: serde_json::Value =
+            serde_json::from_str(&experiment_body("hello context", &hash, "mem-1")).unwrap();
+        doc.as_object_mut().unwrap().remove("memoryContext");
+        doc
+    }
+
+    fn artifact_item(artifact: &str) -> serde_json::Value {
+        serde_json::json!({
+            "kind": "artifact",
+            "memoryId": null,
+            "revisionId": null,
+            "artifactId": artifact,
+            "artifactType": "note",
+            "version": 1,
+            "title": "Note",
+            "content": "inner body",
+            "contentHash": crate::content::hash("inner body".as_bytes()),
+            "privacy": "private"
+        })
+    }
+
+    fn with_context(doc: &mut serde_json::Value, project: &str, items: serde_json::Value) {
+        doc["projectContext"] = serde_json::json!({
+            "projectId": project,
+            "projectTitle": "Project",
+            "items": items
+        });
+    }
+
+    #[test]
+    fn transform_context_free_forgery_refuses_and_identical_accepts() {
+        let db = transform_db();
+        let base = collider_doc();
+        assert!(base.get("projectContext").is_none());
+        let original = base.to_string();
+        assert!(allowed_restore_transform(&db, T_WS, &original, &original));
+        let mut forged = base.clone();
+        forged["result"]["sourceUnderstanding"] =
+            serde_json::json!("Invented source understanding.");
+        assert!(!allowed_restore_transform(
+            &db,
+            T_WS,
+            &original,
+            &forged.to_string()
+        ));
+        let mut forged = base.clone();
+        forged["beamA"] = serde_json::json!("Invented beam.");
+        assert!(!allowed_restore_transform(
+            &db,
+            T_WS,
+            &original,
+            &forged.to_string()
+        ));
+        let mut forged = base.clone();
+        forged["controls"]["creativity"] = serde_json::json!("wild");
+        assert!(!allowed_restore_transform(
+            &db,
+            T_WS,
+            &original,
+            &forged.to_string()
+        ));
+        // Adding a whole optional section is a difference too.
+        let mut added = base.clone();
+        with_context(&mut added, T_NEW_PROJ, serde_json::json!([]));
+        assert!(!allowed_restore_transform(
+            &db,
+            T_WS,
+            &original,
+            &added.to_string()
+        ));
+        let mut added = base.clone();
+        added["memoryContext"] = serde_json::json!([]);
+        assert!(!allowed_restore_transform(
+            &db,
+            T_WS,
+            &original,
+            &added.to_string()
+        ));
+    }
+
+    #[test]
+    fn transform_project_context_absent_present_empty_and_pairs() {
+        let db = transform_db();
+        add_origin(&db, T_WS, T_OLD_PROJ, T_NEW_PROJ);
+        add_origin(&db, T_WS, T_OLD_ART, T_NEW_ART);
+        add_origin(&db, T_OTHER_WS, T_OLD_PROJ, T_NEW_PROJ);
+        // Absent vs present refuses both ways.
+        let mut with_ctx = collider_doc();
+        with_context(&mut with_ctx, T_OLD_PROJ, serde_json::json!([]));
+        let ctx_str = with_ctx.to_string();
+        let bare = collider_doc().to_string();
+        assert!(!allowed_restore_transform(&db, T_WS, &ctx_str, &bare));
+        assert!(!allowed_restore_transform(&db, T_WS, &bare, &ctx_str));
+        // Empty items, identical, accept; invented text with empty items refuses.
+        assert!(allowed_restore_transform(&db, T_WS, &ctx_str, &ctx_str));
+        let mut forged = with_ctx.clone();
+        forged["result"]["sourceUnderstanding"] = serde_json::json!("Invented.");
+        assert!(!allowed_restore_transform(
+            &db,
+            T_WS,
+            &ctx_str,
+            &forged.to_string()
+        ));
+        // Empty vs one item refuses both ways.
+        let mut one = collider_doc();
+        with_context(
+            &mut one,
+            T_OLD_PROJ,
+            serde_json::json!([artifact_item(T_OLD_ART)]),
+        );
+        let one_str = one.to_string();
+        assert!(!allowed_restore_transform(&db, T_WS, &ctx_str, &one_str));
+        assert!(!allowed_restore_transform(&db, T_WS, &one_str, &ctx_str));
+        // Item id remap with an exact pair accepts; without the pair, or
+        // with a pair scoped to another workspace, refuses.
+        let mut remapped = one.clone();
+        remapped["projectContext"]["items"][0]["artifactId"] = serde_json::json!(T_NEW_ART);
+        assert!(allowed_restore_transform(
+            &db,
+            T_WS,
+            &one_str,
+            &remapped.to_string()
+        ));
+        let bare_db = transform_db();
+        assert!(!allowed_restore_transform(
+            &bare_db,
+            T_WS,
+            &one_str,
+            &remapped.to_string()
+        ));
+        assert!(!allowed_restore_transform(
+            &db,
+            T_OTHER_WS,
+            &one_str,
+            &remapped.to_string()
+        ));
+        // Project id remap: exact pair accepts; a fabricated original
+        // pointing at the paired new id refuses (wrong pair), as does
+        // the same change with no pair at all.
+        let mut proj_remapped = one.clone();
+        proj_remapped["projectContext"]["projectId"] = serde_json::json!(T_NEW_PROJ);
+        assert!(allowed_restore_transform(
+            &db,
+            T_WS,
+            &one_str,
+            &proj_remapped.to_string()
+        ));
+        let mut fabricated = one.clone();
+        fabricated["projectContext"]["projectId"] = serde_json::json!(T_FAKE);
+        // Note the direction here mirrors probe B: the snapshot names
+        // the fabricated id and the row names the paired id.
+        assert!(!allowed_restore_transform(
+            &db,
+            T_WS,
+            &fabricated.to_string(),
+            &proj_remapped.to_string()
+        ));
+        assert!(!allowed_restore_transform(
+            &bare_db,
+            T_WS,
+            &one_str,
+            &proj_remapped.to_string()
+        ));
+    }
+
+    #[test]
+    fn transform_memory_context_and_sources_absent_present_empty() {
+        let db = transform_db();
+        add_origin(&db, T_WS, T_OLD_MEM, T_NEW_MEM);
+        add_origin(&db, T_WS, T_OLD_REV, T_NEW_REV);
+        let mut base = collider_doc();
+        base["memoryContext"] = serde_json::json!([{
+            "memoryId": T_OLD_MEM,
+            "revisionId": T_OLD_REV,
+            "version": 1,
+            "title": "Notes",
+            "content": "hello context",
+            "contentHash": crate::content::hash("hello context".as_bytes()),
+            "privacy": "private"
+        }]);
+        let original = base.to_string();
+        assert!(allowed_restore_transform(&db, T_WS, &original, &original));
+        let mut remapped = base.clone();
+        remapped["memoryContext"][0]["memoryId"] = serde_json::json!(T_NEW_MEM);
+        remapped["memoryContext"][0]["revisionId"] = serde_json::json!(T_NEW_REV);
+        assert!(allowed_restore_transform(
+            &db,
+            T_WS,
+            &original,
+            &remapped.to_string()
+        ));
+        let bare_db = transform_db();
+        assert!(!allowed_restore_transform(
+            &bare_db,
+            T_WS,
+            &original,
+            &remapped.to_string()
+        ));
+        // Absent vs present and empty vs entry refuse.
+        let mut absent = base.clone();
+        absent.as_object_mut().unwrap().remove("memoryContext");
+        let absent_str = absent.to_string();
+        assert!(!allowed_restore_transform(
+            &db,
+            T_WS,
+            &original,
+            &absent_str
+        ));
+        assert!(!allowed_restore_transform(
+            &db,
+            T_WS,
+            &absent_str,
+            &original
+        ));
+        let mut empty = base.clone();
+        empty["memoryContext"] = serde_json::json!([]);
+        let empty_str = empty.to_string();
+        assert!(!allowed_restore_transform(&db, T_WS, &original, &empty_str));
+        assert!(allowed_restore_transform(&db, T_WS, &empty_str, &empty_str));
+        // Opportunity sources: same absent/present/empty/pair rules.
+        let opp = serde_json::json!({
+            "format": "anansi-opportunity-set",
+            "sources": [{
+                "kind": "memory",
+                "memoryId": T_OLD_MEM,
+                "sourceId": T_OLD_MEM,
+                "revisionId": T_OLD_REV
+            }]
+        });
+        let opp_str = opp.to_string();
+        assert!(allowed_restore_transform(&db, T_WS, &opp_str, &opp_str));
+        let mut opp_remapped = opp.clone();
+        opp_remapped["sources"][0]["memoryId"] = serde_json::json!(T_NEW_MEM);
+        opp_remapped["sources"][0]["sourceId"] = serde_json::json!(T_NEW_MEM);
+        opp_remapped["sources"][0]["revisionId"] = serde_json::json!(T_NEW_REV);
+        assert!(allowed_restore_transform(
+            &db,
+            T_WS,
+            &opp_str,
+            &opp_remapped.to_string()
+        ));
+        assert!(!allowed_restore_transform(
+            &bare_db,
+            T_WS,
+            &opp_str,
+            &opp_remapped.to_string()
+        ));
+        let mut opp_empty = opp.clone();
+        opp_empty["sources"] = serde_json::json!([]);
+        assert!(!allowed_restore_transform(
+            &db,
+            T_WS,
+            &opp_str,
+            &opp_empty.to_string()
+        ));
+    }
+
+    #[test]
+    fn transform_other_formats_invented_text_refuses_and_pairs_hold() {
+        let db = transform_db();
+        add_origin(&db, T_WS, T_OLD_ART, T_NEW_ART);
+        let row_hash = crate::content::hash("row body".as_bytes());
+        add_row(&db, T_NEW_ART, 1, &row_hash);
+        // Evaluation: identical accepts, invented text refuses,
+        // paired id remap accepts, unpaired refuses.
+        let eval = serde_json::json!({
+            "format": "anansi-evaluation",
+            "sourceArtifactId": T_OLD_ART,
+            "rubricArtifactId": T_OLD_ART,
+            "summary": "original"
+        });
+        let eval_str = eval.to_string();
+        assert!(allowed_restore_transform(&db, T_WS, &eval_str, &eval_str));
+        let mut forged = eval.clone();
+        forged["summary"] = serde_json::json!("invented");
+        assert!(!allowed_restore_transform(
+            &db,
+            T_WS,
+            &eval_str,
+            &forged.to_string()
+        ));
+        let mut remapped = eval.clone();
+        remapped["sourceArtifactId"] = serde_json::json!(T_NEW_ART);
+        assert!(allowed_restore_transform(
+            &db,
+            T_WS,
+            &eval_str,
+            &remapped.to_string()
+        ));
+        let bare_db = transform_db();
+        assert!(!allowed_restore_transform(
+            &bare_db,
+            T_WS,
+            &eval_str,
+            &remapped.to_string()
+        ));
+        // Forge concept: a pinned hash rewritten to the package
+        // row hash for the unchanged referenced id accepts;
+        // invented brief text refuses; a wrong hash refuses.
+        let concept = serde_json::json!({
+            "format": "anansi-forge-concept",
+            "sourceExperimentArtifactId": T_OLD_ART,
+            "sourceExperimentVersion": 1,
+            "sourceExperimentContentHash": crate::content::hash("original experiment body".as_bytes()),
+            "approvedBrief": "Route venues."
+        });
+        let concept_str = concept.to_string();
+        let mut concept_hash = concept.clone();
+        concept_hash["sourceExperimentContentHash"] = serde_json::json!(row_hash);
+        // The row hash lookup uses the transformed body's own id,
+        // so point the transformed reference at the new row.
+        let mut concept_row = concept_hash.clone();
+        concept_row["sourceExperimentArtifactId"] = serde_json::json!(T_NEW_ART);
+        assert!(allowed_restore_transform(
+            &db,
+            T_WS,
+            &concept_str,
+            &concept_row.to_string()
+        ));
+        let mut forged = concept.clone();
+        forged["approvedBrief"] = serde_json::json!("Invented brief.");
+        assert!(!allowed_restore_transform(
+            &db,
+            T_WS,
+            &concept_str,
+            &forged.to_string()
+        ));
+        let mut wrong_hash = concept.clone();
+        wrong_hash["sourceExperimentContentHash"] =
+            serde_json::json!(crate::content::hash("neither".as_bytes()));
+        assert!(!allowed_restore_transform(
+            &db,
+            T_WS,
+            &concept_str,
+            &wrong_hash.to_string()
+        ));
+        // Remaining formats: identical accepts, invented text refuses.
+        for (format, mut doc) in [
+            (
+                "anansi-product-spec",
+                serde_json::json!({"format": "anansi-product-spec", "sourceArtifactId": T_OLD_ART, "title": "original"}),
+            ),
+            (
+                "anansi-source-package",
+                serde_json::json!({"format": "anansi-source-package", "specArtifactId": T_OLD_ART, "sourceArtifactId": T_OLD_ART, "parentPackageArtifactId": T_OLD_ART, "title": "original"}),
+            ),
+            (
+                "anansi-deliverable",
+                serde_json::json!({"format": "anansi-deliverable", "packageArtifactId": T_OLD_ART, "packageVersion": 1, "packageContentHash": "a", "specArtifactId": T_OLD_ART, "specVersion": 1, "specContentHash": "b", "title": "original"}),
+            ),
+            (
+                "anansi-source-review",
+                serde_json::json!({"format": "anansi-source-review", "packageArtifactId": T_OLD_ART, "packageVersion": 1, "packageContentHash": "a", "specArtifactId": T_OLD_ART, "specVersion": 1, "specContentHash": "b", "title": "original"}),
+            ),
+            (
+                "anansi-specification-approval",
+                serde_json::json!({"format": "anansi-specification-approval", "specArtifactId": T_OLD_ART, "specVersion": 1, "specContentHash": "a", "title": "original"}),
+            ),
+            (
+                "anansi-transfer-approval",
+                serde_json::json!({"format": "anansi-transfer-approval", "conceptArtifactId": T_OLD_ART, "conceptVersion": 1, "conceptContentHash": "a", "sourceExperimentArtifactId": T_OLD_ART, "sourceExperimentVersion": 1, "sourceExperimentContentHash": "b", "title": "original"}),
+            ),
+        ] {
+            doc["format"] = serde_json::json!(format);
+            let original = doc.to_string();
+            assert!(
+                allowed_restore_transform(&db, T_WS, &original, &original),
+                "identical {format} should accept"
+            );
+            let mut forged = doc.clone();
+            forged["title"] = serde_json::json!("invented");
+            assert!(
+                !allowed_restore_transform(&db, T_WS, &original, &forged.to_string()),
+                "invented {format} text should refuse"
+            );
+        }
+        // Formats outside the allowlist never transform.
+        assert!(!allowed_restore_transform(
+            &db,
+            T_WS,
+            "plain original body",
+            "plain different body"
+        ));
+    }
+
+    #[test]
+    fn transform_chained_experiment_restored_item_hash() {
+        let db = transform_db();
+        add_origin(&db, T_WS, T_OLD_PROJ, T_NEW_PROJ);
+        add_origin(&db, T_WS, T_OLD_ART, T_NEW_ART);
+        let new_row_hash = crate::content::hash("new row body".as_bytes());
+        add_row(&db, T_NEW_ART, 1, &new_row_hash);
+        let mut original = collider_doc();
+        with_context(
+            &mut original,
+            T_OLD_PROJ,
+            serde_json::json!([artifact_item(T_OLD_ART)]),
+        );
+        let original_str = original.to_string();
+        // Legitimate second restore: item id remapped through
+        // the pair, restored hash naming the restored row.
+        let mut restored = original.clone();
+        restored["projectContext"]["projectId"] = serde_json::json!(T_NEW_PROJ);
+        restored["projectContext"]["items"][0]["artifactId"] = serde_json::json!(T_NEW_ART);
+        restored["projectContext"]["items"][0]["restoredContentHash"] =
+            serde_json::json!(new_row_hash);
+        assert!(allowed_restore_transform(
+            &db,
+            T_WS,
+            &original_str,
+            &restored.to_string()
+        ));
+        // A restored hash naming any other row refuses.
+        let mut wrong = restored.clone();
+        wrong["projectContext"]["items"][0]["restoredContentHash"] =
+            serde_json::json!(crate::content::hash("other row".as_bytes()));
+        assert!(!allowed_restore_transform(
+            &db,
+            T_WS,
+            &original_str,
+            &wrong.to_string()
+        ));
+    }
+
+    #[test]
+    fn ultimate_origin_resolves_through_source_rows() {
+        let db = transform_db();
+        let source_id = "55555555555555555555555555555555";
+        let ultimate_id = "66666666666666666666666666666666";
+        assert_eq!(
+            ultimate_origin(&db, T_WS, source_id),
+            (source_id.to_string(), T_WS.to_string())
+        );
+        add_origin(&db, T_WS, ultimate_id, source_id);
+        // add_origin records original_workspace as 'old-ws'.
+        assert_eq!(
+            ultimate_origin(&db, T_WS, source_id),
+            (ultimate_id.to_string(), "old-ws".to_string())
+        );
+        // A pair scoped to another workspace does not resolve.
+        assert_eq!(
+            ultimate_origin(&db, T_OTHER_WS, source_id),
+            (source_id.to_string(), T_OTHER_WS.to_string())
+        );
+        // A package without the table falls back to the source id.
+        let bare = Connection::open_in_memory().unwrap();
+        assert_eq!(
+            ultimate_origin(&bare, T_WS, source_id),
+            (source_id.to_string(), T_WS.to_string())
+        );
     }
 
     #[test]
