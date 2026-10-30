@@ -26,7 +26,10 @@ backup_restore 7/7, backup_artifacts 5/5, opportunities_restore
 browser tests passing, strict Clippy/fmt/tsc/contracts/docs/
 builds clean, full core and providers+API totals in the delivery
 MANIFEST (only the known live-Ollama semantic_workflow environment
-failures expected). Pre-R1b multi-hop packages remain
+failures; the first broad run's seven schema-bump failures —
+vault version gates and current-version assertions — were fixed
+in a follow-up commit and the suites re-run). Pre-R1b multi-hop
+packages remain
 fail-closed (see addendum); a real v10 backup restore end to end
 is a Windows checklist item. This does not close Windows
 verification of this repair or of Slice 4, M7 native acceptance +

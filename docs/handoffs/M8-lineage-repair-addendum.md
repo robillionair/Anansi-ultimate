@@ -90,10 +90,24 @@ longer existed. A-era and B-era snapshots coexist legitimately.
   round and fixed in the implementation commit), fmt clean,
   contracts `--check` clean, TypeScript clean, docs validation
   PASS, API/web builds pass.
-- Broadened once: full core and providers+API totals are recorded
-  in the delivery MANIFEST (see evidence logs); the only expected
-  failures are the known live-Ollama `semantic_workflow`
-  environment failures.
+- Broadened once: the first full-core run surfaced seven
+  non-environment failures beyond the known live-Ollama
+  `semantic_workflow` four, all caused by the schema bump
+  itself and all fixed in a follow-up commit, not by
+  weakening any check: three vault gates still allowlisted
+  only versions 8/9/10 (`connection`, seal gate, `upgrade`),
+  and current-version assertions pinning 10 in jobs_recovery,
+  title_search and vault_increment2 (including the crash
+  matrix's current-ladder case, renamed 10 → 11). The
+  vault_increment2 PoisonError failures were cascades from
+  the first UnsupportedSchema panic through a shared test
+  lock, not separate defects. After the fix, jobs_recovery
+  7/7, title_search 1/1, vault_increment2 9/9 and
+  vault_runtime 2/2 pass. The broad suites were then
+  re-run to completion; totals are recorded in the delivery
+  MANIFEST (see evidence logs). The only remaining failures
+  are the known live-Ollama `semantic_workflow` environment
+  failures.
 - Not rerun: the full canonical e2e battery end to end — only the
   affected specs above, as in prior rounds. A real v10 backup
   restored end to end is a Windows rerun checklist item (the
