@@ -24,7 +24,11 @@
 //! writes, headers, bodies, trailers, and redirects —
 //! every socket wait uses min(remaining, 10s), so elapsed
 //! time past the deadline is bounded by scheduling
-//! granularity only — 32 KiB of headers, 1 MiB of body,
+//! granularity only. The deadline is enforced beneath
+//! rustls too: the TLS transport checks it on every
+//! underlying socket read/write, so assembling one
+//! encrypted record cannot outlive the deadline — 32 KiB
+//! of headers, 1 MiB of body,
 //! extracted text 1–8,000 chars. Anything outside the
 //! bounds refuses with a generic error that never includes
 //! resolved addresses or response bodies.
@@ -417,13 +421,112 @@ fn resolve(host: &str, port: u16, deadline: &Deadline) -> Result<Vec<SocketAddr>
     }
 }
 
+/// TCP transport that enforces the fetch deadline on
+/// every underlying socket read and write, beneath
+/// rustls. A timeout set once above StreamOwned cannot
+/// bound record assembly: one StreamOwned read can issue
+/// many transport reads while assembling a single
+/// encrypted record, and each fragment that arrives
+/// resets socket inactivity. This wrapper re-checks the
+/// deadline and shrinks the socket timeout to the
+/// remaining budget before every single socket call, so
+/// record assembly, alerts, post-handshake traffic, and
+/// fragmented writes are all bounded by the deadline.
+struct DeadlineTcpStream {
+    inner: TcpStream,
+    deadline: Deadline,
+}
+
+impl DeadlineTcpStream {
+    fn new(inner: TcpStream, deadline: Deadline) -> Self {
+        Self { inner, deadline }
+    }
+
+    fn set_timeouts(&self, timeout: Duration) -> Result<(), String> {
+        self.inner
+            .set_read_timeout(Some(timeout))
+            .map_err(|_| err("Could not configure the connection."))?;
+        self.inner
+            .set_write_timeout(Some(timeout))
+            .map_err(|_| err("Could not configure the connection."))?;
+        Ok(())
+    }
+
+    fn timeout_error(&self) -> std::io::Error {
+        std::io::Error::new(
+            std::io::ErrorKind::TimedOut,
+            "Fetching the URL timed out.",
+        )
+    }
+}
+
+impl Read for DeadlineTcpStream {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        if self.deadline.check().is_err() {
+            return Err(self.timeout_error());
+        }
+        if self
+            .inner
+            .set_read_timeout(Some(self.deadline.socket_timeout()))
+            .is_err()
+        {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Could not configure the connection.",
+            ));
+        }
+        match self.inner.read(buf) {
+            Ok(n) => Ok(n),
+            Err(e) if self.deadline.past() => Err(self.timeout_error()),
+            Err(e) => Err(e),
+        }
+    }
+}
+
+impl Write for DeadlineTcpStream {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        if self.deadline.check().is_err() {
+            return Err(self.timeout_error());
+        }
+        if self
+            .inner
+            .set_write_timeout(Some(self.deadline.socket_timeout()))
+            .is_err()
+        {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Could not configure the connection.",
+            ));
+        }
+        match self.inner.write(buf) {
+            Ok(n) => Ok(n),
+            Err(e) if self.deadline.past() => Err(self.timeout_error()),
+            Err(e) => Err(e),
+        }
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        if self.deadline.check().is_err() {
+            return Err(self.timeout_error());
+        }
+        match self.inner.flush() {
+            Ok(()) => Ok(()),
+            Err(e) if self.deadline.past() => Err(self.timeout_error()),
+            Err(e) => Err(e),
+        }
+    }
+}
+
 /// A readable byte stream: plain TCP or rustls over TCP.
+/// Both variants run over the deadline-aware transport,
+/// so the deadline holds beneath rustls as well as
+/// above it.
 enum FetchStream {
-    Plain(TcpStream),
+    Plain(DeadlineTcpStream),
     // Boxed: StreamOwned is large, and the plain variant
     // would otherwise trip the large-enum-variant lint
     // (the same boxing the save-claim enum uses).
-    Tls(Box<StreamOwned<ClientConnection, TcpStream>>),
+    Tls(Box<StreamOwned<ClientConnection, DeadlineTcpStream>>),
 }
 
 impl Read for FetchStream {
@@ -438,17 +541,14 @@ impl Read for FetchStream {
 impl FetchStream {
     /// Set both socket timeouts on the underlying TCP
     /// stream (through the TLS layer when present), so
-    /// the next wait honors the remaining budget.
+    /// the next wait honors the remaining budget. The
+    /// transport re-sets them on every call anyway; this
+    /// is defense in depth for the next outer read.
     fn set_timeouts(&self, timeout: Duration) -> Result<(), String> {
-        let tcp = match self {
-            FetchStream::Plain(s) => s,
-            FetchStream::Tls(s) => s.get_ref(),
-        };
-        tcp.set_read_timeout(Some(timeout))
-            .map_err(|_| err("Could not configure the connection."))?;
-        tcp.set_write_timeout(Some(timeout))
-            .map_err(|_| err("Could not configure the connection."))?;
-        Ok(())
+        match self {
+            FetchStream::Plain(s) => s.set_timeouts(timeout),
+            FetchStream::Tls(s) => s.get_ref().set_timeouts(timeout),
+        }
     }
 }
 
@@ -721,10 +821,7 @@ fn request_once(
             err(format!("Could not connect to the URL host: {e}"))
         }
     })?;
-    tcp.set_read_timeout(Some(deadline.socket_timeout()))
-        .map_err(|_| err("Could not configure the connection."))?;
-    tcp.set_write_timeout(Some(deadline.socket_timeout()))
-        .map_err(|_| err("Could not configure the connection."))?;
+    let mut transport = DeadlineTcpStream::new(tcp, deadline);
     let mut stream = if target.url.scheme() == "https" {
         let server_name = if let Ok(ip) = target.host.parse::<IpAddr>() {
             ServerName::IpAddress(ip.into())
@@ -734,20 +831,17 @@ fn request_once(
         };
         let mut conn = ClientConnection::new(tls_config.clone(), server_name)
             .map_err(|_| err("Could not start TLS."))?;
-        // Drive the handshake explicitly so every wait
-        // honors the remaining budget: a stalled or
-        // dribbled handshake cannot outlive the deadline.
-        // Certificate and hostname validation are rustls
-        // defaults inside process_new_packets.
-        let mut tcp = tcp;
+        // Drive the handshake explicitly over the
+        // deadline-aware transport, so every handshake
+        // read/write honors the remaining budget: a
+        // stalled or dribbled handshake cannot outlive
+        // the deadline. Certificate and hostname
+        // validation are rustls defaults inside
+        // process_new_packets.
         loop {
             deadline.check()?;
-            tcp.set_read_timeout(Some(deadline.socket_timeout()))
-                .map_err(|_| err("Could not configure the connection."))?;
-            tcp.set_write_timeout(Some(deadline.socket_timeout()))
-                .map_err(|_| err("Could not configure the connection."))?;
             while conn.wants_write() {
-                conn.write_tls(&mut tcp).map_err(|_| {
+                conn.write_tls(&mut transport).map_err(|_| {
                     if deadline.past() {
                         err("Fetching the URL timed out.")
                     } else {
@@ -758,7 +852,7 @@ fn request_once(
             if !conn.is_handshaking() {
                 break;
             }
-            conn.read_tls(&mut tcp).map_err(|_| {
+            conn.read_tls(&mut transport).map_err(|_| {
                 if deadline.past() {
                     err("Fetching the URL timed out.")
                 } else {
@@ -773,9 +867,9 @@ fn request_once(
                 }
             })?;
         }
-        FetchStream::Tls(Box::new(StreamOwned::new(conn, tcp)))
+        FetchStream::Tls(Box::new(StreamOwned::new(conn, transport)))
     } else {
-        FetchStream::Plain(tcp)
+        FetchStream::Plain(transport)
     };
     let host_header = if target.port
         == if target.url.scheme() == "http" {
