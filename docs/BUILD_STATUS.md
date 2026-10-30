@@ -1,3 +1,40 @@
+## 2026-10-30 — M8 Slice 4: explicitly selected saved-project collider input (Linux; Windows pending)
+
+On branch `muse/m8-slice4-project-context` from `c7327bb7`
+(design `4bfda48f` committed before coding; the branch also carries
+the `c14ce920` free-model comparison record). A collider in an
+existing project can now explicitly select a saved project from the
+current workspace and exactly which of its items to send: member
+memories at pinned revisions and artifacts at pinned versions, with a
+pre-send review of exact versions and generation-time provenance on
+the saved experiment. Resolution is backend-only and immediately
+before dispatch: Sealed, foreign-workspace, other-project, archived,
+corrupted, duplicate and approval-row inputs refuse before provider
+traffic; a memory selected through both pickers refuses as a
+duplicate. Restore pre-validates every project item against
+source-package rows and remaps project, memory, revision and artifact
+ids fail-closed; no new transfer fix-up was needed and the new
+transfer test proves a project-context concept survives restore and
+stays Forge-admissible. `memory_list` gained a server-side
+`projectId` filter. Focused evidence (sequential,
+`--test-threads=1`): collider 24/24 (baseline 19/19), transfer 19/19
+(baseline 18/18), forge_restore 4/4, backup_restore 7/7, node
+UI/contracts 83/83 (baseline 81/81); strict Clippy, fmt, tsc,
+contracts check, docs validation, API/web builds pass; the new
+project-context e2e spec passes standalone. Full canonical e2e
+battery (all 29 specs): 34 passed / 1 failed; the single failure is
+the pre-existing real-semantic search.spec failure, proven identical
+on a pristine `c7327bb7` worktree (same assertion, same line), not a
+Slice 4 regression. Full core 334 passed / 4 failed (A6 baseline 328
++ 6 new Slice 4 tests; failures only the 4 known live-Ollama
+environment failures); providers+API 144/0.
+URL fetching, document ingestion and 3D visualization remain
+deferred; M8 is not complete; Windows verification of Slice 4 is
+pending and Linux evidence must not be presented as closing it. No
+cloud, credential, download, push, merge, CI, or promotion. Details:
+[M8 Slice 4 design](handoffs/M8-slice4-project-context-design.md),
+[M8 Slice 4 record](handoffs/M8-slice4-project-context-addendum.md).
+
 ## 2026-10-30 — Windows findings verified; native verification integrated
 
 Implementation `4ef90406d8726757f225e75a36e3bf57e01ebde6` on
