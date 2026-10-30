@@ -28,6 +28,26 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+/// A valid product-spec payload for the Forge leg of
+/// the transfer test: the collider fake otherwise
+/// returns collider JSON for every prompt, which Forge
+/// spec parsing rightly refuses as invalid.
+fn spec_json() -> String {
+    json!({
+        "title": "Mycelial order router",
+        "summary": "A routing advisor that proposes venue choices from local signals.",
+        "purpose": "Route trade flow through venues by local congestion signals.",
+        "intendedUsers": "Small trading desks",
+        "features": ["Score venues by local congestion", "Reroute when a venue stalls", "Show the chosen route with its reason"],
+        "pages": ["index.html"],
+        "nonGoals": ["No live trading", "No accounts"],
+        "dataAndState": "Signals live in memory only.",
+        "acceptanceCriteria": ["Open index.html and see venue scores", "A stalled venue reroutes"],
+        "openQuestions": ["Which venues first?"]
+    })
+    .to_string()
+}
+
 fn collision_json() -> String {
     json!({
         "sourceUnderstanding": "Beam A describes high-frequency trading: fast signals, order books, latency arbitrage. Beam B describes mycelium networks: distributed hyphal signaling, local nutrient routing, resilience through redundancy. Hypothesis: both are decentralized coordination systems with local feedback.",
@@ -123,6 +143,7 @@ fn start_fake() -> Fake {
                 }
                 let mut text = collision_json();
                 match mode.as_str() {
+                    "forge-spec" => text = spec_json(),
                     "malformed" => text = "I have thoughts but no JSON for you.".to_string(),
                     "missing-section" => {
                         let mut doc: Value = serde_json::from_str(&collision_json()).unwrap();
@@ -2527,19 +2548,40 @@ fn assert_refused_no_hits(fake: &Fake, result: Result<Value, CommandError>, labe
     );
 }
 
+/// Same refusal check against a baseline, for tests that
+/// legitimately dispatched a control before the refusal
+/// phase: only the refusal itself must add no hits.
+fn assert_refused_no_new_hits(
+    fake: &Fake,
+    baseline: usize,
+    result: Result<Value, CommandError>,
+    label: &str,
+) {
+    assert!(result.is_err(), "{label}: start must refuse");
+    assert_eq!(
+        fake.hits.load(Ordering::SeqCst),
+        baseline,
+        "{label}: refusal must not hit the provider"
+    );
+}
+
 #[test]
 fn boundary_pinned_archived_revision_refused_in_both_pickers() {
     let fake = start_fake();
     let f = fixture(&fake, "free");
     let (src_id, _) = create_project(&f, "Source project", "Source body.");
-    let (m_id, m_rev, _) =
-        create_project_memory(&f, &src_id, "Doomed notes", "Archived content.");
+    let (m_id, m_rev, _) = create_project_memory(&f, &src_id, "Doomed notes", "Archived content.");
     let arch_rev = archive_memory(&f, &m_id, &m_rev, "Doomed notes", "Archived content.");
     assert_refused_no_hits(
         &fake,
-        start_collide_ctx(&f, "Trading.", "Mycelium.", json!([
-            { "memoryId": m_id, "revisionId": arch_rev }
-        ])),
+        start_collide_ctx(
+            &f,
+            "Trading.",
+            "Mycelium.",
+            json!([
+                { "memoryId": m_id, "revisionId": arch_rev }
+            ]),
+        ),
         "memoryContext pinned archived revision",
     );
     assert_refused_no_hits(
@@ -2568,12 +2610,23 @@ fn boundary_archived_head_blocks_older_revision_in_both_pickers() {
         draft("Tide notes", "Revision B tide observations."),
         None,
     );
-    let _arch = archive_memory(&f, &m_id, &rev_b, "Tide notes", "Revision B tide observations.");
+    let _arch = archive_memory(
+        &f,
+        &m_id,
+        &rev_b,
+        "Tide notes",
+        "Revision B tide observations.",
+    );
     assert_refused_no_hits(
         &fake,
-        start_collide_ctx(&f, "Trading.", "Mycelium.", json!([
-            { "memoryId": m_id, "revisionId": m_rev }
-        ])),
+        start_collide_ctx(
+            &f,
+            "Trading.",
+            "Mycelium.",
+            json!([
+                { "memoryId": m_id, "revisionId": m_rev }
+            ]),
+        ),
         "memoryContext older revision of archived head",
     );
     assert_refused_no_hits(
@@ -2605,9 +2658,14 @@ fn boundary_sealed_head_blocks_older_revision_in_both_pickers() {
     seal_head_revision(f._dir.path(), &rev_b);
     assert_refused_no_hits(
         &fake,
-        start_collide_ctx(&f, "Trading.", "Mycelium.", json!([
-            { "memoryId": m_id, "revisionId": m_rev }
-        ])),
+        start_collide_ctx(
+            &f,
+            "Trading.",
+            "Mycelium.",
+            json!([
+                { "memoryId": m_id, "revisionId": m_rev }
+            ]),
+        ),
         "memoryContext older revision of sealed head",
     );
     assert_refused_no_hits(
@@ -2674,8 +2732,10 @@ fn boundary_reassigned_member_refused_under_old_project() {
     // Reassign the member to the new project (new revision).
     let moved = project_draft("Tide notes", "Revision A tide observations.", &other_id);
     let rev_b = revise_memory(&f, &m_id, &m_rev, moved, None);
-    assert_refused_no_hits(
+    let hits_before_refusal = fake.hits.load(Ordering::SeqCst);
+    assert_refused_no_new_hits(
         &fake,
+        hits_before_refusal,
         start_collide_project(
             &f,
             json!({ "projectId": src_id, "items": [
@@ -2765,9 +2825,14 @@ fn boundary_expired_revision_refused_in_both_pickers() {
     expire_revision(f._dir.path(), &temp_rev);
     assert_refused_no_hits(
         &fake,
-        start_collide_ctx(&f, "Trading.", "Mycelium.", json!([
-            { "memoryId": t_id, "revisionId": temp_rev }
-        ])),
+        start_collide_ctx(
+            &f,
+            "Trading.",
+            "Mycelium.",
+            json!([
+                { "memoryId": t_id, "revisionId": temp_rev }
+            ]),
+        ),
         "memoryContext expired pinned revision",
     );
     assert_refused_no_hits(
@@ -2781,10 +2846,25 @@ fn boundary_expired_revision_refused_in_both_pickers() {
         "projectContext expired pinned revision",
     );
     // Case 2: expired head, older durable pinned revision.
-    let (d_id, d_rev, _) =
-        create_project_memory(&f, &src_id, "Durable notes", "Durable content.");
-    let conf_rev = set_lifecycle(&f, &d_id, &d_rev, "Durable notes", "Durable content.", "confirmed", None);
-    let dur_rev = set_lifecycle(&f, &d_id, &conf_rev, "Durable notes", "Durable content.", "durable", None);
+    let (d_id, d_rev, _) = create_project_memory(&f, &src_id, "Durable notes", "Durable content.");
+    let conf_rev = set_lifecycle(
+        &f,
+        &d_id,
+        &d_rev,
+        "Durable notes",
+        "Durable content.",
+        "confirmed",
+        None,
+    );
+    let dur_rev = set_lifecycle(
+        &f,
+        &d_id,
+        &conf_rev,
+        "Durable notes",
+        "Durable content.",
+        "durable",
+        None,
+    );
     let temp_head = set_lifecycle(
         &f,
         &d_id,
@@ -2797,9 +2877,14 @@ fn boundary_expired_revision_refused_in_both_pickers() {
     expire_revision(f._dir.path(), &temp_head);
     assert_refused_no_hits(
         &fake,
-        start_collide_ctx(&f, "Trading.", "Mycelium.", json!([
-            { "memoryId": d_id, "revisionId": dur_rev }
-        ])),
+        start_collide_ctx(
+            &f,
+            "Trading.",
+            "Mycelium.",
+            json!([
+                { "memoryId": d_id, "revisionId": dur_rev }
+            ]),
+        ),
         "memoryContext older revision of expired head",
     );
     assert_refused_no_hits(
@@ -2824,9 +2909,14 @@ fn boundary_expired_revision_refused_in_both_pickers() {
         "temporary",
         Some("2030-01-01T00:00:00Z"),
     );
-    let started = start_collide_ctx(&f, "Trading.", "Mycelium.", json!([
-        { "memoryId": u_id, "revisionId": live_rev }
-    ]))
+    let started = start_collide_ctx(
+        &f,
+        "Trading.",
+        "Mycelium.",
+        json!([
+            { "memoryId": u_id, "revisionId": live_rev }
+        ]),
+    )
     .unwrap();
     let run_id = started["runId"].as_str().unwrap().to_string();
     assert_eq!(poll_until(&f, &run_id)["status"], "complete");
@@ -2855,9 +2945,14 @@ fn boundary_eligible_older_revision_still_dispatches() {
         draft("Tide notes", "Revision B tide observations."),
         None,
     );
-    let started = start_collide_ctx(&f, "Trading.", "Mycelium.", json!([
-        { "memoryId": m_id, "revisionId": m_rev }
-    ]))
+    let started = start_collide_ctx(
+        &f,
+        "Trading.",
+        "Mycelium.",
+        json!([
+            { "memoryId": m_id, "revisionId": m_rev }
+        ]),
+    )
     .unwrap();
     let run_id = started["runId"].as_str().unwrap().to_string();
     assert_eq!(poll_until(&f, &run_id)["status"], "complete");
@@ -2894,7 +2989,10 @@ fn save_collision(f: &Fixture, run_id: &str) -> (String, String) {
         )
         .unwrap();
     (
-        saved["artifact"]["artifactId"].as_str().unwrap().to_string(),
+        saved["artifact"]["artifactId"]
+            .as_str()
+            .unwrap()
+            .to_string(),
         saved["body"].as_str().unwrap().to_string(),
     )
 }
@@ -2953,11 +3051,15 @@ fn double_restore_keeps_experiment_context_provenance() {
     // Exp1 carries memory context, so its body embeds
     // memory/revision ids and MUST change on restore.
     let (src_id, _) = create_project(&f, "Source project", "Source body.");
-    let (m_id, m_rev, _) =
-        create_project_memory(&f, &src_id, "Member notes", "Member content.");
-    let started1 = start_collide_ctx(&f, "Trading.", "Mycelium.", json!([
-        { "memoryId": m_id, "revisionId": m_rev }
-    ]))
+    let (m_id, m_rev, _) = create_project_memory(&f, &src_id, "Member notes", "Member content.");
+    let started1 = start_collide_ctx(
+        &f,
+        "Trading.",
+        "Mycelium.",
+        json!([
+            { "memoryId": m_id, "revisionId": m_rev }
+        ]),
+    )
     .unwrap();
     let run1 = started1["runId"].as_str().unwrap().to_string();
     assert_eq!(poll_until(&f, &run1)["status"], "complete");
@@ -2975,7 +3077,10 @@ fn double_restore_keeps_experiment_context_provenance() {
     let (_exp2_id, exp2_body) = save_collision(&f, &run2);
     let exp2_doc: Value = serde_json::from_str(&exp2_body).unwrap();
     assert_eq!(
-        exp2_doc["projectContext"]["items"].as_array().unwrap().len(),
+        exp2_doc["projectContext"]["items"]
+            .as_array()
+            .unwrap()
+            .len(),
         1
     );
     assert_eq!(
@@ -3029,7 +3134,10 @@ fn double_restore_keeps_experiment_context_provenance() {
         "second restore must keep Exp2's snapshot verbatim"
     );
     assert_eq!(
-        exp2_body3["projectContext"]["items"].as_array().unwrap().len(),
+        exp2_body3["projectContext"]["items"]
+            .as_array()
+            .unwrap()
+            .len(),
         1,
         "no context item may be silently dropped"
     );
@@ -3044,9 +3152,7 @@ fn double_restore_keeps_experiment_context_provenance() {
         "the original pinned hash must not be rewritten"
     );
     // Exp1 itself still reopens with valid provenance.
-    assert_eq!(
-        exp1_body3["memoryContext"][0]["content"], "Member content."
-    );
+    assert_eq!(exp1_body3["memoryContext"][0]["content"], "Member content.");
 }
 
 #[test]
@@ -3056,14 +3162,16 @@ fn double_restore_keeps_evaluation_context_provenance() {
     // A real evaluation record through its product op:
     // idea set + standard rubric + user assessments.
     let (src_id, _) = create_project(&f, "Eval project", "Eval body.");
-    let eval_concept = |name: &str| json!({
-        "name": name, "problem": "A problem.", "targetCustomer": "Cafes",
-        "solution": "A tool.", "whyUseful": "Saves time.",
-        "differentiationHypothesis": "A hypothesis.", "revenueModel": "Subscription.",
-        "engineeringComplexity": "medium", "implementationCost": "3-5 weeks",
-        "keyRisks": ["Adoption"], "requiredValidation": "Interviews.",
-        "minimumViableVersion": "One workflow."
-    });
+    let eval_concept = |name: &str| {
+        json!({
+            "name": name, "problem": "A problem.", "targetCustomer": "Cafes",
+            "solution": "A tool.", "whyUseful": "Saves time.",
+            "differentiationHypothesis": "A hypothesis.", "revenueModel": "Subscription.",
+            "engineeringComplexity": "medium", "implementationCost": "3-5 weeks",
+            "keyRisks": ["Adoption"], "requiredValidation": "Interviews.",
+            "minimumViableVersion": "One workflow."
+        })
+    };
     let idea_body = json!({
         "topic": "harbor logistics",
         "concepts": [
@@ -3176,15 +3284,11 @@ fn double_restore_keeps_evaluation_context_provenance() {
         .cloned()
         .collect::<Vec<_>>();
     assert_eq!(evals3.len(), 1);
-    let eval_body3 = read_version(
-        &fresh3,
-        &ws3,
-        evals3[0]["artifactId"].as_str().unwrap(),
-        1,
-    )["body"]
-        .as_str()
-        .unwrap()
-        .to_string();
+    let eval_body3 =
+        read_version(&fresh3, &ws3, evals3[0]["artifactId"].as_str().unwrap(), 1)["body"]
+            .as_str()
+            .unwrap()
+            .to_string();
     assert_ne!(
         eval_body3, eval_body,
         "restored evaluation body must differ (ids remapped): otherwise this test proves nothing"
@@ -3209,8 +3313,7 @@ fn double_restore_keeps_evaluation_context_provenance() {
         .collect::<Vec<_>>();
     assert_eq!(ideas3.len(), 1);
     assert_eq!(
-        eval_doc3["sourceArtifactId"],
-        ideas3[0]["artifactId"],
+        eval_doc3["sourceArtifactId"], ideas3[0]["artifactId"],
         "restored evaluation must reference the restored idea set"
     );
 }
@@ -3220,11 +3323,15 @@ fn double_restore_keeps_transferred_concept_admissible() {
     let fake = start_fake();
     let f = fixture(&fake, "free");
     let (src_id, _) = create_project(&f, "Source project", "Source body.");
-    let (m_id, m_rev, _) =
-        create_project_memory(&f, &src_id, "Member notes", "Member content.");
-    let started1 = start_collide_ctx(&f, "Trading.", "Mycelium.", json!([
-        { "memoryId": m_id, "revisionId": m_rev }
-    ]))
+    let (m_id, m_rev, _) = create_project_memory(&f, &src_id, "Member notes", "Member content.");
+    let started1 = start_collide_ctx(
+        &f,
+        "Trading.",
+        "Mycelium.",
+        json!([
+            { "memoryId": m_id, "revisionId": m_rev }
+        ]),
+    )
     .unwrap();
     let run1 = started1["runId"].as_str().unwrap().to_string();
     assert_eq!(poll_until(&f, &run1)["status"], "complete");
@@ -3295,6 +3402,9 @@ fn double_restore_keeps_transferred_concept_admissible() {
             }),
         )
         .unwrap();
+    // The Forge leg needs spec-shaped model output,
+    // not the collider JSON the fake returns by default.
+    set_mode(&fake, "forge-spec");
     let started = fresh3
         .ai_command(
             "forge-spec-start",
@@ -3314,13 +3424,18 @@ fn double_restore_keeps_transferred_concept_admissible() {
             )
             .unwrap();
         let status = polled["status"].as_str().unwrap().to_string();
-        if matches!(status.as_str(), "complete" | "invalid" | "failed" | "cancelled")
-            || Instant::now() > deadline
+        if matches!(
+            status.as_str(),
+            "complete" | "invalid" | "failed" | "cancelled"
+        ) || Instant::now() > deadline
         {
             break status;
         }
         std::thread::sleep(Duration::from_millis(25));
     };
-    assert_eq!(status, "complete", "Forge admission must succeed after double restore");
+    assert_eq!(
+        status, "complete",
+        "Forge admission must succeed after double restore"
+    );
     assert_ne!(concept_id, restored_concept, "concept id must remap");
 }

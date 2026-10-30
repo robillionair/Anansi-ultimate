@@ -263,19 +263,37 @@ export function parseColliderProjectContext(
   const items: ColliderProjectContext['items'] = [];
   for (const item of value.items) {
     if (!isRecord(item)) return null;
+    // An original item carries 11 keys; a restored
+    // artifact item additionally carries
+    // restoredContentHash, recorded by trusted restore
+    // when the referenced artifact's body diverged.
+    // Memory items never carry it. Either shape parses;
+    // anything else is not a project item.
+    const itemKeys = [
+      'kind',
+      'memoryId',
+      'revisionId',
+      'artifactId',
+      'artifactType',
+      'version',
+      'title',
+      'content',
+      'contentHash',
+      'privacy',
+    ];
+    const hasRestored = 'restoredContentHash' in item;
     if (
-      !exactKeys(item, [
-        'kind',
-        'memoryId',
-        'revisionId',
-        'artifactId',
-        'artifactType',
-        'version',
-        'title',
-        'content',
-        'contentHash',
-        'privacy',
-      ])
+      !exactKeys(
+        item,
+        hasRestored ? [...itemKeys, 'restoredContentHash'] : itemKeys,
+      )
+    ) {
+      return null;
+    }
+    if (
+      hasRestored &&
+      (typeof item.restoredContentHash !== 'string' ||
+        item.restoredContentHash.length === 0)
     ) {
       return null;
     }
@@ -294,7 +312,8 @@ export function parseColliderProjectContext(
         typeof item.revisionId !== 'string' ||
         item.revisionId.length === 0 ||
         item.artifactId !== null ||
-        item.artifactType !== null
+        item.artifactType !== null ||
+        hasRestored
       ) {
         return null;
       }

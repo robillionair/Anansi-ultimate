@@ -267,6 +267,30 @@ test('experiment body parser accepts project context and rejects malformed entri
   assert.equal(parsed!.projectContext!.projectTitle, 'Harbor notes');
   assert.equal(parsed!.projectContext!.items.length, 2);
   assert.equal(parsed!.projectContext!.items[0].content, '  Revision B tide observations.\n');
+  // A restored artifact item parses with its restored hash preserved,
+  // while a memory item carrying one refuses (memory bodies restore
+  // verbatim, so the field never belongs on them).
+  const restoredDoc = JSON.parse(validExperimentBody());
+  restoredDoc.projectContext = {
+    projectId: 'p'.repeat(32),
+    projectTitle: 'Harbor notes',
+    items: [
+      { ...withProject.projectContext.items[1], restoredContentHash: 'c'.repeat(64) },
+    ],
+  };
+  const restoredParsed = parseColliderExperimentBody(JSON.stringify(restoredDoc));
+  assert.ok(restoredParsed);
+  assert.equal(
+    restoredParsed!.projectContext!.items[0].restoredContentHash,
+    'c'.repeat(64),
+  );
+  const badMemoryDoc = JSON.parse(validExperimentBody());
+  badMemoryDoc.projectContext = {
+    projectId: 'p'.repeat(32),
+    projectTitle: 'Harbor notes',
+    items: [{ ...withProject.projectContext.items[0], restoredContentHash: 'c'.repeat(64) }],
+  };
+  assert.equal(parseColliderExperimentBody(JSON.stringify(badMemoryDoc)), null);
   // Older experiments without the field still parse, with no project context.
   const legacy = parseColliderExperimentBody(validExperimentBody())!;
   assert.equal(legacy.projectContext, undefined);
