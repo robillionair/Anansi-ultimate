@@ -1412,6 +1412,47 @@
         },
         "type": "object"
       },
+      "ColliderDocumentSource": {
+        "additionalProperties": false,
+        "description": "Provenance for one beam loaded from a user-picked\n`.txt`/`.md` file. The label is a user-supplied\nbasename only — never a path, never proof the\nbackend accessed a file. Both hashes are recomputed\nby the backend against the submitted beam text (see\n`validate_document_source`), so a stale or forged\nrecord cannot describe different submitted text.\n`raw_hash` covers the original file bytes (including\na stripped BOM); `text_hash` covers the submitted\ntext bytes. Neither hash nor label is ever sent to\nthe provider.",
+        "properties": {
+          "bom": {
+            "type": "boolean"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "rawBytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "rawHash": {
+            "type": "string"
+          },
+          "textChars": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "textHash": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "kind",
+          "bom",
+          "rawBytes",
+          "rawHash",
+          "textHash",
+          "textChars"
+        ],
+        "type": "object"
+      },
       "ColliderFeasibility": {
         "additionalProperties": false,
         "description": "Feasibility review (§25 stage 5). Hypotheses,\ndependencies, unknown costs, risks and testability —\nall labelled as hypotheses, never as findings.",
@@ -1778,7 +1819,7 @@
     },
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
-    "description": "The saved experiment body (format\n`anansi-collider-experiment` v1): exact beams,\nresolved controls, validated result, and\nprovider/model provenance with disclosure.\n`memory_context` is optional and defaulted so\nexperiments saved before Slice 3 (no memory\ncontext) still parse: absence means no context.",
+    "description": "The saved experiment body (format\n`anansi-collider-experiment` v1): exact beams,\nresolved controls, validated result, and\nprovider/model provenance with disclosure.\n`memory_context` is optional and defaulted so\nexperiments saved before Slice 3 (no memory\ncontext) still parse: absence means no context.\n`document_a`/`document_b` are likewise optional:\nexperiments saved before document input (or from\nmanually typed beams) carry none and still parse.",
     "properties": {
       "beamA": {
         "type": "string"
@@ -1791,6 +1832,26 @@
       },
       "disclosure": {
         "$ref": "#/$defs/DisclosureRecord"
+      },
+      "documentA": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/ColliderDocumentSource"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "documentB": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/ColliderDocumentSource"
+          },
+          {
+            "type": "null"
+          }
+        ]
       },
       "format": {
         "type": "string"
@@ -2519,6 +2580,47 @@
         },
         "type": "object"
       },
+      "ColliderDocumentSource": {
+        "additionalProperties": false,
+        "description": "Provenance for one beam loaded from a user-picked\n`.txt`/`.md` file. The label is a user-supplied\nbasename only — never a path, never proof the\nbackend accessed a file. Both hashes are recomputed\nby the backend against the submitted beam text (see\n`validate_document_source`), so a stale or forged\nrecord cannot describe different submitted text.\n`raw_hash` covers the original file bytes (including\na stripped BOM); `text_hash` covers the submitted\ntext bytes. Neither hash nor label is ever sent to\nthe provider.",
+        "properties": {
+          "bom": {
+            "type": "boolean"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "rawBytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "rawHash": {
+            "type": "string"
+          },
+          "textChars": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "textHash": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "kind",
+          "bom",
+          "rawBytes",
+          "rawHash",
+          "textHash",
+          "textChars"
+        ],
+        "type": "object"
+      },
       "ColliderMemorySelection": {
         "additionalProperties": false,
         "description": "One explicitly selected memory, by reference only.\nThe client never supplies a body, privacy label,\nworkspace claim or revision provenance: the backend\nresolves the pair itself (see `resolve_memory_context`)\nand refuses anything unresolvable before provider\ntraffic. The revision id is the exact revision the\npre-send review displayed.",
@@ -2626,6 +2728,28 @@
           "preferredOutputType": "concept",
           "technicalDepth": "standard"
         }
+      },
+      "documentA": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/ColliderDocumentSource"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "documentB": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/ColliderDocumentSource"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
       },
       "memoryContext": {
         "items": {

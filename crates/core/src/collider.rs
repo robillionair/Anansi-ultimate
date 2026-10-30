@@ -290,6 +290,10 @@ pub struct ColliderStartRequest {
     pub memory_context: Vec<ColliderMemorySelection>,
     #[serde(default)]
     pub project_context: Option<ColliderProjectSelection>,
+    #[serde(default)]
+    pub document_a: Option<ColliderDocumentSource>,
+    #[serde(default)]
+    pub document_b: Option<ColliderDocumentSource>,
     pub model: Option<String>,
     pub provider: Option<String>,
     pub mode: Option<String>,
@@ -351,6 +355,29 @@ pub struct ColliderResult {
     pub productization: ColliderProductization,
 }
 
+/// Provenance for one beam loaded from a user-picked
+/// `.txt`/`.md` file. The label is a user-supplied
+/// basename only — never a path, never proof the
+/// backend accessed a file. Both hashes are recomputed
+/// by the backend against the submitted beam text (see
+/// `validate_document_source`), so a stale or forged
+/// record cannot describe different submitted text.
+/// `raw_hash` covers the original file bytes (including
+/// a stripped BOM); `text_hash` covers the submitted
+/// text bytes. Neither hash nor label is ever sent to
+/// the provider.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ColliderDocumentSource {
+    pub label: String,
+    pub kind: String,
+    pub bom: bool,
+    pub raw_bytes: u64,
+    pub raw_hash: String,
+    pub text_hash: String,
+    pub text_chars: u64,
+}
+
 /// The saved experiment body (format
 /// `anansi-collider-experiment` v1): exact beams,
 /// resolved controls, validated result, and
@@ -358,6 +385,9 @@ pub struct ColliderResult {
 /// `memory_context` is optional and defaulted so
 /// experiments saved before Slice 3 (no memory
 /// context) still parse: absence means no context.
+/// `document_a`/`document_b` are likewise optional:
+/// experiments saved before document input (or from
+/// manually typed beams) carry none and still parse.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ColliderExperimentDoc {
@@ -370,6 +400,10 @@ pub struct ColliderExperimentDoc {
     pub memory_context: Vec<ColliderMemoryContext>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub project_context: Option<ColliderProjectContext>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub document_a: Option<ColliderDocumentSource>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub document_b: Option<ColliderDocumentSource>,
     pub result: ColliderResult,
     pub provider: String,
     pub model: String,
@@ -415,6 +449,80 @@ pub struct ColliderSaveResponse {
 
 const MAX_OUTPUT_CHARS: usize = 262_144;
 const MAX_BEAM_CHARS: usize = 8_000;
+/// Largest accepted document file, in bytes. A beam
+/// holds at most 8,000 characters, so 64 KiB bounds
+/// the request payload while leaving ample room for
+/// multi-byte UTF-8 text.
+const MAX_DOCUMENT_BYTES: u64 = 65_536;
+const MAX_LABEL_CHARS: usize = 255;
+
+/// Validate one beam's document provenance against the
+/// exact submitted beam text. Every field is recomputed
+/// here — nothing about the record is trusted — so a
+/// forged, stale (edited-beam) or inconsistent record
+/// refuses. The label must be a basename whose
+/// extension matches the kind; the raw hash covers the
+/// original file bytes (a stripped BOM included), the
+/// text hash covers the submitted text bytes, and both
+/// counts must match the beam exactly.
+pub fn validate_document_source(
+    source: &ColliderDocumentSource,
+    beam: &str,
+) -> Result<(), String> {
+    if source.kind != "txt" && source.kind != "md" {
+        return Err(format!(
+            "document kind must be txt or md, got {}",
+            source.kind
+        ));
+    }
+    let label_chars = source.label.chars().count();
+    if label_chars == 0 || label_chars > MAX_LABEL_CHARS {
+        return Err("document label must be 1 to 255 characters.".to_string());
+    }
+    if source.label.contains('/')
+        || source.label.contains('\\')
+        || source.label.contains('\0')
+    {
+        return Err("document label must be a file name, not a path.".to_string());
+    }
+    let suffix = source
+        .label
+        .rsplit('.')
+        .next()
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    if (source.kind == "txt" && suffix != "txt")
+        || (source.kind == "md" && suffix != "md")
+    {
+        return Err("document label extension must match its kind.".to_string());
+    }
+    if source.raw_bytes > MAX_DOCUMENT_BYTES {
+        return Err(format!(
+            "document file must be at most {MAX_DOCUMENT_BYTES} bytes, got {}",
+            source.raw_bytes
+        ));
+    }
+    let beam_bytes = beam.as_bytes();
+    let beam_chars = beam.chars().count() as u64;
+    if source.text_chars != beam_chars || beam_chars > MAX_BEAM_CHARS as u64 {
+        return Err("document text length must match the submitted beam.".to_string());
+    }
+    if crate::content::hash(beam_bytes) != source.text_hash {
+        return Err("document text hash must match the submitted beam.".to_string());
+    }
+    let mut raw: Vec<u8> = Vec::with_capacity(beam_bytes.len() + 3);
+    if source.bom {
+        raw.extend_from_slice(&[0xEF, 0xBB, 0xBF]);
+    }
+    raw.extend_from_slice(beam_bytes);
+    if crate::content::hash(&raw) != source.raw_hash {
+        return Err("document file hash must match the submitted beam.".to_string());
+    }
+    if source.raw_bytes != raw.len() as u64 {
+        return Err("document file size must match the submitted beam.".to_string());
+    }
+    Ok(())
+}
 
 fn check_text(value: &str, label: &str, max: usize) -> Result<(), String> {
     let value = value.trim();
@@ -578,6 +686,12 @@ pub fn validate_experiment_doc(doc: &ColliderExperimentDoc) -> Result<(), String
     }
     check_text(&doc.beam_a, "beamA", MAX_BEAM_CHARS)?;
     check_text(&doc.beam_b, "beamB", MAX_BEAM_CHARS)?;
+    if let Some(document) = &doc.document_a {
+        validate_document_source(document, &doc.beam_a)?;
+    }
+    if let Some(document) = &doc.document_b {
+        validate_document_source(document, &doc.beam_b)?;
+    }
     check_controls(&doc.controls).map_err(|e| e.message.clone())?;
     validate_memory_context(&doc.memory_context)?;
     if let Some(project_context) = &doc.project_context {
@@ -1312,6 +1426,8 @@ struct ColliderRun {
     controls: ColliderControls,
     memory_context: Vec<ColliderMemoryContext>,
     project_context: Option<ColliderProjectContext>,
+    document_a: Option<ColliderDocumentSource>,
+    document_b: Option<ColliderDocumentSource>,
     stream_run_id: String,
     capability: String,
     disclosure: Option<DisclosureRecord>,
@@ -1531,6 +1647,18 @@ fn start(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
         }
     }
     check_controls(&req.controls)?;
+    // Document provenance is verified against the exact
+    // submitted beams before any provider traffic: a
+    // forged or stale record refuses here, never after
+    // a model has seen the text.
+    if let Some(document) = &req.document_a {
+        validate_document_source(document, &req.beam_a)
+            .map_err(|e| invalid(&e))?;
+    }
+    if let Some(document) = &req.document_b {
+        validate_document_source(document, &req.beam_b)
+            .map_err(|e| invalid(&e))?;
+    }
     let workspace_id = logical(scope)?;
     let storage = storage(scope)?;
     // Project must exist, be a project, and be writable.
@@ -1678,6 +1806,8 @@ fn start(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
                 controls: req.controls.clone(),
                 memory_context: memory_context.clone(),
                 project_context: project_context.clone(),
+                document_a: req.document_a.clone(),
+                document_b: req.document_b.clone(),
                 stream_run_id: String::new(),
                 capability: String::new(),
                 disclosure: None,
@@ -1716,6 +1846,8 @@ fn start(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
         controls: req.controls.clone(),
         memory_context,
         project_context,
+        document_a: req.document_a.clone(),
+        document_b: req.document_b.clone(),
         stream_run_id: started
             .get("runId")
             .and_then(|v| v.as_str())
@@ -1932,6 +2064,11 @@ fn save(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
             // and would otherwise trip large-enum-variant,
             // like the result below.
             project_context: Option<Box<ColliderProjectContext>>,
+            // Boxed for the same reason: two hash-bearing
+            // provenance records would otherwise widen
+            // this variant past the lint threshold.
+            document_a: Option<Box<ColliderDocumentSource>>,
+            document_b: Option<Box<ColliderDocumentSource>>,
             // Boxed: the result struct is large by value
             // and would otherwise trip large-enum-variant.
             result: Option<Box<ColliderResult>>,
@@ -1939,7 +2076,7 @@ fn save(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
         },
     }
     let deadline = Instant::now() + Duration::from_secs(30);
-    let (project_id, beam_a, beam_b, controls, memory_context, project_context, result, disclosure) = loop {
+    let (project_id, beam_a, beam_b, controls, memory_context, project_context, document_a, document_b, result, disclosure) = loop {
         let step = with_runs(|map| {
             let Some(run) = map.get_mut(&key).filter(|r| r.session == scope.session) else {
                 return Claim::Missing;
@@ -1963,6 +2100,8 @@ fn save(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
                 controls: run.controls.clone(),
                 memory_context: run.memory_context.clone(),
                 project_context: run.project_context.clone().map(Box::new),
+                document_a: run.document_a.clone().map(Box::new),
+                document_b: run.document_b.clone().map(Box::new),
                 result: run.result.clone().map(Box::new),
                 disclosure: run.disclosure.clone(),
             }
@@ -1996,6 +2135,8 @@ fn save(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
                 controls,
                 memory_context,
                 project_context,
+                document_a,
+                document_b,
                 result,
                 disclosure,
             } => {
@@ -2006,6 +2147,8 @@ fn save(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
                     controls,
                     memory_context,
                     project_context.map(|boxed| *boxed),
+                    document_a.map(|boxed| *boxed),
+                    document_b.map(|boxed| *boxed),
                     result,
                     disclosure,
                 );
@@ -2024,6 +2167,8 @@ fn save(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
         controls,
         memory_context,
         project_context,
+        document_a,
+        document_b,
         result,
         provider: disclosure.provider.clone(),
         model: disclosure.model.clone(),
@@ -2115,6 +2260,8 @@ mod eviction_tests {
             controls: ColliderControls::default(),
             memory_context: Vec::new(),
             project_context: None,
+            document_a: None,
+            document_b: None,
             stream_run_id: stream.to_string(),
             capability: "cap".to_string(),
             disclosure: None,
@@ -2172,5 +2319,142 @@ mod eviction_tests {
             assert!(map.contains_key(&run_key(&scope, "fresh")));
             assert!(!map.contains_key(&run_key(&scope, "old-active")));
         });
+    }
+}
+
+#[cfg(test)]
+mod document_source_tests {
+    use super::*;
+
+    /// Beam text with BOM-stripped content: CRLF endings,
+    /// indentation and a terminal newline, all preserved.
+    const BEAM: &str = "  First line\r\n\tSecond line\r\n";
+    const LABEL: &str = "field-notes.md";
+
+    fn valid_source() -> ColliderDocumentSource {
+        let mut raw = vec![0xEF, 0xBB, 0xBF];
+        raw.extend_from_slice(BEAM.as_bytes());
+        ColliderDocumentSource {
+            label: LABEL.to_string(),
+            kind: "md".to_string(),
+            bom: true,
+            raw_bytes: raw.len() as u64,
+            raw_hash: crate::content::hash(&raw),
+            text_hash: crate::content::hash(BEAM.as_bytes()),
+            text_chars: BEAM.chars().count() as u64,
+        }
+    }
+
+    fn valid_doc_json() -> serde_json::Value {
+        serde_json::json!({
+            "format": "anansi-collider-experiment",
+            "version": 1,
+            "beamA": BEAM,
+            "beamB": "Mycelium.",
+            "controls": {
+                "creativity": "balanced", "technicalDepth": "standard",
+                "practicality": "balanced", "innovationDistance": "moderate",
+                "budget": "", "preferredOutputType": "concept"
+            },
+            "result": {
+                "sourceUnderstanding": "Two domains.",
+                "conceptualPrimitives": ["one", "two", "three"],
+                "crossDomainMappings": ["a maps to b", "c maps to d"],
+                "combinations": [
+                    {"name": "First", "description": "First combination."},
+                    {"name": "Second", "description": "Second combination."}
+                ],
+                "feasibility": {
+                    "hypotheses": ["It may work."],
+                    "dependencies": [], "unknownCosts": [],
+                    "risks": ["It may fail."],
+                    "testability": "Simulate it."
+                },
+                "productization": {
+                    "conceptBrief": "Brief.", "architecture": "Arch.",
+                    "roadmap": "Road.", "testPlan": "Tests.",
+                    "prototypeProposal": "Prototype."
+                }
+            },
+            "provider": "ollama",
+            "model": "llama-x",
+            "disclosure": {
+                "provider": "ollama", "model": "llama-x",
+                "endpointHost": "127.0.0.1", "local": true,
+                "routingMode": "auto", "routingReason": "test",
+                "messageCount": 3, "segmentCount": 4, "redactionCount": 0,
+                "estimatedInputTokens": 100, "costClass": "free",
+                "usage": null, "attempts": []
+            }
+        })
+    }
+
+    #[test]
+    fn valid_bom_source_accepts_and_every_forgery_refuses() {
+        assert!(validate_document_source(&valid_source(), BEAM).is_ok());
+        let mut cases: Vec<(&str, ColliderDocumentSource)> = Vec::new();
+        let mut wrong_text_hash = valid_source();
+        wrong_text_hash.text_hash = "0".repeat(64);
+        cases.push(("wrong text hash", wrong_text_hash));
+        let mut wrong_raw_hash = valid_source();
+        wrong_raw_hash.raw_hash = "0".repeat(64);
+        cases.push(("wrong raw hash", wrong_raw_hash));
+        let mut wrong_bytes = valid_source();
+        wrong_bytes.raw_bytes += 1;
+        cases.push(("wrong byte count", wrong_bytes));
+        let mut wrong_chars = valid_source();
+        wrong_chars.text_chars += 1;
+        cases.push(("wrong char count", wrong_chars));
+        let mut wrong_kind = valid_source();
+        wrong_kind.kind = "txt".to_string();
+        cases.push(("kind/extension mismatch", wrong_kind));
+        let mut path_label = valid_source();
+        path_label.label = "notes/field-notes.md".to_string();
+        cases.push(("path separator in label", path_label));
+        let mut no_bom = valid_source();
+        no_bom.bom = false;
+        cases.push(("flipped BOM flag", no_bom));
+        let mut bad_kind = valid_source();
+        bad_kind.kind = "pdf".to_string();
+        cases.push(("unsupported kind", bad_kind));
+        for (name, source) in cases {
+            assert!(
+                validate_document_source(&source, BEAM).is_err(),
+                "{name} must refuse"
+            );
+        }
+        // An edited beam invalidates the original record.
+        assert!(validate_document_source(&valid_source(), "  First line\r\n\tSecond line changed\r\n").is_err());
+        // A no-BOM source validates against its own bytes.
+        let plain = "Plain text.\n";
+        let source = ColliderDocumentSource {
+            label: "plain.txt".to_string(),
+            kind: "txt".to_string(),
+            bom: false,
+            raw_bytes: plain.len() as u64,
+            raw_hash: crate::content::hash(plain.as_bytes()),
+            text_hash: crate::content::hash(plain.as_bytes()),
+            text_chars: plain.chars().count() as u64,
+        };
+        assert!(validate_document_source(&source, plain).is_ok());
+    }
+
+    #[test]
+    fn old_documents_without_fields_validate_and_documented_ones_pin() {
+        let doc: ColliderExperimentDoc =
+            serde_json::from_value(valid_doc_json()).unwrap();
+        assert!(validate_experiment_doc(&doc).is_ok());
+        let mut documented = valid_doc_json();
+        documented["documentA"] = serde_json::to_value(valid_source()).unwrap();
+        let doc: ColliderExperimentDoc =
+            serde_json::from_value(documented).unwrap();
+        assert!(validate_experiment_doc(&doc).is_ok());
+        // The same document with an edited beam refuses.
+        let mut edited = valid_doc_json();
+        edited["documentA"] = serde_json::to_value(valid_source()).unwrap();
+        edited["beamA"] = serde_json::json!("Edited beam.");
+        let doc: ColliderExperimentDoc =
+            serde_json::from_value(edited).unwrap();
+        assert!(validate_experiment_doc(&doc).is_err());
     }
 }

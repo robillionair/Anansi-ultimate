@@ -358,12 +358,17 @@ export type RoutingMode = "auto" | "autoFree" | "private" | "fast" | "deep" | "c
  * `memory_context` is optional and defaulted so
  * experiments saved before Slice 3 (no memory
  * context) still parse: absence means no context.
+ * `document_a`/`document_b` are likewise optional:
+ * experiments saved before document input (or from
+ * manually typed beams) carry none and still parse.
  */
 export interface ColliderExperimentDoc {
   beamA: string;
   beamB: string;
   controls: ColliderControls;
   disclosure: DisclosureRecord;
+  documentA?: ColliderDocumentSource | null;
+  documentB?: ColliderDocumentSource | null;
   format: string;
   memoryContext?: ColliderMemoryContext[];
   model: string;
@@ -413,6 +418,28 @@ export interface AttemptRecord {
 export interface Usage {
   inputTokens: number;
   outputTokens: number;
+}
+/**
+ * Provenance for one beam loaded from a user-picked
+ * `.txt`/`.md` file. The label is a user-supplied
+ * basename only — never a path, never proof the
+ * backend accessed a file. Both hashes are recomputed
+ * by the backend against the submitted beam text (see
+ * `validate_document_source`), so a stale or forged
+ * record cannot describe different submitted text.
+ * `raw_hash` covers the original file bytes (including
+ * a stripped BOM); `text_hash` covers the submitted
+ * text bytes. Neither hash nor label is ever sent to
+ * the provider.
+ */
+export interface ColliderDocumentSource {
+  bom: boolean;
+  kind: string;
+  label: string;
+  rawBytes: number;
+  rawHash: string;
+  textChars: number;
+  textHash: string;
 }
 /**
  * One resolved memory context entry, saved verbatim
@@ -705,6 +732,8 @@ export interface ColliderStartRequest {
   beamB: string;
   contractVersion?: number;
   controls?: ColliderControls;
+  documentA?: ColliderDocumentSource | null;
+  documentB?: ColliderDocumentSource | null;
   memoryContext?: ColliderMemorySelection[];
   mode?: string | null;
   model?: string | null;
@@ -727,6 +756,28 @@ export interface ColliderControls {
   practicality?: string;
   preferredOutputType?: string;
   technicalDepth?: string;
+}
+/**
+ * Provenance for one beam loaded from a user-picked
+ * `.txt`/`.md` file. The label is a user-supplied
+ * basename only — never a path, never proof the
+ * backend accessed a file. Both hashes are recomputed
+ * by the backend against the submitted beam text (see
+ * `validate_document_source`), so a stale or forged
+ * record cannot describe different submitted text.
+ * `raw_hash` covers the original file bytes (including
+ * a stripped BOM); `text_hash` covers the submitted
+ * text bytes. Neither hash nor label is ever sent to
+ * the provider.
+ */
+export interface ColliderDocumentSource {
+  bom: boolean;
+  kind: string;
+  label: string;
+  rawBytes: number;
+  rawHash: string;
+  textChars: number;
+  textHash: string;
 }
 /**
  * One explicitly selected memory, by reference only.
