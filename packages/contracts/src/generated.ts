@@ -448,6 +448,16 @@ export interface ColliderProjectContext {
  * reassignments, archival or sealing of a source never
  * change this snapshot; the pinned hash lets restore
  * re-validate it against the source package's rows.
+ * `restored_content_hash` is absent on generation and
+ * on memory items, whose bodies restore verbatim. On
+ * an artifact item it records, only when trusted
+ * restore itself changed the referenced artifact's
+ * body (its embedded references were remapped), the
+ * restored row's hash — so the NEXT restore can tell
+ * the restored row apart from the original pinned hash
+ * without conflating the two or rewriting history.
+ * The snapshot content and `content_hash` stay the
+ * original bytes and hash forever.
  */
 export interface ColliderProjectContextItem {
   artifactId?: string | null;
@@ -457,6 +467,7 @@ export interface ColliderProjectContextItem {
   kind: string;
   memoryId?: string | null;
   privacy: string;
+  restoredContentHash?: string | null;
   revisionId?: string | null;
   title: string;
   version: number;

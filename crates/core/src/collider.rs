@@ -232,6 +232,16 @@ pub struct ColliderProjectSelection {
 /// reassignments, archival or sealing of a source never
 /// change this snapshot; the pinned hash lets restore
 /// re-validate it against the source package's rows.
+/// `restored_content_hash` is absent on generation and
+/// on memory items, whose bodies restore verbatim. On
+/// an artifact item it records, only when trusted
+/// restore itself changed the referenced artifact's
+/// body (its embedded references were remapped), the
+/// restored row's hash — so the NEXT restore can tell
+/// the restored row apart from the original pinned hash
+/// without conflating the two or rewriting history.
+/// The snapshot content and `content_hash` stay the
+/// original bytes and hash forever.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ColliderProjectContextItem {
@@ -248,6 +258,8 @@ pub struct ColliderProjectContextItem {
     pub title: String,
     pub content: String,
     pub content_hash: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub restored_content_hash: Option<String>,
     pub privacy: String,
 }
 
@@ -654,6 +666,63 @@ pub fn validate_memory_context(context: &[ColliderMemoryContext]) -> Result<(), 
     Ok(())
 }
 
+/// A pinned revision is disclosable on a NEW dispatch only while
+/// its source is currently eligible. The pinned revision itself
+/// must not be archived or expired, and the source's current head
+/// must not be sealed, archived or expired; for a project member,
+/// the head must still belong to the selected project. A head
+/// read with no revision already refuses a Sealed head, so the
+/// remaining head checks below cover archival, expiry and
+/// reassignment. An unparseable expiry stamp is treated as
+/// ineligible: validated writes only ever store RFC3339 stamps,
+/// so an unparseable one is corrupt data and dispatch fails
+/// closed. Saved history is untouched: this gate applies only
+/// to starting a new collision, never to reading, listing or
+/// restoring an experiment saved earlier, and an older revision
+/// of a source that remains eligible still dispatches.
+fn revision_expired(valid_until: &Option<String>) -> bool {
+    let Some(until) = valid_until else {
+        return false;
+    };
+    let Ok(date) = chrono::DateTime::parse_from_rfc3339(until) else {
+        return true;
+    };
+    date.with_timezone(&chrono::Utc) <= chrono::Utc::now()
+}
+
+fn current_source_eligible(
+    storage: &Storage,
+    workspace_id: &str,
+    memory_id: &str,
+    pinned: &crate::memory::MemoryMetadata,
+    expected_project: Option<&str>,
+) -> bool {
+    if pinned.status == crate::lifecycle::MemoryState::Archived
+        || revision_expired(&pinned.valid_until)
+    {
+        return false;
+    }
+    let Ok(head) = storage.memory_read(crate::memory::MemoryReadRequest {
+        contract_version: 1,
+        workspace_id: workspace_id.to_string(),
+        id: memory_id.to_string(),
+        revision_id: None,
+    }) else {
+        return false;
+    };
+    if head.memory.status == crate::lifecycle::MemoryState::Archived
+        || revision_expired(&head.memory.valid_until)
+    {
+        return false;
+    }
+    if let Some(project) = expected_project
+        && head.memory.project_id.as_deref() != Some(project)
+    {
+        return false;
+    }
+    true
+}
+
 /// Resolve explicit memory selections against workspace
 /// storage. The client supplies only ids: every body,
 /// title, version, privacy label and hash below comes
@@ -664,6 +733,10 @@ pub fn validate_memory_context(context: &[ColliderMemoryContext]) -> Result<(), 
 /// and refuses Sealed rows; any failure refuses the
 /// start before provider traffic. Selections are
 /// validated against the same bounds as saved context.
+/// A pinned revision additionally passes
+/// `current_source_eligible`: a new dispatch must not
+/// bypass a current archival, expiry, sealing or
+/// reassignment of its source.
 fn resolve_memory_context(
     storage: &Storage,
     workspace_id: &str,
@@ -698,6 +771,15 @@ fn resolve_memory_context(
                 revision_id: Some(selection.revision_id.clone()),
             })
             .map_err(|_| fail())?;
+        if !current_source_eligible(
+            storage,
+            workspace_id,
+            &selection.memory_id,
+            &details.memory,
+            None,
+        ) {
+            return Err(fail());
+        }
         let privacy = match details.memory.privacy {
             crate::privacy::Privacy::Private => "private",
             crate::privacy::Privacy::Standard => "standard",
@@ -787,6 +869,26 @@ pub fn validate_project_context(context: &ColliderProjectContext) -> Result<(), 
             }
             _ => return Err(format!("{label} kind must be memory or artifact.")),
         };
+        // Restored tracking belongs only to artifact
+        // items: memory bodies restore verbatim, so a
+        // restored hash on a memory item is fabricated,
+        // never produced by restore. On an artifact
+        // item it must be a lowercase sha256 digest
+        // when present.
+        if key.0 == "memory" {
+            if entry.restored_content_hash.is_some() {
+                return Err(format!("{label} must not carry a restored hash."));
+            }
+        } else if let Some(restored) = &entry.restored_content_hash
+            && (restored.len() != 64
+                || !restored
+                    .bytes()
+                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)))
+        {
+            return Err(format!(
+                "{label} restored hash must be a lowercase sha256 digest."
+            ));
+        }
         if seen.contains(&key) {
             return Err(format!("{label} repeats an item already selected."));
         }
@@ -910,11 +1012,25 @@ fn resolve_project_context(
                 // revision's metadata must assign this
                 // memory to the selected project, and the
                 // pinned revision must not be a project
-                // record or an archived revision.
+                // record or an archived revision. The
+                // current-source gate additionally refuses
+                // a member whose head has since been
+                // archived, expired, sealed or reassigned
+                // to another project, even when the pinned
+                // revision itself is still eligible.
                 if details.memory.project_id.as_deref() != Some(selection.project_id.as_str())
                     || details.memory.kind == "project"
                     || details.memory.status == crate::lifecycle::MemoryState::Archived
                 {
+                    return Err(fail());
+                }
+                if !current_source_eligible(
+                    storage,
+                    workspace_id,
+                    &memory_id,
+                    &details.memory,
+                    Some(selection.project_id.as_str()),
+                ) {
                     return Err(fail());
                 }
                 let privacy = match details.memory.privacy {
@@ -934,6 +1050,7 @@ fn resolve_project_context(
                     title: details.memory.title.clone(),
                     content: details.body.clone(),
                     content_hash: crate::content::hash(details.body.as_bytes()),
+                    restored_content_hash: None,
                     privacy: privacy.to_string(),
                 });
             }
@@ -976,6 +1093,7 @@ fn resolve_project_context(
                     title: details.artifact.title.clone(),
                     content: details.body.clone(),
                     content_hash: crate::content::hash(details.body.as_bytes()),
+                    restored_content_hash: None,
                     privacy: details.artifact.privacy.clone(),
                 });
             }

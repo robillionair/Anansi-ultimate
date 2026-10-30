@@ -364,6 +364,132 @@ fn fix_transfer_experiment_hashes(
     Ok(())
 }
 
+/// Fix-up pass over the prepared `artifact_versions`
+/// rows, after every row's references have been remapped:
+/// when restore itself changed a referenced artifact's
+/// body (its embedded references were remapped), the
+/// experiment that pinned it must record the restored
+/// row's hash on the item, or the next restore would
+/// compare the restored row against the original pinned
+/// hash and refuse a previously valid result. The
+/// snapshot content and original pinned hash stay
+/// verbatim; only `restoredContentHash` is added or
+/// updated, and only to the prepared row's own hash —
+/// never recomputed from an unvalidated original,
+/// because pre-validation already approved the original
+/// bindings. Memory items are untouched: their bodies
+/// restore verbatim, so their hashes never diverge.
+/// The pass iterates to a fixpoint because a referenced
+/// experiment row's own hash changes when its items
+/// gain a restored hash (chained experiments); the
+/// iteration cap fails a cyclic reference set closed.
+fn fix_experiment_project_artifact_hashes(
+    names: &[String],
+    values: &mut [Vec<rusqlite::types::Value>],
+) -> Result<(), CommandError> {
+    use rusqlite::types::Value;
+    let index = |name: &str| -> Result<usize, CommandError> {
+        names
+            .iter()
+            .position(|n| n == name)
+            .ok_or_else(crate::jobs::invalid)
+    };
+    let type_i = index("artifact_type")?;
+    let body_i = index("body")?;
+    let hash_i = index("content_hash")?;
+    let id_i = index("artifact_id")?;
+    let version_i = index("version")?;
+    for _ in 0..=values.len() {
+        let mut row_hashes: std::collections::BTreeMap<(String, i64), String> =
+            std::collections::BTreeMap::new();
+        for row in values.iter() {
+            if let (Value::Text(id), Value::Integer(version), Value::Text(hash)) =
+                (&row[id_i], &row[version_i], &row[hash_i])
+            {
+                row_hashes.insert((id.clone(), *version), hash.clone());
+            }
+        }
+        let mut changed = false;
+        for row in values.iter_mut() {
+            if !matches!(&row[type_i], Value::Text(t) if t == "experiment") {
+                continue;
+            }
+            let Value::Text(body) = &row[body_i].clone() else {
+                continue;
+            };
+            // A body that is not JSON at all cannot be a
+            // collider record: generic manual experiments
+            // restore untouched, as in validation.
+            let Ok(mut doc) = serde_json::from_str::<serde_json::Value>(body) else {
+                continue;
+            };
+            if doc.get("format").and_then(|v| v.as_str()) != Some("anansi-collider-experiment") {
+                continue;
+            }
+            let Some(items) = doc
+                .get_mut("projectContext")
+                .and_then(|c| c.get_mut("items"))
+                .and_then(|v| v.as_array_mut())
+            else {
+                continue;
+            };
+            let mut row_changed = false;
+            for item in items.iter_mut() {
+                if item.get("kind").and_then(|v| v.as_str()) != Some("artifact") {
+                    continue;
+                }
+                let artifact_id = item
+                    .get("artifactId")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(crate::jobs::invalid)?;
+                let version = item
+                    .get("version")
+                    .and_then(|v| v.as_u64())
+                    .ok_or_else(crate::jobs::invalid)? as i64;
+                let row_hash = row_hashes
+                    .get(&(artifact_id.to_string(), version))
+                    .ok_or_else(crate::jobs::invalid)?;
+                let pinned = item
+                    .get("contentHash")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(crate::jobs::invalid)?;
+                let wanted: Option<String> = if row_hash != pinned {
+                    Some(row_hash.clone())
+                } else {
+                    None
+                };
+                let current = item
+                    .get("restoredContentHash")
+                    .and_then(|v| v.as_str())
+                    .map(str::to_string);
+                if current != wanted {
+                    match wanted {
+                        Some(hash) => {
+                            item["restoredContentHash"] = serde_json::Value::String(hash);
+                        }
+                        None => {
+                            item.as_object_mut()
+                                .ok_or_else(crate::jobs::invalid)?
+                                .remove("restoredContentHash");
+                        }
+                    }
+                    row_changed = true;
+                }
+            }
+            if row_changed {
+                changed = true;
+                let rewritten = serde_json::to_string(&doc).map_err(|_| crate::jobs::invalid())?;
+                row[hash_i] = Value::Text(crate::content::hash(rewritten.as_bytes()));
+                row[body_i] = Value::Text(rewritten);
+            }
+        }
+        if !changed {
+            return Ok(());
+        }
+    }
+    Err(crate::jobs::invalid())
+}
+
 fn fix_review_hashes(
     names: &[String],
     values: &mut [Vec<rusqlite::types::Value>],
@@ -998,6 +1124,17 @@ fn validate_original_experiment_bindings(
                             .artifact_type
                             .clone()
                             .ok_or_else(crate::jobs::invalid)?;
+                        // The snapshot stays the original
+                        // bytes and hash forever. The row
+                        // binding accepts the original hash
+                        // or, for an item restore itself
+                        // diverged on an earlier restore,
+                        // the recorded restored hash; the
+                        // row body must hash to whichever
+                        // row hash binds. A restored hash
+                        // matching neither hash refuses,
+                        // so a fabricated original is
+                        // never repaired by recomputation.
                         if row_workspace != artifact_workspace
                             || row_project != *project_id
                             || row_type != entry_type
@@ -1005,9 +1142,11 @@ fn validate_original_experiment_bindings(
                             || row_version != i64::from(entry.version)
                             || row_privacy != entry.privacy
                             || row_privacy == "sealed"
-                            || row_hash != entry.content_hash
-                            || crate::content::hash(row_body.as_bytes()) != entry.content_hash
                             || crate::content::hash(entry.content.as_bytes()) != entry.content_hash
+                            || crate::content::hash(row_body.as_bytes()) != row_hash
+                            || (row_hash != entry.content_hash
+                                && entry.restored_content_hash.as_deref()
+                                    != Some(row_hash.as_str()))
                         {
                             return Err(crate::jobs::invalid());
                         }
@@ -1521,16 +1660,24 @@ impl crate::storage::Storage {
                 fix_approval_hashes(&names, &mut values)?;
                 fix_deliverable_hashes(&names, &mut values)?;
                 fix_review_hashes(&names, &mut values)?;
-                // Order matters: the experiment fix-up
-                // rewrites concept bodies (their pinned
-                // experiment hash follows the restored
-                // experiment row), which changes concept
-                // row hashes. The receipt fix-up must run
-                // after it so the receipt pins the final
-                // concept hash; the reverse order leaves
-                // a stale conceptContentHash whenever
-                // the experiment hash changes on restore
+                // Order matters: the project-artifact
+                // fix-up records restored hashes on
+                // experiment items, which changes
+                // experiment row hashes. It must run
+                // before the transfer fix-ups, so
+                // concepts and receipts pin the final
+                // experiment hashes. The experiment
+                // fix-up rewrites concept bodies (their
+                // pinned experiment hash follows the
+                // restored experiment row), which
+                // changes concept row hashes. The
+                // receipt fix-up must run after it so
+                // the receipt pins the final concept
+                // hash; the reverse order leaves a stale
+                // conceptContentHash whenever the
+                // experiment hash changes on restore
                 // (e.g. remapped memory references).
+                fix_experiment_project_artifact_hashes(&names, &mut values)?;
                 fix_transfer_experiment_hashes(&names, &mut values)?;
                 fix_transfer_receipt_hashes(&names, &mut values)?;
             }
@@ -1883,6 +2030,125 @@ mod experiment_binding_tests {
         )
         .unwrap();
         assert!(validate_original_experiment_bindings(&db).is_ok());
+    }
+
+    /// Source package with full artifact columns, one
+    /// experiment row, one referenced artifact row and
+    /// the memory row the experiment's memory context
+    /// pins. The experiment body is re-hashed on insert,
+    /// so a test body is always internally consistent;
+    /// only the bindings under test vary.
+    fn setup_project(exp_body: &str, art_body: &str, art_hash: &str, mem_hash: &str) -> Connection {
+        let db = Connection::open_in_memory().unwrap();
+        db.execute_batch(
+            "CREATE TABLE artifact_versions (artifact_id TEXT, workspace_id TEXT, project_id TEXT, artifact_type TEXT, version INTEGER, privacy TEXT, content_hash TEXT, body TEXT);
+             CREATE TABLE memory_revisions (id TEXT, memory_id TEXT, workspace_id TEXT, body_hash TEXT, metadata TEXT);",
+        )
+        .unwrap();
+        let exp_hash = crate::content::hash(exp_body.as_bytes());
+        db.execute(
+            "INSERT INTO artifact_versions VALUES ('exp-1', 'ws-1', 'proj-1', 'experiment', 1, 'private', ?1, ?2)",
+            rusqlite::params![exp_hash, exp_body],
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO artifact_versions VALUES ('art-1', 'ws-1', 'proj-1', 'note', 1, 'private', ?1, ?2)",
+            rusqlite::params![art_hash, art_body],
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO memory_revisions VALUES ('rev-1', 'mem-1', 'ws-1', ?1, ?2)",
+            rusqlite::params![
+                mem_hash,
+                r#"{"privacy":"private","version":1,"title":"Notes"}"#
+            ],
+        )
+        .unwrap();
+        db
+    }
+
+    fn project_item(restored: Option<&str>, content_hash: &str) -> serde_json::Value {
+        let mut item = serde_json::json!({
+            "kind": "artifact",
+            "memoryId": null,
+            "revisionId": null,
+            "artifactId": "art-1",
+            "artifactType": "note",
+            "version": 1,
+            "title": "Note",
+            "content": "source note body",
+            "contentHash": content_hash,
+            "privacy": "private"
+        });
+        if let Some(hash) = restored {
+            item["restoredContentHash"] = serde_json::json!(hash);
+        }
+        item
+    }
+
+    fn with_project_item(body: &str, item: serde_json::Value) -> String {
+        let mut doc: serde_json::Value = serde_json::from_str(body).unwrap();
+        doc["projectContext"] = serde_json::json!({
+            "projectId": "proj-1",
+            "projectTitle": "Project",
+            "items": [item]
+        });
+        doc.to_string()
+    }
+
+    #[test]
+    fn experiment_project_artifact_bindings_accept_restored_and_refuse_fabricated() {
+        let content = "hello context";
+        let hash = crate::content::hash(content.as_bytes());
+        let base = experiment_body(content, &hash, "mem-1");
+        let art_content = "source note body";
+        let art_hash = crate::content::hash(art_content.as_bytes());
+        // Valid original: no restored hash, row matches the pinned hash.
+        let original = with_project_item(&base, project_item(None, &art_hash));
+        let db = setup_project(&original, art_content, &art_hash, &hash);
+        assert!(validate_original_experiment_bindings(&db).is_ok());
+        // Valid restored state: the row diverged on an
+        // earlier restore and the item records its hash;
+        // the snapshot still carries the original body.
+        let restored_body = "restored note body with remapped ids";
+        let restored_hash = crate::content::hash(restored_body.as_bytes());
+        let restored = with_project_item(&base, project_item(Some(&restored_hash), &art_hash));
+        let db = setup_project(&restored, restored_body, &restored_hash, &hash);
+        assert!(validate_original_experiment_bindings(&db).is_ok());
+        // Fabricated restored hash matching neither the
+        // pinned hash nor a diverged row's hash refuses:
+        // restore never repairs an original by
+        // recomputation. (A bogus restored value
+        // alongside a row that still matches the
+        // original is harmless: the fix-up pass drops
+        // it on restore, since the row has not
+        // diverged.)
+        let third_body = "third body nobody pinned";
+        let third_hash = crate::content::hash(third_body.as_bytes());
+        let fabricated = with_project_item(
+            &base,
+            project_item(Some(&crate::content::hash("neither".as_bytes())), &art_hash),
+        );
+        let db = setup_project(&fabricated, third_body, &third_hash, &hash);
+        assert!(validate_original_experiment_bindings(&db).is_err());
+        // A restored hash on a memory item refuses at
+        // document validation, before any row is read.
+        let mut mem_item = serde_json::json!({
+            "kind": "memory",
+            "memoryId": "mem-2",
+            "revisionId": "rev-2",
+            "artifactId": null,
+            "artifactType": null,
+            "version": 1,
+            "title": "Other",
+            "content": "other body",
+            "contentHash": crate::content::hash("other body".as_bytes()),
+            "privacy": "private"
+        });
+        mem_item["restoredContentHash"] = serde_json::json!(restored_hash);
+        let mem_doc = with_project_item(&base, mem_item);
+        let db = setup_project(&mem_doc, art_content, &art_hash, &hash);
+        assert!(validate_original_experiment_bindings(&db).is_err());
     }
 
     #[test]
