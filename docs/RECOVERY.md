@@ -1,5 +1,19 @@
 # ANANSI Ultimate — Recovery Guide
 
+## Current M8 R1 provenance repair — 2026-10-30
+
+Use branch `muse/m8-r1-provenance-repair`, from reviewer tip
+`7388b7fa`. The two remaining R1 provenance findings are repaired
+on Linux (see the repair design and addendum in `docs/handoffs/`
+and the BUILD_STATUS entry): no early transform success for absent
+optional context, and id substitutions require an exact
+backend-recorded restore-origins pair, with ultimate origins
+recorded so multi-hop restores validate. Independent Windows rerun
+by ChatGPT is still pending and is the next review step; do not
+treat Linux evidence as closing it. Owner previews/data and
+reviewer worktrees remain untouched. No cloud calls, pushes, CI or
+promotion.
+
 ## Current M8 repair review — 2026-10-30
 
 Use `E:/Anansi/worktrees/review-m8-overnight`, branch `codex/review-m8-overnight-repair`, incoming `d0a6c1e1`. [Exact findings](reviews/windows-m8-overnight-repair.md): original three reviewer probes now pass on Windows, but two added R1 attacks still accept fabricated structured text/identities. Preserve R2/R3 fixes and all assertions; Muse owns the remaining bounded R1 implementation. Do not promote or claim native/security/release completion. Antigravity release tooling is separate; do not modify its worktree. No automatic cloud, CI, push or monitor activation.

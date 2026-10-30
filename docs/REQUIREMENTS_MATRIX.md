@@ -1,5 +1,16 @@
 # ANANSI Ultimate — Requirements Matrix
 
+## M8 R1 provenance repair — 2026-10-30
+
+AN-013/018/019/024 remain in progress. The two remaining R1
+provenance findings (context-free structured forgery via early
+transform success; fabricated project identity via package
+membership) are repaired on Linux on branch
+`muse/m8-r1-provenance-repair` (design + addendum in
+`docs/handoffs/`); independent Windows rerun is pending and is
+required before any acceptance claim. Do not infer complete M8,
+recovery or native certification from Linux or passing happy paths.
+
 ## M8 repair focused Windows review — 2026-10-30
 
 AN-013/018/019/024 remain in progress. [Repair review](reviews/windows-m8-overnight-repair.md) verifies R2/R3 and current-source boundaries; R1 remains blocked by optional-context early acceptance and missing original-to-restored identity authority. Passing old probes and happy paths do not close these added attacks, native or production gates.

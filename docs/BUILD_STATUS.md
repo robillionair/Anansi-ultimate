@@ -2,6 +2,33 @@
 
 Incoming `d0a6c1e1dd8612c954e9aceee9d735f5653780c8`; [independent Windows repair review](reviews/windows-m8-overnight-repair.md). Original Rust probes 2/2 and browser reviewer/instance/project/integrated specs 4/4 pass; source boundary 7/7, UI/contracts 90/90 and static/build checks pass. Two added generic-revision attacks remain accepted by restore: missing optional project context skips the final immutable comparison, and unknown-old/present-new IDs are accepted without actual restore-origin mapping (including a never-restored package). R2 final-hash ordering and R3 source-scoped navigation are verified in focused scope; R1 and promotion stay blocked. Reviewer changes only add tests/docs; no runtime implementation, cloud, downloads, pushes or CI.
 
+## 2026-10-30 — M8 R1 provenance repair: remaining two probes repaired (Linux; independent Windows rerun pending)
+
+On branch `muse/m8-r1-provenance-repair` from reviewer tip `7388b7fa`
+(incoming `d0a6c1e1` plus reviewer probes/docs only; design committed
+before code in `docs/handoffs/M8-r1-provenance-repair-design.md`,
+record in `docs/handoffs/M8-r1-provenance-repair-addendum.md`). R1a:
+no transform branch returns success early — absent optional context
+now falls through to the final whole-document equality. R1b: a
+differing id is allowed only on an exact backend-recorded
+`restore_origins` pair for the owning workspace; package membership
+alone never authorizes. Restore records ultimate origins, so 2nd/3rd/
+Nth restores validate by single pair lookup; no schema change.
+Before: reviewer probes 2/4 (original two pass, two new fail).
+After (sequential, Linux): reviewer probes 4/4, collider 39/39,
+transfer 19/19, forge_restore 4/4, backup_restore 7/7, restore lib
+10/10, node 90/90, 23 affected browser tests passing, strict
+Clippy/fmt/tsc/contracts/docs/builds clean, full core and
+providers+API totals in the delivery MANIFEST (only the known
+live-Ollama semantic_workflow environment failures expected).
+Compatibility (fail-closed): packages restored twice or more under
+old code carry only latest-hop origins, so a further restore under
+new code refuses before publication; packages produced by new code
+carry ultimate origins. This does not close Windows verification of
+this repair or of Slice 4, M7 native acceptance + preview
+promotion, M5 gates, G1 audit, or the §32 sandbox. No cloud,
+credential, download, push, merge, CI, or promotion.
+
 ## 2026-10-30 — M8 overnight Windows repair: R1–R3 repaired (Linux; independent Windows rerun pending)
 
 On branch `muse/m8-overnight-windows-repair` from reviewer tip `240af4ef`
