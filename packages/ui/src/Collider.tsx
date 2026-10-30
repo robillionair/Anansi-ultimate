@@ -11,6 +11,7 @@ import type {
 } from '@anansi/contracts';
 import { DisclosurePanel } from './Providers';
 import { ColliderRunController } from './colliderRun';
+import { ColliderPipelineOverview, pipelineStateForRun } from './ColliderOverview';
 
 // ---------------------------------------------------------------------------
 // Strict client-side parsing (mirrors the backend bounds in
@@ -541,6 +542,7 @@ export function ColliderExperimentView({ doc }: { doc: ColliderExperimentDoc }) 
         immutable. It was structurally validated when generated, not factually
         verified.
       </p>
+      <ColliderPipelineOverview state="complete" />
       <p>
         <strong>Controls.</strong> Creativity {doc.controls.creativity} ·
         technical depth {doc.controls.technicalDepth} · practicality{' '}
@@ -1335,6 +1337,12 @@ export function ColliderPanel({
         Saved-project selection is available below; URL fetching, document
         ingestion and 3D visualization remain deferred.
       </p>
+      <ColliderPipelineOverview
+        state={pipelineStateForRun(run, validating)}
+        partialChars={run?.partialChars ?? 0}
+        error={run?.error ?? null}
+        hasDisclosure={disclosure !== null}
+      />
       <form
         onSubmit={e => {
           e.preventDefault();
