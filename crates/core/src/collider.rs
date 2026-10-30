@@ -1786,8 +1786,8 @@ fn fetch_url(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
     // strict, so an ambient variable cannot relax a
     // production build.
     let allow_test_policy = cfg!(any(test, debug_assertions));
-    let env_flag = allow_test_policy
-        && std::env::var("ANANSI_URL_FETCH_ALLOW_LOOPBACK").as_deref() == Ok("1");
+    let env_flag =
+        allow_test_policy && std::env::var("ANANSI_URL_FETCH_ALLOW_LOOPBACK").as_deref() == Ok("1");
     let policy = crate::url_fetch::policy_for_fetch(env_flag, allow_test_policy);
     let fetched =
         crate::url_fetch::fetch_url_text(&req.url, policy, &[]).map_err(|e| invalid(&e))?;

@@ -715,12 +715,12 @@ fn request_once(
     deadline.check()?;
     let tcp = TcpStream::connect_timeout(&target.addr, deadline.remaining().min(CONNECT_TIMEOUT))
         .map_err(|e| {
-            if deadline.past() {
-                err("Fetching the URL timed out.")
-            } else {
-                err(format!("Could not connect to the URL host: {e}"))
-            }
-        })?;
+        if deadline.past() {
+            err("Fetching the URL timed out.")
+        } else {
+            err(format!("Could not connect to the URL host: {e}"))
+        }
+    })?;
     tcp.set_read_timeout(Some(deadline.socket_timeout()))
         .map_err(|_| err("Could not configure the connection."))?;
     tcp.set_write_timeout(Some(deadline.socket_timeout()))
@@ -807,24 +807,20 @@ fn request_once(
     );
     deadline.check()?;
     stream.set_timeouts(deadline.socket_timeout())?;
-    stream
-        .write_all(request.as_bytes())
-        .map_err(|_| {
-            if deadline.past() {
-                err("Fetching the URL timed out.")
-            } else {
-                err("Failed sending the request.")
-            }
-        })?;
-    stream
-        .flush()
-        .map_err(|_| {
-            if deadline.past() {
-                err("Fetching the URL timed out.")
-            } else {
-                err("Failed sending the request.")
-            }
-        })?;
+    stream.write_all(request.as_bytes()).map_err(|_| {
+        if deadline.past() {
+            err("Fetching the URL timed out.")
+        } else {
+            err("Failed sending the request.")
+        }
+    })?;
+    stream.flush().map_err(|_| {
+        if deadline.past() {
+            err("Fetching the URL timed out.")
+        } else {
+            err("Failed sending the request.")
+        }
+    })?;
     deadline.check()?;
     read_response_inner(&mut stream, deadline)
 }

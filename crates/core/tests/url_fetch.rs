@@ -435,7 +435,11 @@ fn dribbled_headers_obey_total_deadline() {
     parts.push((b"Hello".to_vec(), 0));
     let (addr, handle) = drip_once(parts);
     let start = StdInstant::now();
-    let result = fetch_url_text(&format!("http://127.0.0.1:{}/", addr.port()), short_policy(), &[]);
+    let result = fetch_url_text(
+        &format!("http://127.0.0.1:{}/", addr.port()),
+        short_policy(),
+        &[],
+    );
     let elapsed = start.elapsed();
     handle.join().unwrap();
     assert_deadline_refusal(result, elapsed);
@@ -448,7 +452,11 @@ fn dribbled_content_length_body_obeys_short_deadline() {
     parts.extend(drip_bytes(&[b'x'; 120], 50));
     let (addr, handle) = drip_once(parts);
     let start = StdInstant::now();
-    let result = fetch_url_text(&format!("http://127.0.0.1:{}/", addr.port()), short_policy(), &[]);
+    let result = fetch_url_text(
+        &format!("http://127.0.0.1:{}/", addr.port()),
+        short_policy(),
+        &[],
+    );
     let elapsed = start.elapsed();
     handle.join().unwrap();
     assert_deadline_refusal(result, elapsed);
@@ -461,7 +469,11 @@ fn dribbled_chunk_body_obeys_total_deadline() {
     parts.extend(drip_bytes(&[b'y'; 2000], 5));
     let (addr, handle) = drip_once(parts);
     let start = StdInstant::now();
-    let result = fetch_url_text(&format!("http://127.0.0.1:{}/", addr.port()), short_policy(), &[]);
+    let result = fetch_url_text(
+        &format!("http://127.0.0.1:{}/", addr.port()),
+        short_policy(),
+        &[],
+    );
     let elapsed = start.elapsed();
     handle.join().unwrap();
     assert_deadline_refusal(result, elapsed);
@@ -474,7 +486,11 @@ fn dribbled_close_delimited_body_obeys_total_deadline() {
     parts.extend(drip_bytes(&[b'z'; 100], 50));
     let (addr, handle) = drip_once(parts);
     let start = StdInstant::now();
-    let result = fetch_url_text(&format!("http://127.0.0.1:{}/", addr.port()), short_policy(), &[]);
+    let result = fetch_url_text(
+        &format!("http://127.0.0.1:{}/", addr.port()),
+        short_policy(),
+        &[],
+    );
     let elapsed = start.elapsed();
     handle.join().unwrap();
     assert_deadline_refusal(result, elapsed);
@@ -487,7 +503,11 @@ fn dribbled_trailers_obey_total_deadline() {
     parts.extend(drip_bytes(b"X-Check: value\r\n\r\n", 150));
     let (addr, handle) = drip_once(parts);
     let start = StdInstant::now();
-    let result = fetch_url_text(&format!("http://127.0.0.1:{}/", addr.port()), short_policy(), &[]);
+    let result = fetch_url_text(
+        &format!("http://127.0.0.1:{}/", addr.port()),
+        short_policy(),
+        &[],
+    );
     let elapsed = start.elapsed();
     handle.join().unwrap();
     assert_deadline_refusal(result, elapsed);
@@ -502,8 +522,12 @@ fn slow_but_legal_stream_still_succeeds() {
     let mut parts = vec![(head.to_vec(), 0)];
     parts.extend(drip_bytes(&[b'q'; 50], 20));
     let (addr, handle) = drip_once(parts);
-    let fetched = fetch_url_text(&format!("http://127.0.0.1:{}/", addr.port()), short_policy(), &[])
-        .unwrap();
+    let fetched = fetch_url_text(
+        &format!("http://127.0.0.1:{}/", addr.port()),
+        short_policy(),
+        &[],
+    )
+    .unwrap();
     assert_eq!(fetched.text, "q".repeat(50));
     handle.join().unwrap();
 }
@@ -511,12 +535,7 @@ fn slow_but_legal_stream_still_succeeds() {
 #[test]
 fn redirect_to_reserved_ipv6_refuses() {
     let server = RouteServer::start(move |path| match path {
-        "/to-reserved" => response(
-            302,
-            "Found",
-            &[("Location", "http://[fec0::1]/")],
-            b"",
-        ),
+        "/to-reserved" => response(302, "Found", &[("Location", "http://[fec0::1]/")], b""),
         "/to-mapped" => response(
             302,
             "Found",
