@@ -4,6 +4,7 @@ import type {
   ColliderControls,
   ColliderDocumentSource,
   ColliderExperimentDoc,
+  ColliderUrlSource,
   ColliderMemoryContext,
   ColliderProjectContext,
   ColliderResult,
@@ -17,6 +18,7 @@ import {
   MAX_DOCUMENT_BYTES,
   decodeDocumentBytes,
 } from './documentInput';
+import { UrlFetchSession, urlSourceFromFetch } from './urlFetch';
 import {
   ColliderPipelineOverview,
   colliderResultHeadingId,
@@ -430,6 +432,86 @@ export function parseColliderDocumentSource(
   return value as unknown as ColliderDocumentSource;
 }
 
+export function parseColliderUrlSource(
+  value: unknown,
+): ColliderUrlSource | null {
+  if (!isRecord(value)) return null;
+  if (!exactKeys(value, [
+    'submittedUrl',
+    'finalUrl',
+    'contentKind',
+    'extraction',
+    'fetchedBytes',
+    'fetchedHash',
+    'textHash',
+    'textChars',
+    'bom',
+  ])) {
+    return null;
+  }
+  const hash = /^[0-9a-f]{64}$/;
+  for (const key of ['submittedUrl', 'finalUrl'] as const) {
+    if (
+      typeof value[key] !== 'string' ||
+      value[key].length === 0 ||
+      [...(value[key] as string)].length > 2048
+    ) {
+      return null;
+    }
+    let parsed: URL;
+    try {
+      parsed = new URL(value[key] as string);
+    } catch {
+      return null;
+    }
+    if (
+      parsed.protocol !== 'http:' &&
+      parsed.protocol !== 'https:'
+    ) {
+      return null;
+    }
+    if (parsed.username !== '' || parsed.password !== '') return null;
+    if (parsed.hostname === '') return null;
+    const defaultPort = parsed.protocol === 'http:' ? '80' : '443';
+    if (parsed.port !== '' && parsed.port !== defaultPort) return null;
+  }
+  if (
+    value.contentKind !== 'text' &&
+    value.contentKind !== 'html'
+  ) {
+    return null;
+  }
+  const expectedExtraction =
+    value.contentKind === 'text' ? 'plain' : 'html-conservative';
+  if (value.extraction !== expectedExtraction) return null;
+  if (
+    typeof value.fetchedBytes !== 'number' ||
+    !Number.isInteger(value.fetchedBytes) ||
+    value.fetchedBytes < 0 ||
+    value.fetchedBytes > 1048576
+  ) {
+    return null;
+  }
+  if (
+    typeof value.fetchedHash !== 'string' ||
+    !hash.test(value.fetchedHash) ||
+    typeof value.textHash !== 'string' ||
+    !hash.test(value.textHash)
+  ) {
+    return null;
+  }
+  if (
+    typeof value.textChars !== 'number' ||
+    !Number.isInteger(value.textChars) ||
+    value.textChars < 1 ||
+    value.textChars > 8000
+  ) {
+    return null;
+  }
+  if (typeof value.bom !== 'boolean') return null;
+  return value as unknown as ColliderUrlSource;
+}
+
 export function parseColliderExperimentBody(
   body: string,
 ): ColliderExperimentDoc | null {
@@ -463,6 +545,8 @@ export function parseColliderExperimentBody(
     'projectContext',
     'documentA',
     'documentB',
+    'urlA',
+    'urlB',
   ];
   if (
     !required.every(key => Object.keys(parsed).includes(key)) ||
@@ -490,6 +574,16 @@ export function parseColliderExperimentBody(
       ? undefined
       : parseColliderDocumentSource(parsed.documentB);
   if (documentB === null) return null;
+  const urlA =
+    parsed.urlA === undefined
+      ? undefined
+      : parseColliderUrlSource(parsed.urlA);
+  if (urlA === null) return null;
+  const urlB =
+    parsed.urlB === undefined
+      ? undefined
+      : parseColliderUrlSource(parsed.urlB);
+  if (urlB === null) return null;
   if (parsed.format !== 'anansi-collider-experiment' || parsed.version !== 1) {
     return null;
   }
@@ -530,6 +624,8 @@ export function parseColliderExperimentBody(
     projectContext,
     documentA,
     documentB,
+    urlA,
+    urlB,
   } as unknown as ColliderExperimentDoc;
 }
 
@@ -687,6 +783,28 @@ export function ColliderExperimentView({
             do not change it.
           </p>
         )}
+        {doc.urlA && (
+          <p>
+            URL: {doc.urlA.submittedUrl}
+            {doc.urlA.finalUrl !== doc.urlA.submittedUrl
+              ? ` · final URL: ${doc.urlA.finalUrl}`
+              : ''}{' '}
+            · {doc.urlA.contentKind === 'html' ? 'Web page' : 'Plain text'}
+            {doc.urlA.contentKind === 'html'
+              ? ' · conservatively extracted text'
+              : ''}{' '}
+            · {doc.urlA.fetchedBytes} bytes fetched · {doc.urlA.textChars}{' '}
+            characters · Text SHA-256:{' '}
+            <span
+              title={`Submitted URL ${doc.urlA.submittedUrl}\nFinal URL ${doc.urlA.finalUrl}\nText SHA-256 ${doc.urlA.textHash}\nFetched SHA-256 ${doc.urlA.fetchedHash}`}
+            >
+              {doc.urlA.textHash.slice(0, 16)}…
+            </span>
+            {doc.urlA.bom ? ' · leading BOM stripped' : ''}. This is
+            the generation-time record: later changes at the URL do
+            not change it.
+          </p>
+        )}
         <pre>{doc.beamA}</pre>
       </details>
       <details>
@@ -705,6 +823,28 @@ export function ColliderExperimentView({
             {doc.documentB.bom ? ' · leading BOM stripped' : ''}. This is
             the generation-time record: later changes to the source file
             do not change it.
+          </p>
+        )}
+        {doc.urlB && (
+          <p>
+            URL: {doc.urlB.submittedUrl}
+            {doc.urlB.finalUrl !== doc.urlB.submittedUrl
+              ? ` · final URL: ${doc.urlB.finalUrl}`
+              : ''}{' '}
+            · {doc.urlB.contentKind === 'html' ? 'Web page' : 'Plain text'}
+            {doc.urlB.contentKind === 'html'
+              ? ' · conservatively extracted text'
+              : ''}{' '}
+            · {doc.urlB.fetchedBytes} bytes fetched · {doc.urlB.textChars}{' '}
+            characters · Text SHA-256:{' '}
+            <span
+              title={`Submitted URL ${doc.urlB.submittedUrl}\nFinal URL ${doc.urlB.finalUrl}\nText SHA-256 ${doc.urlB.textHash}\nFetched SHA-256 ${doc.urlB.fetchedHash}`}
+            >
+              {doc.urlB.textHash.slice(0, 16)}…
+            </span>
+            {doc.urlB.bom ? ' · leading BOM stripped' : ''}. This is
+            the generation-time record: later changes at the URL do
+            not change it.
           </p>
         )}
         <pre>{doc.beamB}</pre>
@@ -972,6 +1112,20 @@ export function ColliderPanel({
   const [documentBError, setDocumentBError] = useState('');
   const documentSessionA = useRef(new DocumentLoadSession());
   const documentSessionB = useRef(new DocumentLoadSession());
+  // URL sources, one per beam, mirroring document sources:
+  // a source describes exactly the beam text it was
+  // fetched with; any edit clears it, and a failed fetch
+  // leaves the previous beam and source untouched.
+  const [urlA, setUrlA] = useState<ColliderUrlSource | null>(null);
+  const [urlB, setUrlB] = useState<ColliderUrlSource | null>(null);
+  const [urlAInput, setUrlAInput] = useState('');
+  const [urlBInput, setUrlBInput] = useState('');
+  const [urlALoading, setUrlALoading] = useState(false);
+  const [urlBLoading, setUrlBLoading] = useState(false);
+  const [urlAError, setUrlAError] = useState('');
+  const [urlBError, setUrlBError] = useState('');
+  const urlSessionA = useRef(new UrlFetchSession());
+  const urlSessionB = useRef(new UrlFetchSession());
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [review, setReview] = useState<ColliderMemoryReviewEntry[] | null>(null);
   const [reviewLoading, setReviewLoading] = useState(false);
@@ -1406,39 +1560,63 @@ export function ColliderPanel({
     beam: 'a' | 'b',
     value: string,
   ) {
-    // Editing invalidates any pending file read for this
-    // beam and drops its document attribution: the beam
-    // is manual text from here on, and a stale load can
-    // never overwrite the edit.
-    const session =
+    // Editing invalidates any pending file read or URL
+    // fetch for this beam and drops both attributions:
+    // the beam is manual text from here on, and a stale
+    // load can never overwrite the edit.
+    const documentSession =
       beam === 'a' ? documentSessionA.current : documentSessionB.current;
-    session.invalidate();
+    const urlSession =
+      beam === 'a' ? urlSessionA.current : urlSessionB.current;
+    documentSession.invalidate();
+    urlSession.invalidate();
     if (beam === 'a') {
       setDocumentALoading(false);
       setDocumentA(null);
+      setUrlALoading(false);
+      setUrlA(null);
       setBeamA(value);
     } else {
       setDocumentBLoading(false);
       setDocumentB(null);
+      setUrlBLoading(false);
+      setUrlB(null);
       setBeamB(value);
     }
   }
 
   function clearDocument(beam: 'a' | 'b') {
-    const session =
+    // Clearing a source empties the beam, so both
+    // attributions go: the beam holds no sourced text.
+    const documentSession =
       beam === 'a' ? documentSessionA.current : documentSessionB.current;
-    session.invalidate();
+    const urlSession =
+      beam === 'a' ? urlSessionA.current : urlSessionB.current;
+    documentSession.invalidate();
+    urlSession.invalidate();
     if (beam === 'a') {
       setDocumentALoading(false);
       setDocumentA(null);
       setDocumentAError('');
+      setUrlALoading(false);
+      setUrlA(null);
+      setUrlAError('');
       setBeamA('');
     } else {
       setDocumentBLoading(false);
       setDocumentB(null);
       setDocumentBError('');
+      setUrlBLoading(false);
+      setUrlB(null);
+      setUrlBError('');
       setBeamB('');
     }
+  }
+
+  function clearUrlSource(beam: 'a' | 'b') {
+    // Same as clearing a document source: the beam is
+    // emptied, so both attributions go with it.
+    clearDocument(beam);
   }
 
   async function pickDocument(beam: 'a' | 'b', file: File) {
@@ -1456,6 +1634,14 @@ export function ColliderPanel({
     // A rejection touches only loading state and error —
     // never the last applied beam or attribution.
     session.invalidate();
+    // A document pick is a source switch: it retires a
+    // pending URL fetch for this beam as well.
+    const urlSession =
+      beam === 'a' ? urlSessionA.current : urlSessionB.current;
+    const setUrlLoading =
+      beam === 'a' ? setUrlALoading : setUrlBLoading;
+    urlSession.invalidate();
+    setUrlLoading(false);
     // Bound the read before allocating it: a file larger
     // than the decoder's limit is refused on File.size
     // alone and its contents are never read. The decoder
@@ -1495,11 +1681,98 @@ export function ColliderPanel({
     if (loaded.result) {
       setBeam(loaded.result.text);
       setSource(loaded.result.source);
+      // Source switch: a document beam carries no URL
+      // record, and a stale URL error no longer applies.
+      if (beam === 'a') {
+        setUrlA(null);
+        setUrlAError('');
+      } else {
+        setUrlB(null);
+        setUrlBError('');
+      }
+    }
+  }
+
+  async function fetchUrl(beam: 'a' | 'b') {
+    const session =
+      beam === 'a' ? urlSessionA.current : urlSessionB.current;
+    const setLoading = beam === 'a' ? setUrlALoading : setUrlBLoading;
+    const setError = beam === 'a' ? setUrlAError : setUrlBError;
+    const setSource = beam === 'a' ? setUrlA : setUrlB;
+    const setBeam = beam === 'a' ? setBeamA : setBeamB;
+    const entered = (beam === 'a' ? urlAInput : urlBInput).trim();
+    // Every new fetch supersedes older pending loads of
+    // either kind for this beam, including a fetch that
+    // is itself refused before any network call: retire
+    // first, before any early return, so a gated fetch
+    // can never land after newer intent. A rejection
+    // touches only loading state and error — never the
+    // last applied beam or attribution.
+    session.invalidate();
+    const documentSession =
+      beam === 'a' ? documentSessionA.current : documentSessionB.current;
+    const setDocumentLoading =
+      beam === 'a' ? setDocumentALoading : setDocumentBLoading;
+    documentSession.invalidate();
+    setDocumentLoading(false);
+    if (!entered) {
+      if (mountedRef.current) {
+        setLoading(false);
+        setError('Enter a URL to fetch.');
+      }
+      return;
+    }
+    setLoading(true);
+    setError('');
+    const outcome = await session.load(() =>
+      client.fetchProjectColliderUrl(workspaceId, projectId, entered),
+    );
+    if (!mountedRef.current) return;
+    // One generation gate for both paths: a superseded
+    // fetch — successful or failed — changes neither the
+    // error nor the loading flag, because the invalidating
+    // action (or the newer fetch) already owns them.
+    if (outcome.generation !== session.current) return;
+    setLoading(false);
+    if (outcome.error) {
+      // A failed fetch changes nothing else: the previous
+      // beam and attribution stay, and the error is
+      // visible with retry (press Fetch again).
+      setError(outcome.error.message);
+      return;
+    }
+    if (outcome.result) {
+      setBeam(outcome.result.text);
+      setSource(urlSourceFromFetch(outcome.result));
+      // Source switch: a fetched beam carries no document
+      // record, and a stale document error no longer applies.
+      if (beam === 'a') {
+        setDocumentA(null);
+        setDocumentAError('');
+      } else {
+        setDocumentB(null);
+        setDocumentBError('');
+      }
+    }
+  }
+
+  function cancelUrlFetch(beam: 'a' | 'b') {
+    // Cancel drops the outcome, never the beam: the
+    // in-flight backend fetch runs to its bounded end but
+    // saves nothing, and its outcome is dropped on arrival
+    // because the session is no longer current.
+    const session =
+      beam === 'a' ? urlSessionA.current : urlSessionB.current;
+    session.invalidate();
+    if (beam === 'a') {
+      setUrlALoading(false);
+    } else {
+      setUrlBLoading(false);
     }
   }
 
   async function collide() {
-    if (!mountedRef.current || startingRef.current || busy || running || documentALoading || documentBLoading || !reviewReady || !projectReviewReady || !reviewBoundsOk || !projectReviewBoundsOk) return;
+    if (!mountedRef.current || startingRef.current || busy || running || documentALoading || documentBLoading || urlALoading || urlBLoading || !reviewReady || !projectReviewReady || !reviewBoundsOk || !projectReviewBoundsOk) return;
     // The immutable revisions already displayed are the consent boundary.
     // Re-reading current heads here could transmit an unseen newer revision.
     // The same holds for project items: only the reviewed refs are sent.
@@ -1544,6 +1817,8 @@ export function ColliderPanel({
         // the submitted text before any provider traffic.
         documentA: documentA ?? undefined,
         documentB: documentB ?? undefined,
+        urlA: urlA ?? undefined,
+        urlB: urlB ?? undefined,
         zeroCostLock: lock,
       });
     } catch (e) {
@@ -1602,8 +1877,8 @@ export function ColliderPanel({
         useful combinations. Supplied text is treated as private data, never as
         instructions to the model. Nothing starts until you press Collide Ideas.
         Saved-project selection is available below, as is .txt/.md
-        document input for either beam. URL fetching and 3D visualization
-        remain deferred.
+        document input for either beam, and URL fetching for either beam.
+        3D visualization remains deferred.
       </p>
       <ColliderPipelineOverview
         state={pipelineStateForRun(run, validating)}
@@ -1662,6 +1937,54 @@ export function ColliderPanel({
             </button>
           </p>
         )}
+        <label htmlFor="collider-url-a">URL for the first beam</label>
+        <input
+          id="collider-url-a"
+          type="text"
+          inputMode="url"
+          autoComplete="off"
+          placeholder="https://example.com/page"
+          value={urlAInput}
+          onChange={e => setUrlAInput(e.target.value)}
+        />
+        <button
+          type="button"
+          disabled={urlALoading}
+          onClick={() => void fetchUrl('a')}
+        >
+          Fetch for the first beam
+        </button>
+        {urlALoading && (
+          <button type="button" onClick={() => cancelUrlFetch('a')}>
+            Cancel fetch for the first beam
+          </button>
+        )}
+        {urlALoading && <p>Fetching URL…</p>}
+        {urlAError && <p role="alert">{urlAError}</p>}
+        {urlA && (
+          <p>
+            URL: {urlA.submittedUrl}
+            {urlA.finalUrl !== urlA.submittedUrl
+              ? ` · final URL: ${urlA.finalUrl}`
+              : ''}{' '}
+            · {urlA.contentKind === 'html' ? 'Web page' : 'Plain text'}
+            {urlA.contentKind === 'html'
+              ? ' · conservatively extracted text'
+              : ''}{' '}
+            · {urlA.fetchedBytes} bytes fetched · {urlA.textChars} characters ·{' '}
+            Text SHA-256:{' '}
+            <span
+              title={`Submitted URL ${urlA.submittedUrl}\nFinal URL ${urlA.finalUrl}\nText SHA-256 ${urlA.textHash}\nFetched SHA-256 ${urlA.fetchedHash}`}
+            >
+              {urlA.textHash.slice(0, 16)}…
+            </span>
+            {urlA.bom ? ' · leading BOM stripped' : ''}. Fetched content
+            is untrusted data; editing this beam clears this attribution.{' '}
+            <button type="button" onClick={() => clearUrlSource('a')}>
+              Clear URL source for the first beam
+            </button>
+          </p>
+        )}
         <label htmlFor="collider-beam-b">Beam B</label>
         <textarea
           id="collider-beam-b"
@@ -1701,6 +2024,54 @@ export function ColliderPanel({
             beam clears this attribution.{' '}
             <button type="button" onClick={() => clearDocument('b')}>
               Clear document source
+            </button>
+          </p>
+        )}
+        <label htmlFor="collider-url-b">URL for the second beam</label>
+        <input
+          id="collider-url-b"
+          type="text"
+          inputMode="url"
+          autoComplete="off"
+          placeholder="https://example.com/page"
+          value={urlBInput}
+          onChange={e => setUrlBInput(e.target.value)}
+        />
+        <button
+          type="button"
+          disabled={urlBLoading}
+          onClick={() => void fetchUrl('b')}
+        >
+          Fetch for the second beam
+        </button>
+        {urlBLoading && (
+          <button type="button" onClick={() => cancelUrlFetch('b')}>
+            Cancel fetch for the second beam
+          </button>
+        )}
+        {urlBLoading && <p>Fetching URL…</p>}
+        {urlBError && <p role="alert">{urlBError}</p>}
+        {urlB && (
+          <p>
+            URL: {urlB.submittedUrl}
+            {urlB.finalUrl !== urlB.submittedUrl
+              ? ` · final URL: ${urlB.finalUrl}`
+              : ''}{' '}
+            · {urlB.contentKind === 'html' ? 'Web page' : 'Plain text'}
+            {urlB.contentKind === 'html'
+              ? ' · conservatively extracted text'
+              : ''}{' '}
+            · {urlB.fetchedBytes} bytes fetched · {urlB.textChars} characters ·{' '}
+            Text SHA-256:{' '}
+            <span
+              title={`Submitted URL ${urlB.submittedUrl}\nFinal URL ${urlB.finalUrl}\nText SHA-256 ${urlB.textHash}\nFetched SHA-256 ${urlB.fetchedHash}`}
+            >
+              {urlB.textHash.slice(0, 16)}…
+            </span>
+            {urlB.bom ? ' · leading BOM stripped' : ''}. Fetched content
+            is untrusted data; editing this beam clears this attribution.{' '}
+            <button type="button" onClick={() => clearUrlSource('b')}>
+              Clear URL source for the second beam
             </button>
           </p>
         )}
@@ -2057,7 +2428,7 @@ export function ColliderPanel({
             Zero-Cost Lock (never spend)
           </label>
         </fieldset>
-        <button type="submit" disabled={busy || running || starting || documentALoading || documentBLoading || !reviewReady || !projectReviewReady || !reviewBoundsOk || !projectReviewBoundsOk}>
+        <button type="submit" disabled={busy || running || starting || documentALoading || documentBLoading || urlALoading || urlBLoading || !reviewReady || !projectReviewReady || !reviewBoundsOk || !projectReviewBoundsOk}>
           Collide Ideas
         </button>
         {run?.status === 'running' && (

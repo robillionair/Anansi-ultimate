@@ -152,7 +152,8 @@ test('panel renders both beams, defaults, deferred scope and starts nothing on r
   assert.match(html, /Defaults work without configuration/);
   assert.match(html, /do not guarantee novelty/);
   assert.match(html, /Saved-project selection is available below/);
-  assert.match(html, /URL fetching and 3D visualization remain deferred/);
+  assert.match(html, /URL fetching for either beam/);
+  assert.match(html, /3D visualization remains deferred/);
 });
 
 test('result view renders all six sections and never claims validation or novelty', () => {
@@ -644,7 +645,8 @@ import {
   DocumentLoadSession,
   decodeDocumentBytes,
 } from '../src/documentInput';
-import { parseColliderDocumentSource } from '../src/Collider';
+import { parseColliderDocumentSource, parseColliderUrlSource } from '../src/Collider';
+import { UrlFetchSession, urlSourceFromFetch } from '../src/urlFetch';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -829,5 +831,120 @@ test('experiment body parser accepts valid document provenance and rejects malfo
   assert.doesNotMatch(
     renderToStaticMarkup(<ColliderExperimentView doc={plain} />),
     /Document:/,
+  );
+});
+
+test('url fetch session drops stale outcomes, edits, clears and cancels; fresh fetch applies', async () => {
+  const session = new UrlFetchSession();
+  const first = deferred<any>();
+  const firstLoad = session.load(() => first.promise);
+  const second = deferred<any>();
+  const secondLoad = session.load(() => second.promise);
+  first.resolve({ text: 'stale page' });
+  second.resolve({ text: 'current page' });
+  assert.equal((await firstLoad).result, null);
+  assert.equal((await secondLoad).result?.text, 'current page');
+  // An edit invalidates a pending fetch.
+  const third = deferred<any>();
+  const thirdLoad = session.load(() => third.promise);
+  session.invalidate();
+  third.resolve({ text: 'edited-away' });
+  assert.equal((await thirdLoad).result, null);
+  // A superseded failure is carried but stale, so the
+  // caller must not display it over the current state.
+  const oldFail = deferred<never>();
+  const oldLoad = session.load(() => oldFail.promise);
+  session.invalidate();
+  oldFail.reject(Error('obsolete fetch failure'));
+  const oldOutcome = await oldLoad;
+  assert.equal(oldOutcome.error?.message, 'obsolete fetch failure');
+  assert.notEqual(oldOutcome.generation, session.current);
+  // Cancel is a bare invalidate: a late success after it
+  // must not apply, and a fresh fetch afterward still does.
+  const cancelled = deferred<any>();
+  const cancelledLoad = session.load(() => cancelled.promise);
+  session.invalidate();
+  cancelled.resolve({ text: 'cancelled page must not win' });
+  assert.equal((await cancelledLoad).result, null);
+  const fresh = deferred<any>();
+  const freshLoad = session.load(() => fresh.promise);
+  fresh.resolve({ text: 'fresh page' });
+  const freshOutcome = await freshLoad;
+  assert.equal(freshOutcome.result?.text, 'fresh page');
+  assert.equal(freshOutcome.generation, session.current);
+  // A current failure is an outcome, not a throw.
+  const failing = session.load(() => Promise.reject(Error('fetch refused')));
+  const failed = await failing;
+  assert.equal(failed.result, null);
+  assert.equal(failed.error?.message, 'fetch refused');
+  assert.equal(failed.generation, session.current);
+});
+
+test('url fetch response maps to provenance without its text', () => {
+  const source = urlSourceFromFetch({
+    contractVersion: 1,
+    submittedUrl: 'https://example.com/page',
+    finalUrl: 'https://example.com/page',
+    contentKind: 'html',
+    extraction: 'html-conservative',
+    fetchedBytes: 1234,
+    fetchedHash: 'a'.repeat(64),
+    textHash: 'b'.repeat(64),
+    textChars: 42,
+    bom: false,
+    text: 'Page text.',
+  } as any);
+  assert.deepEqual(source, {
+    submittedUrl: 'https://example.com/page',
+    finalUrl: 'https://example.com/page',
+    contentKind: 'html',
+    extraction: 'html-conservative',
+    fetchedBytes: 1234,
+    fetchedHash: 'a'.repeat(64),
+    textHash: 'b'.repeat(64),
+    textChars: 42,
+    bom: false,
+  });
+  assert.equal((source as any).text, undefined);
+});
+
+test('experiment body parser accepts valid url provenance and rejects malformed records', () => {
+  const source = {
+    submittedUrl: 'https://example.com/page',
+    finalUrl: 'https://example.com/page',
+    contentKind: 'html',
+    extraction: 'html-conservative',
+    fetchedBytes: 1234,
+    fetchedHash: 'a'.repeat(64),
+    textHash: 'b'.repeat(64),
+    textChars: 42,
+    bom: false,
+  };
+  assert.deepEqual(parseColliderUrlSource(source), source);
+  assert.equal(parseColliderUrlSource({ ...source, submittedUrl: 'https://user:pw@example.com/' }), null);
+  assert.equal(parseColliderUrlSource({ ...source, finalUrl: 'https://example.com:8443/' }), null);
+  assert.equal(parseColliderUrlSource({ ...source, contentKind: 'pdf' }), null);
+  assert.equal(parseColliderUrlSource({ ...source, extraction: 'plain' }), null);
+  assert.equal(parseColliderUrlSource({ ...source, fetchedHash: 'xyz' }), null);
+  assert.equal(parseColliderUrlSource({ ...source, textChars: 0 }), null);
+  assert.equal(parseColliderUrlSource({ ...source, fetchedBytes: 1048577 }), null);
+  assert.equal(parseColliderUrlSource({ ...source, surprise: 1 }), null);
+  const withUrl = JSON.parse(validExperimentBody());
+  withUrl.urlA = source;
+  const parsed = parseColliderExperimentBody(JSON.stringify(withUrl));
+  assert.ok(parsed);
+  assert.equal(parsed!.urlA!.submittedUrl, 'https://example.com/page');
+  const html = renderToStaticMarkup(<ColliderExperimentView doc={parsed!} />);
+  assert.match(html, /URL: https:\/\/example\.com\/page/);
+  assert.match(html, /Web page/);
+  assert.match(html, /conservatively extracted text/);
+  assert.match(html, /1234 bytes fetched/);
+  assert.match(html, /generation-time record/);
+  // Experiments without the fields still parse as before.
+  const plain = parseColliderExperimentBody(validExperimentBody())!;
+  assert.equal(plain.urlA, undefined);
+  assert.doesNotMatch(
+    renderToStaticMarkup(<ColliderExperimentView doc={plain} />),
+    /URL:/,
   );
 });
