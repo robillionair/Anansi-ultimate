@@ -171,3 +171,73 @@ Clippy/fmt/tsc/contracts clean).
 - Strict Clippy, fmt, tsc, contracts check clean.
 - The WP2 record (this file, updated with before/after
   evidence) is committed before WP3 criteria are written.
+
+## WP2 evidence (before / after, Linux, sequential)
+
+Criteria committed as `f60480da` after the WP1 gate
+(`158cc241`). Implementation `ca932ae1`, tests
+`d334d9f2`.
+
+- W1 pagination: before, the project dropdown, member
+  list and member version lists called listMemories
+  without a limit and truncated silently at the
+  backend's 50-row default page. After, `listAllMemories`
+  pages at limit 100 to `nextOffset` exhaustion at all
+  three sites, with a 200-page cap surfacing as a
+  visible error. Node tests cover multi-page order,
+  exact 100/200 boundaries, empty, mid-page failure and
+  non-advancing pages; e2e seeds 51 members and shows
+  the 51st.
+- W2 list failures: before, a failed load set an empty
+  list and the picker reported "no selectable items".
+  After, distinct error states with Retry controls, and
+  the empty message only after a successful load.
+  E2E aborts the member list once and recovers via
+  Retry.
+- W3 privacy: before, neither pre-send review showed a
+  privacy label. After, both review loaders capture it
+  from the read responses and both reviews render it.
+  Node loader tests plus e2e assertions.
+- W4 cross-picker duplicates: before, only the backend
+  refusal at submit explained a double selection.
+  After, the checkbox in the other picker disables with
+  a note naming the other context; unchecking
+  re-enables. E2E covers disable, note and re-enable.
+- W5 bounds: before, a 9th checkbox and an overlong
+  item could be reviewed and only failed at submit.
+  After, the 9th checkbox disables at 8 per picker with
+  a note, and a review violating 8000/32000 warns and
+  disables Collide Ideas. E2E covers both.
+- W6 review retry: before, a failed read left only an
+  error. After, Retry reloads the same choices
+  unchanged. E2E aborts one read and recovers via Retry
+  with the checkbox still checked.
+- W7 filtered items: before, ineligible types and
+  project records vanished silently. After, counts
+  render as help notes (titles/bodies never shown).
+  Node counting tests plus e2e: the approval-row note
+  case seeds its receipt through a real
+  collide/save/transfer, since approval rows cannot be
+  registered via the API (register refuses types
+  outside the 19 eligible ones).
+- W8 races: the existing epoch/cancellation discipline
+  passed the new gated route-delay tests unchanged —
+  a 900 ms delayed superseded member list never
+  overwrites the newly selected project, and a 1200 ms
+  delayed first review read never overwrites the
+  version-switched review. No app code changed for W8.
+- Gate after repair (sequential): new e2e spec 5/5;
+  prior collider-project-context spec 1/1 (privacy
+  text in summaries matches by substring, as before);
+  collider 34/34, transfer 19/19, forge_restore 4/4,
+  backup_restore 7/7, node pass, tsc clean, contracts
+  --check clean, fmt clean. No assertion weakened.
+- Test-side defects fixed, not production: the spec's
+  pairing regex carried a doubled escape (API startup
+  timeout), and the home-project option label needs its
+  "(this project)" suffix for an exact selectOption.
+- Harness note: the Playwright chromium binary was
+  missing after a VM replacement and was reinstalled
+  with `npx playwright install chromium` (test tooling,
+  not a model download); the web bundle was rebuilt
+  before the e2e runs.
