@@ -14,6 +14,24 @@ TypeScript/contracts, builds and browser Ask 1/1 pass. No new model answers/toke
 measurements, native preview promotion, cloud calls, pushes or CI. Existing
 full-core A6/Ollama failures remain scoped and recorded.
 
+## 2026-10-30 — A6 reporting correction: offline and wire records split
+
+On top of `9cff10c2` on branch `muse/ask-a6-repair`.
+A6's single mixed record is split into A6-offline
+(retrieval/disclosure/offline-behavior checks only, no
+provider hits) and A6-wire (fake-provider plumbing:
+`Answered` is the canned fake response, and the check
+covers only that the captured request carries the
+abstention instruction). Each record holds only its own
+request's measurements. The offline checks do NOT verify
+connected-model refusal. Report wording corrected: the
+old traffic-gating assertion was replaced with narrower,
+model-independent checks, not preserved. Focused tests
+(`benchmark_tokens` 1/1, held-out 5/5), formatting, and
+strict core Clippy pass; held-out cases and production
+code untouched; no scale runs, cloud, downloads, or
+promotion.
+
 ## 2026-10-30 — A6 benchmark repair: assertion re-anchored, no production change
 
 From verified integration `151565d7` on branch

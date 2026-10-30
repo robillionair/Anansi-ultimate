@@ -51,8 +51,18 @@ repair restored; it would also invent a requirement
 (the traffic-gating decision is documented as open in
 the acceptance file, not decided here).
 
-The correction re-anchors A6 to the requirement itself,
-without weakening it:
+The correction replaces the old assertion with narrower,
+model-independent checks. To be explicit about what
+changed: the old assertion gated provider traffic
+(`InsufficientEvidence` status plus zero hits). That
+gate is gone, because repaired retrieval no longer
+guarantees it — traffic with partial evidence is
+designed behavior, not a defect. What replaces it is
+narrower in scope: it covers only retrieval,
+disclosure, and offline behavior, and it says nothing
+about whether a connected model refuses unsupported
+questions. Within that narrower scope it is strict: any
+regression in the five properties below fails the test.
 
 - The case, the question, and the corpus are unchanged.
 - The verdict is now the model-independent offline
@@ -62,16 +72,17 @@ without weakening it:
   evidence is missing"; no cited chunk mentions
   "berth"; disclosure source memories equal exactly the
   cited set; compiled prompt under 5,500 chars.
-- The record now reports the real offline outcome
-  (previously its prompt/evidence/citation fields were
-  hardcoded to 0) and states the observed fake provider
-  hit count plainly in its notes, with the explanation
-  that traffic with partial evidence is designed
-  behavior graded at the evidence level, not gated.
+- The offline and fake-provider observations live in
+  separate, explicitly labelled records (A6-offline and
+  A6-wire), each containing only measurements from its
+  own request. The wire record preserves the connected
+  fake-provider outcome, including its `Answered`
+  status, as plumbing evidence about what was sent —
+  not proof of factual correctness or abstention. The
+  offline record carries no provider hits at all.
 - The genuinely-empty case keeps its zero-traffic
   assertion in the new held-out test, where it still
-  holds. Any regression in the five honesty properties
-  fails the test exactly as the old assertion did.
+  holds.
 
 ## What now passes?
 
@@ -117,8 +128,13 @@ without weakening it:
   `partial_chunk_insert_failure_rolls_back_complete_chunk_set`,
   `real_semantic_embedding_indexing_retrieval_and_sealed_refusal`,
   `reranking_temporal_validity_and_contradiction_lifecycle_evaluation`.
-  No new failure, no assertion weakened. The pre-existing
-  A6 failure is gone; there is no longer a benchmark A6
+  No new failure. On the assertion itself, see the
+  correction section above: the old traffic-gating
+  assertion was replaced, not preserved — the new checks
+  are narrower (retrieval, disclosure, and offline
+  behavior only) and model-independent, and they do not
+  verify connected-model refusal. The pre-existing A6
+  failure is gone; there is no longer a benchmark A6
   invariant failure to carry.
 - The isolated preview launcher and all existing
   preview data roots are untouched; the diff contains

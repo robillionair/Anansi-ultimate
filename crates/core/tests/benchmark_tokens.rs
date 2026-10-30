@@ -1304,20 +1304,29 @@ fn benchmark_token_consumption() {
         dump_prompt(&format!("{qid}-naive"), &naive);
     }
 
-    // A6: insufficient evidence — honesty graded at the evidence level.
+    // A6: insufficient evidence — two separate records, one per request.
     // The requested fact is absent from the corpus, but repaired
     // OR-candidate retrieval legitimately returns Harbor-related
     // partial matches, so the old proxy (InsufficientEvidence status
     // plus zero provider traffic, an artifact of pre-repair AND
     // retrieval returning nothing) no longer holds even when honesty
-    // does. The model-independent offline outcome is therefore graded
-    // directly: no answer without a model, the abstention instruction
-    // present, no cited chunk containing the requested fact, and
-    // disclosure exactly equal to the cited set. Provider traffic
-    // with partial evidence is the designed behavior of repaired
-    // retrieval (retrieval is not proof of answerability); the
-    // genuinely-empty case keeps its zero-traffic assertion in
-    // ask_partial_evidence_acceptance.rs.
+    // does. Each record below contains only measurements from its
+    // own request; nothing is copied across the two requests.
+    // - A6-offline (retrieval/disclosure/offline-behavior checks,
+    //   model-independent): no answer without a model, the
+    //   abstention instruction present, no cited chunk containing
+    //   the requested fact, disclosure exactly equal to the cited
+    //   set, prompt within budget. These checks do NOT verify that
+    //   a connected model refuses unsupported questions.
+    // - A6-wire (fake-provider plumbing evidence only): the captured
+    //   request carries the abstention instruction, and the
+    //   provider's Answered status is the canned fake response. It
+    //   is plumbing evidence about what was sent, not proof of
+    //   factual correctness or abstention.
+    // Provider traffic with partial evidence is the designed
+    // behavior of repaired retrieval (retrieval is not proof of
+    // answerability); the genuinely-empty case keeps its
+    // zero-traffic assertion in ask_partial_evidence_acceptance.rs.
     let a6 = run_ask(
         &ask_core,
         &ask_ws,
@@ -1379,11 +1388,11 @@ fn benchmark_token_consumption() {
         &mut records,
         &mut failures,
         Record {
-            scenario: "A6".to_string(),
+            scenario: "A6-offline".to_string(),
             approach: "anansi".to_string(),
             question_id: "A6".to_string(),
             status: format!("{:?}", a6_offline.status),
-            provider_hits: if real_mode { None } else { Some(a6.hits) },
+            provider_hits: None,
             request_bytes: None,
             prompt_chars: Some(a6_offline.manifest.character_count as u64),
             evidence_chars: Some(a6_evidence_chars),
@@ -1397,13 +1406,58 @@ fn benchmark_token_consumption() {
             ledger_input_tokens: None,
             ledger_output_tokens: None,
             wire_checks_passed: a6_ok,
-            notes: format!(
-                "offline honesty verdict; fake provider hits={} (traffic with partial evidence is designed repaired-retrieval behavior, graded at evidence level, not gated)",
-                a6.hits
-            ),
+            notes: "offline request only; no provider traffic in this record. Retrieval/disclosure/offline-behavior checks only; they do NOT verify that a connected model refuses unsupported questions."
+                .to_string(),
         },
         a6_ok,
-        "insufficient-evidence honesty (evidence level): no answer without a model, abstention instructed, no fact in citations, disclosure exact",
+        "A6 offline retrieval/disclosure/offline-behavior checks (model-independent): no answer without a model, abstention instructed, no fact in citations, disclosure exact",
+    );
+    let a6_wire_prompt = a6.wire_body.as_ref().and_then(|body| {
+        serde_json::from_str::<Value>(body).ok().and_then(|wire| {
+            wire.get("prompt")
+                .and_then(|v| v.as_str())
+                .map(|p| p.to_string())
+        })
+    });
+    let a6_wire_ok = if real_mode {
+        true
+    } else {
+        a6.hits > 0
+            && a6_wire_prompt
+                .as_ref()
+                .is_some_and(|p| p.contains("state truthfully that evidence is missing"))
+    };
+    push_record(
+        &mut records,
+        &mut failures,
+        Record {
+            scenario: "A6-wire".to_string(),
+            approach: "anansi-plumbing".to_string(),
+            question_id: "A6".to_string(),
+            status: a6.status.clone(),
+            provider_hits: if real_mode { None } else { Some(a6.hits) },
+            request_bytes: a6.wire_body.as_ref().map(|b| b.len() as u64),
+            prompt_chars: a6.wire_prompt_chars,
+            evidence_chars: None,
+            cited_memory_count: None,
+            anansi_estimate_tokens: a6.wire_prompt_chars.map(|c| c / 4),
+            compile_ms: None,
+            total_ms: Some(a6.total_ms),
+            provider_reported_input_tokens: None,
+            provider_reported_output_tokens: None,
+            provider_reported_cached_tokens: None,
+            ledger_input_tokens: None,
+            ledger_output_tokens: None,
+            wire_checks_passed: a6_wire_ok,
+            notes: if real_mode {
+                "real mode: no fake wire capture; plumbing check not applicable".to_string()
+            } else {
+                "fake-provider plumbing only: the Answered status is the canned fake response, not proof of factual correctness or abstention; the check covers only what the captured request carried"
+                    .to_string()
+            },
+        },
+        a6_wire_ok,
+        "A6 fake-provider plumbing (plumbing evidence only): captured request carries the abstention instruction",
     );
 
     // A7: repeated question, 3 consecutive calls.
