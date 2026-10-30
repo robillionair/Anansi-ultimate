@@ -18,9 +18,9 @@ Before: reviewer probes 2/4 (original two pass, two new fail).
 After (sequential, Linux): reviewer probes 4/4, collider 39/39,
 transfer 19/19, forge_restore 4/4, backup_restore 7/7, restore lib
 10/10, node 90/90, 23 affected browser tests passing, strict
-Clippy/fmt/tsc/contracts/docs/builds clean, full core and
-providers+API totals in the delivery MANIFEST (only the known
-live-Ollama semantic_workflow environment failures expected).
+Clippy/fmt/tsc/contracts/docs/builds clean, full core 357/4 (only
+the known live-Ollama semantic_workflow environment failures),
+providers+API 144/0.
 Compatibility (fail-closed): packages restored twice or more under
 old code carry only latest-hop origins, so a further restore under
 new code refuses before publication; packages produced by new code

@@ -76,10 +76,11 @@ missing table).
   (one collapsible-if found during this round and fixed in the
   implementation commit), fmt clean, contracts `--check` clean,
   TypeScript clean, docs validation PASS, API/web builds pass.
-- Broadened once: full core and providers+API totals are recorded
-  in the delivery MANIFEST (see evidence logs); the only expected
-  failures are the known live-Ollama `semantic_workflow`
-  environment failures.
+- Broadened once: full core `--no-fail-fast -- --test-threads=1`
+  357 passed / 4 failed — reconciliation 349 (prior repair) + 2
+  new reviewer probes + 6 new unit tests = 357, failures only
+  the known live-Ollama `semantic_workflow` environment failures;
+  providers+API 144/0. Evidence logs are in the delivery ZIP.
 - Not rerun: the full canonical e2e battery end to end — only the
   affected specs above, as in prior rounds.
 
