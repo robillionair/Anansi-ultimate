@@ -1324,3 +1324,254 @@ fn context_experiment_transfer_survives_restore_and_stays_forge_admissible() {
         "restored transfer must stay Forge-admissible"
     );
 }
+
+#[test]
+fn project_context_experiment_transfer_survives_restore_and_stays_forge_admissible() {
+    // M8 Slice 4: a project-context experiment's body
+    // changes on restore (its project, memory and
+    // artifact ids remap), so its hash changes. The
+    // concept and receipt pinned experiment hashes must
+    // follow the restored row, or Forge admission on the
+    // restored workspace would fail closed on a valid
+    // transfer. No new transfer fix-up is needed: the
+    // existing experiment-hash fix-up already covers all
+    // experiment rows and runs before the receipt fix-up.
+    let fake = start_fake();
+    let f = fixture(&fake);
+    let source_project = f
+        .core
+        .memory_command(
+            "create",
+            json!({ "contractVersion": 1, "workspaceId": f.ws, "kind": "project", "draft": draft("Harbor notes project", "Source body.") }),
+        )
+        .unwrap()["memory"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let memory = f
+        .core
+        .memory_command(
+            "create",
+            json!({ "contractVersion": 1, "workspaceId": f.ws, "draft": json!({ "title": "Tide notes", "body": "Revision B tide observations.", "privacy": "private", "eventDate": null, "validFrom": null, "validUntil": null, "confidence": null, "sourceReferences": [], "projectId": source_project }) }),
+        )
+        .unwrap();
+    let mem_id = memory["memory"]["id"].as_str().unwrap().to_string();
+    let mem_rev = memory["memory"]["revisionId"].as_str().unwrap().to_string();
+    let artifact = f
+        .core
+        .artifacts_command(
+            "register",
+            json!({
+                "contractVersion": 1, "workspaceId": f.ws, "projectId": source_project,
+                "type": "note", "title": "Harbor summary", "body": "Summary draft one.",
+                "sourceReferences": [], "privacy": "private"
+            }),
+        )
+        .unwrap();
+    let art_id = artifact["artifact"]["artifactId"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let mut body: Value = serde_json::from_str(&experiment_body()).unwrap();
+    body["projectContext"] = json!({
+        "projectId": source_project,
+        "projectTitle": "Harbor notes project",
+        "items": [
+            {
+                "kind": "memory",
+                "memoryId": mem_id,
+                "revisionId": mem_rev,
+                "artifactId": null,
+                "artifactType": null,
+                "version": 1,
+                "title": "Tide notes",
+                "content": "Revision B tide observations.",
+                "contentHash": content::hash("Revision B tide observations.".as_bytes()),
+                "privacy": "private"
+            },
+            {
+                "kind": "artifact",
+                "memoryId": null,
+                "revisionId": null,
+                "artifactId": art_id,
+                "artifactType": "note",
+                "version": 1,
+                "title": "Harbor summary",
+                "content": "Summary draft one.",
+                "contentHash": content::hash("Summary draft one.".as_bytes()),
+                "privacy": "private"
+            }
+        ]
+    });
+    let experiment = register_experiment(&f, &body.to_string());
+    let _ = transfer(&f, &experiment, 1, 0, "Route venues by local congestion.");
+    let root = f._dir.path().to_path_buf();
+    let store = Storage::new(root.clone()).unwrap();
+    let bytes = backup_bytes(&root, &store, &f.ws);
+    let dir2 = tempfile::tempdir().unwrap();
+    let fresh = Core::with_storage_root(dir2.path().to_path_buf());
+    let restored = try_upload_restore(&fresh, &bytes, "project-context-transfer").unwrap();
+    let restored_ws = restored["workspaces"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let projects = fresh
+        .memory_command(
+            "list",
+            json!({ "contractVersion": 1, "workspaceId": restored_ws, "kind": "project" }),
+        )
+        .unwrap()["memories"]
+        .clone();
+    let find_project = |title: &str| {
+        projects
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|m| m["title"] == title)
+            .unwrap()["id"]
+            .as_str()
+            .unwrap()
+            .to_string()
+    };
+    // The concept lives in the fixture project; the
+    // context points at the source project.
+    let restored_home = find_project("Transfer Project");
+    let restored_source = find_project("Harbor notes project");
+    let list = fresh
+        .artifacts_command(
+            "list",
+            json!({ "contractVersion": 1, "workspaceId": restored_ws, "projectId": restored_home }),
+        )
+        .unwrap();
+    let artifacts = list["artifacts"].as_array().unwrap();
+    let restored_experiment = artifacts
+        .iter()
+        .find(|a| a["type"] == "experiment")
+        .unwrap();
+    let restored_concept = artifacts.iter().find(|a| a["type"] == "concept").unwrap();
+    let restored_receipt = artifacts
+        .iter()
+        .find(|a| a["type"] == "transfer-approval")
+        .unwrap();
+    let restored_experiment_id = restored_experiment["artifactId"].as_str().unwrap();
+    let restored_concept_id = restored_concept["artifactId"].as_str().unwrap();
+    let experiment_body: Value = serde_json::from_str(
+        fresh
+            .artifacts_command(
+                "read",
+                json!({ "contractVersion": 1, "workspaceId": restored_ws, "artifactId": restored_experiment_id, "version": 1 }),
+            )
+            .unwrap()["body"]
+            .as_str()
+            .unwrap(),
+    )
+    .unwrap();
+    // The snapshot survived with remapped references.
+    let context = &experiment_body["projectContext"];
+    assert_eq!(context["projectId"], restored_source);
+    assert_eq!(context["projectTitle"], "Harbor notes project");
+    let items = context["items"].as_array().unwrap();
+    assert_eq!(items[0]["content"], "Revision B tide observations.");
+    assert_eq!(items[1]["content"], "Summary draft one.");
+    assert_ne!(items[0]["memoryId"].as_str().unwrap(), mem_id);
+    assert_ne!(items[0]["revisionId"].as_str().unwrap(), mem_rev);
+    assert_ne!(items[1]["artifactId"].as_str().unwrap(), art_id);
+    assert_eq!(items[0]["version"], 1);
+    assert_eq!(items[1]["version"], 1);
+    let restored_hash = content::hash(
+        fresh
+            .artifacts_command(
+                "read",
+                json!({ "contractVersion": 1, "workspaceId": restored_ws, "artifactId": restored_experiment_id, "version": 1 }),
+            )
+            .unwrap()["body"]
+            .as_str()
+            .unwrap()
+            .as_bytes(),
+    );
+    let concept_body: Value = serde_json::from_str(
+        fresh
+            .artifacts_command(
+                "read",
+                json!({ "contractVersion": 1, "workspaceId": restored_ws, "artifactId": restored_concept_id, "version": 1 }),
+            )
+            .unwrap()["body"]
+            .as_str()
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        concept_body["sourceExperimentArtifactId"],
+        restored_experiment_id
+    );
+    assert_eq!(concept_body["sourceExperimentContentHash"], restored_hash);
+    let receipt_body: Value = serde_json::from_str(
+        fresh
+            .artifacts_command(
+                "read",
+                json!({ "contractVersion": 1, "workspaceId": restored_ws, "artifactId": restored_receipt["artifactId"].as_str().unwrap(), "version": 1 }),
+            )
+            .unwrap()["body"]
+            .as_str()
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        receipt_body["sourceExperimentArtifactId"],
+        restored_experiment_id
+    );
+    assert_eq!(receipt_body["sourceExperimentContentHash"], restored_hash);
+    // Forge admission on the restored workspace still
+    // accepts the transferred concept (receipt + hashes
+    // match the restored equivalents). The restored
+    // workspace needs its own provider configuration.
+    fresh
+        .ai_command(
+            "providers-configure",
+            json!({
+                "workspaceId": restored_ws,
+                "config": {
+                    "providers": [{
+                        "config": { "provider": "ollama", "baseUrl": fake.base_url, "credential": null, "enabled": true },
+                        "locality": "local",
+                        "models": [{
+                            "id": "llama-x", "provider": "ollama",
+                            "capabilities": { "chat": true, "streaming": true, "vision": false, "coding": true, "deepReasoning": false, "embeddings": false },
+                            "contextWindow": 8192, "cost": "free", "speed": "balanced"
+                        }]
+                    }],
+                    "budget": { "maxRequests": 50, "maxTotalTokens": 500000 }
+                }
+            }),
+        )
+        .unwrap();
+    let started = fresh
+        .ai_command(
+            "forge-spec-start",
+            json!({ "contractVersion": 1, "workspaceId": restored_ws, "projectId": restored_home, "sourceArtifactId": restored_concept_id, "sourceVersion": 1, "conceptIndex": 0, "purpose": "Route flow.", "intendedUsers": "Desks.", "mustHave": "Score venues.", "zeroCostLock": true }),
+        )
+        .unwrap();
+    let run_id = started["runId"].as_str().unwrap().to_string();
+    let deadline = Instant::now() + Duration::from_secs(30);
+    let status = loop {
+        let polled = fresh
+            .ai_command(
+                "forge-spec-poll",
+                json!({ "contractVersion": 1, "workspaceId": restored_ws, "runId": run_id }),
+            )
+            .unwrap();
+        let status = polled["status"].as_str().unwrap().to_string();
+        if matches!(
+            status.as_str(),
+            "complete" | "invalid" | "failed" | "cancelled"
+        ) || Instant::now() > deadline
+        {
+            break status;
+        }
+        std::thread::sleep(Duration::from_millis(25));
+    };
+    assert_eq!(
+        status, "complete",
+        "restored transfer must stay Forge-admissible"
+    );
+}

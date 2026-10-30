@@ -1511,6 +1511,859 @@ fn memory_context_cancellation_and_malformed_save_nothing() {
     assert_eq!(list["artifacts"].as_array().unwrap().len(), 0);
 }
 
+/// M8 Slice 4 helpers: project assignment travels in the
+/// draft (`projectId` must resolve to a project in the
+/// same workspace), and artifacts register into a project
+/// by id. The collider's own project is the save target;
+/// the context project may be any project in the workspace.
+fn project_draft(title: &str, body: &str, project_id: &str) -> Value {
+    json!({ "title": title, "body": body, "privacy": "private",
+            "eventDate": null, "validFrom": null, "validUntil": null,
+            "confidence": null, "sourceReferences": [], "projectId": project_id })
+}
+
+fn create_project(f: &Fixture, title: &str, body: &str) -> (String, String) {
+    let created = f
+        .core
+        .memory_command(
+            "create",
+            json!({ "contractVersion": 1, "workspaceId": f.ws, "kind": "project", "draft": draft(title, body) }),
+        )
+        .unwrap();
+    (
+        created["memory"]["id"].as_str().unwrap().to_string(),
+        created["memory"]["revisionId"]
+            .as_str()
+            .unwrap()
+            .to_string(),
+    )
+}
+
+fn create_project_memory(
+    f: &Fixture,
+    project_id: &str,
+    title: &str,
+    body: &str,
+) -> (String, String, u32) {
+    let created = f
+        .core
+        .memory_command(
+            "create",
+            json!({ "contractVersion": 1, "workspaceId": f.ws, "draft": project_draft(title, body, project_id) }),
+        )
+        .unwrap();
+    (
+        created["memory"]["id"].as_str().unwrap().to_string(),
+        created["memory"]["revisionId"]
+            .as_str()
+            .unwrap()
+            .to_string(),
+        created["memory"]["version"].as_u64().unwrap() as u32,
+    )
+}
+
+fn register_project_artifact(
+    f: &Fixture,
+    project_id: &str,
+    artifact_type: &str,
+    title: &str,
+    body: &str,
+) -> (String, u32) {
+    let registered = f
+        .core
+        .artifacts_command(
+            "register",
+            json!({
+                "contractVersion": 1, "workspaceId": f.ws, "projectId": project_id,
+                "type": artifact_type, "title": title, "body": body,
+                "sourceReferences": [], "privacy": "private"
+            }),
+        )
+        .unwrap();
+    (
+        registered["artifact"]["artifactId"]
+            .as_str()
+            .unwrap()
+            .to_string(),
+        registered["artifact"]["version"].as_u64().unwrap() as u32,
+    )
+}
+
+fn start_collide_project(f: &Fixture, project_context: Value) -> Result<Value, CommandError> {
+    f.core.ai_command(
+        "collider-start",
+        json!({
+            "contractVersion": 1, "workspaceId": f.ws, "projectId": f.project,
+            "beamA": "Trading.", "beamB": "Mycelium.", "zeroCostLock": true,
+            "projectContext": project_context
+        }),
+    )
+}
+
+fn start_collide_both(
+    f: &Fixture,
+    memory_context: Value,
+    project_context: Value,
+) -> Result<Value, CommandError> {
+    f.core.ai_command(
+        "collider-start",
+        json!({
+            "contractVersion": 1, "workspaceId": f.ws, "projectId": f.project,
+            "beamA": "Trading.", "beamB": "Mycelium.", "zeroCostLock": true,
+            "memoryContext": memory_context, "projectContext": project_context
+        }),
+    )
+}
+
+fn corrupt_artifact_body(root: &Path, artifact_id: &str) {
+    let db = rusqlite::Connection::open(root.join(DATABASE_NAME)).unwrap();
+    db.execute(
+        "UPDATE artifact_versions SET body='Corrupted body.' WHERE artifact_id=?1",
+        [artifact_id],
+    )
+    .unwrap();
+}
+
+#[test]
+fn project_context_sent_on_wire_and_saved_as_provenance() {
+    let fake = start_fake();
+    let f = fixture(&fake, "free");
+    let (src_id, _) = create_project(
+        &f,
+        "Harbor notes project",
+        "Source project record body must stay out.",
+    );
+    let (m_id, m_rev, m_ver) =
+        create_project_memory(&f, &src_id, "Tide notes", "Revision A tide observations.");
+    let (a_id, _) =
+        register_project_artifact(&f, &src_id, "note", "Harbor summary", "Summary draft one.");
+    f.core
+        .artifacts_command(
+            "revise",
+            json!({
+                "contractVersion": 1, "workspaceId": f.ws, "artifactId": a_id,
+                "expectedVersion": 1, "title": "Harbor summary",
+                "body": "Summary draft two.", "sourceReferences": []
+            }),
+        )
+        .unwrap();
+    let _ = create_project_memory(
+        &f,
+        &src_id,
+        "Unselected notes",
+        "Unselected project content must never reach the provider.",
+    );
+    let (other_id, _) = create_project(&f, "Other project", "Other project body.");
+    let _ = create_project_memory(
+        &f,
+        &other_id,
+        "Other notes",
+        "Other project content must never reach the provider.",
+    );
+    let _ = register_project_artifact(
+        &f,
+        &other_id,
+        "note",
+        "Other summary",
+        "Other artifact content must never reach the provider.",
+    );
+    let started = start_collide_project(
+        &f,
+        json!({
+            "projectId": src_id,
+            "items": [
+                { "kind": "memory", "memoryId": m_id, "revisionId": m_rev },
+                { "kind": "artifact", "artifactId": a_id, "version": 2 }
+            ]
+        }),
+    )
+    .unwrap();
+    let run_id = started["runId"].as_str().unwrap().to_string();
+    let polled = poll_until(&f, &run_id);
+    assert_eq!(polled["status"], "complete", "{polled}");
+    let wire = wire_text(&fake);
+    assert!(
+        wire.contains("Revision A tide observations."),
+        "selected member missing from request"
+    );
+    assert!(
+        wire.contains("Summary draft two."),
+        "selected artifact v2 missing from request"
+    );
+    assert!(
+        wire.contains(
+            "Project context (data) — Harbor notes project / Tide notes (memory revision 1):"
+        ),
+        "project framing missing from request"
+    );
+    assert!(
+        wire.contains(
+            "Project context (data) — Harbor notes project / Harbor summary (artifact version 2):"
+        ),
+        "artifact framing missing from request"
+    );
+    for forbidden in [
+        "Unselected project content must never reach the provider.",
+        "Other project content must never reach the provider.",
+        "Other artifact content must never reach the provider.",
+        "Source project record body must stay out.",
+        "Summary draft one.",
+    ] {
+        assert!(
+            !wire.contains(forbidden),
+            "unselected or superseded content leaked: {forbidden}"
+        );
+    }
+    let saved = f
+        .core
+        .ai_command(
+            "collider-save",
+            json!({ "contractVersion": 1, "workspaceId": f.ws, "runId": run_id }),
+        )
+        .unwrap();
+    let body: Value = serde_json::from_str(saved["body"].as_str().unwrap()).unwrap();
+    let context = body["projectContext"].as_object().unwrap();
+    assert_eq!(context["projectId"], src_id);
+    assert_eq!(context["projectTitle"], "Harbor notes project");
+    let items = context["items"].as_array().unwrap();
+    assert_eq!(items.len(), 2);
+    assert_eq!(items[0]["kind"], "memory");
+    assert_eq!(items[0]["memoryId"], m_id);
+    assert_eq!(items[0]["revisionId"], m_rev);
+    assert_eq!(items[0]["version"], m_ver);
+    assert_eq!(items[0]["title"], "Tide notes");
+    assert_eq!(items[0]["content"], "Revision A tide observations.");
+    assert_eq!(
+        items[0]["contentHash"],
+        content::hash("Revision A tide observations.".as_bytes())
+    );
+    assert_eq!(items[0]["privacy"], "private");
+    assert_eq!(items[1]["kind"], "artifact");
+    assert_eq!(items[1]["artifactId"], a_id);
+    assert_eq!(items[1]["artifactType"], "note");
+    assert_eq!(items[1]["version"], 2);
+    assert_eq!(items[1]["title"], "Harbor summary");
+    assert_eq!(items[1]["content"], "Summary draft two.");
+    assert_eq!(
+        items[1]["contentHash"],
+        content::hash("Summary draft two.".as_bytes())
+    );
+    assert_eq!(items[1]["privacy"], "private");
+}
+
+#[test]
+fn project_context_refusals_make_zero_provider_hits() {
+    let fake = start_fake();
+    let f = fixture(&fake, "free");
+    let (src_id, _) = create_project(&f, "Source project", "Source body.");
+    let (m_id, m_rev, _) = create_project_memory(&f, &src_id, "Member notes", "Member content.");
+    let (a_id, _) = register_project_artifact(
+        &f,
+        &src_id,
+        "note",
+        "Member summary",
+        "Member artifact content.",
+    );
+    // A foreign workspace's project member: resolution is workspace-scoped.
+    let other_ws = f
+        .core
+        .workspace_command("create", json!({ "contractVersion": 1, "name": "Other" }))
+        .unwrap()["workspace"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let foreign_project = f
+        .core
+        .memory_command(
+            "create",
+            json!({ "contractVersion": 1, "workspaceId": other_ws, "kind": "project", "draft": draft("Foreign project", "Foreign body.") }),
+        )
+        .unwrap()["memory"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let foreign_member = f
+        .core
+        .memory_command(
+            "create",
+            json!({ "contractVersion": 1, "workspaceId": other_ws, "draft": project_draft("Foreign notes", "Foreign content.", &foreign_project) }),
+        )
+        .unwrap();
+    let foreign_m_id = foreign_member["memory"]["id"].as_str().unwrap().to_string();
+    let foreign_m_rev = foreign_member["memory"]["revisionId"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    // Another project in the same workspace, with its own member and artifact.
+    let (other_id, _) = create_project(&f, "Other project", "Other body.");
+    let (other_m_id, other_m_rev, _) =
+        create_project_memory(&f, &other_id, "Other notes", "Other content.");
+    let (other_a_id, _) = register_project_artifact(
+        &f,
+        &other_id,
+        "note",
+        "Other summary",
+        "Other artifact content.",
+    );
+    // A sealed member: sealed via SQL, since creation refuses sealed drafts.
+    let (sealed_id, sealed_rev, _) = create_project_memory(
+        &f,
+        &src_id,
+        "Sealed notes",
+        "Sealed content must never be sent.",
+    );
+    seal_memory(f._dir.path(), &sealed_id);
+    // An archived member: the archived revision itself is pinned.
+    let (arch_id, arch_rev, _) =
+        create_project_memory(&f, &src_id, "Archived notes", "Archived content.");
+    f.core
+        .memory_command(
+            "revise",
+            json!({
+                "contractVersion": 1, "workspaceId": f.ws, "id": arch_id,
+                "expectedRevision": arch_rev, "draft": draft("Archived notes", "Archived content."),
+                "lifecycle": { "state": "archived", "confirmed": true, "successorId": null }
+            }),
+        )
+        .unwrap();
+    let arch_rev2 = f
+        .core
+        .memory_command(
+            "list",
+            json!({ "contractVersion": 1, "workspaceId": f.ws, "id": arch_id }),
+        )
+        .unwrap()["memories"][0]["revisionId"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    // An overlong member: revised past the 8000-character bound.
+    let (long_id, long_rev, _) = create_project_memory(&f, &src_id, "Long notes", "Short content.");
+    f.core
+        .memory_command(
+            "revise",
+            json!({
+                "contractVersion": 1, "workspaceId": f.ws, "id": long_id,
+                "expectedRevision": long_rev, "draft": draft("Long notes", &"x".repeat(8001))
+            }),
+        )
+        .unwrap();
+    let long_rev2 = f
+        .core
+        .memory_command(
+            "list",
+            json!({ "contractVersion": 1, "workspaceId": f.ws, "id": long_id }),
+        )
+        .unwrap()["memories"][0]["revisionId"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    // A corrupted artifact: body edited in SQL without updating its hash.
+    let (corrupt_id, _) = register_project_artifact(
+        &f,
+        &src_id,
+        "note",
+        "Corrupt summary",
+        "Corrupt artifact content.",
+    );
+    corrupt_artifact_body(f._dir.path(), &corrupt_id);
+    let mem = |id: &str, rev: &str| json!({ "kind": "memory", "memoryId": id, "revisionId": rev });
+    let art = |id: &str, version: u32| json!({ "kind": "artifact", "artifactId": id, "version": version });
+    let cases: Vec<(&str, Value)> = vec![
+        (
+            "nonexistent project",
+            json!({ "projectId": "p".repeat(32), "items": [mem(&m_id, &m_rev)] }),
+        ),
+        (
+            "nonexistent member",
+            json!({ "projectId": src_id, "items": [mem("m", &m_rev)] }),
+        ),
+        (
+            "foreign workspace member",
+            json!({ "projectId": src_id, "items": [mem(&foreign_m_id, &foreign_m_rev)] }),
+        ),
+        (
+            "other-project member",
+            json!({ "projectId": src_id, "items": [mem(&other_m_id, &other_m_rev)] }),
+        ),
+        (
+            "sealed member",
+            json!({ "projectId": src_id, "items": [mem(&sealed_id, &sealed_rev)] }),
+        ),
+        (
+            "archived member revision",
+            json!({ "projectId": src_id, "items": [mem(&arch_id, &arch_rev2)] }),
+        ),
+        (
+            "other-project artifact",
+            json!({ "projectId": src_id, "items": [art(&other_a_id, 1)] }),
+        ),
+        (
+            "unknown artifact",
+            json!({ "projectId": src_id, "items": [art(&"a".repeat(32), 1)] }),
+        ),
+        (
+            "corrupted artifact",
+            json!({ "projectId": src_id, "items": [art(&corrupt_id, 1)] }),
+        ),
+        (
+            "duplicate item",
+            json!({ "projectId": src_id, "items": [mem(&m_id, &m_rev), mem(&m_id, &m_rev)] }),
+        ),
+        (
+            "overlong member",
+            json!({ "projectId": src_id, "items": [mem(&long_id, &long_rev2)] }),
+        ),
+        (
+            "project record as item",
+            json!({ "projectId": src_id, "items": [mem(&src_id, &{
+                f.core
+                    .memory_command(
+                        "list",
+                        json!({ "contractVersion": 1, "workspaceId": f.ws, "id": src_id }),
+                    )
+                    .unwrap()["memories"][0]["revisionId"]
+                    .as_str()
+                    .unwrap()
+                    .to_string()
+            })] }),
+        ),
+    ];
+    for (label, context) in cases {
+        let result = start_collide_project(&f, context);
+        assert!(
+            result.is_err(),
+            "{label}: unresolvable selection must refuse start"
+        );
+        assert_eq!(
+            fake.hits.load(Ordering::SeqCst),
+            0,
+            "{label}: refusal must not hit the provider"
+        );
+    }
+    // A memory selected through both pickers is refused as a duplicate.
+    let both = start_collide_both(
+        &f,
+        json!([{ "memoryId": m_id, "revisionId": m_rev }]),
+        json!({ "projectId": src_id, "items": [mem(&m_id, &m_rev)] }),
+    );
+    assert!(both.is_err(), "cross-picker duplicate must refuse start");
+    assert_eq!(
+        fake.hits.load(Ordering::SeqCst),
+        0,
+        "cross-picker refusal must not hit the provider"
+    );
+    // A valid selection still collides after the refusals.
+    let started = start_collide_project(
+        &f,
+        json!({ "projectId": src_id, "items": [mem(&m_id, &m_rev), art(&a_id, 1)] }),
+    )
+    .unwrap();
+    let run_id = started["runId"].as_str().unwrap().to_string();
+    assert_eq!(poll_until(&f, &run_id)["status"], "complete");
+}
+
+#[test]
+fn project_context_pinning_survives_edits_and_restore() {
+    let fake = start_fake();
+    let f = fixture(&fake, "free");
+    let (src_id, _) = create_project(&f, "Harbor notes project", "Source body.");
+    let (m_id, m_rev, _) =
+        create_project_memory(&f, &src_id, "Tide notes", "Revision A tide observations.");
+    let (a_id, _) =
+        register_project_artifact(&f, &src_id, "note", "Harbor summary", "Summary draft one.");
+    let started = start_collide_project(
+        &f,
+        json!({
+            "projectId": src_id,
+            "items": [
+                { "kind": "memory", "memoryId": m_id, "revisionId": m_rev },
+                { "kind": "artifact", "artifactId": a_id, "version": 1 }
+            ]
+        }),
+    )
+    .unwrap();
+    let run_id = started["runId"].as_str().unwrap().to_string();
+    let polled = poll_until(&f, &run_id);
+    assert_eq!(polled["status"], "complete", "{polled}");
+    let saved = f
+        .core
+        .ai_command(
+            "collider-save",
+            json!({ "contractVersion": 1, "workspaceId": f.ws, "runId": run_id }),
+        )
+        .unwrap();
+    let artifact_id = saved["artifact"]["artifactId"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    // Revise both sources: the saved experiment must still resolve to v1.
+    f.core
+        .memory_command(
+            "revise",
+            json!({
+                "contractVersion": 1, "workspaceId": f.ws, "id": m_id,
+                "expectedRevision": m_rev, "draft": draft("Tide notes", "Revision B tide observations.")
+            }),
+        )
+        .unwrap();
+    f.core
+        .artifacts_command(
+            "revise",
+            json!({
+                "contractVersion": 1, "workspaceId": f.ws, "artifactId": a_id,
+                "expectedVersion": 1, "title": "Harbor summary",
+                "body": "Summary draft two.", "sourceReferences": []
+            }),
+        )
+        .unwrap();
+    let reopened = read_version(&f.core, &f.ws, &artifact_id, 1);
+    let body: Value = serde_json::from_str(reopened["body"].as_str().unwrap()).unwrap();
+    assert_eq!(
+        body["projectContext"]["items"][0]["content"],
+        "Revision A tide observations."
+    );
+    assert_eq!(
+        body["projectContext"]["items"][1]["content"],
+        "Summary draft one."
+    );
+    // Fresh restore: content still v1, references remapped to restored rows.
+    let store = Storage::new(f._dir.path().to_path_buf()).unwrap();
+    let bytes = backup_bytes(f._dir.path(), &store, &f.ws);
+    let fresh_dir = tempfile::tempdir().unwrap();
+    let fresh = Core::with_storage_root(fresh_dir.path().to_path_buf());
+    let restored = try_upload_restore(&fresh, &bytes, "pinned").unwrap();
+    let restored_ws = restored["workspaces"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    // The experiment lives in the run's home project
+    // (the fixture project), while its context points
+    // at the source project: both remap independently.
+    let projects = fresh
+        .memory_command(
+            "list",
+            json!({ "contractVersion": 1, "workspaceId": restored_ws, "kind": "project" }),
+        )
+        .unwrap()["memories"]
+        .clone();
+    let find_project = |title: &str| {
+        projects
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|m| m["title"] == title)
+            .unwrap()["id"]
+            .as_str()
+            .unwrap()
+            .to_string()
+    };
+    let restored_source = find_project("Harbor notes project");
+    let restored_home = find_project("Collider Project");
+    let arts = fresh
+        .artifacts_command(
+            "list",
+            json!({ "contractVersion": 1, "workspaceId": restored_ws, "projectId": restored_home }),
+        )
+        .unwrap();
+    let restored_artifact = arts["artifacts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["type"] == "experiment")
+        .unwrap();
+    let restored_id = restored_artifact["artifactId"].as_str().unwrap();
+    let restored_body: Value = serde_json::from_str(
+        read_version(&fresh, &restored_ws, restored_id, 1)["body"]
+            .as_str()
+            .unwrap(),
+    )
+    .unwrap();
+    let context = &restored_body["projectContext"];
+    assert_eq!(context["projectId"], restored_source);
+    assert_eq!(context["projectTitle"], "Harbor notes project");
+    let items = context["items"].as_array().unwrap();
+    assert_eq!(items[0]["content"], "Revision A tide observations.");
+    assert_eq!(items[1]["content"], "Summary draft one.");
+    assert_ne!(
+        items[0]["memoryId"].as_str().unwrap(),
+        m_id,
+        "memory id must remap"
+    );
+    assert_ne!(
+        items[0]["revisionId"].as_str().unwrap(),
+        m_rev,
+        "revision id must remap"
+    );
+    assert_ne!(
+        items[1]["artifactId"].as_str().unwrap(),
+        a_id,
+        "artifact id must remap"
+    );
+    assert_eq!(items[0]["version"], 1);
+    assert_eq!(items[1]["version"], 1);
+    // The remapped references resolve to the restored v1 bodies.
+    let read_back = fresh
+        .memory_command(
+            "read",
+            json!({
+                "contractVersion": 1, "workspaceId": restored_ws,
+                "id": items[0]["memoryId"], "revisionId": items[0]["revisionId"]
+            }),
+        )
+        .unwrap();
+    assert_eq!(read_back["body"], "Revision A tide observations.");
+    let read_art = fresh
+        .artifacts_command(
+            "read",
+            json!({
+                "contractVersion": 1, "workspaceId": restored_ws,
+                "artifactId": items[1]["artifactId"], "version": 1
+            }),
+        )
+        .unwrap();
+    assert_eq!(read_art["body"], "Summary draft one.");
+}
+
+/// Build one saved project-context experiment plus a
+/// second project with its own artifact, for restore
+/// refusal cases. Each case gets its own fixture: a
+/// tampered version would otherwise poison every later
+/// restore of the same workspace.
+fn build_saved_project_experiment(f: &Fixture) -> (String, String, String, String, String) {
+    let (src_id, _) = create_project(f, "Source project", "Source body.");
+    let (m_id, m_rev, _) = create_project_memory(f, &src_id, "Member notes", "Member content.");
+    let (a_id, _) = register_project_artifact(
+        f,
+        &src_id,
+        "note",
+        "Member summary",
+        "Member artifact content.",
+    );
+    let (other_id, _) = create_project(f, "Other project", "Other body.");
+    let (other_a_id, _) = register_project_artifact(
+        f,
+        &other_id,
+        "note",
+        "Other summary",
+        "Other artifact content.",
+    );
+    let started = start_collide_project(
+        f,
+        json!({
+            "projectId": src_id,
+            "items": [
+                { "kind": "memory", "memoryId": m_id, "revisionId": m_rev },
+                { "kind": "artifact", "artifactId": a_id, "version": 1 }
+            ]
+        }),
+    )
+    .unwrap();
+    let run_id = started["runId"].as_str().unwrap().to_string();
+    let polled = poll_until(f, &run_id);
+    assert_eq!(polled["status"], "complete", "{polled}");
+    let saved = f
+        .core
+        .ai_command(
+            "collider-save",
+            json!({ "contractVersion": 1, "workspaceId": f.ws, "runId": run_id }),
+        )
+        .unwrap();
+    (
+        saved["body"].as_str().unwrap().to_string(),
+        saved["artifact"]["artifactId"]
+            .as_str()
+            .unwrap()
+            .to_string(),
+        src_id,
+        other_id,
+        other_a_id,
+    )
+}
+
+fn assert_restore_refused(fresh: &Core, bytes: &[u8], name: &str) {
+    assert!(try_upload_restore(fresh, bytes, name).is_err());
+    let listed = fresh
+        .workspace_command("list", json!({ "contractVersion": 1 }))
+        .unwrap();
+    assert!(
+        !listed["workspaces"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|w| w["name"] == name),
+        "{name} restore published a destination workspace"
+    );
+}
+
+#[test]
+fn restore_refuses_tampered_or_misbound_project_context() {
+    // Control: the valid package restores.
+    let fake = start_fake();
+    let f = fixture(&fake, "free");
+    build_saved_project_experiment(&f);
+    let store = Storage::new(f._dir.path().to_path_buf()).unwrap();
+    let good_bytes = backup_bytes(f._dir.path(), &store, &f.ws);
+    let fresh_dir = tempfile::tempdir().unwrap();
+    let fresh = Core::with_storage_root(fresh_dir.path().to_path_buf());
+    assert!(try_upload_restore(&fresh, &good_bytes, "good").is_ok());
+    // Tamper the artifact item's pinned hash: restore must refuse.
+    let fake2 = start_fake();
+    let f2 = fixture(&fake2, "free");
+    let (body2, artifact2, _, _, _) = build_saved_project_experiment(&f2);
+    let mut doc: Value = serde_json::from_str(&body2).unwrap();
+    doc["projectContext"]["items"][1]["contentHash"] = json!("0".repeat(64));
+    f2.core
+        .artifacts_command(
+            "revise",
+            json!({
+                "contractVersion": 1, "workspaceId": f2.ws, "artifactId": artifact2,
+                "expectedVersion": 1,
+                "title": "Collider experiment: Trading.",
+                "body": doc.to_string(), "sourceReferences": []
+            }),
+        )
+        .unwrap();
+    let store2 = Storage::new(f2._dir.path().to_path_buf()).unwrap();
+    let bad_bytes = backup_bytes(f2._dir.path(), &store2, &f2.ws);
+    let fresh_dir2 = tempfile::tempdir().unwrap();
+    let fresh2 = Core::with_storage_root(fresh_dir2.path().to_path_buf());
+    assert_restore_refused(&fresh2, &bad_bytes, "tampered");
+    // Misbind the pinned project: the items still belong
+    // to the source project, so restore must refuse.
+    let fake3 = start_fake();
+    let f3 = fixture(&fake3, "free");
+    let (body3, artifact3, _, other3, _) = build_saved_project_experiment(&f3);
+    let mut doc3: Value = serde_json::from_str(&body3).unwrap();
+    doc3["projectContext"]["projectId"] = json!(other3);
+    f3.core
+        .artifacts_command(
+            "revise",
+            json!({
+                "contractVersion": 1, "workspaceId": f3.ws, "artifactId": artifact3,
+                "expectedVersion": 1,
+                "title": "Collider experiment: Trading.",
+                "body": doc3.to_string(), "sourceReferences": []
+            }),
+        )
+        .unwrap();
+    let store3 = Storage::new(f3._dir.path().to_path_buf()).unwrap();
+    let misbound_bytes = backup_bytes(f3._dir.path(), &store3, &f3.ws);
+    let fresh_dir3 = tempfile::tempdir().unwrap();
+    let fresh3 = Core::with_storage_root(fresh_dir3.path().to_path_buf());
+    assert_restore_refused(&fresh3, &misbound_bytes, "misbound");
+    // Misbind the artifact item to another project's
+    // artifact: the row's project no longer matches.
+    let fake4 = start_fake();
+    let f4 = fixture(&fake4, "free");
+    let (body4, artifact4, _, _, other_a4) = build_saved_project_experiment(&f4);
+    let mut doc4: Value = serde_json::from_str(&body4).unwrap();
+    doc4["projectContext"]["items"][1]["artifactId"] = json!(other_a4);
+    f4.core
+        .artifacts_command(
+            "revise",
+            json!({
+                "contractVersion": 1, "workspaceId": f4.ws, "artifactId": artifact4,
+                "expectedVersion": 1,
+                "title": "Collider experiment: Trading.",
+                "body": doc4.to_string(), "sourceReferences": []
+            }),
+        )
+        .unwrap();
+    let store4 = Storage::new(f4._dir.path().to_path_buf()).unwrap();
+    let art_bytes = backup_bytes(f4._dir.path(), &store4, &f4.ws);
+    let fresh_dir4 = tempfile::tempdir().unwrap();
+    let fresh4 = Core::with_storage_root(fresh_dir4.path().to_path_buf());
+    assert_restore_refused(&fresh4, &art_bytes, "misbound-artifact");
+}
+
+#[test]
+fn project_list_filter_returns_members_and_project_revisions() {
+    let fake = start_fake();
+    let f = fixture(&fake, "free");
+    let (src_id, _) = create_project(&f, "Source project", "Source body.");
+    let (other_id, _) = create_project(&f, "Other project", "Other body.");
+    let (m1_id, m1_rev, _) = create_project_memory(&f, &src_id, "First notes", "First content.");
+    let (m2_id, _, _) = create_project_memory(&f, &src_id, "Second notes", "Second content.");
+    let (m3_id, _, _) = create_project_memory(&f, &other_id, "Other notes", "Other content.");
+    let (u_id, _, _) = create_memory(&f, "Unassigned notes", "Unassigned content.");
+    let listed = f
+        .core
+        .memory_command(
+            "list",
+            json!({ "contractVersion": 1, "workspaceId": f.ws, "projectId": src_id }),
+        )
+        .unwrap();
+    let ids: Vec<&str> = listed["memories"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|m| m["id"].as_str())
+        .collect();
+    assert_eq!(ids.len(), 2, "only the source project's members list");
+    assert!(ids.contains(&m1_id.as_str()));
+    assert!(ids.contains(&m2_id.as_str()));
+    assert!(!ids.contains(&m3_id.as_str()));
+    assert!(!ids.contains(&u_id.as_str()));
+    assert!(
+        !ids.contains(&src_id.as_str()),
+        "the project record itself is not a member"
+    );
+    // Move the first member to the other project: the
+    // source filter keeps only its source revision, while
+    // the unfiltered history shows both revisions.
+    f.core
+        .memory_command(
+            "revise",
+            json!({
+                "contractVersion": 1, "workspaceId": f.ws, "id": m1_id,
+                "expectedRevision": m1_rev,
+                "draft": project_draft("First notes", "First content, moved.", &other_id)
+            }),
+        )
+        .unwrap();
+    let filtered = f
+        .core
+        .memory_command(
+            "list",
+            json!({ "contractVersion": 1, "workspaceId": f.ws, "id": m1_id, "projectId": src_id }),
+        )
+        .unwrap();
+    let filtered_revs = filtered["memories"].as_array().unwrap();
+    assert_eq!(
+        filtered_revs.len(),
+        1,
+        "only the source-project revision lists"
+    );
+    assert_eq!(filtered_revs[0]["version"], 1);
+    let unfiltered = f
+        .core
+        .memory_command(
+            "list",
+            json!({ "contractVersion": 1, "workspaceId": f.ws, "id": m1_id }),
+        )
+        .unwrap();
+    assert_eq!(unfiltered["memories"].as_array().unwrap().len(), 2);
+    // Sealing composes with the filter: the sealed member drops out.
+    seal_memory(f._dir.path(), &m2_id);
+    let listed2 = f
+        .core
+        .memory_command(
+            "list",
+            json!({ "contractVersion": 1, "workspaceId": f.ws, "projectId": src_id }),
+        )
+        .unwrap();
+    let ids2: Vec<&str> = listed2["memories"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|m| m["id"].as_str())
+        .collect();
+    assert!(
+        !ids2.contains(&m2_id.as_str()),
+        "sealed member must drop out of the filtered list"
+    );
+}
+
 #[test]
 fn memory_list_skips_sealed_rows() {
     let fake = start_fake();
