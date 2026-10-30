@@ -4,6 +4,7 @@ import type {
   ColliderControls,
   ColliderExperimentDoc,
   ColliderMemoryContext,
+  ColliderProjectContext,
   ColliderResult,
   DisclosureRecord,
   MemoryMetadata,
@@ -218,6 +219,114 @@ export function parseColliderMemoryContext(
   return out;
 }
 
+// Mirror of crates/core/src/artifacts.rs ARTIFACT_TYPES.
+// The backend refuses anything outside this list at
+// dispatch; the project picker only offers these, so
+// internal approval rows (transfer-approval,
+// specification-approval) are never offered as items.
+const ELIGIBLE_PROJECT_ARTIFACT_TYPES = new Set([
+  'research',
+  'source',
+  'idea',
+  'concept',
+  'experiment',
+  'prototype',
+  'generated-file',
+  'simulation',
+  'agent-test',
+  'decision',
+  'launch-material',
+  'feedback',
+  'note',
+  'rubric',
+  'evaluation',
+  'deliverable',
+  'specification',
+  'source-package',
+  'source-review',
+]);
+
+export function parseColliderProjectContext(
+  value: unknown,
+): ColliderProjectContext | null {
+  if (!isRecord(value)) return null;
+  if (!exactKeys(value, ['projectId', 'projectTitle', 'items'])) return null;
+  if (typeof value.projectId !== 'string' || value.projectId.length === 0) {
+    return null;
+  }
+  const projectTitle = textField(value.projectTitle, 200);
+  if (projectTitle === null) return null;
+  if (!Array.isArray(value.items)) return null;
+  if (value.items.length < 1 || value.items.length > 8) return null;
+  const seen = new Set<string>();
+  let total = 0;
+  const items: ColliderProjectContext['items'] = [];
+  for (const item of value.items) {
+    if (!isRecord(item)) return null;
+    if (
+      !exactKeys(item, [
+        'kind',
+        'memoryId',
+        'revisionId',
+        'artifactId',
+        'artifactType',
+        'version',
+        'title',
+        'content',
+        'contentHash',
+        'privacy',
+      ])
+    ) {
+      return null;
+    }
+    const kind = item.kind as string;
+    if (kind !== 'memory' && kind !== 'artifact') return null;
+    const key =
+      kind === 'memory'
+        ? `memory:${item.memoryId as string}`
+        : `artifact:${item.artifactId as string}`;
+    if (seen.has(key)) return null;
+    seen.add(key);
+    if (kind === 'memory') {
+      if (
+        typeof item.memoryId !== 'string' ||
+        item.memoryId.length === 0 ||
+        typeof item.revisionId !== 'string' ||
+        item.revisionId.length === 0 ||
+        item.artifactId !== null ||
+        item.artifactType !== null
+      ) {
+        return null;
+      }
+    } else {
+      if (
+        typeof item.artifactId !== 'string' ||
+        item.artifactId.length === 0 ||
+        typeof item.artifactType !== 'string' ||
+        !ELIGIBLE_PROJECT_ARTIFACT_TYPES.has(item.artifactType as string) ||
+        item.memoryId !== null ||
+        item.revisionId !== null
+      ) {
+        return null;
+      }
+    }
+    if (typeof item.version !== 'number' || item.version < 1) return null;
+    const title = textField(item.title, 200);
+    const content = textField(item.content, 8000);
+    if (title === null || content === null) return null;
+    total += content.length;
+    if (total > 32000) return null;
+    if (typeof item.contentHash !== 'string' || item.contentHash.length === 0) {
+      return null;
+    }
+    if (!['private', 'standard', 'public'].includes(item.privacy as string)) {
+      return null;
+    }
+    items.push(item as unknown as ColliderProjectContext['items'][number]);
+  }
+  return { projectId: value.projectId, projectTitle, items };
+}
+
 export function parseColliderExperimentBody(
   body: string,
 ): ColliderExperimentDoc | null {
@@ -241,7 +350,9 @@ export function parseColliderExperimentBody(
   ];
   // memoryContext is optional: experiments saved before
   // Slice 3 carry no context and must still parse.
-  const allowed = [...required, 'memoryContext'];
+  // projectContext is likewise optional: experiments
+  // saved before Slice 4 carry none and must parse.
+  const allowed = [...required, 'memoryContext', 'projectContext'];
   if (
     !required.every(key => Object.keys(parsed).includes(key)) ||
     !Object.keys(parsed).every(key => allowed.includes(key))
@@ -253,6 +364,11 @@ export function parseColliderExperimentBody(
       ? []
       : parseColliderMemoryContext(parsed.memoryContext);
   if (memoryContext === null) return null;
+  const projectContext =
+    parsed.projectContext === undefined
+      ? undefined
+      : parseColliderProjectContext(parsed.projectContext);
+  if (projectContext === null) return null;
   if (parsed.format !== 'anansi-collider-experiment' || parsed.version !== 1) {
     return null;
   }
@@ -287,7 +403,11 @@ export function parseColliderExperimentBody(
     return null;
   }
   if (!isRecord(parsed.disclosure)) return null;
-  return { ...parsed, memoryContext } as unknown as ColliderExperimentDoc;
+  return {
+    ...parsed,
+    memoryContext,
+    projectContext,
+  } as unknown as ColliderExperimentDoc;
 }
 
 // ---------------------------------------------------------------------------
@@ -435,6 +555,33 @@ export function ColliderExperimentView({ doc }: { doc: ColliderExperimentDoc }) 
           ))}
         </section>
       )}
+      {doc.projectContext && doc.projectContext.items.length > 0 && (
+        <section aria-label="Project context">
+          <p>
+            <strong>
+              Project context (as sent at generation time).
+            </strong>{' '}
+            From project {doc.projectContext.projectTitle}. This is the
+            generation-time snapshot: later project edits do not change it.
+          </p>
+          {doc.projectContext.items.map(entry => (
+            <details
+              key={
+                entry.kind === 'memory'
+                  ? `memory:${entry.memoryId}`
+                  : `artifact:${entry.artifactId}`
+              }
+            >
+              <summary>
+                {entry.title} ·{' '}
+                {entry.kind === 'memory' ? 'memory revision' : 'artifact version'}{' '}
+                {entry.version} · {entry.privacy}
+              </summary>
+              <pre>{entry.content}</pre>
+            </details>
+          ))}
+        </section>
+      )}
       <ColliderResultView result={doc.result} />
     </div>
   );
@@ -455,6 +602,26 @@ export const DEFAULT_COLLIDER_CONTROLS: ColliderControls = {
 export type ColliderMemoryReviewEntry = {
   memoryId: string;
   revisionId: string;
+  version: number;
+  title: string;
+  body: string;
+};
+
+export type ColliderProjectChoice = {
+  kind: 'memory' | 'artifact';
+  /** Memory id or artifact id. */
+  id: string;
+  /** Revision id for a memory, version number as text for an artifact. */
+  versionId: string;
+  version: number;
+  title: string;
+};
+
+export type ColliderProjectReviewEntry = {
+  kind: 'memory' | 'artifact';
+  memoryId?: string;
+  revisionId?: string;
+  artifactId?: string;
   version: number;
   title: string;
   body: string;
@@ -484,6 +651,25 @@ export function ColliderPanel({
   const [review, setReview] = useState<ColliderMemoryReviewEntry[] | null>(null);
   const [reviewLoading, setReviewLoading] = useState(false);
   const [reviewError, setReviewError] = useState('');
+  // Project context: a saved project plus explicitly
+  // chosen items from it. Nothing is selected
+  // automatically, and the project's own record text is
+  // never included unless the user pastes it as a beam.
+  const [projectOptions, setProjectOptions] = useState<MemoryMetadata[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState('');
+  const [projectMembers, setProjectMembers] = useState<MemoryMetadata[]>([]);
+  const [projectArtifacts, setProjectArtifacts] = useState<
+    { artifactId: string; title: string; version: number; type: string }[]
+  >([]);
+  const [projectChoices, setProjectChoices] = useState<ColliderProjectChoice[]>([]);
+  const [projectVersions, setProjectVersions] = useState<
+    Record<string, { id: string; version: number }[]>
+  >({});
+  const [projectReview, setProjectReview] = useState<
+    ColliderProjectReviewEntry[] | null
+  >(null);
+  const [projectReviewLoading, setProjectReviewLoading] = useState(false);
+  const [projectReviewError, setProjectReviewError] = useState('');
   const [starting, setStarting] = useState(false);
   const startingRef = useRef(false);
   const mountedRef = useRef(true);
@@ -491,6 +677,21 @@ export function ColliderPanel({
     !reviewLoading && !reviewError && review !== null &&
     review.length === selectedIds.length &&
     review.every((entry, index) => entry.memoryId === selectedIds[index])
+  );
+  // The project review must describe exactly the
+  // current choices, in order, at the pinned versions:
+  // a stale review can never authorize a different set.
+  const projectReviewReady = projectChoices.length === 0 || (
+    !projectReviewLoading && !projectReviewError && projectReview !== null &&
+    projectReview.length === projectChoices.length &&
+    projectReview.every((entry, index) => {
+      const choice = projectChoices[index];
+      if (entry.kind !== choice.kind) return false;
+      if (choice.kind === 'memory') {
+        return entry.memoryId === choice.id && entry.revisionId === choice.versionId;
+      }
+      return entry.artifactId === choice.id && String(entry.version) === choice.versionId;
+    })
   );
   const [controls, setControls] = useState<ColliderControls>(
     DEFAULT_COLLIDER_CONTROLS,
@@ -566,6 +767,247 @@ export function ColliderPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedIds.join(',')]);
 
+  // Project context loading and review. Two separate
+  // disciplines: option lists are render-only data
+  // guarded by effect cancellation (a stale list can
+  // never authorize a send), while the review is the
+  // consent boundary and uses the same epoch discipline
+  // as the memory review. A project switch clears
+  // choices, review and version options synchronously,
+  // so a late response for the previous project can
+  // never describe the new selection.
+  const projectReviewEpoch = useRef(0);
+  const projectListEpoch = useRef(0);
+  useEffect(() => {
+    let cancelled = false;
+    void client
+      .listMemories(workspaceId, { kind: 'project' })
+      .then(list => {
+        if (!cancelled) setProjectOptions(list.memories);
+      })
+      .catch(() => {
+        if (!cancelled) setProjectOptions([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspaceId]);
+  useEffect(() => {
+    if (!selectedProjectId) {
+      setProjectMembers([]);
+      setProjectArtifacts([]);
+      return;
+    }
+    let cancelled = false;
+    void client
+      .listMemories(workspaceId, { projectId: selectedProjectId })
+      .then(list => {
+        if (!cancelled) {
+          setProjectMembers(
+            list.memories.filter(m => m.kind !== 'project'),
+          );
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setProjectMembers([]);
+      });
+    void client
+      .listProjectArtifacts(workspaceId, selectedProjectId)
+      .then(list => {
+        if (!cancelled) {
+          setProjectArtifacts(
+            list.artifacts
+              .filter(a => ELIGIBLE_PROJECT_ARTIFACT_TYPES.has(a.type))
+              .map(a => ({
+                artifactId: a.artifactId,
+                title: a.title,
+                version: a.version,
+                type: a.type,
+              })),
+          );
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setProjectArtifacts([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedProjectId]);
+  async function loadProjectReview(
+    choices: ColliderProjectChoice[],
+  ): Promise<ColliderProjectReviewEntry[]> {
+    const entries: ColliderProjectReviewEntry[] = [];
+    for (const choice of choices) {
+      if (choice.kind === 'memory') {
+        const read = await client.readMemory(
+          workspaceId,
+          choice.id,
+          choice.versionId,
+        );
+        entries.push({
+          kind: 'memory',
+          memoryId: read.memory.id,
+          revisionId: read.memory.revisionId,
+          version: read.memory.version,
+          title: read.memory.title,
+          body: read.body,
+        });
+      } else {
+        const read = await client.readProjectArtifact(
+          workspaceId,
+          choice.id,
+          choice.version,
+        );
+        entries.push({
+          kind: 'artifact',
+          artifactId: read.artifact.artifactId,
+          version: read.artifact.version,
+          title: read.artifact.title,
+          body: read.body,
+        });
+      }
+    }
+    return entries;
+  }
+  const projectChoicesKey = projectChoices
+    .map(c => `${c.kind}:${c.id}@${c.versionId}`)
+    .join(',');
+  useEffect(() => {
+    const epoch = ++projectReviewEpoch.current;
+    setProjectReview(null);
+    setProjectReviewError('');
+    if (projectChoices.length === 0) {
+      setProjectReviewLoading(false);
+      return;
+    }
+    setProjectReviewLoading(true);
+    void loadProjectReview(projectChoices)
+      .then(entries => {
+        if (epoch !== projectReviewEpoch.current) return;
+        setProjectReview(entries);
+        setProjectReviewLoading(false);
+      })
+      .catch(() => {
+        if (epoch !== projectReviewEpoch.current) return;
+        setProjectReview(null);
+        setProjectReviewError(
+          'A selected project item could not be read; refresh the selection and try again.',
+        );
+        setProjectReviewLoading(false);
+      });
+    return () => {
+      if (projectReviewEpoch.current === epoch) projectReviewEpoch.current += 1;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectChoicesKey]);
+
+  function changeSelectedProject(id: string) {
+    // Invalidate in the input event, before any old
+    // read can settle or an immediate submit can reuse
+    // the previous review.
+    projectReviewEpoch.current += 1;
+    projectListEpoch.current += 1;
+    setSelectedProjectId(id);
+    setProjectChoices([]);
+    setProjectReview(null);
+    setProjectReviewError('');
+    setProjectVersions({});
+    setProjectMembers([]);
+    setProjectArtifacts([]);
+  }
+  function toggleProjectMemory(m: MemoryMetadata, checked: boolean) {
+    projectReviewEpoch.current += 1;
+    setProjectReview(null);
+    setProjectReviewError('');
+    if (!checked) {
+      setProjectChoices(previous =>
+        previous.filter(c => !(c.kind === 'memory' && c.id === m.id)),
+      );
+      return;
+    }
+    setProjectChoices(previous => [
+      ...previous,
+      {
+        kind: 'memory',
+        id: m.id,
+        versionId: m.revisionId,
+        version: m.version,
+        title: m.title,
+      },
+    ]);
+    const epoch = projectListEpoch.current;
+    void client
+      .listMemories(workspaceId, { id: m.id, projectId: selectedProjectId })
+      .then(list => {
+        if (epoch !== projectListEpoch.current) return;
+        setProjectVersions(previous => ({
+          ...previous,
+          [`memory:${m.id}`]: list.memories.map(r => ({
+            id: r.revisionId,
+            version: r.version,
+          })),
+        }));
+      })
+      .catch(() => undefined);
+  }
+  function toggleProjectArtifact(
+    a: { artifactId: string; title: string; version: number; type: string },
+    checked: boolean,
+  ) {
+    projectReviewEpoch.current += 1;
+    setProjectReview(null);
+    setProjectReviewError('');
+    if (!checked) {
+      setProjectChoices(previous =>
+        previous.filter(c => !(c.kind === 'artifact' && c.id === a.artifactId)),
+      );
+      return;
+    }
+    setProjectChoices(previous => [
+      ...previous,
+      {
+        kind: 'artifact',
+        id: a.artifactId,
+        versionId: String(a.version),
+        version: a.version,
+        title: a.title,
+      },
+    ]);
+    const epoch = projectListEpoch.current;
+    void client
+      .listProjectArtifactVersions(workspaceId, a.artifactId)
+      .then(list => {
+        if (epoch !== projectListEpoch.current) return;
+        setProjectVersions(previous => ({
+          ...previous,
+          [`artifact:${a.artifactId}`]: list.versions.map(v => ({
+            id: String(v.version),
+            version: v.version,
+          })),
+        }));
+      })
+      .catch(() => undefined);
+  }
+  function changeProjectChoiceVersion(
+    choice: ColliderProjectChoice,
+    versionId: string,
+    version: number,
+  ) {
+    projectReviewEpoch.current += 1;
+    setProjectReview(null);
+    setProjectReviewError('');
+    setProjectChoices(previous =>
+      previous.map(c =>
+        c.kind === choice.kind && c.id === choice.id
+          ? { ...c, versionId, version }
+          : c,
+      ),
+    );
+  }
+
   // Poll the active run; unmount (project switch, panel
   // close) cancels it through the controller reset.
   useEffect(() => {
@@ -626,12 +1068,31 @@ export function ColliderPanel({
   }, []);
 
   async function collide() {
-    if (!mountedRef.current || startingRef.current || busy || running || !reviewReady) return;
+    if (!mountedRef.current || startingRef.current || busy || running || !reviewReady || !projectReviewReady) return;
     // The immutable revisions already displayed are the consent boundary.
     // Re-reading current heads here could transmit an unseen newer revision.
+    // The same holds for project items: only the reviewed refs are sent.
     const memoryContext = selectedIds.length > 0
       ? review!.map(entry => ({ memoryId: entry.memoryId, revisionId: entry.revisionId }))
       : [];
+    const projectContext = projectChoices.length > 0
+      ? {
+          projectId: selectedProjectId,
+          items: projectReview!.map(entry =>
+            entry.kind === 'memory'
+              ? {
+                  kind: 'memory',
+                  memoryId: entry.memoryId as string,
+                  revisionId: entry.revisionId as string,
+                }
+              : {
+                  kind: 'artifact',
+                  artifactId: entry.artifactId as string,
+                  version: entry.version,
+                },
+          ),
+        }
+      : undefined;
     startingRef.current = true;
     setStarting(true);
     setResult(null);
@@ -645,6 +1106,7 @@ export function ColliderPanel({
         beamB,
         controls,
         memoryContext,
+        projectContext,
         zeroCostLock: lock,
       });
     } catch (e) {
@@ -702,8 +1164,8 @@ export function ColliderPanel({
         Collide two ideas, technologies, principles or industries and explore
         useful combinations. Supplied text is treated as private data, never as
         instructions to the model. Nothing starts until you press Collide Ideas.
-        Later slices will add URL fetching, document ingestion, saved-project
-        selection and 3D visualization; none of those are available here.
+        Saved-project selection is available below; URL fetching, document
+        ingestion and 3D visualization remain deferred.
       </p>
       <form
         onSubmit={e => {
@@ -775,6 +1237,142 @@ export function ColliderPanel({
                 <details key={entry.memoryId}>
                   <summary>
                     {entry.title} · revision {entry.version}
+                  </summary>
+                  <pre>{entry.body}</pre>
+                </details>
+              ))}
+          </section>
+        )}
+        <fieldset>
+          <legend>Project context (optional)</legend>
+          <p className="help">
+            Choose a saved project and exactly which of its items to send.
+            Nothing is selected automatically, and the project&apos;s own
+            record text is never included. Selecting, reviewing or changing
+            context starts no inference; only the items you check, at the
+            versions shown below, are sent when you press Collide Ideas.
+          </p>
+          <label>
+            Saved project
+            <select
+              id="collider-project"
+              value={selectedProjectId}
+              onChange={e => changeSelectedProject(e.target.value)}
+            >
+              <option value="">No project context</option>
+              {projectOptions.map(p => (
+                <option key={p.id} value={p.id}>
+                  {p.title}
+                  {p.id === projectId ? ' (this project)' : ''}
+                </option>
+              ))}
+            </select>
+          </label>
+          {selectedProjectId && projectMembers.length === 0 && projectArtifacts.length === 0 && (
+            <p className="help">This project has no selectable items yet.</p>
+          )}
+          {projectMembers.map(m => {
+            const choice = projectChoices.find(
+              c => c.kind === 'memory' && c.id === m.id,
+            );
+            const versions = projectVersions[`memory:${m.id}`];
+            return (
+              <div key={`memory:${m.id}`}>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={choice !== undefined}
+                    onChange={e => toggleProjectMemory(m, e.target.checked)}
+                  />{' '}
+                  {m.title} · memory · Revision {m.version} · {m.privacy}
+                </label>
+                {choice && versions && versions.length > 0 && (
+                  <label>
+                    Version
+                    <select
+                      aria-label={`Version for ${m.title}`}
+                      value={choice.versionId}
+                      onChange={e => {
+                        const option = versions.find(v => v.id === e.target.value);
+                        if (option) {
+                          changeProjectChoiceVersion(choice, option.id, option.version);
+                        }
+                      }}
+                    >
+                      {versions.map(v => (
+                        <option key={v.id} value={v.id}>
+                          Revision {v.version}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+              </div>
+            );
+          })}
+          {projectArtifacts.map(a => {
+            const choice = projectChoices.find(
+              c => c.kind === 'artifact' && c.id === a.artifactId,
+            );
+            const versions = projectVersions[`artifact:${a.artifactId}`];
+            return (
+              <div key={`artifact:${a.artifactId}`}>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={choice !== undefined}
+                    onChange={e => toggleProjectArtifact(a, e.target.checked)}
+                  />{' '}
+                  {a.title} · artifact ({a.type}) · Version {a.version}
+                </label>
+                {choice && versions && versions.length > 0 && (
+                  <label>
+                    Version
+                    <select
+                      aria-label={`Version for ${a.title}`}
+                      value={choice.versionId}
+                      onChange={e => {
+                        const option = versions.find(v => v.id === e.target.value);
+                        if (option) {
+                          changeProjectChoiceVersion(choice, option.id, option.version);
+                        }
+                      }}
+                    >
+                      {versions.map(v => (
+                        <option key={v.id} value={v.id}>
+                          Version {v.version}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+              </div>
+            );
+          })}
+        </fieldset>
+        {projectChoices.length > 0 && (
+          <section aria-label="Project context to send">
+            <p className="help">
+              Exactly these project items, at these versions, will be sent.
+              Nothing is sent until you press Collide Ideas.
+            </p>
+            {projectReviewLoading && (
+              <p role="status">Loading the selected project review…</p>
+            )}
+            {projectReviewError && <p role="alert">{projectReviewError}</p>}
+            {projectReview &&
+              projectReview.map(entry => (
+                <details
+                  key={
+                    entry.kind === 'memory'
+                      ? `memory:${entry.memoryId}`
+                      : `artifact:${entry.artifactId}`
+                  }
+                >
+                  <summary>
+                    {entry.title} ·{' '}
+                    {entry.kind === 'memory' ? 'memory revision' : 'artifact version'}{' '}
+                    {entry.version}
                   </summary>
                   <pre>{entry.body}</pre>
                 </details>
@@ -871,7 +1469,7 @@ export function ColliderPanel({
             Zero-Cost Lock (never spend)
           </label>
         </fieldset>
-        <button type="submit" disabled={busy || running || starting || !reviewReady}>
+        <button type="submit" disabled={busy || running || starting || !reviewReady || !projectReviewReady}>
           Collide Ideas
         </button>
         {run?.status === 'running' && (

@@ -142,8 +142,8 @@ test('panel renders both beams, defaults, deferred scope and starts nothing on r
   assert.match(html, /Zero-Cost Lock \(never spend\)/);
   assert.match(html, /Defaults work without configuration/);
   assert.match(html, /do not guarantee novelty/);
-  assert.match(html, /URL fetching, document ingestion/);
-  assert.match(html, /none of those are available here/);
+  assert.match(html, /Saved-project selection is available below/);
+  assert.match(html, /URL fetching, document ingestion and 3D visualization remain deferred/);
 });
 
 test('result view renders all six sections and never claims validation or novelty', () => {
@@ -228,6 +228,130 @@ test('experiment view shows generation-time memory context verbatim', () => {
     <ColliderExperimentView doc={parseColliderExperimentBody(validExperimentBody())!} />,
   );
   assert.doesNotMatch(legacy, /Memory context \(as sent/);
+});
+
+test('experiment body parser accepts project context and rejects malformed entries', () => {
+  const withProject = JSON.parse(validExperimentBody());
+  withProject.projectContext = {
+    projectId: 'p'.repeat(32),
+    projectTitle: 'Harbor notes',
+    items: [
+      {
+        kind: 'memory',
+        memoryId: 'm'.repeat(32),
+        revisionId: 'r'.repeat(32),
+        artifactId: null,
+        artifactType: null,
+        version: 2,
+        title: 'Tide notes',
+        content: '  Revision B tide observations.\n',
+        contentHash: 'a'.repeat(64),
+        privacy: 'private',
+      },
+      {
+        kind: 'artifact',
+        memoryId: null,
+        revisionId: null,
+        artifactId: 'a'.repeat(32),
+        artifactType: 'note',
+        version: 3,
+        title: 'Harbor summary',
+        content: 'Summary body.',
+        contentHash: 'b'.repeat(64),
+        privacy: 'standard',
+      },
+    ],
+  };
+  const parsed = parseColliderExperimentBody(JSON.stringify(withProject));
+  assert.ok(parsed);
+  assert.equal(parsed!.projectContext!.projectTitle, 'Harbor notes');
+  assert.equal(parsed!.projectContext!.items.length, 2);
+  assert.equal(parsed!.projectContext!.items[0].content, '  Revision B tide observations.\n');
+  // Older experiments without the field still parse, with no project context.
+  const legacy = parseColliderExperimentBody(validExperimentBody())!;
+  assert.equal(legacy.projectContext, undefined);
+  // Malformed entries refuse: sealed privacy, approval artifact type,
+  // duplicate item, missing hash, memory item carrying artifact fields.
+  const memoryItem = withProject.projectContext.items[0];
+  for (const bad of [
+    { ...memoryItem, privacy: 'sealed' },
+    { ...memoryItem, contentHash: '' },
+    { ...memoryItem, artifactId: 'a'.repeat(32) },
+    { ...withProject.projectContext.items[1], artifactType: 'transfer-approval' },
+    { ...withProject.projectContext.items[1], artifactType: 'specification-approval' },
+  ]) {
+    const doc = JSON.parse(validExperimentBody());
+    doc.projectContext = {
+      projectId: 'p'.repeat(32),
+      projectTitle: 'Harbor notes',
+      items: [bad],
+    };
+    assert.equal(parseColliderExperimentBody(JSON.stringify(doc)), null);
+  }
+  const dup = JSON.parse(validExperimentBody());
+  dup.projectContext = {
+    projectId: 'p'.repeat(32),
+    projectTitle: 'Harbor notes',
+    items: [memoryItem, memoryItem],
+  };
+  assert.equal(parseColliderExperimentBody(JSON.stringify(dup)), null);
+  const tooMany = JSON.parse(validExperimentBody());
+  tooMany.projectContext = {
+    projectId: 'p'.repeat(32),
+    projectTitle: 'Harbor notes',
+    items: Array.from({ length: 9 }, (_, i) => ({
+      ...memoryItem,
+      memoryId: `m${i}`.padEnd(32, 'x'),
+    })),
+  };
+  assert.equal(parseColliderExperimentBody(JSON.stringify(tooMany)), null);
+});
+
+test('experiment view shows generation-time project context verbatim', () => {
+  const doc = JSON.parse(validExperimentBody());
+  doc.projectContext = {
+    projectId: 'p'.repeat(32),
+    projectTitle: 'Harbor notes',
+    items: [
+      {
+        kind: 'memory',
+        memoryId: 'm'.repeat(32),
+        revisionId: 'r'.repeat(32),
+        artifactId: null,
+        artifactType: null,
+        version: 2,
+        title: 'Tide notes',
+        content: 'Revision B tide observations.',
+        contentHash: 'a'.repeat(64),
+        privacy: 'private',
+      },
+      {
+        kind: 'artifact',
+        memoryId: null,
+        revisionId: null,
+        artifactId: 'a'.repeat(32),
+        artifactType: 'note',
+        version: 3,
+        title: 'Harbor summary',
+        content: 'Summary body.',
+        contentHash: 'b'.repeat(64),
+        privacy: 'standard',
+      },
+    ],
+  };
+  const parsed = parseColliderExperimentBody(JSON.stringify(doc))!;
+  const html = renderToStaticMarkup(<ColliderExperimentView doc={parsed} />);
+  assert.match(html, /Project context \(as sent at generation time\)/);
+  assert.match(html, /From project Harbor notes/);
+  assert.match(html, /Tide notes · memory revision 2/);
+  assert.match(html, /Revision B tide observations\./);
+  assert.match(html, /Harbor summary · artifact version 3/);
+  assert.match(html, /Summary body\./);
+  assert.match(html, /later project edits do not change it/);
+  const legacy = renderToStaticMarkup(
+    <ColliderExperimentView doc={parseColliderExperimentBody(validExperimentBody())!} />,
+  );
+  assert.doesNotMatch(legacy, /Project context \(as sent/);
 });
 
 test('panel offers unselected memory context and starts nothing on render', () => {
