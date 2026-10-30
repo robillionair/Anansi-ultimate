@@ -1521,6 +1521,93 @@
         ],
         "type": "object"
       },
+      "ColliderProjectContext": {
+        "additionalProperties": false,
+        "description": "Resolved project context, saved with the experiment.\n`project_title` is the source project's title at\ngeneration time; later renames do not rewrite history.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/$defs/ColliderProjectContextItem"
+            },
+            "type": "array"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "projectTitle": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId",
+          "projectTitle",
+          "items"
+        ],
+        "type": "object"
+      },
+      "ColliderProjectContextItem": {
+        "additionalProperties": false,
+        "description": "One resolved project item, saved verbatim with the\nexperiment as generation-time provenance. The `kind`\ndiscriminator decides which id fields are meaningful;\nvalidation enforces the per-kind shape. Later edits,\nreassignments, archival or sealing of a source never\nchange this snapshot; the pinned hash lets restore\nre-validate it against the source package's rows.",
+        "properties": {
+          "artifactId": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "artifactType": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "content": {
+            "type": "string"
+          },
+          "contentHash": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "memoryId": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "privacy": {
+            "type": "string"
+          },
+          "revisionId": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "version": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "kind",
+          "version",
+          "title",
+          "content",
+          "contentHash",
+          "privacy"
+        ],
+        "type": "object"
+      },
       "ColliderResult": {
         "additionalProperties": false,
         "description": "The validated six-section collision result.",
@@ -1711,6 +1798,16 @@
       },
       "model": {
         "type": "string"
+      },
+      "projectContext": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/ColliderProjectContext"
+          },
+          {
+            "type": "null"
+          }
+        ]
       },
       "provider": {
         "type": "string"
@@ -2432,6 +2529,69 @@
           "revisionId"
         ],
         "type": "object"
+      },
+      "ColliderProjectItemSelection": {
+        "additionalProperties": false,
+        "description": "One explicitly selected project item, by reference\nonly. The `kind` discriminator decides which id pair\nis meaningful: a memory item pins a memory revision,\nan artifact item pins an artifact version. Any other\ncombination is refused at validation, and every body,\ntitle, privacy label and project-membership claim is\nresolved by the backend (see `resolve_project_context`),\nnever trusted from the client.",
+        "properties": {
+          "artifactId": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "kind": {
+            "type": "string"
+          },
+          "memoryId": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "revisionId": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "version": {
+            "default": null,
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "type": "object"
+      },
+      "ColliderProjectSelection": {
+        "additionalProperties": false,
+        "description": "The client's project-context selection: one saved\nproject plus explicitly chosen items from it. The\nproject selection alone sends nothing: an absent\n`project_context` (or an empty item list, refused)\nmeans no project content reaches the provider.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/$defs/ColliderProjectItemSelection"
+            },
+            "type": "array"
+          },
+          "projectId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId",
+          "items"
+        ],
+        "type": "object"
       }
     },
     "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -2483,6 +2643,16 @@
         "type": [
           "string",
           "null"
+        ]
+      },
+      "projectContext": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/ColliderProjectSelection"
+          },
+          {
+            "type": "null"
+          }
         ]
       },
       "projectId": {
@@ -7941,6 +8111,14 @@
         "format": "uint32",
         "minimum": 0,
         "type": "integer"
+      },
+      "projectId": {
+        "default": null,
+        "description": "Optional project membership filter (M8 Slice 4):\nrestricts rows to revisions whose metadata\n`projectId` equals this id. Applies both to the\ncurrent-revision listing and to the revision\nhistory of a single memory, so the collider\nproject picker can list a project's members and\nthe versions of one member that belong to it.",
+        "type": [
+          "string",
+          "null"
+        ]
       },
       "query": {
         "type": [

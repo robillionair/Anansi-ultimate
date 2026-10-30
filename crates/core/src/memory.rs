@@ -182,6 +182,15 @@ pub struct MemoryListRequest {
     pub include_archived: bool,
     #[serde(default)]
     pub include_expired: bool,
+    /// Optional project membership filter (M8 Slice 4):
+    /// restricts rows to revisions whose metadata
+    /// `projectId` equals this id. Applies both to the
+    /// current-revision listing and to the revision
+    /// history of a single memory, so the collider
+    /// project picker can list a project's members and
+    /// the versions of one member that belong to it.
+    #[serde(default)]
+    pub project_id: Option<String>,
 }
 #[derive(Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -719,7 +728,7 @@ impl Storage {
         // and Sealed content is never disclosed. The
         // allow_plaintext check below stays as a
         // backstop for any row that slips through.
-        let mut statement=connection.prepare("SELECT r.metadata FROM memory_revisions r JOIN memories m ON m.workspace_id=r.workspace_id AND m.id=r.memory_id WHERE r.workspace_id=?1 AND json_extract(r.metadata,'$.privacy')!='sealed' AND ((?2 IS NULL AND r.id=m.current_revision) OR r.memory_id=?2) AND (?2 IS NOT NULL OR ((?5 IS NULL OR json_extract(r.metadata,'$.kind')=?5) AND (?6 OR json_extract(r.metadata,'$.status')!='archived') AND (?7 OR json_extract(r.metadata,'$.validUntil') IS NULL OR julianday(json_extract(r.metadata,'$.validUntil'))>julianday(?8)))) ORDER BY r.memory_id,r.version DESC LIMIT ?3 OFFSET ?4").map_err(|_|unavailable())?;
+        let mut statement=connection.prepare("SELECT r.metadata FROM memory_revisions r JOIN memories m ON m.workspace_id=r.workspace_id AND m.id=r.memory_id WHERE r.workspace_id=?1 AND json_extract(r.metadata,'$.privacy')!='sealed' AND ((?2 IS NULL AND r.id=m.current_revision) OR r.memory_id=?2) AND (?2 IS NOT NULL OR ((?5 IS NULL OR json_extract(r.metadata,'$.kind')=?5) AND (?6 OR json_extract(r.metadata,'$.status')!='archived') AND (?7 OR json_extract(r.metadata,'$.validUntil') IS NULL OR julianday(json_extract(r.metadata,'$.validUntil'))>julianday(?8)))) AND (?9 IS NULL OR json_extract(r.metadata,'$.projectId')=?9) ORDER BY r.memory_id,r.version DESC LIMIT ?3 OFFSET ?4").map_err(|_|unavailable())?;
         let rows = statement
             .query_map(
                 params![
@@ -730,7 +739,8 @@ impl Storage {
                     r.kind,
                     r.include_archived,
                     r.include_expired,
-                    Utc::now().to_rfc3339()
+                    Utc::now().to_rfc3339(),
+                    r.project_id,
                 ],
                 |row| row.get::<_, String>(0),
             )

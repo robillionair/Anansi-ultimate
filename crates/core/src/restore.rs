@@ -901,6 +901,121 @@ fn validate_original_experiment_bindings(
                 return Err(crate::jobs::invalid());
             }
         }
+        // M8 Slice 4: every pinned project context item
+        // must resolve to a real row in the source
+        // package, in the pinned project, with matching
+        // hash and privacy — memory items through their
+        // revision rows (same checks as above, plus the
+        // pinned revision's metadata projectId), artifact
+        // items through their version rows (same
+        // workspace, pinned project, eligible type,
+        // non-Sealed, snapshot body hashing to the pinned
+        // hash). A fabricated, reassigned, Sealed or
+        // corrupted original refuses the whole restore
+        // before any destination state is published.
+        if let Some(context) = &doc.project_context {
+            let project_id = &context.project_id;
+            for entry in &context.items {
+                match entry.kind.as_str() {
+                    "memory" => {
+                        let revision_id =
+                            entry.revision_id.clone().ok_or_else(crate::jobs::invalid)?;
+                        let memory_id = entry.memory_id.clone().ok_or_else(crate::jobs::invalid)?;
+                        let found: Option<(String, String, String, String)> = source
+                            .query_row(
+                                "SELECT memory_id, workspace_id, body_hash, metadata FROM memory_revisions WHERE id = ?1",
+                                [revision_id],
+                                |r| {
+                                    Ok((
+                                        r.get::<_, String>(0)?,
+                                        r.get::<_, String>(1)?,
+                                        r.get::<_, String>(2)?,
+                                        r.get::<_, String>(3)?,
+                                    ))
+                                },
+                            )
+                            .ok();
+                        let Some((owner_memory, owner_workspace, row_hash, raw_meta)) = found
+                        else {
+                            return Err(crate::jobs::invalid());
+                        };
+                        if owner_memory != memory_id
+                            || owner_workspace != artifact_workspace
+                            || row_hash != entry.content_hash
+                            || crate::content::hash(entry.content.as_bytes()) != entry.content_hash
+                        {
+                            return Err(crate::jobs::invalid());
+                        }
+                        let meta: serde_json::Value =
+                            serde_json::from_str(&raw_meta).map_err(|_| crate::jobs::invalid())?;
+                        if meta.get("privacy").and_then(|v| v.as_str()) == Some("sealed")
+                            || meta.get("privacy").and_then(|v| v.as_str())
+                                != Some(entry.privacy.as_str())
+                            || meta.get("version").and_then(|v| v.as_u64())
+                                != Some(u64::from(entry.version))
+                            || meta.get("title").and_then(|v| v.as_str())
+                                != Some(entry.title.as_str())
+                            || meta.get("projectId").and_then(|v| v.as_str())
+                                != Some(project_id.as_str())
+                        {
+                            return Err(crate::jobs::invalid());
+                        }
+                    }
+                    "artifact" => {
+                        let artifact_id =
+                            entry.artifact_id.clone().ok_or_else(crate::jobs::invalid)?;
+                        let found: Option<(String, String, String, i64, String, String, String)> =
+                            source
+                                .query_row(
+                                    "SELECT workspace_id, project_id, artifact_type, version, privacy, content_hash, body FROM artifact_versions WHERE artifact_id = ?1 AND version = ?2",
+                                    rusqlite::params![artifact_id, entry.version],
+                                    |r| {
+                                        Ok((
+                                            r.get::<_, String>(0)?,
+                                            r.get::<_, String>(1)?,
+                                            r.get::<_, String>(2)?,
+                                            r.get::<_, i64>(3)?,
+                                            r.get::<_, String>(4)?,
+                                            r.get::<_, String>(5)?,
+                                            r.get::<_, String>(6)?,
+                                        ))
+                                    },
+                                )
+                                .ok();
+                        let Some((
+                            row_workspace,
+                            row_project,
+                            row_type,
+                            row_version,
+                            row_privacy,
+                            row_hash,
+                            row_body,
+                        )) = found
+                        else {
+                            return Err(crate::jobs::invalid());
+                        };
+                        let entry_type = entry
+                            .artifact_type
+                            .clone()
+                            .ok_or_else(crate::jobs::invalid)?;
+                        if row_workspace != artifact_workspace
+                            || row_project != *project_id
+                            || row_type != entry_type
+                            || !crate::artifacts::ARTIFACT_TYPES.contains(&row_type.as_str())
+                            || row_version != i64::from(entry.version)
+                            || row_privacy != entry.privacy
+                            || row_privacy == "sealed"
+                            || row_hash != entry.content_hash
+                            || crate::content::hash(row_body.as_bytes()) != entry.content_hash
+                            || crate::content::hash(entry.content.as_bytes()) != entry.content_hash
+                        {
+                            return Err(crate::jobs::invalid());
+                        }
+                    }
+                    _ => return Err(crate::jobs::invalid()),
+                }
+            }
+        }
     }
     Ok(())
 }
@@ -1071,23 +1186,40 @@ fn remap_artifact_row(
     // resolve to the restored memory/revision, fail
     // closed when either is not in the package, and the
     // revision's owner must match the pinned memory in
-    // the artifact's own workspace. Snapshot content and
-    // pinned hashes stay verbatim; the row hash is
-    // recomputed when the body changed.
+    // the artifact's own workspace. Slice 4 project
+    // context remaps next, chained on the already
+    // memory-remapped body: its memory items move
+    // through the same ownership check, its artifact
+    // items move their artifact id only, and its pinned
+    // project id moves through the memory identity map.
+    // Snapshot content and pinned hashes stay verbatim;
+    // the row hash is recomputed when the body changed.
     let is_experiment = matches!(&columns[type_i], Value::Text(t) if t == "experiment");
     if is_experiment {
         let body_i = index("body")?;
         let hash_i = index("content_hash")?;
-        if let Value::Text(body) = &columns[body_i]
-            && let Some(rewritten) = crate::collider::remap_experiment_memory_references(
-                body,
+        if let Value::Text(body) = &columns[body_i] {
+            let mut current = body.clone();
+            if let Some(rewritten) = crate::collider::remap_experiment_memory_references(
+                &current,
                 ids,
                 revision_owners,
                 old_workspace,
-            )?
-        {
-            columns[hash_i] = Value::Text(crate::content::hash(rewritten.as_bytes()));
-            columns[body_i] = Value::Text(rewritten);
+            )? {
+                current = rewritten;
+            }
+            if let Some(rewritten) = crate::collider::remap_experiment_project_references(
+                &current,
+                ids,
+                revision_owners,
+                old_workspace,
+            )? {
+                current = rewritten;
+            }
+            if current != *body {
+                columns[hash_i] = Value::Text(crate::content::hash(current.as_bytes()));
+                columns[body_i] = Value::Text(current);
+            }
         }
     }
     // Opportunity sets (type `idea`, body format

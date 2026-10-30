@@ -367,6 +367,7 @@ export interface ColliderExperimentDoc {
   format: string;
   memoryContext?: ColliderMemoryContext[];
   model: string;
+  projectContext?: ColliderProjectContext | null;
   provider: string;
   result: ColliderResult;
   version: number;
@@ -426,6 +427,37 @@ export interface ColliderMemoryContext {
   memoryId: string;
   privacy: string;
   revisionId: string;
+  title: string;
+  version: number;
+}
+/**
+ * Resolved project context, saved with the experiment.
+ * `project_title` is the source project's title at
+ * generation time; later renames do not rewrite history.
+ */
+export interface ColliderProjectContext {
+  items: ColliderProjectContextItem[];
+  projectId: string;
+  projectTitle: string;
+}
+/**
+ * One resolved project item, saved verbatim with the
+ * experiment as generation-time provenance. The `kind`
+ * discriminator decides which id fields are meaningful;
+ * validation enforces the per-kind shape. Later edits,
+ * reassignments, archival or sealing of a source never
+ * change this snapshot; the pinned hash lets restore
+ * re-validate it against the source package's rows.
+ */
+export interface ColliderProjectContextItem {
+  artifactId?: string | null;
+  artifactType?: string | null;
+  content: string;
+  contentHash: string;
+  kind: string;
+  memoryId?: string | null;
+  privacy: string;
+  revisionId?: string | null;
   title: string;
   version: number;
 }
@@ -665,6 +697,7 @@ export interface ColliderStartRequest {
   mode?: string | null;
   model?: string | null;
   permitId?: string | null;
+  projectContext?: ColliderProjectSelection | null;
   projectId: string;
   provider?: string | null;
   workspaceId: string;
@@ -695,6 +728,34 @@ export interface ColliderControls {
 export interface ColliderMemorySelection {
   memoryId: string;
   revisionId: string;
+}
+/**
+ * The client's project-context selection: one saved
+ * project plus explicitly chosen items from it. The
+ * project selection alone sends nothing: an absent
+ * `project_context` (or an empty item list, refused)
+ * means no project content reaches the provider.
+ */
+export interface ColliderProjectSelection {
+  items: ColliderProjectItemSelection[];
+  projectId: string;
+}
+/**
+ * One explicitly selected project item, by reference
+ * only. The `kind` discriminator decides which id pair
+ * is meaningful: a memory item pins a memory revision,
+ * an artifact item pins an artifact version. Any other
+ * combination is refused at validation, and every body,
+ * title, privacy label and project-membership claim is
+ * resolved by the backend (see `resolve_project_context`),
+ * never trusted from the client.
+ */
+export interface ColliderProjectItemSelection {
+  artifactId?: string | null;
+  kind: string;
+  memoryId?: string | null;
+  revisionId?: string | null;
+  version?: number | null;
 }
 /**
  * Cost knowledge about a model. `Unknown` is treated as paid everywhere
@@ -1990,6 +2051,16 @@ export interface MemoryListRequest {
   kind?: string | null;
   limit?: number | null;
   offset?: number;
+  /**
+   * Optional project membership filter (M8 Slice 4):
+   * restricts rows to revisions whose metadata
+   * `projectId` equals this id. Applies both to the
+   * current-revision listing and to the revision
+   * history of a single memory, so the collider
+   * project picker can list a project's members and
+   * the versions of one member that belong to it.
+   */
+  projectId?: string | null;
   query?: string | null;
   workspaceId: string;
 }
