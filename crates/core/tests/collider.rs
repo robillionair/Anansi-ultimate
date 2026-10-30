@@ -3527,3 +3527,38 @@ fn review_concept_context_pins_final_hash_after_transfer_fixups_and_restores_twi
         !hash_matches
     );
 }
+
+// R1 additional attack (M8 overnight Windows repair): swapping a
+// snapshot for another legitimate artifact's body, while keeping the
+// pinned artifact id and the real row hash, must refuse. The swapped
+// body is genuine text, but it is not the pinned artifact's body, so
+// it is not an allowed restore transformation of the snapshot.
+#[test]
+fn repair_swapped_legitimate_snapshot_body_refuses_restore() {
+    let fake = start_fake();
+    let f = fixture(&fake, "free");
+    let (body, artifact_id, _, _, other_a_id) = build_saved_project_experiment(&f);
+    let other = read_version(&f.core, &f.ws, &other_a_id, 1);
+    let other_body = other["body"].as_str().unwrap().to_string();
+    let mut doc: Value = serde_json::from_str(&body).unwrap();
+    let item = &mut doc["projectContext"]["items"][1];
+    let actual_source_hash = item["contentHash"].clone();
+    item["content"] = json!(other_body);
+    item["contentHash"] = json!(content::hash(other_body.as_bytes()));
+    item["restoredContentHash"] = actual_source_hash;
+    f.core
+        .artifacts_command(
+            "revise",
+            json!({
+                "contractVersion": 1, "workspaceId": f.ws, "artifactId": artifact_id,
+                "expectedVersion": 1, "title": "Swapped snapshot",
+                "body": serde_json::to_string(&doc).unwrap(), "sourceReferences": []
+            }),
+        )
+        .unwrap();
+    let store = Storage::new(f._dir.path().to_path_buf()).unwrap();
+    let bytes = backup_bytes(f._dir.path(), &store, &f.ws);
+    let fresh_dir = tempfile::tempdir().unwrap();
+    let fresh = Core::with_storage_root(fresh_dir.path().to_path_buf());
+    assert_restore_refused(&fresh, &bytes, "swapped-snapshot");
+}

@@ -234,14 +234,15 @@ pub struct ColliderProjectSelection {
 /// re-validate it against the source package's rows.
 /// `restored_content_hash` is absent on generation and
 /// on memory items, whose bodies restore verbatim. On
-/// an artifact item it records, only when trusted
-/// restore itself changed the referenced artifact's
-/// body (its embedded references were remapped), the
-/// restored row's hash — so the NEXT restore can tell
-/// the restored row apart from the original pinned hash
-/// without conflating the two or rewriting history.
-/// The snapshot content and `content_hash` stay the
-/// original bytes and hash forever.
+/// an artifact item it records, only when restore itself
+/// changed the referenced artifact's body (its embedded
+/// references were remapped), the restored row's hash.
+/// It is untrusted metadata: restore validation never
+/// authorizes a snapshot from this field (see
+/// `allowed_restore_transform` in restore.rs), and the
+/// restore fix-up overwrites it from the final
+/// materialized row. The snapshot content and
+/// `content_hash` stay the original bytes and hash forever.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ColliderProjectContextItem {

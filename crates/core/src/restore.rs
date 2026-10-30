@@ -490,6 +490,34 @@ fn fix_experiment_project_artifact_hashes(
     Err(crate::jobs::invalid())
 }
 
+/// R2: run every pinned-hash fix-up to a global
+/// fixpoint. See the call site in `restore_snapshot`
+/// for why a single ordered pass is not enough.
+fn apply_pinned_hash_fixups(
+    names: &[String],
+    values: &mut [Vec<rusqlite::types::Value>],
+) -> Result<(), CommandError> {
+    let mut converged = false;
+    for _ in 0..=values.len() {
+        let snapshot = values.to_vec();
+        fix_approval_hashes(names, values)?;
+        fix_deliverable_hashes(names, values)?;
+        fix_review_hashes(names, values)?;
+        fix_experiment_project_artifact_hashes(names, values)?;
+        fix_transfer_experiment_hashes(names, values)?;
+        fix_transfer_receipt_hashes(names, values)?;
+        if values == snapshot {
+            converged = true;
+            break;
+        }
+    }
+    if converged {
+        Ok(())
+    } else {
+        Err(crate::jobs::invalid())
+    }
+}
+
 fn fix_review_hashes(
     names: &[String],
     values: &mut [Vec<rusqlite::types::Value>],
@@ -947,6 +975,399 @@ fn validate_original_transfer_bindings(source: &rusqlite::Connection) -> Result<
     Ok(())
 }
 
+/// R1 (M8 overnight Windows repair): a source row body
+/// is an allowed restore transformation of a snapshot
+/// only when it differs from that snapshot in exactly
+/// the ways restore itself transforms a body — id
+/// substitutions through the restore identity map and
+/// pinned-hash rewrites to a referenced package row's
+/// hash — and every such difference is verified against
+/// the source package's own rows. The experiment item's
+/// `restoredContentHash` field is never consulted here:
+/// it is client-editable, so it cannot authorize
+/// provenance. A snapshot that differs in any other
+/// field (text, title, combination, brief, file content
+/// and so on) is invented content, even when its own
+/// hash is internally consistent and its restored field
+/// happens to name the real row hash.
+fn is_lower_hex(value: &str, len: usize) -> bool {
+    value.len() == len
+        && value
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+}
+
+fn package_artifact_hash(
+    source: &rusqlite::Connection,
+    artifact_id: &str,
+    version: i64,
+) -> Option<String> {
+    source
+        .query_row(
+            "SELECT content_hash FROM artifact_versions WHERE artifact_id = ?1 AND version = ?2",
+            rusqlite::params![artifact_id, version],
+            |r| r.get(0),
+        )
+        .ok()
+}
+
+fn package_id_exists(source: &rusqlite::Connection, id: &str) -> bool {
+    for (table, column) in [
+        ("artifact_versions", "artifact_id"),
+        ("memories", "id"),
+        ("memory_revisions", "id"),
+        ("workspaces", "id"),
+    ] {
+        if let Ok(mut stmt) = source.prepare(&format!(
+            "SELECT 1 FROM {table} WHERE {column} = ?1 LIMIT 1"
+        )) && let Ok(true) = stmt.exists(rusqlite::params![id])
+        {
+            return true;
+        }
+    }
+    false
+}
+
+/// A differing id is an allowed remap only when the new
+/// id is a package id and the old id is not: a genuine
+/// restore always replaces an old id with a new package
+/// id, never with another id already in the package.
+fn check_id_change(source: &rusqlite::Connection, original: &str, transformed: &str) -> bool {
+    original == transformed
+        || (is_lower_hex(transformed, 32)
+            && package_id_exists(source, transformed)
+            && !package_id_exists(source, original))
+}
+
+fn check_id_field(
+    source: &rusqlite::Connection,
+    original: &serde_json::Value,
+    transformed: &serde_json::Value,
+    key: &str,
+) -> bool {
+    match (
+        original.get(key).and_then(|v| v.as_str()),
+        transformed.get(key).and_then(|v| v.as_str()),
+    ) {
+        (None, None) => true,
+        (Some(old), Some(new)) => check_id_change(source, old, new),
+        _ => false,
+    }
+}
+
+/// A differing pinned hash is allowed only when it is
+/// exactly the package row hash for the artifact the
+/// transformed body itself references by id+version.
+fn check_hash_field(
+    source: &rusqlite::Connection,
+    original: &serde_json::Value,
+    transformed: &serde_json::Value,
+    key: &str,
+    ref_id: Option<&str>,
+    ref_version: Option<i64>,
+) -> bool {
+    match (
+        original.get(key).and_then(|v| v.as_str()),
+        transformed.get(key).and_then(|v| v.as_str()),
+    ) {
+        (None, None) => true,
+        (Some(old), Some(new)) => {
+            old == new
+                || (is_lower_hex(new, 64)
+                    && ref_id.is_some()
+                    && ref_version.is_some()
+                    && package_artifact_hash(
+                        source,
+                        ref_id.unwrap_or_default(),
+                        ref_version.unwrap_or_default(),
+                    )
+                    .as_deref()
+                        == Some(new))
+        }
+        _ => false,
+    }
+}
+
+fn normalize_field(normalized: &mut serde_json::Value, original: &serde_json::Value, key: &str) {
+    if let Some(obj) = normalized.as_object_mut() {
+        match original.get(key) {
+            Some(value) => {
+                obj.insert(key.to_string(), value.clone());
+            }
+            None => {
+                obj.remove(key);
+            }
+        }
+    }
+}
+
+fn str_field<'a>(doc: &'a serde_json::Value, key: &str) -> Option<&'a str> {
+    doc.get(key).and_then(|v| v.as_str())
+}
+
+fn version_field(doc: &serde_json::Value, key: &str) -> Option<i64> {
+    doc.get(key).and_then(|v| v.as_u64()).map(|v| v as i64)
+}
+
+/// Compare two arrays elementwise after normalizing
+/// allowed id fields on each element. Returns false on
+/// length mismatch or on any element the caller rejects.
+fn check_id_array(
+    source: &rusqlite::Connection,
+    original: &serde_json::Value,
+    normalized: &mut serde_json::Value,
+    field: &str,
+    keys: &[&str],
+) -> bool {
+    let Some(orig_items) = original.get(field).and_then(|v| v.as_array()) else {
+        return normalized.get(field).is_none();
+    };
+    let Some(norm_items) = normalized.get_mut(field).and_then(|v| v.as_array_mut()) else {
+        return false;
+    };
+    if orig_items.len() != norm_items.len() {
+        return false;
+    }
+    for (orig, norm) in orig_items.iter().zip(norm_items.iter_mut()) {
+        for key in keys {
+            if !check_id_field(source, orig, norm, key) {
+                return false;
+            }
+            normalize_field(norm, orig, key);
+        }
+    }
+    true
+}
+
+fn allowed_restore_transform(
+    source: &rusqlite::Connection,
+    original_body: &str,
+    transformed_body: &str,
+) -> bool {
+    let Ok(original) = serde_json::from_str::<serde_json::Value>(original_body) else {
+        return false;
+    };
+    let Ok(transformed) = serde_json::from_str::<serde_json::Value>(transformed_body) else {
+        return false;
+    };
+    let Some(format) = str_field(&original, "format") else {
+        return false;
+    };
+    if str_field(&transformed, "format") != Some(format) {
+        return false;
+    }
+    if !matches!(
+        format,
+        "anansi-collider-experiment"
+            | "anansi-evaluation"
+            | "anansi-product-spec"
+            | "anansi-source-package"
+            | "anansi-deliverable"
+            | "anansi-source-review"
+            | "anansi-specification-approval"
+            | "anansi-transfer-approval"
+            | "anansi-forge-concept"
+            | "anansi-opportunity-set"
+    ) {
+        return false;
+    }
+    let mut normalized = transformed.clone();
+    match format {
+        "anansi-collider-experiment" => {
+            if !check_id_array(
+                source,
+                &original,
+                &mut normalized,
+                "memoryContext",
+                &["memoryId", "revisionId"],
+            ) {
+                return false;
+            }
+            let Some(orig_ctx) = original.get("projectContext") else {
+                return normalized.get("projectContext").is_none();
+            };
+            let Some(norm_ctx) = normalized.get_mut("projectContext") else {
+                return false;
+            };
+            if !check_id_field(source, orig_ctx, norm_ctx, "projectId") {
+                return false;
+            }
+            normalize_field(norm_ctx, orig_ctx, "projectId");
+            let Some(orig_items) = orig_ctx.get("items").and_then(|v| v.as_array()) else {
+                return norm_ctx.get("items").is_none();
+            };
+            let Some(norm_items) = norm_ctx.get_mut("items").and_then(|v| v.as_array_mut()) else {
+                return false;
+            };
+            if orig_items.len() != norm_items.len() {
+                return false;
+            }
+            for (orig, norm) in orig_items.iter().zip(norm_items.iter_mut()) {
+                for key in ["memoryId", "revisionId", "artifactId"] {
+                    if !check_id_field(source, orig, norm, key) {
+                        return false;
+                    }
+                    normalize_field(norm, orig, key);
+                }
+                // A restored item hash in the transformed
+                // body must name the package row it
+                // points at; the field itself is then
+                // normalized away, so it cannot authorize
+                // any other difference.
+                if let Some(restored) = str_field(norm, "restoredContentHash")
+                    && !is_lower_hex(restored, 64)
+                {
+                    return false;
+                }
+                if let Some(restored) = str_field(norm, "restoredContentHash") {
+                    let ref_id = str_field(norm, "artifactId");
+                    let ref_version = version_field(norm, "version");
+                    if ref_id.is_none()
+                        || ref_version.is_none()
+                        || package_artifact_hash(
+                            source,
+                            ref_id.unwrap_or_default(),
+                            ref_version.unwrap_or_default(),
+                        )
+                        .as_deref()
+                            != Some(restored)
+                    {
+                        return false;
+                    }
+                }
+                normalize_field(norm, orig, "restoredContentHash");
+            }
+        }
+        "anansi-evaluation" => {
+            for key in ["sourceArtifactId", "rubricArtifactId"] {
+                if !check_id_field(source, &original, &normalized, key) {
+                    return false;
+                }
+                normalize_field(&mut normalized, &original, key);
+            }
+        }
+        "anansi-product-spec" => {
+            if !check_id_field(source, &original, &normalized, "sourceArtifactId") {
+                return false;
+            }
+            normalize_field(&mut normalized, &original, "sourceArtifactId");
+        }
+        "anansi-source-package" => {
+            for key in [
+                "specArtifactId",
+                "sourceArtifactId",
+                "parentPackageArtifactId",
+            ] {
+                if !check_id_field(source, &original, &normalized, key) {
+                    return false;
+                }
+                normalize_field(&mut normalized, &original, key);
+            }
+        }
+        "anansi-deliverable" | "anansi-source-review" => {
+            for key in ["packageArtifactId", "specArtifactId"] {
+                if !check_id_field(source, &original, &normalized, key) {
+                    return false;
+                }
+                normalize_field(&mut normalized, &original, key);
+            }
+            if !check_hash_field(
+                source,
+                &original,
+                &normalized,
+                "packageContentHash",
+                str_field(&transformed, "packageArtifactId"),
+                version_field(&transformed, "packageVersion"),
+            ) || !check_hash_field(
+                source,
+                &original,
+                &normalized,
+                "specContentHash",
+                str_field(&transformed, "specArtifactId"),
+                version_field(&transformed, "specVersion"),
+            ) {
+                return false;
+            }
+            normalize_field(&mut normalized, &original, "packageContentHash");
+            normalize_field(&mut normalized, &original, "specContentHash");
+        }
+        "anansi-specification-approval" => {
+            if !check_id_field(source, &original, &normalized, "specArtifactId") {
+                return false;
+            }
+            normalize_field(&mut normalized, &original, "specArtifactId");
+            if !check_hash_field(
+                source,
+                &original,
+                &normalized,
+                "specContentHash",
+                str_field(&transformed, "specArtifactId"),
+                version_field(&transformed, "specVersion"),
+            ) {
+                return false;
+            }
+            normalize_field(&mut normalized, &original, "specContentHash");
+        }
+        "anansi-transfer-approval" => {
+            for key in ["conceptArtifactId", "sourceExperimentArtifactId"] {
+                if !check_id_field(source, &original, &normalized, key) {
+                    return false;
+                }
+                normalize_field(&mut normalized, &original, key);
+            }
+            if !check_hash_field(
+                source,
+                &original,
+                &normalized,
+                "conceptContentHash",
+                str_field(&transformed, "conceptArtifactId"),
+                version_field(&transformed, "conceptVersion"),
+            ) || !check_hash_field(
+                source,
+                &original,
+                &normalized,
+                "sourceExperimentContentHash",
+                str_field(&transformed, "sourceExperimentArtifactId"),
+                version_field(&transformed, "sourceExperimentVersion"),
+            ) {
+                return false;
+            }
+            normalize_field(&mut normalized, &original, "conceptContentHash");
+            normalize_field(&mut normalized, &original, "sourceExperimentContentHash");
+        }
+        "anansi-forge-concept" => {
+            if !check_id_field(source, &original, &normalized, "sourceExperimentArtifactId") {
+                return false;
+            }
+            normalize_field(&mut normalized, &original, "sourceExperimentArtifactId");
+            if !check_hash_field(
+                source,
+                &original,
+                &normalized,
+                "sourceExperimentContentHash",
+                str_field(&transformed, "sourceExperimentArtifactId"),
+                version_field(&transformed, "sourceExperimentVersion"),
+            ) {
+                return false;
+            }
+            normalize_field(&mut normalized, &original, "sourceExperimentContentHash");
+        }
+        "anansi-opportunity-set" => {
+            if !check_id_array(
+                source,
+                &original,
+                &mut normalized,
+                "sources",
+                &["memoryId", "sourceId", "revisionId"],
+            ) {
+                return false;
+            }
+        }
+        _ => return false,
+    }
+    normalized == original
+}
+
 /// M8 Slice 1: a saved collider experiment whose body
 /// declares the collider format must fully validate
 /// before any destination write, mirroring the review
@@ -1125,16 +1546,23 @@ fn validate_original_experiment_bindings(
                             .clone()
                             .ok_or_else(crate::jobs::invalid)?;
                         // The snapshot stays the original
-                        // bytes and hash forever. The row
-                        // binding accepts the original hash
-                        // or, for an item restore itself
-                        // diverged on an earlier restore,
-                        // the recorded restored hash; the
-                        // row body must hash to whichever
-                        // row hash binds. A restored hash
-                        // matching neither hash refuses,
-                        // so a fabricated original is
-                        // never repaired by recomputation.
+                        // bytes and hash forever. R1: the
+                        // body-supplied restored hash is
+                        // untrusted metadata and is never
+                        // an authorization. A pristine row
+                        // must be byte-identical to the
+                        // snapshot; a diverged row must be
+                        // an allowed restore transformation
+                        // of the snapshot, verified
+                        // against the package's own rows
+                        // (see allowed_restore_transform).
+                        // A fabricated original is never
+                        // repaired by recomputation.
+                        let binding_ok = if row_hash == entry.content_hash {
+                            entry.content == row_body
+                        } else {
+                            allowed_restore_transform(source, &entry.content, &row_body)
+                        };
                         if row_workspace != artifact_workspace
                             || row_project != *project_id
                             || row_type != entry_type
@@ -1144,9 +1572,7 @@ fn validate_original_experiment_bindings(
                             || row_privacy == "sealed"
                             || crate::content::hash(entry.content.as_bytes()) != entry.content_hash
                             || crate::content::hash(row_body.as_bytes()) != row_hash
-                            || (row_hash != entry.content_hash
-                                && entry.restored_content_hash.as_deref()
-                                    != Some(row_hash.as_str()))
+                            || !binding_ok
                         {
                             return Err(crate::jobs::invalid());
                         }
@@ -1657,29 +2083,21 @@ impl crate::storage::Storage {
                 values.push(columns);
             }
             if table == "artifact_versions" {
-                fix_approval_hashes(&names, &mut values)?;
-                fix_deliverable_hashes(&names, &mut values)?;
-                fix_review_hashes(&names, &mut values)?;
-                // Order matters: the project-artifact
-                // fix-up records restored hashes on
-                // experiment items, which changes
-                // experiment row hashes. It must run
-                // before the transfer fix-ups, so
-                // concepts and receipts pin the final
-                // experiment hashes. The experiment
-                // fix-up rewrites concept bodies (their
-                // pinned experiment hash follows the
-                // restored experiment row), which
-                // changes concept row hashes. The
-                // receipt fix-up must run after it so
-                // the receipt pins the final concept
-                // hash; the reverse order leaves a stale
-                // conceptContentHash whenever the
-                // experiment hash changes on restore
-                // (e.g. remapped memory references).
-                fix_experiment_project_artifact_hashes(&names, &mut values)?;
-                fix_transfer_experiment_hashes(&names, &mut values)?;
-                fix_transfer_receipt_hashes(&names, &mut values)?;
+                // R2: a single ordered pass cannot pin
+                // final hashes when fix-ups feed each
+                // other — the experiment-project pass
+                // records a concept's hash, then the
+                // transfer pass rewrites that concept's
+                // body, leaving the recorded hash stale
+                // for the next restore. Run all passes
+                // to a global fixpoint instead (see
+                // apply_pinned_hash_fixups): each round
+                // sets every pinned field to its
+                // referenced row's current hash, and
+                // publication proceeds only when a full
+                // round changes nothing, so every pinned
+                // field names a final materialized row.
+                apply_pinned_hash_fixups(&names, &mut values)?;
             }
             prepared.push((table, names, values));
         }
@@ -2038,7 +2456,13 @@ mod experiment_binding_tests {
     /// pins. The experiment body is re-hashed on insert,
     /// so a test body is always internally consistent;
     /// only the bindings under test vary.
-    fn setup_project(exp_body: &str, art_body: &str, art_hash: &str, mem_hash: &str) -> Connection {
+    fn setup_project(
+        exp_body: &str,
+        art_body: &str,
+        art_hash: &str,
+        mem_hash: &str,
+        art_type: &str,
+    ) -> Connection {
         let db = Connection::open_in_memory().unwrap();
         db.execute_batch(
             "CREATE TABLE artifact_versions (artifact_id TEXT, workspace_id TEXT, project_id TEXT, artifact_type TEXT, version INTEGER, privacy TEXT, content_hash TEXT, body TEXT);
@@ -2052,8 +2476,19 @@ mod experiment_binding_tests {
         )
         .unwrap();
         db.execute(
-            "INSERT INTO artifact_versions VALUES ('art-1', 'ws-1', 'proj-1', 'note', 1, 'private', ?1, ?2)",
-            rusqlite::params![art_hash, art_body],
+            "INSERT INTO artifact_versions VALUES ('art-1', 'ws-1', 'proj-1', ?1, 1, 'private', ?2, ?3)",
+            rusqlite::params![art_type, art_hash, art_body],
+        )
+        .unwrap();
+        // Referenced experiment row used by the
+        // concept-transform restored case below; its
+        // plain body is skipped by experiment
+        // validation, so other cases are unaffected.
+        let exp9_body = "exp9 body";
+        let exp9_hash = crate::content::hash(exp9_body.as_bytes());
+        db.execute(
+            "INSERT INTO artifact_versions VALUES ('exp-9', 'ws-1', 'proj-1', 'experiment', 1, 'private', ?1, ?2)",
+            rusqlite::params![exp9_hash, exp9_body],
         )
         .unwrap();
         db.execute(
@@ -2067,16 +2502,21 @@ mod experiment_binding_tests {
         db
     }
 
-    fn project_item(restored: Option<&str>, content_hash: &str) -> serde_json::Value {
+    fn project_item(
+        restored: Option<&str>,
+        content_hash: &str,
+        art_type: &str,
+        content: &str,
+    ) -> serde_json::Value {
         let mut item = serde_json::json!({
             "kind": "artifact",
             "memoryId": null,
             "revisionId": null,
             "artifactId": "art-1",
-            "artifactType": "note",
+            "artifactType": art_type,
             "version": 1,
             "title": "Note",
-            "content": "source note body",
+            "content": content,
             "contentHash": content_hash,
             "privacy": "private"
         });
@@ -2104,17 +2544,74 @@ mod experiment_binding_tests {
         let art_content = "source note body";
         let art_hash = crate::content::hash(art_content.as_bytes());
         // Valid original: no restored hash, row matches the pinned hash.
-        let original = with_project_item(&base, project_item(None, &art_hash));
-        let db = setup_project(&original, art_content, &art_hash, &hash);
+        let original = with_project_item(&base, project_item(None, &art_hash, "note", art_content));
+        let db = setup_project(&original, art_content, &art_hash, &hash, "note");
         assert!(validate_original_experiment_bindings(&db).is_ok());
-        // Valid restored state: the row diverged on an
-        // earlier restore and the item records its hash;
-        // the snapshot still carries the original body.
+        // Valid restored state (R1): the row diverged
+        // on an earlier restore only by an allowed
+        // transformation — here a forge-concept whose
+        // pinned experiment hash now names the package
+        // experiment row — and the snapshot still
+        // carries the original body. The restored field
+        // is not what authorizes this; the transform
+        // check against the package row does.
+        let exp9_hash = crate::content::hash("exp9 body".as_bytes());
+        let concept_original = serde_json::json!({
+            "format": "anansi-forge-concept",
+            "version": 1,
+            "sourceExperimentArtifactId": "exp-9",
+            "sourceExperimentVersion": 1,
+            "sourceExperimentContentHash": crate::content::hash("original experiment body".as_bytes()),
+            "selectedCombinationIndex": 0,
+            "selectedCombination": {"name": "One", "description": "First"},
+            "approvedBrief": "Route venues.",
+            "assumptions": [],
+            "unknowns": [],
+            "productizationBrief": "Brief.",
+            "provider": "ollama",
+            "model": "llama-x"
+        });
+        let mut concept_restored = concept_original.clone();
+        concept_restored["sourceExperimentContentHash"] = serde_json::json!(exp9_hash);
+        let concept_original_str = serde_json::to_string(&concept_original).unwrap();
+        let concept_restored_str = serde_json::to_string(&concept_restored).unwrap();
+        let concept_original_hash = crate::content::hash(concept_original_str.as_bytes());
+        let concept_restored_hash = crate::content::hash(concept_restored_str.as_bytes());
+        let restored = with_project_item(
+            &base,
+            project_item(
+                Some(&concept_restored_hash),
+                &concept_original_hash,
+                "concept",
+                &concept_original_str,
+            ),
+        );
+        let db = setup_project(
+            &restored,
+            &concept_restored_str,
+            &concept_restored_hash,
+            &hash,
+            "concept",
+        );
+        assert!(validate_original_experiment_bindings(&db).is_ok());
+        // R1 plain-text divergence refuses even when
+        // the item records the diverged row's hash:
+        // restore never transforms plain text, so a
+        // different plain body is invented content.
         let restored_body = "restored note body with remapped ids";
         let restored_hash = crate::content::hash(restored_body.as_bytes());
-        let restored = with_project_item(&base, project_item(Some(&restored_hash), &art_hash));
-        let db = setup_project(&restored, restored_body, &restored_hash, &hash);
-        assert!(validate_original_experiment_bindings(&db).is_ok());
+        let plain_restored = with_project_item(
+            &base,
+            project_item(Some(&restored_hash), &art_hash, "note", art_content),
+        );
+        let db = setup_project(
+            &plain_restored,
+            restored_body,
+            &restored_hash,
+            &hash,
+            "note",
+        );
+        assert!(validate_original_experiment_bindings(&db).is_err());
         // Fabricated restored hash matching neither the
         // pinned hash nor a diverged row's hash refuses:
         // restore never repairs an original by
@@ -2127,9 +2624,14 @@ mod experiment_binding_tests {
         let third_hash = crate::content::hash(third_body.as_bytes());
         let fabricated = with_project_item(
             &base,
-            project_item(Some(&crate::content::hash("neither".as_bytes())), &art_hash),
+            project_item(
+                Some(&crate::content::hash("neither".as_bytes())),
+                &art_hash,
+                "note",
+                art_content,
+            ),
         );
-        let db = setup_project(&fabricated, third_body, &third_hash, &hash);
+        let db = setup_project(&fabricated, third_body, &third_hash, &hash, "note");
         assert!(validate_original_experiment_bindings(&db).is_err());
         // A restored hash on a memory item refuses at
         // document validation, before any row is read.
@@ -2147,8 +2649,104 @@ mod experiment_binding_tests {
         });
         mem_item["restoredContentHash"] = serde_json::json!(restored_hash);
         let mem_doc = with_project_item(&base, mem_item);
-        let db = setup_project(&mem_doc, art_content, &art_hash, &hash);
+        let db = setup_project(&mem_doc, art_content, &art_hash, &hash, "note");
         assert!(validate_original_experiment_bindings(&db).is_err());
+    }
+
+    #[test]
+    fn pinned_hash_fixups_refuse_a_same_version_cycle() {
+        // A same-version experiment → concept →
+        // experiment cycle cannot arise through the API
+        // (a revise always creates a new version, which
+        // breaks the cycle), but a hand-crafted package
+        // can contain one. Each fix-up round then
+        // changes both row hashes, so the bounded
+        // global fixpoint must refuse instead of
+        // looping or publishing stale pins.
+        use rusqlite::types::Value;
+        let exp_id = "aa".repeat(16);
+        let concept_id = "bb".repeat(16);
+        let concept_original = serde_json::json!({
+            "format": "anansi-forge-concept",
+            "version": 1,
+            "sourceExperimentArtifactId": exp_id,
+            "sourceExperimentVersion": 1,
+            "sourceExperimentContentHash": "placeholder",
+            "selectedCombinationIndex": 0,
+            "selectedCombination": {"name": "One", "description": "First"},
+            "approvedBrief": "Route venues.",
+            "assumptions": [],
+            "unknowns": [],
+            "productizationBrief": "Brief.",
+            "provider": "ollama",
+            "model": "llama-x"
+        });
+        let concept_original_str = serde_json::to_string(&concept_original).unwrap();
+        let concept_original_hash = crate::content::hash(concept_original_str.as_bytes());
+        let exp_body = serde_json::json!({
+            "format": "anansi-collider-experiment",
+            "version": 1,
+            "beamA": "Trading.",
+            "beamB": "Mycelium.",
+            "controls": {"creativity": "balanced", "technicalDepth": "standard", "practicality": "balanced", "innovationDistance": "moderate", "budget": "", "preferredOutputType": "concept"},
+            "memoryContext": [],
+            "projectContext": {
+                "projectId": "proj-1",
+                "projectTitle": "Project",
+                "items": [{
+                    "kind": "artifact",
+                    "memoryId": null,
+                    "revisionId": null,
+                    "artifactId": concept_id,
+                    "artifactType": "concept",
+                    "version": 1,
+                    "title": "Concept",
+                    "content": concept_original_str,
+                    "contentHash": concept_original_hash,
+                    "privacy": "private"
+                }]
+            },
+            "result": {"sourceUnderstanding": "Two domains.", "conceptualPrimitives": [], "crossDomainMappings": [], "combinations": [], "feasibility": {"hypotheses": [], "dependencies": [], "unknownCosts": [], "risks": [], "testability": "testable"}, "productization": {"conceptBrief": "brief", "architecture": "arch", "roadmap": "road", "testPlan": "plan", "prototypeProposal": "proto"}},
+            "provider": "ollama",
+            "model": "llama-x",
+            "disclosure": {"provider": "ollama", "model": "llama-x", "endpointHost": "localhost", "local": true, "costClass": "free", "routingMode": "local", "routingReason": "local", "messageCount": 1, "segmentCount": 1, "redactionCount": 0, "estimatedInputTokens": 1, "attempts": []}
+        });
+        let exp_doc = exp_body;
+        let exp_str = serde_json::to_string(&exp_doc).unwrap();
+        let exp_hash = crate::content::hash(exp_str.as_bytes());
+        let mut concept_doc = concept_original;
+        concept_doc["sourceExperimentContentHash"] = serde_json::json!(exp_hash);
+        let concept_str = serde_json::to_string(&concept_doc).unwrap();
+        let concept_hash = crate::content::hash(concept_str.as_bytes());
+        // The experiment item's snapshot is the concept
+        // body before its experiment hash was pinned, so
+        // the item's restored hash must follow the
+        // concept row through the fix-ups — and the
+        // concept row must follow the experiment row.
+        let names = vec![
+            "artifact_type".to_string(),
+            "body".to_string(),
+            "content_hash".to_string(),
+            "artifact_id".to_string(),
+            "version".to_string(),
+        ];
+        let mut values = vec![
+            vec![
+                Value::Text("experiment".to_string()),
+                Value::Text(exp_str),
+                Value::Text(exp_hash),
+                Value::Text(exp_id),
+                Value::Integer(1),
+            ],
+            vec![
+                Value::Text("concept".to_string()),
+                Value::Text(concept_str),
+                Value::Text(concept_hash),
+                Value::Text(concept_id),
+                Value::Integer(1),
+            ],
+        ];
+        assert!(apply_pinned_hash_fixups(&names, &mut values).is_err());
     }
 
     #[test]
