@@ -1613,7 +1613,7 @@ export function ColliderPanel({
           rows={5}
         />
         <label htmlFor="collider-document-a">
-          Document for Beam A (.txt or .md)
+          Document for the first beam (.txt or .md)
         </label>
         <input
           id="collider-document-a"
@@ -1657,7 +1657,7 @@ export function ColliderPanel({
           rows={5}
         />
         <label htmlFor="collider-document-b">
-          Document for Beam B (.txt or .md)
+          Document for the second beam (.txt or .md)
         </label>
         <input
           id="collider-document-b"

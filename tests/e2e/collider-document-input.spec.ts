@@ -192,7 +192,7 @@ test('collider document input: review -> race -> reselect -> reject -> collide -
     // Beam A from a document: exact decoded text is
     // reviewed with its source label, and no provider
     // traffic happens on selection or review.
-    await collider.getByLabel('Document for Beam A (.txt or .md)', { exact: true }).setInputFiles(docA);
+    await collider.getByLabel('Document for the first beam (.txt or .md)', { exact: true }).setInputFiles(docA);
     await expect(collider.getByLabel('Beam A', { exact: true })).toHaveValue('  Field notes\n\tIndented line\n');
     await expect(collider.getByText(/Document: field-notes\.md/)).toBeVisible();
     await expect(collider.getByText(/leading BOM stripped/)).toBeVisible();
@@ -201,8 +201,8 @@ test('collider document input: review -> race -> reselect -> reject -> collide -
     // Source-switch race: two picks for the same beam in
     // succession must end with the second pick's content
     // and attribution, whatever the read interleaving.
-    await collider.getByLabel('Document for Beam A (.txt or .md)', { exact: true }).setInputFiles(raceA);
-    await collider.getByLabel('Document for Beam A (.txt or .md)', { exact: true }).setInputFiles(raceB);
+    await collider.getByLabel('Document for the first beam (.txt or .md)', { exact: true }).setInputFiles(raceA);
+    await collider.getByLabel('Document for the first beam (.txt or .md)', { exact: true }).setInputFiles(raceB);
     await expect(collider.getByLabel('Beam A', { exact: true })).toHaveValue(raceBText);
     await expect(collider.getByText(/Document: race-b\.md/)).toBeVisible();
     expect(fakeHits).toBe(0);
@@ -211,22 +211,22 @@ test('collider document input: review -> race -> reselect -> reject -> collide -
     // again and the beam updates.
     const raceBv2 = 'Winning race content, revised.\n';
     fs.writeFileSync(raceB, raceBv2);
-    await collider.getByLabel('Document for Beam A (.txt or .md)', { exact: true }).setInputFiles(raceB);
+    await collider.getByLabel('Document for the first beam (.txt or .md)', { exact: true }).setInputFiles(raceB);
     await expect(collider.getByLabel('Beam A', { exact: true })).toHaveValue(raceBv2);
     await expect(collider.getByText(/Document: race-b\.md/)).toBeVisible();
 
     // Beam B rejections: invalid UTF-8, then oversized.
     // Both refuse visibly and leave the beam empty.
-    await collider.getByLabel('Document for Beam B (.txt or .md)', { exact: true }).setInputFiles(bad);
+    await collider.getByLabel('Document for the second beam (.txt or .md)', { exact: true }).setInputFiles(bad);
     await expect(collider.getByRole('alert')).toHaveText(/not valid UTF-8/);
     await expect(collider.getByLabel('Beam B', { exact: true })).toHaveValue('');
-    await collider.getByLabel('Document for Beam B (.txt or .md)', { exact: true }).setInputFiles(long);
+    await collider.getByLabel('Document for the second beam (.txt or .md)', { exact: true }).setInputFiles(long);
     await expect(collider.getByRole('alert')).toHaveText(/at most 8000/);
     await expect(collider.getByLabel('Beam B', { exact: true })).toHaveValue('');
     expect(fakeHits).toBe(0);
 
     // Beam B from a document, then the explicit press.
-    await collider.getByLabel('Document for Beam B (.txt or .md)', { exact: true }).setInputFiles(docB);
+    await collider.getByLabel('Document for the second beam (.txt or .md)', { exact: true }).setInputFiles(docB);
     await expect(collider.getByLabel('Beam B', { exact: true })).toHaveValue(docBText);
     await expect(collider.getByText(/Document: mycelium\.txt/)).toBeVisible();
     expect(fakeHits).toBe(0);
