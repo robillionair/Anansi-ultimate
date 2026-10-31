@@ -23,7 +23,7 @@ DPI (paused), reduced motion, and deviceScaleFactor
 accessible fallback; Three.js and remaining §26
 requirements stay unfinished and are not claimed.
 Linux verification: node 105/105, tsc/build/
-contracts clean, docs 202 files, focused browser
+contracts clean, docs 204 files, focused browser
 battery 5/5 (visualization, visualization
 screenshots, document-input, url-input, pipeline
 overview). No backend/schema/contract change;
