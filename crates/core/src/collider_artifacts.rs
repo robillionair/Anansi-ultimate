@@ -57,10 +57,7 @@ pub struct ColliderArtifacts {
 }
 
 fn single_line(value: &str) -> String {
-    value
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
+    value.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 fn header(doc: &ColliderExperimentDoc, title: &str) -> Vec<String> {
@@ -145,11 +142,13 @@ fn architecture(doc: &ColliderExperimentDoc) -> String {
     ));
     let mut blocks = bullets(&doc.result.conceptual_primitives);
     blocks.push(
-        "Note: these are conceptual primitives from the record, not a module list."
-            .to_string(),
+        "Note: these are conceptual primitives from the record, not a module list.".to_string(),
     );
     lines.extend(section("Conceptual building blocks", blocks));
-    lines.extend(section("Module decomposition", vec![NOT_STATED.to_string()]));
+    lines.extend(section(
+        "Module decomposition",
+        vec![NOT_STATED.to_string()],
+    ));
     lines.extend(section(
         "Technology stack options",
         vec![NOT_STATED.to_string()],
@@ -187,10 +186,7 @@ fn feasibility(doc: &ColliderExperimentDoc) -> String {
 fn roadmap(doc: &ColliderExperimentDoc) -> String {
     let p = &doc.result.productization;
     let mut lines = header(doc, "Roadmap");
-    lines.extend(section(
-        "Delivery timeline",
-        vec![p.roadmap.clone()],
-    ));
+    lines.extend(section("Delivery timeline", vec![p.roadmap.clone()]));
     lines.extend(section(
         "Phases",
         vec![
@@ -198,10 +194,7 @@ fn roadmap(doc: &ColliderExperimentDoc) -> String {
                 .to_string(),
         ],
     ));
-    lines.extend(section(
-        "Critical milestones",
-        vec![NOT_STATED.to_string()],
-    ));
+    lines.extend(section("Critical milestones", vec![NOT_STATED.to_string()]));
     lines.extend(section(
         "Dependencies",
         bullets(&doc.result.feasibility.dependencies),
@@ -231,9 +224,7 @@ fn risks(doc: &ColliderExperimentDoc) -> String {
         .collect();
     lines.extend(section("Risks", bullets(&rows)));
     let mut costs = bullets(&doc.result.feasibility.unknown_costs);
-    costs.push(
-        "These are uncertain costs from the record, not risks.".to_string(),
-    );
+    costs.push("These are uncertain costs from the record, not risks.".to_string());
     lines.extend(section("Uncertain costs", costs));
     lines.extend(section(
         "Risk categories",
@@ -276,18 +267,9 @@ fn test_plan(doc: &ColliderExperimentDoc) -> String {
             edge
         },
     ));
-    lines.extend(section(
-        "Adversarial inputs",
-        vec![NOT_STATED.to_string()],
-    ));
-    lines.extend(section(
-        "Stress scenarios",
-        vec![NOT_STATED.to_string()],
-    ));
-    lines.extend(section(
-        "Performance budgets",
-        vec![NOT_STATED.to_string()],
-    ));
+    lines.extend(section("Adversarial inputs", vec![NOT_STATED.to_string()]));
+    lines.extend(section("Stress scenarios", vec![NOT_STATED.to_string()]));
+    lines.extend(section("Performance budgets", vec![NOT_STATED.to_string()]));
     finish(lines)
 }
 
@@ -486,7 +468,10 @@ mod artifact_tests {
         // `derivation_hashes_match_the_typescript_mirror`
         // below, from values this suite prints.
         let hashes = compute_artifacts(&doc);
-        assert_eq!(hashes.concept.bytes, derive_artifact(&doc, "CONCEPT.md").unwrap().len());
+        assert_eq!(
+            hashes.concept.bytes,
+            derive_artifact(&doc, "CONCEPT.md").unwrap().len()
+        );
         check_artifacts(&doc, &hashes).expect("fresh hashes validate");
     }
 
@@ -509,17 +494,35 @@ mod artifact_tests {
         // disagree and the drift is visible.
         let doc = fixture_doc();
         let hashes = compute_artifacts(&doc);
-        assert_eq!(hashes.concept.sha256, "e2cadb381eda099cd0c34ffd318847e5291fdb2b5d3e685502dd88a31299398c");
+        assert_eq!(
+            hashes.concept.sha256,
+            "e2cadb381eda099cd0c34ffd318847e5291fdb2b5d3e685502dd88a31299398c"
+        );
         assert_eq!(hashes.concept.bytes, 882);
-        assert_eq!(hashes.architecture.sha256, "fbd19e41179b140e584a128ff3e2bce470a9735cce141ced119af2573069f007");
+        assert_eq!(
+            hashes.architecture.sha256,
+            "fbd19e41179b140e584a128ff3e2bce470a9735cce141ced119af2573069f007"
+        );
         assert_eq!(hashes.architecture.bytes, 628);
-        assert_eq!(hashes.feasibility.sha256, "19aaa9410f39d5fc981307091a7bf4743169a94d1a6c3bd68c550f7bcd156481");
+        assert_eq!(
+            hashes.feasibility.sha256,
+            "19aaa9410f39d5fc981307091a7bf4743169a94d1a6c3bd68c550f7bcd156481"
+        );
         assert_eq!(hashes.feasibility.bytes, 704);
-        assert_eq!(hashes.roadmap.sha256, "9f53524f011d6621d87e77b9c719db5b07bcdd809151c473e31756c4d9b50c22");
+        assert_eq!(
+            hashes.roadmap.sha256,
+            "9f53524f011d6621d87e77b9c719db5b07bcdd809151c473e31756c4d9b50c22"
+        );
         assert_eq!(hashes.roadmap.bytes, 589);
-        assert_eq!(hashes.risks.sha256, "b9e4a8c213d0d7921651a5d8bdc410f6755bba5055fd73e09fef3c13060d3275");
+        assert_eq!(
+            hashes.risks.sha256,
+            "b9e4a8c213d0d7921651a5d8bdc410f6755bba5055fd73e09fef3c13060d3275"
+        );
         assert_eq!(hashes.risks.bytes, 657);
-        assert_eq!(hashes.test_plan.sha256, "9a9726a6d2e41cfcd364ee3aee42a2531a295aa500b8acbd38091d57973516d5");
+        assert_eq!(
+            hashes.test_plan.sha256,
+            "9a9726a6d2e41cfcd364ee3aee42a2531a295aa500b8acbd38091d57973516d5"
+        );
         assert_eq!(hashes.test_plan.bytes, 869);
     }
 }
