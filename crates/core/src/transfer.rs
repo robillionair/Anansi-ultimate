@@ -520,8 +520,10 @@ pub fn transfer(value: Value, scope: &CallerScope) -> Result<Value, CommandError
         // The derived architecture travels with the
         // concept so the Forge side starts from the
         // approved outputs, not from a fresh summary.
-        initial_specification:
-            crate::collider_artifacts::derive_artifact(&experiment, "ARCHITECTURE.md"),
+        initial_specification: crate::collider_artifacts::derive_artifact(
+            &experiment,
+            "ARCHITECTURE.md",
+        ),
         provider: provider.clone(),
         model: model.clone(),
     };
