@@ -23,6 +23,18 @@
  * as markup. Only the pedestal carries a label —
  * per-agent text lives in the detail card and the
  * table, not in a texture per agent.
+ *
+ * M9 SwarmTank Slice 3: instance slots stay in
+ * initial layout order (persona-stable) and
+ * updateDecisions retargets them — colors and
+ * marker visibility follow the target decision
+ * immediately, positions and facings interpolate
+ * over 600 ms with easeInOutCubic. Ring lines for
+ * every radius the layout can produce are prebuilt
+ * and toggled visible, so a transition creates or
+ * destroys no geometry. Markers are one mesh sized
+ * for all slots, ordered Confused-first in slot
+ * order; unused slots collapse to scale 0.
  */
 
 import * as THREE from 'three';
@@ -57,6 +69,7 @@ const BODY_Y = 6;
 const NOSE_OFFSET = 8;
 const MARKER_BASE_Y = 18;
 const ORBIT_SPEED = 0.05;
+const TRANSITION_SECONDS = 0.6;
 
 export type BuiltArenaScene = {
   scene: THREE.Scene;
@@ -75,6 +88,15 @@ export type BuiltArenaScene = {
   setSelected: (id: string | null) => void;
   /** Advance the Confused orbit and marker bob to time t (seconds). */
   animate: (t: number) => void;
+  /**
+   * Retarget every slot to a new layout (same
+   * personas, new decisions). Colors and markers
+   * follow immediately; positions interpolate.
+   * Pass instant = true to snap (reduced motion).
+   */
+  updateDecisions: (nextLayout: ArenaLayout, instant: boolean) => void;
+  /** Advance the transition clock by dt seconds. Returns progress 0..1. */
+  advanceTransition: (dt: number) => number;
   /** Dispose every geometry, material, and texture in the scene. */
   dispose: () => void;
 };
@@ -136,6 +158,44 @@ function facingFor(
   return { x: -sin, z: cos };
 }
 
+function easeInOutCubic(p: number): number {
+  return p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
+}
+
+function lerp(a: number, b: number, p: number): number {
+  return a + (b - a) * p;
+}
+
+/** Shortest-arc interpolation between two angles. */
+function lerpAngle(from: number, to: number, p: number): number {
+  let delta = (to - from) % (Math.PI * 2);
+  if (delta > Math.PI) delta -= Math.PI * 2;
+  if (delta < -Math.PI) delta += Math.PI * 2;
+  return from + delta * p;
+}
+
+/**
+ * Every ring radius the layout module can produce
+ * for up to 200 agents in one decision group
+ * (base + ring * 26, capacity floor(2πr/14) per
+ * ring). Prebuilt once; transitions only toggle
+ * visibility, never allocate geometry.
+ */
+function possibleRingRadii(): number[] {
+  const out = new Set<number>();
+  for (const base of [60, 120, 180]) {
+    let ring = 0;
+    let placed = 0;
+    while (placed < 200) {
+      const radius = base + ring * 26;
+      out.add(radius);
+      placed += Math.max(1, Math.floor((2 * Math.PI * radius) / 14));
+      ring += 1;
+    }
+  }
+  return [...out].sort((a, b) => a - b);
+}
+
 /**
  * Build the arena for one saved run. The camera is
  * fixed top-down (position (0, 640, 0), up (0, 0, -1),
@@ -185,8 +245,10 @@ export function buildSwarmtankArena(
   );
   if (pedestalSprite) threeScene.add(pedestalSprite);
 
-  // Amphitheater ring lines, one per used radius.
-  for (const radius of layout.ringRadii) {
+  // Prebuilt amphitheater ring lines; only the
+  // radii the current layout uses are visible.
+  const ringLines: Array<{ radius: number; line: THREE.Line }> = [];
+  for (const radius of possibleRingRadii()) {
     const points: THREE.Vector3[] = [];
     for (let i = 0; i <= 64; i++) {
       const angle = (i / 64) * Math.PI * 2;
@@ -199,7 +261,7 @@ export function buildSwarmtankArena(
       );
     }
     const ringGeometry = new THREE.BufferGeometry().setFromPoints(points);
-    const ring = new THREE.Line(
+    const line = new THREE.Line(
       ringGeometry,
       new THREE.LineBasicMaterial({
         color: RING_COLOR,
@@ -207,7 +269,9 @@ export function buildSwarmtankArena(
         opacity: 0.8,
       }),
     );
-    threeScene.add(ring);
+    line.visible = layout.ringRadii.includes(radius);
+    threeScene.add(line);
+    ringLines.push({ radius, line });
   }
 
   // Agent bodies: one instanced sphere per persona,
@@ -225,18 +289,28 @@ export function buildSwarmtankArena(
     new THREE.MeshBasicMaterial({ color: 0xffffff }),
     Math.max(agents.length, 1),
   );
-  // Hesitation markers above Confused agents.
-  const confusedAgents = agents.filter(agent => agent.decision === 'Confused');
+  // Hesitation markers: one mesh for all slots,
+  // Confused-first in slot order; unused slots
+  // collapse to scale 0.
   const markers = new THREE.InstancedMesh(
     new THREE.OctahedronGeometry(3),
     new THREE.MeshBasicMaterial({ color: MARKER_COLOR }),
-    Math.max(confusedAgents.length, 1),
-  );
-  const confusedIndices = confusedAgents.map(agent =>
-    agents.findIndex(a => a.personaId === agent.personaId),
+    Math.max(agents.length, 1),
   );
 
-  const currentAngles = agents.map(agent => agent.angle);
+  // Per-slot transition state, in initial layout
+  // order. Slots never reorder: a persona keeps
+  // its instance index across decisions.
+  const angleFrom = agents.map(agent => agent.angle);
+  const radiusFrom = agents.map(agent => agent.radius);
+  const angleTo = agents.map(agent => agent.angle);
+  const radiusTo = agents.map(agent => agent.radius);
+  const decisionTo = agents.map(agent => agent.decision);
+  let markerSlots: number[] = agents
+    .map((agent, i) => (agent.decision === 'Confused' ? i : -1))
+    .filter(i => i >= 0);
+  let transitionProgress = 1;
+  let lastT = 0;
   let selectedId: string | null = null;
   const bodyMatrix = new THREE.Matrix4();
   const noseMatrix = new THREE.Matrix4();
@@ -247,20 +321,37 @@ export function buildSwarmtankArena(
   const scale = new THREE.Vector3();
   const up = new THREE.Vector3(0, 1, 0);
 
-  function refreshBodies() {
+  /** Base (orbit-free) angle/radius of a slot at current progress. */
+  function slotBase(i: number): { angle: number; radius: number } {
+    const p = easeInOutCubic(transitionProgress);
+    return {
+      angle: lerpAngle(angleFrom[i] ?? 0, angleTo[i] ?? 0, p),
+      radius: lerp(radiusFrom[i] ?? 0, radiusTo[i] ?? 0, p),
+    };
+  }
+
+  /** Full position angle of a slot at time t (orbit on top). */
+  function slotAngle(i: number, t: number): number {
+    const base = slotBase(i).angle;
+    return decisionTo[i] === 'Confused' ? base + t * ORBIT_SPEED : base;
+  }
+
+  function refreshBodies(t: number) {
     const color = new THREE.Color();
     agents.forEach((agent, i) => {
-      const angle = currentAngles[i] ?? agent.angle;
-      const x = agent.radius * Math.cos(angle);
-      const z = agent.radius * Math.sin(angle);
-      const facing = facingFor(agent.decision, angle);
+      const { radius } = slotBase(i);
+      const angle = slotAngle(i, t);
+      const x = radius * Math.cos(angle);
+      const z = radius * Math.sin(angle);
+      const decision = decisionTo[i] ?? agent.decision;
+      const facing = facingFor(decision, angle);
       const selected = agent.personaId === selectedId;
       position.set(x, BODY_Y, z);
       quaternion.identity();
       scale.setScalar(selected ? 1.6 : 1);
       bodyMatrix.compose(position, quaternion, scale);
       bodies.setMatrixAt(i, bodyMatrix);
-      color.set(DECISION_COLORS[agent.decision] ?? '#ffffff');
+      color.set(DECISION_COLORS[decision] ?? '#ffffff');
       bodies.setColorAt(i, color);
       noseQuaternion.setFromAxisAngle(up, Math.atan2(facing.x, facing.z));
       position.set(
@@ -270,7 +361,7 @@ export function buildSwarmtankArena(
       );
       noseMatrix.compose(position, noseQuaternion, new THREE.Vector3(1, 1, 1));
       noses.setMatrixAt(i, noseMatrix);
-      color.set(DECISION_COLORS[agent.decision] ?? '#ffffff');
+      color.set(DECISION_COLORS[decision] ?? '#ffffff');
       noses.setColorAt(i, color);
     });
     bodies.instanceMatrix.needsUpdate = true;
@@ -280,22 +371,29 @@ export function buildSwarmtankArena(
   }
 
   function refreshMarkers(t: number) {
-    confusedAgents.forEach((agent, i) => {
-      const index = confusedIndices[i] ?? -1;
-      if (index < 0) return;
-      const angle = currentAngles[index] ?? agent.angle;
-      const x = agent.radius * Math.cos(angle);
-      const z = agent.radius * Math.sin(angle);
-      position.set(x, MARKER_BASE_Y + 3 * Math.sin(t * 2 + i), z);
+    const zero = new THREE.Matrix4().makeScale(0, 0, 0);
+    for (let m = 0; m < Math.max(agents.length, 1); m++) {
+      const slot = markerSlots[m];
+      if (slot === undefined) {
+        markers.setMatrixAt(m, zero);
+        continue;
+      }
+      const { radius } = slotBase(slot);
+      const angle = slotAngle(slot, t);
+      position.set(
+        radius * Math.cos(angle),
+        MARKER_BASE_Y + 3 * Math.sin(t * 2 + m),
+        radius * Math.sin(angle),
+      );
       quaternion.identity();
       scale.setScalar(1);
       markerMatrix.compose(position, quaternion, scale);
-      markers.setMatrixAt(i, markerMatrix);
-    });
+      markers.setMatrixAt(m, markerMatrix);
+    }
     markers.instanceMatrix.needsUpdate = true;
   }
 
-  refreshBodies();
+  refreshBodies(0);
   refreshMarkers(0);
   bodies.computeBoundingSphere();
   threeScene.add(bodies, noses, markers);
@@ -312,37 +410,26 @@ export function buildSwarmtankArena(
 
   const setSelected = (id: string | null) => {
     selectedId = id;
-    refreshBodies();
+    refreshBodies(lastT);
   };
 
   const animate = (t: number) => {
-    agents.forEach((agent, i) => {
-      if (agent.decision === 'Confused') {
-        currentAngles[i] = agent.angle + t * ORBIT_SPEED;
-      }
-    });
-    refreshBodies();
+    lastT = t;
+    refreshBodies(t);
     refreshMarkers(t);
   };
 
-  const dispose = () => {
-    threeScene.traverse(object => {
-      const mesh = object as THREE.Mesh;
-      if (mesh.geometry) mesh.geometry.dispose();
-      const materials = Array.isArray(mesh.material)
-        ? mesh.material
-        : mesh.material
-          ? [mesh.material]
-          : [];
-      for (const material of materials) {
-        const withMap = material as THREE.Material & { map?: THREE.Texture | null };
-        if (withMap.map) withMap.map.dispose();
-        material.dispose();
-      }
-    });
+  const advanceTransition = (dt: number): number => {
+    if (transitionProgress < 1) {
+      transitionProgress = Math.min(
+        1,
+        transitionProgress + dt / TRANSITION_SECONDS,
+      );
+    }
+    return transitionProgress;
   };
 
-  return {
+  const built: BuiltArenaScene = {
     scene: threeScene,
     camera,
     layout,
@@ -350,13 +437,65 @@ export function buildSwarmtankArena(
     counts: {
       agents: agents.length,
       rings: layout.ringRadii.length,
-      markers: confusedAgents.length,
+      markers: markerSlots.length,
     },
     pick,
     setSelected,
     animate,
-    dispose,
+    updateDecisions: (nextLayout, instant) => {
+      const nextById = new Map(
+        nextLayout.agents.map(agent => [agent.personaId, agent]),
+      );
+      agents.forEach((agent, i) => {
+        const current = slotBase(i);
+        angleFrom[i] = current.angle;
+        radiusFrom[i] = current.radius;
+        const next = nextById.get(agent.personaId);
+        if (next) {
+          angleTo[i] = next.angle;
+          radiusTo[i] = next.radius;
+          decisionTo[i] = next.decision;
+        }
+      });
+      markerSlots = agents
+        .map((agent, i) =>
+          (decisionTo[i] ?? agent.decision) === 'Confused' ? i : -1,
+        )
+        .filter(i => i >= 0);
+      for (const ring of ringLines) {
+        ring.line.visible = nextLayout.ringRadii.includes(ring.radius);
+      }
+      transitionProgress = instant ? 1 : 0;
+      built.layout = nextLayout;
+      built.counts = {
+        agents: agents.length,
+        rings: nextLayout.ringRadii.length,
+        markers: markerSlots.length,
+      };
+      refreshBodies(lastT);
+      refreshMarkers(lastT);
+    },
+    advanceTransition,
+    dispose: () => {
+      threeScene.traverse(object => {
+        const mesh = object as THREE.Mesh;
+        if (mesh.geometry) mesh.geometry.dispose();
+        const materials = Array.isArray(mesh.material)
+          ? mesh.material
+          : mesh.material
+            ? [mesh.material]
+            : [];
+        for (const material of materials) {
+          const withMap = material as THREE.Material & {
+            map?: THREE.Texture | null;
+          };
+          if (withMap.map) withMap.map.dispose();
+          material.dispose();
+        }
+      });
+    },
   };
+  return built;
 }
 
 export { layoutSwarmtankArena };

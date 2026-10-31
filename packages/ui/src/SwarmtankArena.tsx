@@ -30,11 +30,17 @@ import { SwarmtankThreeView } from './SwarmtankThreeView';
 export function SwarmtankArena({
   run,
   runKey,
+  effectiveDecisions,
+  layoutKey,
   selectedPersonaId,
   onSelectPersona,
 }: {
   run: SwarmtankRunDoc;
   runKey: string;
+  /** Decisions the arena currently displays (baseline or scenario). */
+  effectiveDecisions: SwarmtankDecision[];
+  /** Changes when the effective layout changes (run or scenario). */
+  layoutKey: string;
   selectedPersonaId: string | null;
   onSelectPersona: (id: string | null) => void;
 }) {
@@ -43,15 +49,15 @@ export function SwarmtankArena({
   const [reduceMotion, setReduceMotion] = useState(() => isReducedMotion());
   const [failedRunKey, setFailedRunKey] = useState<string | null>(null);
   const layout = useMemo(
-    () => layoutSwarmtankArena(run.personas, run.decisions),
-    [run],
+    () => layoutSwarmtankArena(run.personas, effectiveDecisions),
+    [run, effectiveDecisions],
   );
   const webglFailed = failedRunKey === runKey;
 
   const selectedPersona: SwarmtankPersona | null =
     run.personas.find(persona => persona.id === selectedPersonaId) ?? null;
   const selectedDecision: SwarmtankDecision | null =
-    run.decisions.find(decision => decision.personaId === selectedPersonaId) ??
+    effectiveDecisions.find(decision => decision.personaId === selectedPersonaId) ??
     null;
 
   const converts = layout.agents.filter(agent => agent.decision === 'Convert').length;
@@ -86,6 +92,7 @@ export function SwarmtankArena({
       ) : (
         <SwarmtankThreeView
           layout={layout}
+          layoutKey={layoutKey}
           runKey={runKey}
           selectedPersonaId={selectedPersonaId}
           onSelect={onSelectPersona}

@@ -199,6 +199,8 @@ test('arena section renders canvas, toggle, and the selected detail card', () =>
     React.createElement(SwarmtankArena, {
       run: doc,
       runKey: 'arena-run-v1',
+      effectiveDecisions: doc.decisions,
+      layoutKey: 'arena-run-v1|baseline',
       selectedPersonaId: null,
       onSelectPersona: () => {},
     }),
@@ -211,6 +213,8 @@ test('arena section renders canvas, toggle, and the selected detail card', () =>
     React.createElement(SwarmtankArena, {
       run: doc,
       runKey: 'arena-run-v1',
+      effectiveDecisions: doc.decisions,
+      layoutKey: 'arena-run-v1|baseline',
       selectedPersonaId: 'persona-001',
       onSelectPersona: () => {},
     }),

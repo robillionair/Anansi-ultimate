@@ -1,24 +1,45 @@
 // ---------------------------------------------------------------------------
-// SwarmTank (M9 Slice 1): synthetic personas, seeded
-// decisions, report, and the Forge bridge. This
-// panel makes no provider calls on load — or ever,
-// in this slice: generation and evaluation are
+// SwarmTank (M9 Slices 1–3): synthetic personas,
+// seeded decisions, report, scenario controls with
+// instant local sensitivity, scenario branches, and
+// the Forge bridge. This panel makes no provider
+// calls on load — or ever, in these slices:
+// generation, evaluation, and scenario branching are
 // deterministic backend operations over seeded
-// archetypes. Every persona is labeled simulated.
+// archetypes, and scenario recomputation in the
+// browser is pure local arithmetic. Every persona is
+// labeled simulated.
 // ---------------------------------------------------------------------------
 
 import { useState } from 'react';
 import type {
   ArtifactRecord,
   Client,
+  CountedItem,
   SwarmtankDecision,
   SwarmtankInput,
   SwarmtankPersona,
   SwarmtankReport,
   SwarmtankRunDoc,
+  SwarmtankScenario,
+  SwarmtankScenarioDoc,
   SwarmtankSource,
 } from '@anansi/contracts';
 import { SwarmtankArena } from './SwarmtankArena';
+import SwarmtankScenarioControls from './SwarmtankScenarioControls';
+import SwarmtankComparison from './SwarmtankComparison';
+import {
+  computeScenarioComparison,
+  defaultScenarioFor,
+  evaluateScenarioPopulation,
+  scenarioSignature,
+  scenariosEqual,
+  type ScenarioComparison,
+} from './swarmtankSensitivity';
+import {
+  scenarioComparisonJson,
+  scenarioComparisonMarkdown,
+} from './swarmtankScenarioExport';
 
 // ---------------------------------------------------------------------------
 // Strict client-side parsing for saved run bodies
@@ -323,6 +344,313 @@ export function parseSwarmtankRunBody(body: string): SwarmtankRunDoc | null {
 }
 
 // ---------------------------------------------------------------------------
+// M9 Slice 3: strict client-side parsing for saved
+// scenario branch bodies (mirrors
+// crates/core/src/swarmtank.rs). Same caveat as the
+// run parser: shape and bounds only, no hash check
+// in the browser. A branch body that does not parse
+// never renders.
+// ---------------------------------------------------------------------------
+
+function parseScenarioTransition(value: unknown): {
+  from: string;
+  to: string;
+  count: number;
+} | null {
+  if (!isRecord(value)) return null;
+  if (!exactKeys(value, ['from', 'to', 'count'])) return null;
+  if (
+    (value.from !== 'Convert' &&
+      value.from !== 'Confused' &&
+      value.from !== 'Reject') ||
+    (value.to !== 'Convert' &&
+      value.to !== 'Confused' &&
+      value.to !== 'Reject')
+  ) {
+    return null;
+  }
+  const count = numberIn(value.count, 1, Number.MAX_SAFE_INTEGER);
+  if (count === null) return null;
+  return { from: value.from, to: value.to, count };
+}
+
+function parseScenarioMetrics(value: unknown): {
+  total: number;
+  converts: number;
+  confused: number;
+  rejects: number;
+  conversionRate: number;
+  averageWillingnessToPay: number;
+  averagePerceivedValue: number;
+} | null {
+  if (!isRecord(value)) return null;
+  if (
+    !exactKeys(value, [
+      'total',
+      'converts',
+      'confused',
+      'rejects',
+      'conversionRate',
+      'averageWillingnessToPay',
+      'averagePerceivedValue',
+    ])
+  ) {
+    return null;
+  }
+  const total = numberIn(value.total, 0, Number.MAX_SAFE_INTEGER);
+  const converts = numberIn(value.converts, 0, Number.MAX_SAFE_INTEGER);
+  const confused = numberIn(value.confused, 0, Number.MAX_SAFE_INTEGER);
+  const rejects = numberIn(value.rejects, 0, Number.MAX_SAFE_INTEGER);
+  const conversionRate = numberIn(value.conversionRate, 0, 100);
+  const averageWillingnessToPay = numberIn(
+    value.averageWillingnessToPay,
+    0,
+    Number.MAX_SAFE_INTEGER,
+  );
+  const averagePerceivedValue = numberIn(value.averagePerceivedValue, 0, 1);
+  if (
+    total === null ||
+    converts === null ||
+    confused === null ||
+    rejects === null ||
+    conversionRate === null ||
+    averageWillingnessToPay === null ||
+    averagePerceivedValue === null
+  ) {
+    return null;
+  }
+  return {
+    total,
+    converts,
+    confused,
+    rejects,
+    conversionRate,
+    averageWillingnessToPay,
+    averagePerceivedValue,
+  };
+}
+
+function parseScenario(value: unknown): SwarmtankScenario | null {
+  if (!isRecord(value)) return null;
+  if (
+    !exactKeys(value, [
+      'priceMonthly',
+      'activeFeatures',
+      'trustSignals',
+      'setupDifficulty',
+    ])
+  ) {
+    return null;
+  }
+  let priceMonthly: number | null = null;
+  if (value.priceMonthly !== null) {
+    priceMonthly = numberIn(value.priceMonthly, 0, Number.MAX_SAFE_INTEGER);
+    if (priceMonthly === null) return null;
+  }
+  const activeFeatures = textList(value.activeFeatures, 50, 300);
+  if (activeFeatures === null) return null;
+  if (!isRecord(value.trustSignals)) return null;
+  if (
+    !exactKeys(value.trustSignals, [
+      'soc2Security',
+      'freeTrialAvailable',
+      'slaGuarantee',
+      'moneyBackGuarantee',
+    ])
+  ) {
+    return null;
+  }
+  for (const key of Object.keys(value.trustSignals)) {
+    if (typeof value.trustSignals[key] !== 'boolean') return null;
+  }
+  if (
+    value.setupDifficulty !== 'effortless' &&
+    value.setupDifficulty !== 'moderate' &&
+    value.setupDifficulty !== 'complex'
+  ) {
+    return null;
+  }
+  return {
+    priceMonthly,
+    activeFeatures,
+    trustSignals: value.trustSignals as SwarmtankScenario['trustSignals'],
+    setupDifficulty: value.setupDifficulty,
+  };
+}
+
+export function parseSwarmtankScenarioDoc(
+  body: string,
+): SwarmtankScenarioDoc | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return null;
+  }
+  if (!isRecord(parsed)) return null;
+  if (
+    !exactKeys(parsed, [
+      'format',
+      'version',
+      'parentArtifactId',
+      'parentVersion',
+      'parentContentHash',
+      'personas',
+      'baselineInput',
+      'baselineDecisions',
+      'scenario',
+      'decisions',
+      'transitions',
+      'metrics',
+      'contentHash',
+    ])
+  ) {
+    return null;
+  }
+  if (parsed.format !== 'anansi-swarmtank-scenario' || parsed.version !== 1) {
+    return null;
+  }
+  if (
+    typeof parsed.parentArtifactId !== 'string' ||
+    parsed.parentArtifactId.trim() === '' ||
+    typeof parsed.parentVersion !== 'number' ||
+    !Number.isInteger(parsed.parentVersion) ||
+    parsed.parentVersion < 1 ||
+    typeof parsed.parentContentHash !== 'string' ||
+    !/^[0-9a-f]{64}$/.test(parsed.parentContentHash) ||
+    typeof parsed.contentHash !== 'string' ||
+    !/^[0-9a-f]{64}$/.test(parsed.contentHash)
+  ) {
+    return null;
+  }
+  const baselineInput = parseInput(parsed.baselineInput);
+  if (baselineInput === null) return null;
+  const scenario = parseScenario(parsed.scenario);
+  if (scenario === null) return null;
+  if (!Array.isArray(parsed.personas) || parsed.personas.length === 0) return null;
+  if (
+    !Array.isArray(parsed.baselineDecisions) ||
+    parsed.baselineDecisions.length !== parsed.personas.length ||
+    !Array.isArray(parsed.decisions) ||
+    parsed.decisions.length !== parsed.personas.length
+  ) {
+    return null;
+  }
+  const personas: SwarmtankPersona[] = [];
+  for (let i = 0; i < parsed.personas.length; i++) {
+    const persona = parsePersona(parsed.personas[i], i);
+    if (persona === null) return null;
+    personas.push(persona);
+  }
+  const baselineDecisions: SwarmtankDecision[] = [];
+  for (const raw of parsed.baselineDecisions) {
+    const decision = parseDecision(raw);
+    if (decision === null) return null;
+    baselineDecisions.push(decision);
+  }
+  const decisions: SwarmtankDecision[] = [];
+  for (const raw of parsed.decisions) {
+    const decision = parseDecision(raw);
+    if (decision === null) return null;
+    decisions.push(decision);
+  }
+  if (!Array.isArray(parsed.transitions)) return null;
+  const transitions: Array<{ from: string; to: string; count: number }> = [];
+  for (const raw of parsed.transitions) {
+    const transition = parseScenarioTransition(raw);
+    if (transition === null) return null;
+    transitions.push(transition);
+  }
+  if (!isRecord(parsed.metrics)) return null;
+  if (!exactKeys(parsed.metrics, ['baseline', 'scenario', 'priceElasticity'])) {
+    return null;
+  }
+  const baselineMetrics = parseScenarioMetrics(parsed.metrics.baseline);
+  const scenarioMetrics = parseScenarioMetrics(parsed.metrics.scenario);
+  if (baselineMetrics === null || scenarioMetrics === null) return null;
+  let priceElasticity: number | null = null;
+  if (parsed.metrics.priceElasticity !== null) {
+    priceElasticity = numberIn(
+      parsed.metrics.priceElasticity,
+      -Number.MAX_SAFE_INTEGER,
+      Number.MAX_SAFE_INTEGER,
+    );
+    if (priceElasticity === null) return null;
+  }
+  return {
+    format: 'anansi-swarmtank-scenario',
+    version: 1,
+    parentArtifactId: parsed.parentArtifactId,
+    parentVersion: parsed.parentVersion,
+    parentContentHash: parsed.parentContentHash,
+    personas,
+    baselineInput,
+    baselineDecisions,
+    scenario,
+    decisions,
+    transitions,
+    metrics: {
+      baseline: baselineMetrics,
+      scenario: scenarioMetrics,
+      priceElasticity,
+    },
+    contentHash: parsed.contentHash,
+  };
+}
+
+/**
+ * Display-only report derived from a branch doc's
+ * embedded baseline decisions, used when the branch
+ * parent run is not in this project's artifact list
+ * (for example after a backup/restore remap, where
+ * the parent pin is historical provenance). Never
+ * sent back to the backend.
+ */
+function deriveLocalReport(
+  personas: SwarmtankPersona[],
+  decisions: SwarmtankDecision[],
+): SwarmtankReport {
+  const total = decisions.length;
+  const converts = decisions.filter(d => d.decision === 'Convert').length;
+  const confused = decisions.filter(d => d.decision === 'Confused').length;
+  const rejects = decisions.filter(d => d.decision === 'Reject').length;
+  const countBy = (items: string[]): CountedItem[] => {
+    const counts = new Map<string, number>();
+    for (const item of items) counts.set(item, (counts.get(item) ?? 0) + 1);
+    return [...counts.entries()]
+      .map(([item, count]) => ({ item, count }))
+      .sort((a, b) => b.count - a.count || (a.item < b.item ? -1 : 1));
+  };
+  const objections = decisions
+    .map(d => d.keyObjection)
+    .filter((item): item is string => item !== null);
+  const confusionPoints = decisions
+    .filter(d => d.decision === 'Confused')
+    .map(d => d.keyObjection)
+    .filter((item): item is string => item !== null);
+  return {
+    averageWillingnessToPay:
+      total > 0
+        ? Math.round(
+            (decisions.reduce((sum, d) => sum + d.willingnessToPay, 0) / total) *
+              100,
+          ) / 100
+        : 0,
+    confused,
+    conversionRate:
+      total > 0 ? Math.round((100 * converts) / total * 100) / 100 : 0,
+    converts,
+    objectionBreakdown: countBy(objections),
+    recommendations: [],
+    rejects,
+    segments: countBy(personas.map(p => p.role)),
+    topConfusionPoints: countBy(confusionPoints).slice(0, 5),
+    topObjections: countBy(objections).slice(0, 5),
+    total,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Panel: input, import, generate, evaluate, report,
 // export, and the Forge bridge. Rendering,
 // selecting, or previewing saves nothing; only
@@ -390,6 +718,16 @@ export function SwarmtankReportView({
   onFilterChange,
   onExport,
   exportDisabled,
+  scenario,
+  onScenarioChange,
+  onScenarioReset,
+  onScenarioRerun,
+  rerunDisabled,
+  branchSaved,
+  onSaveBranch,
+  saveBranchDisabled,
+  onExportComparisonJson,
+  onExportComparisonMarkdown,
 }: {
   report: SwarmtankReport;
   run: SwarmtankRunDoc;
@@ -402,11 +740,45 @@ export function SwarmtankReportView({
   onFilterChange: (value: string) => void;
   onExport: () => void;
   exportDisabled: boolean;
+  scenario: SwarmtankScenario | null;
+  onScenarioChange: (next: SwarmtankScenario) => void;
+  onScenarioReset: () => void;
+  onScenarioRerun: () => void;
+  rerunDisabled: boolean;
+  branchSaved: boolean;
+  onSaveBranch: () => void;
+  saveBranchDisabled: boolean;
+  onExportComparisonJson: () => void;
+  onExportComparisonMarkdown: () => void;
 }) {
   const decisionByPersona = new Map(
     run.decisions.map(decision => [decision.personaId, decision]),
   );
   const visiblePersonas = filterRunPersonas(run, search, decisionFilter);
+  // Instant local sensitivity: recomputed on every
+  // render from the baseline run, no network.
+  const scenarioDecisions: SwarmtankDecision[] =
+    scenario === null
+      ? run.decisions
+      : evaluateScenarioPopulation(
+          run.personas,
+          run.input,
+          run.decisions,
+          scenario,
+        );
+  const comparison: ScenarioComparison | null =
+    scenario === null
+      ? null
+      : computeScenarioComparison(
+          run.decisions,
+          scenarioDecisions,
+          run.input.priceAmount,
+          scenario.priceMonthly ?? run.input.priceAmount,
+        );
+  const layoutKey =
+    scenario === null
+      ? `${runKey}|baseline`
+      : `${runKey}|${scenarioSignature(scenario)}`;
   return (
     <section aria-label="SwarmTank report">
       <h3>SwarmTank report</h3>
@@ -460,12 +832,60 @@ export function SwarmtankReportView({
           <p>Validate with real customers: {rec.validation}</p>
         </section>
       ))}
+      {scenario !== null && comparison !== null ? (
+        <>
+          <SwarmtankScenarioControls
+            run={run}
+            scenario={scenario}
+            onScenarioChange={onScenarioChange}
+            onReset={onScenarioReset}
+            onRerun={onScenarioRerun}
+            rerunDisabled={rerunDisabled}
+          />
+          <p>
+            Scenario conversion rate: {comparison.scenario.conversionRate}%
+            (baseline {comparison.baseline.conversionRate}%, signed delta{' '}
+            {comparison.scenario.conversionRate -
+              comparison.baseline.conversionRate >=
+            0
+              ? '+'
+              : ''}
+            {Math.round(
+              (comparison.scenario.conversionRate -
+                comparison.baseline.conversionRate) *
+                100,
+            ) / 100}{' '}
+            points). Average willingness to pay:{' '}
+            {comparison.scenario.averageWillingnessToPay} (baseline{' '}
+            {comparison.baseline.averageWillingnessToPay}). Average perceived
+            value: {comparison.scenario.averagePerceivedValue} (baseline{' '}
+            {comparison.baseline.averagePerceivedValue}). Net shifts: +
+            {comparison.convertedIds.length} Converted,{' '}
+            {comparison.lostIds.length} Regressed,{' '}
+            {comparison.unchangedCount} Unchanged.
+          </p>
+        </>
+      ) : null}
       <SwarmtankArena
         run={run}
         runKey={runKey}
+        effectiveDecisions={scenarioDecisions}
+        layoutKey={layoutKey}
         selectedPersonaId={selectedPersonaId}
         onSelectPersona={onSelectPersona}
       />
+      {scenario !== null && comparison !== null ? (
+        <SwarmtankComparison
+          comparison={comparison}
+          personas={run.personas}
+          scenario={scenario}
+          branchSaved={branchSaved}
+          onSaveBranch={onSaveBranch}
+          onExportJson={onExportComparisonJson}
+          onExportMarkdown={onExportComparisonMarkdown}
+          saveDisabled={saveBranchDisabled}
+        />
+      ) : null}
       <p>
         <label>
           Search personas{' '}
@@ -565,6 +985,12 @@ export function SwarmtankPanel({
   const [savedArtifact, setSavedArtifact] = useState<ArtifactRecord | null>(null);
   const [report, setReport] = useState<SwarmtankReport | null>(null);
   const [reportArtifact, setReportArtifact] = useState<ArtifactRecord | null>(null);
+  const [scenario, setScenario] = useState<SwarmtankScenario | null>(null);
+  const [branchArtifact, setBranchArtifact] = useState<ArtifactRecord | null>(null);
+  const [branchDoc, setBranchDoc] = useState<SwarmtankScenarioDoc | null>(null);
+  const [transferMode, setTransferMode] = useState<'baseline' | 'scenario'>(
+    'baseline',
+  );
   const [selectedPersonaId, setSelectedPersonaId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [decisionFilter, setDecisionFilter] = useState('All');
@@ -576,6 +1002,7 @@ export function SwarmtankPanel({
   const experiments = artifacts.filter(artifact => artifact.type === 'experiment');
   const concepts = artifacts.filter(artifact => artifact.type === 'concept');
   const runs = artifacts.filter(artifact => artifact.type === 'simulation');
+  const branches = artifacts.filter(artifact => artifact.type === 'scenario');
 
   function setField<K extends keyof SwarmtankInput>(key: K, value: SwarmtankInput[K]) {
     setInput(current => ({ ...current, [key]: value }));
@@ -682,6 +1109,10 @@ export function SwarmtankPanel({
       setSavedArtifact(response.artifact);
       setReport(response.report);
       setReportArtifact(response.artifact);
+      setScenario(defaultScenarioFor(doc));
+      setBranchArtifact(null);
+      setBranchDoc(null);
+      setTransferMode('baseline');
       setSelectedPersonaId(null);
       setPreview(null);
       await onSaved();
@@ -714,12 +1145,261 @@ export function SwarmtankPanel({
       setSavedArtifact(response.artifact);
       setReport(response.report);
       setReportArtifact(response.artifact);
+      setScenario(defaultScenarioFor(doc));
+      setBranchArtifact(null);
+      setBranchDoc(null);
+      setTransferMode('baseline');
       setSelectedPersonaId(null);
     } catch (err) {
       notify(err instanceof Error ? err.message : 'Report failed. Retry.', true);
     } finally {
       setRunning(false);
     }
+  }
+
+  function changeScenario(next: SwarmtankScenario) {
+    setScenario(next);
+    // A saved branch describes its own scenario; once
+    // the live scenario drifts from it, the link ends.
+    if (branchDoc !== null && !scenariosEqual(branchDoc.scenario, next)) {
+      setBranchArtifact(null);
+      setBranchDoc(null);
+      setTransferMode('baseline');
+    }
+  }
+
+  function resetScenario() {
+    if (savedRun === null) return;
+    setScenario(defaultScenarioFor(savedRun));
+    setBranchArtifact(null);
+    setBranchDoc(null);
+    setTransferMode('baseline');
+  }
+
+  async function rerunScenario() {
+    if (savedRun === null || scenario === null) return;
+    setRunning(true);
+    try {
+      const response = await client.evaluateSwarmtank(workspaceId, {
+        projectId,
+        input: {
+          ...savedRun.input,
+          priceAmount: scenario.priceMonthly ?? savedRun.input.priceAmount,
+          features: scenario.activeFeatures,
+        },
+        preset: savedRun.preset,
+        seed: savedRun.seed,
+        source: savedRun.source,
+      });
+      const doc = parseSwarmtankRunBody(response.body);
+      if (doc === null) {
+        notify('The re-run body is not readable.', true);
+        return;
+      }
+      setSavedRun(doc);
+      setSavedArtifact(response.artifact);
+      setReport(response.report);
+      setReportArtifact(response.artifact);
+      setScenario(defaultScenarioFor(doc));
+      setBranchArtifact(null);
+      setBranchDoc(null);
+      setTransferMode('baseline');
+      setSelectedPersonaId(null);
+      await onSaved();
+      notify('Re-ran the scenario inputs as a new deterministic run.', false);
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'Re-run failed. Retry.', true);
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  async function saveBranch() {
+    if (savedRun === null || savedArtifact === null || scenario === null) return;
+    setRunning(true);
+    try {
+      const response = await client.saveSwarmtankScenario(workspaceId, {
+        projectId,
+        parentArtifactId: savedArtifact.artifactId,
+        parentVersion: savedArtifact.version,
+        scenario,
+      });
+      const doc = parseSwarmtankScenarioDoc(response.body);
+      setBranchArtifact(response.artifact);
+      setBranchDoc(doc);
+      await onSaved();
+      notify(
+        `Saved the scenario as a branch (version ${response.artifact.version}). The baseline run is unchanged.`,
+        false,
+      );
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'Branch save failed. Retry.', true);
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  async function viewBranch(artifact: ArtifactRecord) {
+    setRunning(true);
+    try {
+      const details = await client.readProjectArtifact(
+        workspaceId,
+        artifact.artifactId,
+        artifact.version,
+      );
+      const doc = parseSwarmtankScenarioDoc(details.body);
+      if (doc === null) {
+        notify('That branch body is not a readable scenario branch.', true);
+        return;
+      }
+      // Fast path: the branch belongs to the run
+      // already on screen — keep it, apply the branch.
+      if (
+        savedArtifact !== null &&
+        savedArtifact.artifactId === doc.parentArtifactId &&
+        savedArtifact.version === doc.parentVersion &&
+        savedRun !== null
+      ) {
+        setScenario(doc.scenario);
+        setBranchArtifact(artifact);
+        setBranchDoc(doc);
+        setSelectedPersonaId(null);
+        return;
+      }
+      const parent = runs.find(
+        item =>
+          item.artifactId === doc.parentArtifactId &&
+          item.version === doc.parentVersion,
+      );
+      if (parent !== undefined) {
+        await viewReport(parent);
+        setScenario(doc.scenario);
+        setBranchArtifact(artifact);
+        setBranchDoc(doc);
+        return;
+      }
+      // Restored-workspace fallback: the parent pin
+      // is historical provenance and the parent record
+      // may carry a new id. Synthesize the display
+      // run from the branch's embedded baseline.
+      const preset = doc.personas.length;
+      if (preset !== 20 && preset !== 50 && preset !== 100) {
+        notify('That branch embeds an unsupported population size.', true);
+        return;
+      }
+      setSavedRun({
+        format: 'anansi-swarmtank-run',
+        version: 1,
+        input: doc.baselineInput,
+        seed: `branch-${artifact.artifactId}`,
+        preset,
+        personas: doc.personas,
+        decisions: doc.baselineDecisions,
+        contentHash: doc.parentContentHash,
+      });
+      setSavedArtifact({
+        artifactId: doc.parentArtifactId,
+        version: doc.parentVersion,
+        type: 'simulation',
+        title: 'SwarmTank run (from branch)',
+        timestamp: artifact.timestamp,
+        sourceReferences: [],
+        validationStatus: 'validated',
+        privacy: 'private',
+        projectId,
+        contentHash: doc.parentContentHash,
+      });
+      setReport(deriveLocalReport(doc.personas, doc.baselineDecisions));
+      setReportArtifact({
+        artifactId: doc.parentArtifactId,
+        version: doc.parentVersion,
+        type: 'simulation',
+        title: 'SwarmTank run (from branch)',
+        timestamp: artifact.timestamp,
+        sourceReferences: [],
+        validationStatus: 'validated',
+        privacy: 'private',
+        projectId,
+        contentHash: doc.parentContentHash,
+      });
+      setScenario(doc.scenario);
+      setBranchArtifact(artifact);
+      setBranchDoc(doc);
+      setTransferMode('baseline');
+      setSelectedPersonaId(null);
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'Branch view failed. Retry.', true);
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  function exportComparisonJson() {
+    if (savedRun === null || savedArtifact === null || scenario === null) return;
+    const scenarioDecisions = evaluateScenarioPopulation(
+      savedRun.personas,
+      savedRun.input,
+      savedRun.decisions,
+      scenario,
+    );
+    const comparison = computeScenarioComparison(
+      savedRun.decisions,
+      scenarioDecisions,
+      savedRun.input.priceAmount,
+      scenario.priceMonthly ?? savedRun.input.priceAmount,
+    );
+    downloadJson(
+      `anansi-swarmtank-${savedArtifact.artifactId}-scenario-comparison.json`,
+      scenarioComparisonJson({
+        run: savedRun,
+        runArtifactId: savedArtifact.artifactId,
+        runVersion: savedArtifact.version,
+        runContentHash: savedArtifact.contentHash,
+        scenario,
+        scenarioDecisions,
+        branchArtifactId: branchArtifact?.artifactId ?? null,
+        branchVersion: branchArtifact?.version ?? null,
+        comparison,
+      }),
+    );
+  }
+
+  function exportComparisonMarkdown() {
+    if (savedRun === null || savedArtifact === null || scenario === null) return;
+    const scenarioDecisions = evaluateScenarioPopulation(
+      savedRun.personas,
+      savedRun.input,
+      savedRun.decisions,
+      scenario,
+    );
+    const comparison = computeScenarioComparison(
+      savedRun.decisions,
+      scenarioDecisions,
+      savedRun.input.priceAmount,
+      scenario.priceMonthly ?? savedRun.input.priceAmount,
+    );
+    const blob = new Blob(
+      [
+        scenarioComparisonMarkdown({
+          run: savedRun,
+          runArtifactId: savedArtifact.artifactId,
+          runVersion: savedArtifact.version,
+          runContentHash: savedArtifact.contentHash,
+          scenario,
+          scenarioDecisions,
+          branchArtifactId: branchArtifact?.artifactId ?? null,
+          branchVersion: branchArtifact?.version ?? null,
+          comparison,
+        }),
+      ],
+      { type: 'text/markdown' },
+    );
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `anansi-swarmtank-${savedArtifact.artifactId}-scenario-comparison.md`;
+    anchor.click();
+    URL.revokeObjectURL(url);
   }
 
   function exportReport() {
@@ -764,6 +1444,12 @@ export function SwarmtankPanel({
         runVersion: savedArtifact.version,
         conceptArtifactId: conceptId,
         expectedConceptVersion: concept.version,
+        ...(transferMode === 'scenario' && branchArtifact !== null
+          ? {
+              scenarioArtifactId: branchArtifact.artifactId,
+              scenarioVersion: branchArtifact.version,
+            }
+          : {}),
       });
       if (response.alreadyApplied) {
         notify('Already applied: this run already revised that Forge concept.', false);
@@ -970,6 +1656,21 @@ export function SwarmtankPanel({
           </ul>
         </section>
       ) : null}
+      {branches.length > 0 ? (
+        <section aria-label="Saved SwarmTank scenario branches">
+          <h3>Saved scenario branches</h3>
+          <ul>
+            {branches.map(artifact => (
+              <li key={artifact.artifactId}>
+                {artifact.title} (version {artifact.version}){' '}
+                <button disabled={running || busy} onClick={() => viewBranch(artifact)}>
+                  View comparison
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
       {report !== null && savedRun !== null && reportArtifact !== null ? (
         <>
           <SwarmtankReportView
@@ -984,6 +1685,24 @@ export function SwarmtankPanel({
             onFilterChange={setDecisionFilter}
             onExport={exportReport}
             exportDisabled={running || busy}
+            scenario={scenario}
+            onScenarioChange={changeScenario}
+            onScenarioReset={resetScenario}
+            onScenarioRerun={rerunScenario}
+            rerunDisabled={running || busy}
+            branchSaved={branchArtifact !== null}
+            onSaveBranch={saveBranch}
+            saveBranchDisabled={
+              running ||
+              busy ||
+              scenario === null ||
+              branchArtifact !== null ||
+              (savedRun !== null &&
+                scenario !== null &&
+                scenariosEqual(scenario, defaultScenarioFor(savedRun)))
+            }
+            onExportComparisonJson={exportComparisonJson}
+            onExportComparisonMarkdown={exportComparisonMarkdown}
           />
           {source === undefined || source.kind !== 'concept' ? (
             <p>
@@ -1019,9 +1738,35 @@ export function SwarmtankPanel({
               }
               onClick={transferToForge}
             >
-              Apply Recommendations to Forge
+              {branchArtifact !== null
+                ? transferMode === 'scenario'
+                  ? 'Apply Scenario Recommendations to Forge'
+                  : 'Apply Baseline Recommendations to Forge'
+                : 'Apply Recommendations to Forge'}
             </button>
           </p>
+          {branchArtifact !== null ? (
+            <p>
+              <label>
+                <input
+                  type="radio"
+                  name="swarmtank-transfer-mode"
+                  checked={transferMode === 'baseline'}
+                  onChange={() => setTransferMode('baseline')}
+                />{' '}
+                Apply Baseline Recommendations to Forge
+              </label>{' '}
+              <label>
+                <input
+                  type="radio"
+                  name="swarmtank-transfer-mode"
+                  checked={transferMode === 'scenario'}
+                  onChange={() => setTransferMode('scenario')}
+                />{' '}
+                Apply Scenario Recommendations to Forge
+              </label>
+            </p>
+          ) : null}
         </>
       ) : null}
     </section>

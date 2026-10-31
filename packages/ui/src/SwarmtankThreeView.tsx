@@ -30,6 +30,7 @@ import type { ArenaLayout } from './swarmtankArenaLayout';
 
 export function SwarmtankThreeView({
   layout,
+  layoutKey,
   runKey,
   selectedPersonaId,
   onSelect,
@@ -37,6 +38,8 @@ export function SwarmtankThreeView({
   onUnavailable,
 }: {
   layout: ArenaLayout;
+  /** Changes when the effective layout changes (run or scenario). */
+  layoutKey: string;
   runKey: string;
   selectedPersonaId: string | null;
   onSelect: (id: string | null) => void;
@@ -117,8 +120,22 @@ export function SwarmtankThreeView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runKey]);
 
+  // Scenario re-clustering: retarget the existing
+  // scene (never rebuild it) when the effective
+  // layout changes. Declared after the build effect
+  // so it runs after a rebuild on a run switch.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const built = builtRef.current;
+    const renderer = rendererRef.current;
+    if (!built || !renderer) return;
+    built.updateDecisions(layout, reducedMotion);
+    renderer.render(built.scene, built.camera);
+  }, [layoutKey, reducedMotion]);
+
   // Animation: one static frame under reduced motion,
-  // otherwise a slow Confused orbit loop.
+  // otherwise a slow Confused orbit loop that also
+  // advances any in-flight re-clustering transition.
   useEffect(() => {
     const built = builtRef.current;
     const renderer = rendererRef.current;
@@ -130,7 +147,10 @@ export function SwarmtankThreeView({
     }
     let frame = 0;
     const start = performance.now();
+    let previous = start;
     const tick = (now: number) => {
+      built.advanceTransition((now - previous) / 1000);
+      previous = now;
       built.animate((now - start) / 1000);
       renderer.render(built.scene, built.camera);
       frame = requestAnimationFrame(tick);

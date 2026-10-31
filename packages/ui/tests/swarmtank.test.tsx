@@ -177,6 +177,16 @@ test('report view renders metrics, recommendations, and labeled rows', () => {
       onFilterChange: () => {},
       onExport: () => {},
       exportDisabled: false,
+      scenario: null,
+      onScenarioChange: () => {},
+      onScenarioReset: () => {},
+      onScenarioRerun: () => {},
+      rerunDisabled: false,
+      branchSaved: false,
+      onSaveBranch: () => {},
+      saveBranchDisabled: true,
+      onExportComparisonJson: () => {},
+      onExportComparisonMarkdown: () => {},
     }),
   );
   assert.ok(html.includes('Conversion rate: 60%'));
@@ -206,6 +216,16 @@ test('report view with a decision filter hides other rows', () => {
       onFilterChange: () => {},
       onExport: () => {},
       exportDisabled: false,
+      scenario: null,
+      onScenarioChange: () => {},
+      onScenarioReset: () => {},
+      onScenarioRerun: () => {},
+      rerunDisabled: false,
+      branchSaved: false,
+      onSaveBranch: () => {},
+      saveBranchDisabled: true,
+      onExportComparisonJson: () => {},
+      onExportComparisonMarkdown: () => {},
     }),
   );
   assert.ok(!html.includes('Ava Keller'));
@@ -213,7 +233,7 @@ test('report view with a decision filter hides other rows', () => {
 });
 
 test('swarmtank files contain zero innerHTML', () => {
-  for (const file of ['packages/ui/src/Swarmtank.tsx', 'packages/ui/src/Transfer.tsx', 'packages/ui/src/swarmtankArenaLayout.ts', 'packages/ui/src/swarmtankThreeScene.ts', 'packages/ui/src/SwarmtankThreeView.tsx', 'packages/ui/src/SwarmtankArena.tsx']) {
+  for (const file of ['packages/ui/src/Swarmtank.tsx', 'packages/ui/src/Transfer.tsx', 'packages/ui/src/swarmtankArenaLayout.ts', 'packages/ui/src/swarmtankThreeScene.ts', 'packages/ui/src/SwarmtankThreeView.tsx', 'packages/ui/src/SwarmtankArena.tsx', 'packages/ui/src/swarmtankSensitivity.ts', 'packages/ui/src/SwarmtankScenarioControls.tsx', 'packages/ui/src/SwarmtankComparison.tsx', 'packages/ui/src/swarmtankScenarioExport.ts']) {
     const source = readFileSync(file, 'utf8');
     assert.ok(!source.includes('innerHTML'), file);
     assert.ok(!source.includes('dangerouslySetInnerHTML'), file);

@@ -185,9 +185,13 @@ test('without WebGL the arena falls back to its note and the full table', async 
     await expect(
       arena.getByText('3D arena unavailable — the complete table below carries the same information.'),
     ).toBeVisible();
-    // The complete table is still rendered and searchable.
+    // The complete table is still rendered and searchable, and the
+    // baseline report metrics are visible. The baseline line is matched
+    // by shape (integer percent + "(N of M)") so the Slice 3 scenario
+    // metrics bar ("Scenario conversion rate: …") and comparison
+    // ("Conversion rate: 100.00% baseline → …") do not collide with it.
     await expect(swarmtank.locator('section[aria-label="SwarmTank report"] table')).toBeVisible();
-    await expect(swarmtank.getByText('Conversion rate:')).toBeVisible();
+    await expect(swarmtank.getByText(/^Conversion rate: [0-9.]+% \([0-9]+ of/)).toBeVisible();
   } finally {
     await session.cleanup();
   }
