@@ -1,3 +1,39 @@
+## 2026-10-31 — M8 visualization workflow (Linux; independent Windows rerun pending)
+
+On branch `muse/m8-visualization` from reviewer
+tip `795aab00` (Windows-verified URL repair 2
+runtime; design committed before code, record in
+`docs/handoffs/M8-visualization-design.md` and
+`docs/handoffs/M8-visualization-addendum.md`).
+Complete project-scoped workflow for an exact saved
+Collider experiment version: pure derivation of
+nodes (beams, understanding, every primitive,
+mapping, combination, feasibility item, and
+productization field) with section-flow-only edges
+(no text-mined relationships), deterministic layout,
+canvas + always-rendered text/list selection showing
+exact source text and pinned provenance, reduced
+motion static view with Pause/Resume otherwise,
+identity-keyed stale-state clearing, zero API calls
+(no inference from opening or interacting), render
+as data (no innerHTML), and restart/backup-restore
+reopen via the existing artifact path. No backend,
+schema, or contract change; Antigravity directories
+untouched. Material decision recorded honestly: the
+renderer is Canvas 2D on the existing stack (no
+Three.js in the repo, no package-manager path that
+preserves the pinned install), behind a
+renderer-agnostic scene model — the workflow is
+delivered, the §26 Three.js renderer itself remains
+outstanding and is not claimed. Linux verification:
+node 105/105, 26/26 across 22 specs (collider, document-input, url-input, visualization, instance anchors, integrated acceptance, memory acceptance, memory context, picker reliability x5, pipeline overview, project context, review anchors, review document input, review rejected selection, transfer, transfer concurrency, transfer identity, forge, forge deliverable, forge review, forge revision, backups), strict
+Clippy/fmt/tsc/contracts/docs/builds clean,
+full core 405/4 (only the 4 known live-Ollama semantic_workflow environment failures), providers+API 144/0.
+Windows rerun of this slice, Slice 4 Windows
+verification, M7 native acceptance + preview
+promotion, M5 gates and the §32 sandbox remain open.
+M8 is NOT complete.
+
 ## 2026-10-31 — URL input repair2 verified on Windows
 
 Runtime `d0a86d5e3` passes reviewer probes3/3, URL integration21/21, UI/contracts99/99, strict core all-target Clippy/fmt, TypeScript/contracts/docs, API/web builds and browser4/4 (URL plus document regressions, save/restart/restore). URL-01/02/02b closed in focused scope. [Evidence](reviews/windows-m8-url-input-verified-2026-10-31.md). No native acceptance, preview promotion, release installer or complete M8 claim; earlier red sections are historical.

@@ -52,6 +52,23 @@ is pending. Owner previews/data and Antigravity
 tooling remain untouched. No cloud calls, pushes, CI
 or promotion.
 
+## Current M8 visualization — 2026-10-31
+
+On branch `muse/m8-visualization`, from reviewer
+tip `795aab00`. Saved-experiment visualization only
+(live panel untouched): pure derivation from the
+parsed experiment document, section-flow-only edges,
+deterministic layout, canvas + text/list selection
+with exact source text and pinned provenance,
+reduced-motion static view, identity-keyed stale
+state, zero API calls, render as data. No backend,
+schema, or contract change; no new persistence. The
+renderer is Canvas 2D (Three.js swap open, not
+claimed). Linux verification only; independent
+Windows rerun is pending. Owner previews/data and
+Antigravity tooling remain untouched. No cloud calls,
+pushes, CI or promotion.
+
 ## Current M8 URL input repair 2 — 2026-10-30
 
 On branch `muse/m8-url-input-repair2`, from reviewer
