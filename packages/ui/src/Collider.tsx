@@ -670,7 +670,9 @@ export function parseColliderExperimentBody(
   if (typeof parsed.provider !== 'string' || typeof parsed.model !== 'string') {
     return null;
   }
-  if (parsed.artifacts !== undefined) {
+  // `null` parses as absent, matching the backend's
+  // Option field; only a present object is checked.
+  if (parsed.artifacts !== undefined && parsed.artifacts !== null) {
     if (
       !parseColliderArtifacts(parsed.artifacts, {
         beamA,
