@@ -52,6 +52,23 @@ is pending. Owner previews/data and Antigravity
 tooling remain untouched. No cloud calls, pushes, CI
 or promotion.
 
+## Current M8 visualization repair — 2026-10-31
+
+On branch `muse/m8-visualization-repair`, from
+reviewer tip `5a050f18`. VIS-01: helper renamed to
+`colliderVisualizationScene.ts` (case-only
+collision with the component broke Windows builds);
+all imports updated, casing checks intact,
+folded-name scan clean. VIS-02: canvas labels now
+white over a dark backing, verified in inspected
+screenshots (paused, reduced-motion, high DPI).
+Canvas/list stays the accessible fallback; Three.js
+and remaining §26 requirements stay unfinished.
+Linux verification only; independent Windows rerun
+is pending. Owner previews/data and Antigravity
+tooling remain untouched. No cloud calls, pushes, CI
+or promotion.
+
 ## Current M8 visualization — 2026-10-31
 
 On branch `muse/m8-visualization`, from reviewer

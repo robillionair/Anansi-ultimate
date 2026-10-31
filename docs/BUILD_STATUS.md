@@ -1,3 +1,36 @@
+## 2026-10-31 — M8 visualization repair (Linux; independent Windows rerun pending)
+
+On branch `muse/m8-visualization-repair` from
+reviewer tip `5a050f18` (design committed before
+code, record in
+`docs/handoffs/M8-visualization-repair-design.md` and
+`docs/handoffs/M8-visualization-repair-addendum.md`).
+VIS-01 (P1): the visualization helper is renamed
+via `git mv` to the genuinely distinct base name
+`colliderVisualizationScene.ts` — the old name
+differed from the component only in case and broke
+the build on case-insensitive filesystems (TS2305,
+Vite MISSING_EXPORT, UI suite 43 pass with 3 failed
+file loads on Windows). All imports updated; no
+casing checks disabled, no resolution settings
+altered, no test weakened; folded-name scan of
+tracked paths is empty. VIS-02 (P2): canvas labels
+were drawn in the background color and invisible;
+they are now restrained white over a dark backing
+rect, verified in inspected screenshots at normal
+DPI (paused), reduced motion, and deviceScaleFactor
+2 (shipped as evidence). Canvas/list remains the
+accessible fallback; Three.js and remaining §26
+requirements stay unfinished and are not claimed.
+Linux verification: node 105/105, tsc/build/
+contracts clean, docs 202 files, focused browser
+battery 5/5 (visualization, visualization
+screenshots, document-input, url-input, pipeline
+overview). No backend/schema/contract change;
+Antigravity directories untouched. Windows rerun of
+this repair (especially the case-insensitive build)
+is pending. M8 is NOT complete.
+
 ## 2026-10-31 — visualization Windows review: changes required
 
 Runtime `93cf77605` has a case-insensitive module-name collision: TypeScript/Vite fail and3 UI test files cannot load (43 individual tests pass). Canvas labels also use the background color by source inspection. [Review](reviews/windows-m8-visualization.md). Browser acceptance not run on stale assets; section26 Three.js remains deferred, not complete.
