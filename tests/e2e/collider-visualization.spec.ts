@@ -127,6 +127,11 @@ test('collider visualization: pinned version -> select -> switch clears -> resta
     return found!.artifactId as string;
   }
 
+  const shotDir = process.env.VIZ_SHOT_DIR;
+  async function shot(loc: ReturnType<typeof page.locator>, name: string) {
+    if (shotDir) await loc.screenshot({ path: path.join(shotDir, name) });
+  }
+
   try {
     await startApi();
     const created = await call('workspaces', 'create', { name: 'Collider Workspace' });
@@ -209,6 +214,9 @@ test('collider visualization: pinned version -> select -> switch clears -> resta
     await expect(viz.getByRole('heading', { name: 'Selected: Beam A — Beam A' })).toBeVisible();
     await expect(viz.locator('pre', { hasText: 'First beam about kitchens.' })).toBeVisible();
     expect(fakeHits).toBe(hitsAfterFirstCollide);
+    // VIS-02 evidence (opt-in): the paused canvas frame,
+    // with node labels drawn in contrasting white.
+    await shot(canvas, 'viz-paused.png');
 
     // Second experiment, then switch back: the selection
     // from the second view must not survive the switch.
@@ -300,6 +308,8 @@ test('collider visualization: pinned version -> select -> switch clears -> resta
     await expect(viz.getByText('Motion reduced (system setting) — static view.')).toBeVisible();
     await expect(viz.getByRole('button', { name: 'Pause motion' })).toHaveCount(0);
     await expect(viz.getByRole('button', { name: 'Resume motion' })).toHaveCount(0);
+    // VIS-02 evidence (opt-in): the reduced-motion frame.
+    await shot(canvas, 'viz-reduced-motion.png');
   } finally {
     await stopApi();
     await new Promise<void>(r => fake.close(() => r()));
