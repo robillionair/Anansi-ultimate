@@ -73,3 +73,7 @@ Purpose: Help founders explore how hypothetical customer profiles might respond 
 ## Slice 1 checkpoint — 2026-10-31
 
 Slice 1 (synthetic personas & decision engine) implemented on branch `muse/m9-swarmtank-slice1` from Windows-verified baseline `7c576b85`; design before code in `docs/handoffs/M9-swarmtank-slice1-design.md`, addendum in `docs/handoffs/M9-swarmtank-slice1-addendum.md`. Linux verification: Rust 562 passed + 4 known live-Ollama environment failures, node 131/131, browser battery 15/15. Independent Windows rerun pending. Deferred, not claimed: §38 3D arena, scenario engine, provider-backed generation, URL import, spec auto-start, native save dialog.
+
+## Slice 2 checkpoint — 2026-10-31
+
+Slice 2 (3D arena visualization & accessible alternative) implemented on branch `muse/m9-swarmtank-slice2` from Windows-verified Slice 1 baseline `75a0b427`; design before code in `docs/handoffs/M9-swarmtank-slice2-design.md`, addendum in `docs/handoffs/M9-swarmtank-slice2-addendum.md`. Linux verification: Rust 562 passed + 4 known live-Ollama environment failures, node 138/138, e2e arena spec 3/3, browser battery 18/18. Independent Windows rerun pending. Deferred, not claimed: Slice 3 scenario controls, provider-backed re-evaluation, per-agent 3D labels, native save dialog.

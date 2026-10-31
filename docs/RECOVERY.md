@@ -1,3 +1,22 @@
+## Resume point — 2026-10-31 M9 SwarmTank Slice 2
+
+Owner-authorized M9 slice on branch
+`muse/m9-swarmtank-slice2` from Windows-verified
+Slice 1 baseline `75a0b427`. Three.js arena over
+the saved run: pedestal, amphitheater rings,
+decision clustering, raycast detail card, and a
+synchronized 2D table fallback; DPR clamp 2,
+low-power context, full disposal, per-run WebGL
+failure tracking, synchronous reduced-motion
+initial value. Linux verification: node 138/138,
+e2e arena spec 3/3, Rust 562 passed + 4 known
+live-Ollama failures, browser battery 18/18,
+tsc/contracts/docs (216 files)/web build clean.
+Independent Windows rerun pending (checklist in
+the delivery MANIFEST). Slice 3 scenario controls
+stay deferred. Native/release/production gates
+stay open.
+
 ## Resume point — 2026-10-31 M9 SwarmTank Slice 1
 
 Owner-authorized M9 slice on branch
