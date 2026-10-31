@@ -1,3 +1,34 @@
+## 2026-10-31 — M8 §27 artifacts & Forge provisioning (Linux; independent Windows rerun pending)
+
+On branch `muse/m8-artifacts-forge` from
+reviewer tip `7632f947` (the Three.js runtime;
+design committed before code, record in
+`docs/handoffs/M8-artifacts-forge-design.md` and
+`docs/handoffs/M8-artifacts-forge-addendum.md`).
+Six deterministic markdown artifacts derived purely
+from the saved experiment (Rust canonical, TS
+mirror byte-identical, pinned hash vectors agree),
+with SHA-256 + byte counts embedded in the
+document at save time and fail-closed recomputation
+in validation (covers restore and transfer);
+tabbed viewer with a safe renderer (zero raw-HTML
+injection), search, copy, and a deterministic STORE
+zip export whose MANIFEST hashes match the entries
+and the stored hashes; "Build This Product" reuses
+the existing transfer op (record brief as approved
+brief, derived ARCHITECTURE.md as the concept's
+initial specification, structural idempotency, no
+spec auto-start). Linux verification: Rust workspace
+553 passed + 4 known live-Ollama failures, Clippy/
+fmt clean, node 125/125, tsc/build/contracts clean,
+docs 209 files, browser battery 12/12 specs incl.
+backup/restore leg with already-transferred
+re-Build. Native save dialog recorded as open, not
+claimed; Windows rerun, native acceptance, preview
+promotion, M5 gates, §32 sandbox, and Slice 4 /
+Three.js Windows verification remain open; M8 is
+not complete.
+
 ## 2026-10-31 — M8 Three.js visualization (Linux; independent Windows rerun pending)
 
 On branch `muse/m8-threejs-visualization` from

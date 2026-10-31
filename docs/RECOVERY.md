@@ -1,3 +1,21 @@
+## Resume point — 2026-10-31 §27 artifacts & Forge provisioning
+
+Owner-authorized M8 slice on branch
+`muse/m8-artifacts-forge` from reviewer tip
+`7632f947` (Three.js runtime). Six deterministic
+artifacts with stored hashes, safe viewer,
+deterministic export bundle, and Build This
+Product over the existing transfer op; Linux
+verification: Rust 553 passed + 4 known
+live-Ollama failures, node 125/125, tsc/build/
+contracts clean, docs 209 files, browser battery
+12/12. Independent Windows rerun pending
+(checklist in the delivery MANIFEST). Native save
+dialog recorded as open, not claimed. Preserve
+closed document/URL, visualization repair,
+Three.js fallback, and §27 findings.
+Native/release/production gates stay open.
+
 ## Resume point — 2026-10-31 Three.js visualization
 
 Owner-authorized M8 slice on branch
