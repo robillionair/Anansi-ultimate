@@ -3293,6 +3293,78 @@ export interface RubricDimension {
   label: string;
   weight: number;
 }
+export interface ScenarioComparison {
+  convertedIds: string[];
+  introducedObjections: ScenarioObjectionDelta[];
+  lostIds: string[];
+  metrics: ScenarioMetricsPair;
+  resolvedObjections: ScenarioObjectionDelta[];
+  transitions: ScenarioTransition[];
+  unchangedCount: number;
+}
+export interface ScenarioObjectionDelta {
+  baselineCount: number;
+  item: string;
+  scenarioCount: number;
+}
+export interface ScenarioMetricsPair {
+  baseline: ScenarioMetrics;
+  priceElasticity?: number | null;
+  scenario: ScenarioMetrics;
+}
+export interface ScenarioMetrics {
+  averagePerceivedValue: number;
+  averageWillingnessToPay: number;
+  confused: number;
+  conversionRate: number;
+  converts: number;
+  rejects: number;
+  total: number;
+}
+export interface ScenarioTransition {
+  count: number;
+  from: string;
+  to: string;
+}
+export interface ScenarioMetrics {
+  averagePerceivedValue: number;
+  averageWillingnessToPay: number;
+  confused: number;
+  conversionRate: number;
+  converts: number;
+  rejects: number;
+  total: number;
+}
+export interface ScenarioMetricsPair {
+  baseline: ScenarioMetrics;
+  priceElasticity?: number | null;
+  scenario: ScenarioMetrics;
+}
+export interface ScenarioMetrics {
+  averagePerceivedValue: number;
+  averageWillingnessToPay: number;
+  confused: number;
+  conversionRate: number;
+  converts: number;
+  rejects: number;
+  total: number;
+}
+export interface ScenarioObjectionDelta {
+  baselineCount: number;
+  item: string;
+  scenarioCount: number;
+}
+export interface ScenarioTransition {
+  count: number;
+  from: string;
+  to: string;
+}
+export interface ScenarioTrustSignals {
+  freeTrialAvailable?: boolean;
+  moneyBackGuarantee?: boolean;
+  slaGuarantee?: boolean;
+  soc2Security?: boolean;
+}
 export interface ScheduleReadRequest {
   contractVersion: number;
   workspaceId: string;
@@ -3858,6 +3930,246 @@ export interface SwarmtankSource {
   kind: string;
   version: number;
 }
+export interface SwarmtankScenario {
+  activeFeatures: string[];
+  priceMonthly?: number | null;
+  setupDifficulty?: string;
+  trustSignals: ScenarioTrustSignals;
+}
+export interface ScenarioTrustSignals {
+  freeTrialAvailable?: boolean;
+  moneyBackGuarantee?: boolean;
+  slaGuarantee?: boolean;
+  soc2Security?: boolean;
+}
+export interface SwarmtankScenarioDiff {
+  baselineAverageWillingnessToPay: number;
+  baselineConversionRate: number;
+  conversionDelta: number;
+  introducedObjections: CountedItem[];
+  optimalPriceRecommendation: string;
+  resolvedObjections: CountedItem[];
+  scenarioArtifactId: string;
+  scenarioAverageWillingnessToPay: number;
+  scenarioContentHash: string;
+  scenarioConversionRate: number;
+  scenarioVersion: number;
+  transitions: ScenarioTransition[];
+}
+export interface CountedItem {
+  count: number;
+  item: string;
+}
+export interface ScenarioTransition {
+  count: number;
+  from: string;
+  to: string;
+}
+/**
+ * The stored scenario branch document. Self-contained
+ * by design: it embeds the parent run's personas,
+ * input, and baseline decisions, so validation
+ * recomputes everything from the document itself
+ * and never needs a parent lookup — which is what
+ * keeps branches restore-stable after artifact ids
+ * are remapped (the parent pin below is historical
+ * provenance only, like the Slice 1 source pin).
+ */
+export interface SwarmtankScenarioDoc {
+  baselineDecisions: SwarmtankDecision[];
+  baselineInput: SwarmtankInput;
+  contentHash: string;
+  decisions: SwarmtankDecision[];
+  format: string;
+  metrics: ScenarioMetricsPair;
+  parentArtifactId: string;
+  parentContentHash: string;
+  parentVersion: number;
+  personas: SwarmtankPersona[];
+  scenario: SwarmtankScenario;
+  transitions: ScenarioTransition[];
+  version: number;
+}
+/**
+ * One decision. `key_objection` is required for
+ * Confused/Reject and null for Convert.
+ */
+export interface SwarmtankDecision {
+  decision: string;
+  keyObjection?: string | null;
+  perceivedValue: number;
+  personaId: string;
+  reason: string;
+  score: number;
+  willingnessToPay: number;
+}
+/**
+ * A SwarmTank run input: manual fields, or fields
+ * copied from a saved experiment / Forge concept.
+ * `pricing` is display text; `price_amount` is the
+ * optional numeric monthly price the decision engine
+ * compares against budgets. A missing numeric price
+ * is never invented from the text.
+ */
+export interface SwarmtankInput {
+  description: string;
+  features?: string[];
+  industry?: string;
+  priceAmount?: number | null;
+  pricing?: string;
+  segment?: string;
+  valueProposition?: string;
+}
+export interface ScenarioMetricsPair {
+  baseline: ScenarioMetrics;
+  priceElasticity?: number | null;
+  scenario: ScenarioMetrics;
+}
+export interface ScenarioMetrics {
+  averagePerceivedValue: number;
+  averageWillingnessToPay: number;
+  confused: number;
+  conversionRate: number;
+  converts: number;
+  rejects: number;
+  total: number;
+}
+/**
+ * One synthetic buyer. Every surface rendering a
+ * persona must label it simulated; the `synthetic`
+ * field is always true and is part of the stored
+ * record so no consumer can render it unlabeled
+ * by accident.
+ */
+export interface SwarmtankPersona {
+  approximateBudget: number;
+  companySize: string;
+  expectedImplementationEffort: string;
+  id: string;
+  name: string;
+  needs: string[];
+  priceSensitivity: number;
+  priorities: string[];
+  purchaseConstraints: string[];
+  requiredTrustSignals: string[];
+  role: string;
+  skepticism: number;
+  synthetic: boolean;
+}
+export interface SwarmtankScenario {
+  activeFeatures: string[];
+  priceMonthly?: number | null;
+  setupDifficulty?: string;
+  trustSignals: ScenarioTrustSignals;
+}
+export interface ScenarioTrustSignals {
+  freeTrialAvailable?: boolean;
+  moneyBackGuarantee?: boolean;
+  slaGuarantee?: boolean;
+  soc2Security?: boolean;
+}
+export interface ScenarioTransition {
+  count: number;
+  from: string;
+  to: string;
+}
+export interface SwarmtankScenarioRequest {
+  contractVersion?: number;
+  parentArtifactId: string;
+  parentVersion: number;
+  projectId: string;
+  scenario: SwarmtankScenario;
+  workspaceId: string;
+}
+export interface SwarmtankScenario {
+  activeFeatures: string[];
+  priceMonthly?: number | null;
+  setupDifficulty?: string;
+  trustSignals: ScenarioTrustSignals;
+}
+export interface ScenarioTrustSignals {
+  freeTrialAvailable?: boolean;
+  moneyBackGuarantee?: boolean;
+  slaGuarantee?: boolean;
+  soc2Security?: boolean;
+}
+export interface SwarmtankScenarioResponse {
+  artifact: ArtifactRecord;
+  body: string;
+  contractVersion: number;
+  metrics: ScenarioMetricsPair;
+  report: SwarmtankReport;
+  transitions: ScenarioTransition[];
+}
+/**
+ * One artifact version's metadata — the §9 field set.
+ */
+export interface ArtifactRecord {
+  artifactId: string;
+  contentHash: string;
+  /**
+   * Generator/model metadata: `{"kind":"manual"}` in this
+   * slice; generator slices record model provenance here.
+   */
+  generator?: {
+    [k: string]: unknown;
+  };
+  privacy: string;
+  projectId: string;
+  sourceReferences: string[];
+  /**
+   * The §9 timestamp: when this version was registered.
+   */
+  timestamp: string;
+  title: string;
+  type: string;
+  validationStatus: string;
+  version: number;
+}
+export interface ScenarioMetricsPair {
+  baseline: ScenarioMetrics;
+  priceElasticity?: number | null;
+  scenario: ScenarioMetrics;
+}
+export interface ScenarioMetrics {
+  averagePerceivedValue: number;
+  averageWillingnessToPay: number;
+  confused: number;
+  conversionRate: number;
+  converts: number;
+  rejects: number;
+  total: number;
+}
+export interface SwarmtankReport {
+  averageWillingnessToPay: number;
+  confused: number;
+  conversionRate: number;
+  converts: number;
+  objectionBreakdown: CountedItem[];
+  recommendations: SwarmtankRecommendation[];
+  rejects: number;
+  segments: CountedItem[];
+  topConfusionPoints: CountedItem[];
+  topObjections: CountedItem[];
+  total: number;
+}
+export interface CountedItem {
+  count: number;
+  item: string;
+}
+export interface SwarmtankRecommendation {
+  assumption: string;
+  detail: string;
+  syntheticEvidence: string;
+  title: string;
+  uncertainty: string;
+  validation: string;
+}
+export interface ScenarioTransition {
+  count: number;
+  from: string;
+  to: string;
+}
 /**
  * The import source pin: an exact experiment or
  * concept version, never a floating "latest".
@@ -3875,6 +4187,13 @@ export interface SwarmtankTransferRequest {
   projectId: string;
   runArtifactId: string;
   runVersion: number;
+  /**
+   * M9 Slice 3: when a scenario branch is applied,
+   * both fields name it; otherwise both are absent
+   * and the transfer carries baseline recommendations.
+   */
+  scenarioArtifactId?: string | null;
+  scenarioVersion?: number | null;
   workspaceId: string;
 }
 export interface SwarmtankTransferResponse {
@@ -3942,6 +4261,16 @@ export interface TransferConceptDoc {
    * application.
    */
   swarmtankAddendum?: SwarmtankAddendum | null;
+  /**
+   * M9 Slice 3 scenario comparison: the priced /
+   * featured scenario that produced the applied
+   * recommendations, when the user applied scenario
+   * recommendations rather than baseline ones.
+   * Absent on concepts without a SwarmTank scenario
+   * application, and cleared when a later baseline
+   * application replaces a scenario one.
+   */
+  swarmtankScenarioDiff?: SwarmtankScenarioDiff | null;
   unknowns: string[];
   version: number;
 }
@@ -3975,6 +4304,25 @@ export interface SwarmtankRecommendation {
 export interface CountedItem {
   count: number;
   item: string;
+}
+export interface SwarmtankScenarioDiff {
+  baselineAverageWillingnessToPay: number;
+  baselineConversionRate: number;
+  conversionDelta: number;
+  introducedObjections: CountedItem[];
+  optimalPriceRecommendation: string;
+  resolvedObjections: CountedItem[];
+  scenarioArtifactId: string;
+  scenarioAverageWillingnessToPay: number;
+  scenarioContentHash: string;
+  scenarioConversionRate: number;
+  scenarioVersion: number;
+  transitions: ScenarioTransition[];
+}
+export interface ScenarioTransition {
+  count: number;
+  from: string;
+  to: string;
 }
 /**
  * The transfer request: an exact experiment version,

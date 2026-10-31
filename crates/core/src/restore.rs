@@ -1712,10 +1712,19 @@ fn validate_original_experiment_bindings(
 /// dereferenced by report or transfer, so a
 /// remapped restore leaves the run itself fully
 /// functional.
+///
+/// M9 Slice 3: scenario branches are gated the same
+/// way. A branch is self-contained (it embeds the
+/// parent run's personas, input, and baseline
+/// decisions), so its validation recomputes
+/// everything from the document itself and never
+/// needs a parent lookup — which keeps branches
+/// valid after artifact ids are remapped, since
+/// their parent pin is provenance only.
 fn validate_original_swarmtank_bindings(source: &rusqlite::Connection) -> Result<(), CommandError> {
     let mut q = source
         .prepare(
-            "SELECT workspace_id, body, content_hash FROM artifact_versions WHERE artifact_type = 'simulation'",
+            "SELECT workspace_id, body, content_hash FROM artifact_versions WHERE artifact_type IN ('simulation', 'scenario')",
         )
         .map_err(|_| crate::jobs::invalid())?;
     let mut rows = q.query([]).map_err(|_| crate::jobs::invalid())?;
@@ -1729,15 +1738,24 @@ fn validate_original_swarmtank_bindings(source: &rusqlite::Connection) -> Result
         let Ok(value) = serde_json::from_str::<serde_json::Value>(&body) else {
             continue;
         };
-        if value.get("format").and_then(|v| v.as_str()) != Some("anansi-swarmtank-run") {
-            continue;
+        let format = value.get("format").and_then(|v| v.as_str());
+        if format == Some("anansi-swarmtank-run") {
+            if crate::content::hash(body.as_bytes()) != content_hash {
+                return Err(crate::jobs::invalid());
+            }
+            let doc: crate::swarmtank::SwarmtankRunDoc =
+                serde_json::from_str(&body).map_err(|_| crate::jobs::invalid())?;
+            crate::swarmtank::validate_swarmtank_run_doc(&doc)
+                .map_err(|_| crate::jobs::invalid())?;
+        } else if format == Some("anansi-swarmtank-scenario") {
+            if crate::content::hash(body.as_bytes()) != content_hash {
+                return Err(crate::jobs::invalid());
+            }
+            let doc: crate::swarmtank::SwarmtankScenarioDoc =
+                serde_json::from_str(&body).map_err(|_| crate::jobs::invalid())?;
+            crate::swarmtank::validate_swarmtank_scenario_doc(&doc)
+                .map_err(|_| crate::jobs::invalid())?;
         }
-        if crate::content::hash(body.as_bytes()) != content_hash {
-            return Err(crate::jobs::invalid());
-        }
-        let doc: crate::swarmtank::SwarmtankRunDoc =
-            serde_json::from_str(&body).map_err(|_| crate::jobs::invalid())?;
-        crate::swarmtank::validate_swarmtank_run_doc(&doc).map_err(|_| crate::jobs::invalid())?;
     }
     Ok(())
 }

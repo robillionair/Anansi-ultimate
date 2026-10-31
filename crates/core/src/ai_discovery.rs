@@ -826,6 +826,7 @@ impl Core {
             | "swarmtank-evaluate"
             | "swarmtank-report"
             | "swarmtank-transfer-to-forge"
+            | "swarmtank-scenario"
             | "ideas-generate-start"
             | "ideas-generate-poll"
             | "ideas-generate-cancel"

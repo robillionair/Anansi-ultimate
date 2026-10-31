@@ -12390,6 +12390,366 @@
     "title": "RubricDoc",
     "type": "object"
   },
+  "ScenarioComparison": {
+    "$defs": {
+      "ScenarioMetrics": {
+        "properties": {
+          "averagePerceivedValue": {
+            "format": "double",
+            "type": "number"
+          },
+          "averageWillingnessToPay": {
+            "format": "double",
+            "type": "number"
+          },
+          "confused": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "conversionRate": {
+            "format": "double",
+            "type": "number"
+          },
+          "converts": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "rejects": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "total": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "converts",
+          "confused",
+          "rejects",
+          "conversionRate",
+          "averageWillingnessToPay",
+          "averagePerceivedValue"
+        ],
+        "type": "object"
+      },
+      "ScenarioMetricsPair": {
+        "properties": {
+          "baseline": {
+            "$ref": "#/$defs/ScenarioMetrics"
+          },
+          "priceElasticity": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "scenario": {
+            "$ref": "#/$defs/ScenarioMetrics"
+          }
+        },
+        "required": [
+          "baseline",
+          "scenario"
+        ],
+        "type": "object"
+      },
+      "ScenarioObjectionDelta": {
+        "properties": {
+          "baselineCount": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "item": {
+            "type": "string"
+          },
+          "scenarioCount": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "item",
+          "baselineCount",
+          "scenarioCount"
+        ],
+        "type": "object"
+      },
+      "ScenarioTransition": {
+        "properties": {
+          "count": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "from",
+          "to",
+          "count"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "convertedIds": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "introducedObjections": {
+        "items": {
+          "$ref": "#/$defs/ScenarioObjectionDelta"
+        },
+        "type": "array"
+      },
+      "lostIds": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "metrics": {
+        "$ref": "#/$defs/ScenarioMetricsPair"
+      },
+      "resolvedObjections": {
+        "items": {
+          "$ref": "#/$defs/ScenarioObjectionDelta"
+        },
+        "type": "array"
+      },
+      "transitions": {
+        "items": {
+          "$ref": "#/$defs/ScenarioTransition"
+        },
+        "type": "array"
+      },
+      "unchangedCount": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "transitions",
+      "convertedIds",
+      "lostIds",
+      "unchangedCount",
+      "resolvedObjections",
+      "introducedObjections",
+      "metrics"
+    ],
+    "title": "ScenarioComparison",
+    "type": "object"
+  },
+  "ScenarioMetrics": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "averagePerceivedValue": {
+        "format": "double",
+        "type": "number"
+      },
+      "averageWillingnessToPay": {
+        "format": "double",
+        "type": "number"
+      },
+      "confused": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "conversionRate": {
+        "format": "double",
+        "type": "number"
+      },
+      "converts": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "rejects": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "total": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "total",
+      "converts",
+      "confused",
+      "rejects",
+      "conversionRate",
+      "averageWillingnessToPay",
+      "averagePerceivedValue"
+    ],
+    "title": "ScenarioMetrics",
+    "type": "object"
+  },
+  "ScenarioMetricsPair": {
+    "$defs": {
+      "ScenarioMetrics": {
+        "properties": {
+          "averagePerceivedValue": {
+            "format": "double",
+            "type": "number"
+          },
+          "averageWillingnessToPay": {
+            "format": "double",
+            "type": "number"
+          },
+          "confused": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "conversionRate": {
+            "format": "double",
+            "type": "number"
+          },
+          "converts": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "rejects": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "total": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "converts",
+          "confused",
+          "rejects",
+          "conversionRate",
+          "averageWillingnessToPay",
+          "averagePerceivedValue"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "baseline": {
+        "$ref": "#/$defs/ScenarioMetrics"
+      },
+      "priceElasticity": {
+        "format": "double",
+        "type": [
+          "number",
+          "null"
+        ]
+      },
+      "scenario": {
+        "$ref": "#/$defs/ScenarioMetrics"
+      }
+    },
+    "required": [
+      "baseline",
+      "scenario"
+    ],
+    "title": "ScenarioMetricsPair",
+    "type": "object"
+  },
+  "ScenarioObjectionDelta": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "baselineCount": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "item": {
+        "type": "string"
+      },
+      "scenarioCount": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "item",
+      "baselineCount",
+      "scenarioCount"
+    ],
+    "title": "ScenarioObjectionDelta",
+    "type": "object"
+  },
+  "ScenarioTransition": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "count": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "from": {
+        "type": "string"
+      },
+      "to": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "from",
+      "to",
+      "count"
+    ],
+    "title": "ScenarioTransition",
+    "type": "object"
+  },
+  "ScenarioTrustSignals": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "freeTrialAvailable": {
+        "default": false,
+        "type": "boolean"
+      },
+      "moneyBackGuarantee": {
+        "default": false,
+        "type": "boolean"
+      },
+      "slaGuarantee": {
+        "default": false,
+        "type": "boolean"
+      },
+      "soc2Security": {
+        "default": false,
+        "type": "boolean"
+      }
+    },
+    "title": "ScenarioTrustSignals",
+    "type": "object"
+  },
   "ScheduleReadRequest": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
@@ -14492,6 +14852,967 @@
     "title": "SwarmtankRunDoc",
     "type": "object"
   },
+  "SwarmtankScenario": {
+    "$defs": {
+      "ScenarioTrustSignals": {
+        "additionalProperties": false,
+        "properties": {
+          "freeTrialAvailable": {
+            "default": false,
+            "type": "boolean"
+          },
+          "moneyBackGuarantee": {
+            "default": false,
+            "type": "boolean"
+          },
+          "slaGuarantee": {
+            "default": false,
+            "type": "boolean"
+          },
+          "soc2Security": {
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "activeFeatures": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "priceMonthly": {
+        "format": "double",
+        "type": [
+          "number",
+          "null"
+        ]
+      },
+      "setupDifficulty": {
+        "default": "moderate",
+        "type": "string"
+      },
+      "trustSignals": {
+        "$ref": "#/$defs/ScenarioTrustSignals"
+      }
+    },
+    "required": [
+      "activeFeatures",
+      "trustSignals"
+    ],
+    "title": "SwarmtankScenario",
+    "type": "object"
+  },
+  "SwarmtankScenarioDiff": {
+    "$defs": {
+      "CountedItem": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "item": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "item",
+          "count"
+        ],
+        "type": "object"
+      },
+      "ScenarioTransition": {
+        "properties": {
+          "count": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "from",
+          "to",
+          "count"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "baselineAverageWillingnessToPay": {
+        "format": "double",
+        "type": "number"
+      },
+      "baselineConversionRate": {
+        "format": "double",
+        "type": "number"
+      },
+      "conversionDelta": {
+        "format": "double",
+        "type": "number"
+      },
+      "introducedObjections": {
+        "items": {
+          "$ref": "#/$defs/CountedItem"
+        },
+        "type": "array"
+      },
+      "optimalPriceRecommendation": {
+        "type": "string"
+      },
+      "resolvedObjections": {
+        "items": {
+          "$ref": "#/$defs/CountedItem"
+        },
+        "type": "array"
+      },
+      "scenarioArtifactId": {
+        "type": "string"
+      },
+      "scenarioAverageWillingnessToPay": {
+        "format": "double",
+        "type": "number"
+      },
+      "scenarioContentHash": {
+        "type": "string"
+      },
+      "scenarioConversionRate": {
+        "format": "double",
+        "type": "number"
+      },
+      "scenarioVersion": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "transitions": {
+        "items": {
+          "$ref": "#/$defs/ScenarioTransition"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "scenarioArtifactId",
+      "scenarioVersion",
+      "scenarioContentHash",
+      "baselineConversionRate",
+      "scenarioConversionRate",
+      "conversionDelta",
+      "baselineAverageWillingnessToPay",
+      "scenarioAverageWillingnessToPay",
+      "optimalPriceRecommendation",
+      "resolvedObjections",
+      "introducedObjections",
+      "transitions"
+    ],
+    "title": "SwarmtankScenarioDiff",
+    "type": "object"
+  },
+  "SwarmtankScenarioDoc": {
+    "$defs": {
+      "ScenarioMetrics": {
+        "properties": {
+          "averagePerceivedValue": {
+            "format": "double",
+            "type": "number"
+          },
+          "averageWillingnessToPay": {
+            "format": "double",
+            "type": "number"
+          },
+          "confused": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "conversionRate": {
+            "format": "double",
+            "type": "number"
+          },
+          "converts": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "rejects": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "total": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "converts",
+          "confused",
+          "rejects",
+          "conversionRate",
+          "averageWillingnessToPay",
+          "averagePerceivedValue"
+        ],
+        "type": "object"
+      },
+      "ScenarioMetricsPair": {
+        "properties": {
+          "baseline": {
+            "$ref": "#/$defs/ScenarioMetrics"
+          },
+          "priceElasticity": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "scenario": {
+            "$ref": "#/$defs/ScenarioMetrics"
+          }
+        },
+        "required": [
+          "baseline",
+          "scenario"
+        ],
+        "type": "object"
+      },
+      "ScenarioTransition": {
+        "properties": {
+          "count": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "from",
+          "to",
+          "count"
+        ],
+        "type": "object"
+      },
+      "ScenarioTrustSignals": {
+        "additionalProperties": false,
+        "properties": {
+          "freeTrialAvailable": {
+            "default": false,
+            "type": "boolean"
+          },
+          "moneyBackGuarantee": {
+            "default": false,
+            "type": "boolean"
+          },
+          "slaGuarantee": {
+            "default": false,
+            "type": "boolean"
+          },
+          "soc2Security": {
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "SwarmtankDecision": {
+        "additionalProperties": false,
+        "description": "One decision. `key_objection` is required for\nConfused/Reject and null for Convert.",
+        "properties": {
+          "decision": {
+            "type": "string"
+          },
+          "keyObjection": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "perceivedValue": {
+            "format": "double",
+            "type": "number"
+          },
+          "personaId": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "score": {
+            "format": "double",
+            "type": "number"
+          },
+          "willingnessToPay": {
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "required": [
+          "personaId",
+          "decision",
+          "reason",
+          "perceivedValue",
+          "willingnessToPay",
+          "score"
+        ],
+        "type": "object"
+      },
+      "SwarmtankInput": {
+        "additionalProperties": false,
+        "description": "A SwarmTank run input: manual fields, or fields\ncopied from a saved experiment / Forge concept.\n`pricing` is display text; `price_amount` is the\noptional numeric monthly price the decision engine\ncompares against budgets. A missing numeric price\nis never invented from the text.",
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "features": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "industry": {
+            "default": "",
+            "type": "string"
+          },
+          "priceAmount": {
+            "default": null,
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "pricing": {
+            "default": "",
+            "type": "string"
+          },
+          "segment": {
+            "default": "",
+            "type": "string"
+          },
+          "valueProposition": {
+            "default": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "description"
+        ],
+        "type": "object"
+      },
+      "SwarmtankPersona": {
+        "additionalProperties": false,
+        "description": "One synthetic buyer. Every surface rendering a\npersona must label it simulated; the `synthetic`\nfield is always true and is part of the stored\nrecord so no consumer can render it unlabeled\nby accident.",
+        "properties": {
+          "approximateBudget": {
+            "format": "double",
+            "type": "number"
+          },
+          "companySize": {
+            "type": "string"
+          },
+          "expectedImplementationEffort": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "needs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "priceSensitivity": {
+            "format": "double",
+            "type": "number"
+          },
+          "priorities": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "purchaseConstraints": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "requiredTrustSignals": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "role": {
+            "type": "string"
+          },
+          "skepticism": {
+            "format": "double",
+            "type": "number"
+          },
+          "synthetic": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "role",
+          "companySize",
+          "approximateBudget",
+          "needs",
+          "priorities",
+          "skepticism",
+          "priceSensitivity",
+          "purchaseConstraints",
+          "requiredTrustSignals",
+          "expectedImplementationEffort",
+          "synthetic"
+        ],
+        "type": "object"
+      },
+      "SwarmtankScenario": {
+        "additionalProperties": false,
+        "properties": {
+          "activeFeatures": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "priceMonthly": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "setupDifficulty": {
+            "default": "moderate",
+            "type": "string"
+          },
+          "trustSignals": {
+            "$ref": "#/$defs/ScenarioTrustSignals"
+          }
+        },
+        "required": [
+          "activeFeatures",
+          "trustSignals"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "description": "The stored scenario branch document. Self-contained\nby design: it embeds the parent run's personas,\ninput, and baseline decisions, so validation\nrecomputes everything from the document itself\nand never needs a parent lookup — which is what\nkeeps branches restore-stable after artifact ids\nare remapped (the parent pin below is historical\nprovenance only, like the Slice 1 source pin).",
+    "properties": {
+      "baselineDecisions": {
+        "items": {
+          "$ref": "#/$defs/SwarmtankDecision"
+        },
+        "type": "array"
+      },
+      "baselineInput": {
+        "$ref": "#/$defs/SwarmtankInput"
+      },
+      "contentHash": {
+        "type": "string"
+      },
+      "decisions": {
+        "items": {
+          "$ref": "#/$defs/SwarmtankDecision"
+        },
+        "type": "array"
+      },
+      "format": {
+        "type": "string"
+      },
+      "metrics": {
+        "$ref": "#/$defs/ScenarioMetricsPair"
+      },
+      "parentArtifactId": {
+        "type": "string"
+      },
+      "parentContentHash": {
+        "type": "string"
+      },
+      "parentVersion": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "personas": {
+        "items": {
+          "$ref": "#/$defs/SwarmtankPersona"
+        },
+        "type": "array"
+      },
+      "scenario": {
+        "$ref": "#/$defs/SwarmtankScenario"
+      },
+      "transitions": {
+        "items": {
+          "$ref": "#/$defs/ScenarioTransition"
+        },
+        "type": "array"
+      },
+      "version": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "format",
+      "version",
+      "parentArtifactId",
+      "parentVersion",
+      "parentContentHash",
+      "scenario",
+      "personas",
+      "baselineInput",
+      "baselineDecisions",
+      "decisions",
+      "transitions",
+      "metrics",
+      "contentHash"
+    ],
+    "title": "SwarmtankScenarioDoc",
+    "type": "object"
+  },
+  "SwarmtankScenarioRequest": {
+    "$defs": {
+      "ScenarioTrustSignals": {
+        "additionalProperties": false,
+        "properties": {
+          "freeTrialAvailable": {
+            "default": false,
+            "type": "boolean"
+          },
+          "moneyBackGuarantee": {
+            "default": false,
+            "type": "boolean"
+          },
+          "slaGuarantee": {
+            "default": false,
+            "type": "boolean"
+          },
+          "soc2Security": {
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "SwarmtankScenario": {
+        "additionalProperties": false,
+        "properties": {
+          "activeFeatures": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "priceMonthly": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "setupDifficulty": {
+            "default": "moderate",
+            "type": "string"
+          },
+          "trustSignals": {
+            "$ref": "#/$defs/ScenarioTrustSignals"
+          }
+        },
+        "required": [
+          "activeFeatures",
+          "trustSignals"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "contractVersion": {
+        "default": 1,
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "parentArtifactId": {
+        "type": "string"
+      },
+      "parentVersion": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "projectId": {
+        "type": "string"
+      },
+      "scenario": {
+        "$ref": "#/$defs/SwarmtankScenario"
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "workspaceId",
+      "projectId",
+      "parentArtifactId",
+      "parentVersion",
+      "scenario"
+    ],
+    "title": "SwarmtankScenarioRequest",
+    "type": "object"
+  },
+  "SwarmtankScenarioResponse": {
+    "$defs": {
+      "ArtifactRecord": {
+        "description": "One artifact version's metadata — the §9 field set.",
+        "properties": {
+          "artifactId": {
+            "type": "string"
+          },
+          "contentHash": {
+            "type": "string"
+          },
+          "generator": {
+            "description": "Generator/model metadata: `{\"kind\":\"manual\"}` in this\nslice; generator slices record model provenance here."
+          },
+          "privacy": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "sourceReferences": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "timestamp": {
+            "description": "The §9 timestamp: when this version was registered.",
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "validationStatus": {
+            "type": "string"
+          },
+          "version": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "artifactId",
+          "projectId",
+          "type",
+          "version",
+          "title",
+          "timestamp",
+          "sourceReferences",
+          "validationStatus",
+          "privacy",
+          "contentHash"
+        ],
+        "type": "object"
+      },
+      "CountedItem": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "item": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "item",
+          "count"
+        ],
+        "type": "object"
+      },
+      "ScenarioMetrics": {
+        "properties": {
+          "averagePerceivedValue": {
+            "format": "double",
+            "type": "number"
+          },
+          "averageWillingnessToPay": {
+            "format": "double",
+            "type": "number"
+          },
+          "confused": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "conversionRate": {
+            "format": "double",
+            "type": "number"
+          },
+          "converts": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "rejects": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "total": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "converts",
+          "confused",
+          "rejects",
+          "conversionRate",
+          "averageWillingnessToPay",
+          "averagePerceivedValue"
+        ],
+        "type": "object"
+      },
+      "ScenarioMetricsPair": {
+        "properties": {
+          "baseline": {
+            "$ref": "#/$defs/ScenarioMetrics"
+          },
+          "priceElasticity": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "scenario": {
+            "$ref": "#/$defs/ScenarioMetrics"
+          }
+        },
+        "required": [
+          "baseline",
+          "scenario"
+        ],
+        "type": "object"
+      },
+      "ScenarioTransition": {
+        "properties": {
+          "count": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "from",
+          "to",
+          "count"
+        ],
+        "type": "object"
+      },
+      "SwarmtankRecommendation": {
+        "additionalProperties": false,
+        "properties": {
+          "assumption": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "syntheticEvidence": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "uncertainty": {
+            "type": "string"
+          },
+          "validation": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "detail",
+          "assumption",
+          "syntheticEvidence",
+          "uncertainty",
+          "validation"
+        ],
+        "type": "object"
+      },
+      "SwarmtankReport": {
+        "additionalProperties": false,
+        "properties": {
+          "averageWillingnessToPay": {
+            "format": "double",
+            "type": "number"
+          },
+          "confused": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "conversionRate": {
+            "format": "double",
+            "type": "number"
+          },
+          "converts": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "objectionBreakdown": {
+            "items": {
+              "$ref": "#/$defs/CountedItem"
+            },
+            "type": "array"
+          },
+          "recommendations": {
+            "items": {
+              "$ref": "#/$defs/SwarmtankRecommendation"
+            },
+            "type": "array"
+          },
+          "rejects": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "segments": {
+            "items": {
+              "$ref": "#/$defs/CountedItem"
+            },
+            "type": "array"
+          },
+          "topConfusionPoints": {
+            "items": {
+              "$ref": "#/$defs/CountedItem"
+            },
+            "type": "array"
+          },
+          "topObjections": {
+            "items": {
+              "$ref": "#/$defs/CountedItem"
+            },
+            "type": "array"
+          },
+          "total": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "converts",
+          "confused",
+          "rejects",
+          "conversionRate",
+          "averageWillingnessToPay",
+          "topConfusionPoints",
+          "topObjections",
+          "objectionBreakdown",
+          "segments",
+          "recommendations"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "artifact": {
+        "$ref": "#/$defs/ArtifactRecord"
+      },
+      "body": {
+        "type": "string"
+      },
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "metrics": {
+        "$ref": "#/$defs/ScenarioMetricsPair"
+      },
+      "report": {
+        "$ref": "#/$defs/SwarmtankReport"
+      },
+      "transitions": {
+        "items": {
+          "$ref": "#/$defs/ScenarioTransition"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "artifact",
+      "body",
+      "report",
+      "transitions",
+      "metrics"
+    ],
+    "title": "SwarmtankScenarioResponse",
+    "type": "object"
+  },
   "SwarmtankSource": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
@@ -14550,6 +15871,23 @@
         "format": "uint32",
         "minimum": 0,
         "type": "integer"
+      },
+      "scenarioArtifactId": {
+        "default": null,
+        "description": "M9 Slice 3: when a scenario branch is applied,\nboth fields name it; otherwise both are absent\nand the transfer carries baseline recommendations.",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "scenarioVersion": {
+        "default": null,
+        "format": "uint32",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
       },
       "workspaceId": {
         "type": "string"
@@ -14686,6 +16024,27 @@
         ],
         "type": "object"
       },
+      "ScenarioTransition": {
+        "properties": {
+          "count": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "from",
+          "to",
+          "count"
+        ],
+        "type": "object"
+      },
       "SwarmtankAddendum": {
         "additionalProperties": false,
         "description": "The revision note a transfer writes onto a Forge\nconcept's new version.",
@@ -14761,6 +16120,77 @@
           "validation"
         ],
         "type": "object"
+      },
+      "SwarmtankScenarioDiff": {
+        "properties": {
+          "baselineAverageWillingnessToPay": {
+            "format": "double",
+            "type": "number"
+          },
+          "baselineConversionRate": {
+            "format": "double",
+            "type": "number"
+          },
+          "conversionDelta": {
+            "format": "double",
+            "type": "number"
+          },
+          "introducedObjections": {
+            "items": {
+              "$ref": "#/$defs/CountedItem"
+            },
+            "type": "array"
+          },
+          "optimalPriceRecommendation": {
+            "type": "string"
+          },
+          "resolvedObjections": {
+            "items": {
+              "$ref": "#/$defs/CountedItem"
+            },
+            "type": "array"
+          },
+          "scenarioArtifactId": {
+            "type": "string"
+          },
+          "scenarioAverageWillingnessToPay": {
+            "format": "double",
+            "type": "number"
+          },
+          "scenarioContentHash": {
+            "type": "string"
+          },
+          "scenarioConversionRate": {
+            "format": "double",
+            "type": "number"
+          },
+          "scenarioVersion": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "transitions": {
+            "items": {
+              "$ref": "#/$defs/ScenarioTransition"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "scenarioArtifactId",
+          "scenarioVersion",
+          "scenarioContentHash",
+          "baselineConversionRate",
+          "scenarioConversionRate",
+          "conversionDelta",
+          "baselineAverageWillingnessToPay",
+          "scenarioAverageWillingnessToPay",
+          "optimalPriceRecommendation",
+          "resolvedObjections",
+          "introducedObjections",
+          "transitions"
+        ],
+        "type": "object"
       }
     },
     "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -14824,6 +16254,17 @@
           }
         ],
         "description": "M9 Slice 1 SwarmTank revision note: the top\nobjections, confusion points, and recommended\nadjustments from one evaluated run, written by\nswarmtank-transfer-to-forge onto a new concept\nversion. Absent on concepts without a SwarmTank\napplication."
+      },
+      "swarmtankScenarioDiff": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/SwarmtankScenarioDiff"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "M9 Slice 3 scenario comparison: the priced /\nfeatured scenario that produced the applied\nrecommendations, when the user applied scenario\nrecommendations rather than baseline ones.\nAbsent on concepts without a SwarmTank scenario\napplication, and cleared when a later baseline\napplication replaces a scenario one."
       },
       "unknowns": {
         "items": {

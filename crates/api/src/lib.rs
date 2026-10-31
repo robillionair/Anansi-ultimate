@@ -123,6 +123,7 @@ pub fn command_path(path: &str) -> bool {
             | "/v1/ai/swarmtank-evaluate"
             | "/v1/ai/swarmtank-report"
             | "/v1/ai/swarmtank-transfer-to-forge"
+            | "/v1/ai/swarmtank-scenario"
             | "/v1/ai/opportunities-generate-start"
             | "/v1/ai/opportunities-generate-poll"
             | "/v1/ai/opportunities-generate-cancel"

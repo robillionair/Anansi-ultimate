@@ -53,11 +53,14 @@ use anansi_core::relationships::{
     RelationshipDetails, RelationshipDraft, RelationshipList, RelationshipRecord,
 };
 use anansi_core::swarmtank::{
-    CountedItem, SwarmtankAddendum, SwarmtankBatchInfo, SwarmtankDecision,
-    SwarmtankEvaluateRequest, SwarmtankEvaluateResponse, SwarmtankInput, SwarmtankPersona,
-    SwarmtankPersonasRequest, SwarmtankPersonasResponse, SwarmtankRecommendation, SwarmtankReport,
-    SwarmtankReportRequest, SwarmtankReportResponse, SwarmtankRunDoc, SwarmtankSource,
-    SwarmtankTransferRequest, SwarmtankTransferResponse,
+    CountedItem, ScenarioComparison, ScenarioMetrics, ScenarioMetricsPair, ScenarioObjectionDelta,
+    ScenarioTransition, ScenarioTrustSignals, SwarmtankAddendum, SwarmtankBatchInfo,
+    SwarmtankDecision, SwarmtankEvaluateRequest, SwarmtankEvaluateResponse, SwarmtankInput,
+    SwarmtankPersona, SwarmtankPersonasRequest, SwarmtankPersonasResponse, SwarmtankRecommendation,
+    SwarmtankReport, SwarmtankReportRequest, SwarmtankReportResponse, SwarmtankRunDoc,
+    SwarmtankScenario, SwarmtankScenarioDiff, SwarmtankScenarioDoc, SwarmtankScenarioRequest,
+    SwarmtankScenarioResponse, SwarmtankSource, SwarmtankTransferRequest,
+    SwarmtankTransferResponse,
 };
 use anansi_core::transfer::{TransferConceptDoc, TransferRequest, TransferResponse};
 use anansi_core::workspace::{
@@ -126,6 +129,17 @@ fn main() {
         "SwarmtankReportResponse":schemars::schema_for!(SwarmtankReportResponse),
         "SwarmtankTransferRequest":schemars::schema_for!(SwarmtankTransferRequest),
         "SwarmtankTransferResponse":schemars::schema_for!(SwarmtankTransferResponse),
+        "ScenarioTrustSignals":schemars::schema_for!(ScenarioTrustSignals),
+        "SwarmtankScenario":schemars::schema_for!(SwarmtankScenario),
+        "ScenarioTransition":schemars::schema_for!(ScenarioTransition),
+        "ScenarioObjectionDelta":schemars::schema_for!(ScenarioObjectionDelta),
+        "ScenarioMetrics":schemars::schema_for!(ScenarioMetrics),
+        "ScenarioMetricsPair":schemars::schema_for!(ScenarioMetricsPair),
+        "ScenarioComparison":schemars::schema_for!(ScenarioComparison),
+        "SwarmtankScenarioDoc":schemars::schema_for!(SwarmtankScenarioDoc),
+        "SwarmtankScenarioDiff":schemars::schema_for!(SwarmtankScenarioDiff),
+        "SwarmtankScenarioRequest":schemars::schema_for!(SwarmtankScenarioRequest),
+        "SwarmtankScenarioResponse":schemars::schema_for!(SwarmtankScenarioResponse),
         "IdeasGenerateStartRequest":schemars::schema_for!(IdeasGenerateStartRequest),
         "IdeasRunRequest":schemars::schema_for!(IdeasRunRequest),
         "IdeasGenerateStartResponse":schemars::schema_for!(IdeasGenerateStartResponse),

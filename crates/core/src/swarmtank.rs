@@ -328,6 +328,13 @@ pub struct SwarmtankTransferRequest {
     pub run_version: u32,
     pub concept_artifact_id: String,
     pub expected_concept_version: u32,
+    /// M9 Slice 3: when a scenario branch is applied,
+    /// both fields name it; otherwise both are absent
+    /// and the transfer carries baseline recommendations.
+    #[serde(default)]
+    pub scenario_artifact_id: Option<String>,
+    #[serde(default)]
+    pub scenario_version: Option<u32>,
 }
 
 #[derive(Debug, Serialize, JsonSchema)]
@@ -955,11 +962,16 @@ fn objection_for(factor: &str) -> &'static str {
 
 fn category_for(objection: &str) -> &'static str {
     match objection {
-        "Budget constraints" | "Price sensitivity" | "Price exceeds budget" => "price",
+        "Budget constraints"
+        | "Price sensitivity"
+        | "Price exceeds budget"
+        | "Price exceeds budget under high price sensitivity" => "price",
         "Missing trust signals" => "trust",
         "Unclear value proposition" => "clarity",
         "Weak product-customer fit" => "fit",
         "Lacks purchasing authority" => "authority",
+        "High setup overhead exceeds team capacity" => "switching",
+        _ if objection.starts_with("Missing critical required feature:") => "fit",
         _ => "switching",
     }
 }
@@ -1031,6 +1043,758 @@ pub fn evaluate_population(
         .iter()
         .map(|p| evaluate_persona(p, input))
         .collect()
+}
+
+// ---------------------------------------------------------------------------
+// M9 Slice 3: scenario sensitivity (§39). A
+// separate evaluator over a baseline run: the
+// baseline engine above is frozen, and scenario
+// decisions never rewrite baseline decisions.
+// The TS mirror in packages/ui/src/
+// swarmtankSensitivity.ts implements exactly these
+// formulas; any change here must land there too,
+// including the integer-cents reason formatting
+// (§2.4 of the Slice 3 design: Rust {:.2} and JS
+// toFixed(2) round half-values differently).
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ScenarioTrustSignals {
+    #[serde(default)]
+    pub soc2_security: bool,
+    #[serde(default)]
+    pub free_trial_available: bool,
+    #[serde(default)]
+    pub sla_guarantee: bool,
+    #[serde(default)]
+    pub money_back_guarantee: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SwarmtankScenario {
+    pub price_monthly: Option<f64>,
+    pub active_features: Vec<String>,
+    pub trust_signals: ScenarioTrustSignals,
+    #[serde(default = "default_setup_difficulty")]
+    pub setup_difficulty: String,
+}
+
+fn default_setup_difficulty() -> String {
+    "moderate".to_string()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ScenarioTransition {
+    pub from: String,
+    pub to: String,
+    pub count: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ScenarioObjectionDelta {
+    pub item: String,
+    pub baseline_count: u32,
+    pub scenario_count: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ScenarioMetrics {
+    pub total: u32,
+    pub converts: u32,
+    pub confused: u32,
+    pub rejects: u32,
+    pub conversion_rate: f64,
+    pub average_willingness_to_pay: f64,
+    pub average_perceived_value: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ScenarioMetricsPair {
+    pub baseline: ScenarioMetrics,
+    pub scenario: ScenarioMetrics,
+    pub price_elasticity: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ScenarioComparison {
+    pub transitions: Vec<ScenarioTransition>,
+    pub converted_ids: Vec<String>,
+    pub lost_ids: Vec<String>,
+    pub unchanged_count: u32,
+    pub resolved_objections: Vec<ScenarioObjectionDelta>,
+    pub introduced_objections: Vec<ScenarioObjectionDelta>,
+    pub metrics: ScenarioMetricsPair,
+}
+
+/// The stored scenario branch document. Self-contained
+/// by design: it embeds the parent run's personas,
+/// input, and baseline decisions, so validation
+/// recomputes everything from the document itself
+/// and never needs a parent lookup — which is what
+/// keeps branches restore-stable after artifact ids
+/// are remapped (the parent pin below is historical
+/// provenance only, like the Slice 1 source pin).
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SwarmtankScenarioDoc {
+    pub format: String,
+    pub version: u32,
+    pub parent_artifact_id: String,
+    pub parent_version: u32,
+    pub parent_content_hash: String,
+    pub scenario: SwarmtankScenario,
+    pub personas: Vec<SwarmtankPersona>,
+    pub baseline_input: SwarmtankInput,
+    pub baseline_decisions: Vec<SwarmtankDecision>,
+    pub decisions: Vec<SwarmtankDecision>,
+    pub transitions: Vec<ScenarioTransition>,
+    pub metrics: ScenarioMetricsPair,
+    pub content_hash: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SwarmtankScenarioDiff {
+    pub scenario_artifact_id: String,
+    pub scenario_version: u32,
+    pub scenario_content_hash: String,
+    pub baseline_conversion_rate: f64,
+    pub scenario_conversion_rate: f64,
+    pub conversion_delta: f64,
+    pub baseline_average_willingness_to_pay: f64,
+    pub scenario_average_willingness_to_pay: f64,
+    pub optimal_price_recommendation: String,
+    pub resolved_objections: Vec<CountedItem>,
+    pub introduced_objections: Vec<CountedItem>,
+    pub transitions: Vec<ScenarioTransition>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SwarmtankScenarioRequest {
+    #[serde(default = "one")]
+    pub contract_version: u8,
+    pub workspace_id: String,
+    pub project_id: String,
+    pub parent_artifact_id: String,
+    pub parent_version: u32,
+    pub scenario: SwarmtankScenario,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SwarmtankScenarioResponse {
+    pub contract_version: u8,
+    pub artifact: crate::artifacts::ArtifactRecord,
+    pub body: String,
+    pub report: SwarmtankReport,
+    pub transitions: Vec<ScenarioTransition>,
+    pub metrics: ScenarioMetricsPair,
+}
+
+/// Integer-cents formatting shared with the TS
+/// mirror: round half away from zero to cents,
+/// then print exactly two decimals. Never use
+/// {:.2} here — it rounds half-to-even and would
+/// diverge from the TS mirror on exact halves.
+fn fmt2(value: f64) -> String {
+    let cents = (value * 100.0).round() as i64;
+    let sign = if cents < 0 { "-" } else { "" };
+    let abs = cents.abs();
+    format!("{sign}{}.{:02}", abs / 100, abs % 100)
+}
+
+fn scenario_reason(f: &Factors) -> String {
+    format!(
+        "Score {}: fit {}, budget {}, price {}, trust {}, switching {}, clarity {}, authority {}.",
+        fmt2(f.score),
+        fmt2(f.fit),
+        fmt2(f.budget),
+        fmt2(f.price),
+        fmt2(f.trust),
+        fmt2(f.switching),
+        fmt2(f.clarity),
+        fmt2(f.authority)
+    )
+}
+
+fn validate_scenario(
+    scenario: &SwarmtankScenario,
+    baseline: &SwarmtankInput,
+) -> Result<(), String> {
+    if let Some(price) = scenario.price_monthly {
+        if !price.is_finite() || price < 0.0 {
+            return Err("scenario priceMonthly must be a finite non-negative number".to_string());
+        }
+        if let Some(base) = baseline.price_amount
+            && price > 10.0 * base
+        {
+            return Err("scenario priceMonthly must not exceed 10x the baseline price".to_string());
+        }
+    }
+    check_list(
+        &scenario.active_features,
+        "activeFeatures",
+        MAX_FEATURES,
+        MAX_FEATURE_CHARS,
+    )?;
+    let mut seen = std::collections::HashSet::new();
+    for feature in &scenario.active_features {
+        if !seen.insert(feature.clone()) {
+            return Err("activeFeatures must not contain duplicates".to_string());
+        }
+        if !baseline.features.contains(feature) {
+            return Err("activeFeatures must be a subset of the baseline features".to_string());
+        }
+    }
+    if !matches!(
+        scenario.setup_difficulty.as_str(),
+        "effortless" | "moderate" | "complex"
+    ) {
+        return Err("setupDifficulty must be effortless, moderate, or complex".to_string());
+    }
+    Ok(())
+}
+
+/// Needs covered by a feature list under the Slice 1
+/// word-overlap rule: a need counts when any word
+/// longer than 3 chars appears in the joined feature
+/// + value-proposition text.
+fn covered_needs(
+    persona: &SwarmtankPersona,
+    features: &[String],
+    value_proposition: &str,
+) -> Vec<String> {
+    let haystack = format!("{} {value_proposition}", features.join(" "));
+    persona
+        .needs
+        .iter()
+        .filter(|need| {
+            need.split_whitespace()
+                .any(|word| word.chars().count() > 3 && contains(&haystack, word))
+        })
+        .cloned()
+        .collect()
+}
+
+fn has_security_signal(persona: &SwarmtankPersona) -> bool {
+    persona
+        .required_trust_signals
+        .iter()
+        .chain(persona.purchase_constraints.iter())
+        .any(|signal| {
+            contains(signal, "soc")
+                || contains(signal, "security")
+                || contains(signal, "compliance")
+        })
+}
+
+fn decision_rank(decision: &str) -> i32 {
+    match decision {
+        "Convert" => 2,
+        "Confused" => 1,
+        _ => 0,
+    }
+}
+
+/// Evaluate one persona under a scenario. The
+/// baseline decision drives only the downgrade /
+/// upgrade rules; the score itself is recomputed
+/// from the scenario inputs with the Slice 1
+/// weights and thresholds.
+pub fn evaluate_scenario_persona(
+    persona: &SwarmtankPersona,
+    baseline_input: &SwarmtankInput,
+    baseline_decision: &SwarmtankDecision,
+    scenario: &SwarmtankScenario,
+) -> SwarmtankDecision {
+    let mut scenario_input = baseline_input.clone();
+    scenario_input.price_amount = scenario.price_monthly.or(baseline_input.price_amount);
+    scenario_input.features = scenario.active_features.clone();
+    let mut f = evaluate_factors(persona, &scenario_input);
+    // Trust deltas (§2.2 of the design).
+    let effective_skepticism = (persona.skepticism
+        - if scenario.trust_signals.free_trial_available {
+            0.20
+        } else {
+            0.0
+        })
+    .clamp(0.0, 1.0);
+    f.trust = 0.75 - 0.5 * effective_skepticism;
+    if scenario.trust_signals.soc2_security && has_security_signal(persona) {
+        f.trust = f.trust.max(0.80);
+    }
+    if scenario.trust_signals.sla_guarantee {
+        f.trust = (f.trust + 0.05).min(1.0);
+    }
+    if scenario.trust_signals.money_back_guarantee {
+        f.price = (f.price + 0.10).min(1.0);
+    }
+    // Setup-effort override.
+    match scenario.setup_difficulty.as_str() {
+        "effortless" => f.switching = 1.0,
+        "complex" => f.switching = f.switching.min(0.5),
+        _ => {}
+    }
+    f.score = 0.25 * f.fit
+        + 0.20 * f.budget
+        + 0.15 * f.price
+        + 0.10 * f.trust
+        + 0.10 * f.switching
+        + 0.10 * f.clarity
+        + 0.10 * f.authority;
+    let mut decision = if f.score >= 0.65 {
+        "Convert"
+    } else if f.score >= 0.40 {
+        "Confused"
+    } else {
+        "Reject"
+    };
+    let mut key_objection: Option<String> = if decision == "Convert" {
+        None
+    } else {
+        let ranked = [
+            ("fit", f.fit),
+            ("budget", f.budget),
+            ("price", f.price),
+            ("trust", f.trust),
+            ("switching", f.switching),
+            ("clarity", f.clarity),
+            ("authority", f.authority),
+        ];
+        let lowest = ranked
+            .iter()
+            .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+        lowest.map(|(name, _)| objection_for(name).to_string())
+    };
+    // Override ladder, in order (design §2.3).
+    let scenario_price = scenario_input.price_amount;
+    let veto = matches!(scenario_price, Some(price) if price > 0.0)
+        && scenario_price.is_some_and(|price| price > persona.approximate_budget)
+        && persona.price_sensitivity >= 0.7;
+    if veto {
+        decision = "Reject";
+        key_objection = Some("Price exceeds budget under high price sensitivity".to_string());
+    } else {
+        if baseline_decision.decision == "Convert" && decision == "Convert" {
+            let baseline_covered = covered_needs(
+                persona,
+                &baseline_input.features,
+                &baseline_input.value_proposition,
+            );
+            let scenario_covered = covered_needs(
+                persona,
+                &scenario.active_features,
+                &baseline_input.value_proposition,
+            );
+            if !baseline_covered.is_empty() && scenario_covered.is_empty() {
+                let first = baseline_covered
+                    .iter()
+                    .find(|need| !scenario_covered.contains(need))
+                    .cloned()
+                    .unwrap_or_else(|| baseline_covered[0].clone());
+                decision = "Confused";
+                key_objection = Some(format!("Missing critical required feature: {first}"));
+            } else if scenario.setup_difficulty == "complex"
+                && persona.expected_implementation_effort == "Low"
+            {
+                decision = "Confused";
+                key_objection = Some("High setup overhead exceeds team capacity".to_string());
+            }
+        }
+        if baseline_decision.decision == "Confused"
+            && decision == "Confused"
+            && scenario.trust_signals.free_trial_available
+            && matches!(
+                persona.role.as_str(),
+                "Cost-sensitive freelancer" | "Small agency owner"
+            )
+            && matches!(
+                baseline_decision.key_objection.as_deref(),
+                Some("Price sensitivity") | Some("Missing trust signals")
+            )
+        {
+            decision = "Convert";
+            key_objection = None;
+        }
+    }
+    let perceived_value = round2(0.6 * f.fit + 0.4 * f.score);
+    let willingness_to_pay =
+        (persona.approximate_budget * perceived_value * (1.0 - 0.5 * persona.price_sensitivity))
+            .round()
+            .clamp(0.0, persona.approximate_budget);
+    SwarmtankDecision {
+        persona_id: persona.id.clone(),
+        decision: decision.to_string(),
+        reason: scenario_reason(&f),
+        key_objection,
+        perceived_value,
+        willingness_to_pay,
+        score: round2(f.score),
+    }
+}
+
+pub fn evaluate_scenario_population(
+    personas: &[SwarmtankPersona],
+    baseline_input: &SwarmtankInput,
+    baseline_decisions: &[SwarmtankDecision],
+    scenario: &SwarmtankScenario,
+) -> Vec<SwarmtankDecision> {
+    // Positional zip with an id check: in a validated
+    // document decisions sit in persona order, so a
+    // mismatch can only come from unvalidated input —
+    // and then the persona is skipped, which the
+    // caller's count check rejects fail-closed rather
+    // than silently borrowing another persona's
+    // baseline decision.
+    personas
+        .iter()
+        .zip(baseline_decisions.iter())
+        .filter(|(p, d)| p.id == d.persona_id)
+        .map(|(p, baseline)| evaluate_scenario_persona(p, baseline_input, baseline, scenario))
+        .collect()
+}
+
+fn scenario_metrics(decisions: &[SwarmtankDecision]) -> ScenarioMetrics {
+    let total = decisions.len() as u32;
+    let converts = decisions.iter().filter(|d| d.decision == "Convert").count() as u32;
+    let confused = decisions
+        .iter()
+        .filter(|d| d.decision == "Confused")
+        .count() as u32;
+    let rejects = decisions.iter().filter(|d| d.decision == "Reject").count() as u32;
+    ScenarioMetrics {
+        total,
+        converts,
+        confused,
+        rejects,
+        conversion_rate: if total > 0 {
+            round2(100.0 * converts as f64 / total as f64)
+        } else {
+            0.0
+        },
+        average_willingness_to_pay: if total > 0 {
+            round2(decisions.iter().map(|d| d.willingness_to_pay).sum::<f64>() / total as f64)
+        } else {
+            0.0
+        },
+        average_perceived_value: if total > 0 {
+            round2(decisions.iter().map(|d| d.perceived_value).sum::<f64>() / total as f64)
+        } else {
+            0.0
+        },
+    }
+}
+
+fn price_elasticity(
+    baseline_price: Option<f64>,
+    scenario_price: Option<f64>,
+    baseline_rate: f64,
+    scenario_rate: f64,
+) -> Option<f64> {
+    let base = baseline_price?;
+    let price = scenario_price?;
+    if base <= 0.0 || baseline_rate <= 0.0 || (price - base).abs() < f64::EPSILON {
+        return None;
+    }
+    Some(round2(
+        ((scenario_rate - baseline_rate) / baseline_rate) / ((price - base) / base),
+    ))
+}
+
+pub fn compute_scenario_comparison(
+    baseline_decisions: &[SwarmtankDecision],
+    scenario_decisions: &[SwarmtankDecision],
+    baseline_price: Option<f64>,
+    scenario_price: Option<f64>,
+) -> ScenarioComparison {
+    let baseline_metrics = scenario_metrics(baseline_decisions);
+    let scenario_metrics = scenario_metrics(scenario_decisions);
+    let mut counts: Vec<(String, String, u32)> = Vec::new();
+    let mut converted_ids = Vec::new();
+    let mut lost_ids = Vec::new();
+    let mut unchanged_count = 0u32;
+    for (base, scen) in baseline_decisions.iter().zip(scenario_decisions.iter()) {
+        if let Some(entry) = counts
+            .iter_mut()
+            .find(|(f, t, _)| f == &base.decision && t == &scen.decision)
+        {
+            entry.2 += 1;
+        } else {
+            counts.push((base.decision.clone(), scen.decision.clone(), 1));
+        }
+        let rank_diff = decision_rank(&scen.decision) - decision_rank(&base.decision);
+        if rank_diff > 0 {
+            converted_ids.push(scen.persona_id.clone());
+        } else if rank_diff < 0 {
+            lost_ids.push(scen.persona_id.clone());
+        } else {
+            unchanged_count += 1;
+        }
+    }
+    counts.sort_by(|a, b| {
+        decision_rank(&b.0)
+            .cmp(&decision_rank(&a.0))
+            .then_with(|| decision_rank(&b.1).cmp(&decision_rank(&a.1)))
+    });
+    let transitions = counts
+        .into_iter()
+        .map(|(from, to, count)| ScenarioTransition { from, to, count })
+        .collect();
+    let count_objections = |decisions: &[SwarmtankDecision]| {
+        let mut out: Vec<(String, u32)> = Vec::new();
+        for d in decisions {
+            if let Some(objection) = &d.key_objection {
+                if let Some(entry) = out.iter_mut().find(|(item, _)| item == objection) {
+                    entry.1 += 1;
+                } else {
+                    out.push((objection.clone(), 1));
+                }
+            }
+        }
+        out
+    };
+    let baseline_counts = count_objections(baseline_decisions);
+    let scenario_counts = count_objections(scenario_decisions);
+    let mut resolved = Vec::new();
+    for (item, base_count) in &baseline_counts {
+        let scen_count = scenario_counts
+            .iter()
+            .find(|(i, _)| i == item)
+            .map(|(_, c)| *c)
+            .unwrap_or(0);
+        if scen_count < *base_count {
+            resolved.push(ScenarioObjectionDelta {
+                item: item.clone(),
+                baseline_count: *base_count,
+                scenario_count: scen_count,
+            });
+        }
+    }
+    let mut introduced = Vec::new();
+    for (item, scen_count) in &scenario_counts {
+        let base_count = baseline_counts
+            .iter()
+            .find(|(i, _)| i == item)
+            .map(|(_, c)| *c)
+            .unwrap_or(0);
+        if *scen_count > base_count {
+            introduced.push(ScenarioObjectionDelta {
+                item: item.clone(),
+                baseline_count: base_count,
+                scenario_count: *scen_count,
+            });
+        }
+    }
+    resolved.sort_by(|a, b| {
+        (b.baseline_count - b.scenario_count)
+            .cmp(&(a.baseline_count - a.scenario_count))
+            .then_with(|| a.item.cmp(&b.item))
+    });
+    introduced.sort_by(|a, b| {
+        (b.scenario_count - b.baseline_count)
+            .cmp(&(a.scenario_count - a.baseline_count))
+            .then_with(|| a.item.cmp(&b.item))
+    });
+    ScenarioComparison {
+        transitions,
+        converted_ids,
+        lost_ids,
+        unchanged_count,
+        resolved_objections: resolved,
+        introduced_objections: introduced,
+        metrics: ScenarioMetricsPair {
+            price_elasticity: price_elasticity(
+                baseline_price,
+                scenario_price,
+                baseline_metrics.conversion_rate,
+                scenario_metrics.conversion_rate,
+            ),
+            baseline: baseline_metrics,
+            scenario: scenario_metrics,
+        },
+    }
+}
+
+pub fn canonical_scenario_hash(doc: &SwarmtankScenarioDoc) -> String {
+    let mut copy = doc.clone();
+    copy.content_hash = String::new();
+    let body = serde_json::to_string(&copy).unwrap_or_default();
+    crate::content::hash(body.as_bytes())
+}
+
+fn decisions_match(stored: &[SwarmtankDecision], fresh: &[SwarmtankDecision]) -> bool {
+    stored.len() == fresh.len()
+        && stored.iter().zip(fresh.iter()).all(|(s, f)| {
+            s.persona_id == f.persona_id
+                && s.decision == f.decision
+                && s.reason == f.reason
+                && s.key_objection == f.key_objection
+                && (s.perceived_value - f.perceived_value).abs() <= f64::EPSILON
+                && (s.willingness_to_pay - f.willingness_to_pay).abs() <= f64::EPSILON
+                && (s.score - f.score).abs() <= f64::EPSILON
+        })
+}
+
+/// Full branch validation: shape, bounds, scenario
+/// bounds against the embedded baseline input,
+/// baseline recomputation, scenario recomputation,
+/// transition/metric recomputation, and the content
+/// hash. Self-contained: no parent lookup, so a
+/// branch stays valid across restores that remap
+/// artifact ids.
+pub fn validate_swarmtank_scenario_doc(doc: &SwarmtankScenarioDoc) -> Result<(), String> {
+    if doc.format != "anansi-swarmtank-scenario" {
+        return Err(format!(
+            "swarmtank scenario format must be anansi-swarmtank-scenario, got {}",
+            doc.format
+        ));
+    }
+    if doc.version != 1 {
+        return Err(format!(
+            "swarmtank scenario version must be 1, got {}",
+            doc.version
+        ));
+    }
+    if doc.parent_artifact_id.trim().is_empty() || doc.parent_version == 0 {
+        return Err("scenario parent pin must name an artifact version".to_string());
+    }
+    if doc.parent_content_hash.len() != 64
+        || !doc
+            .parent_content_hash
+            .chars()
+            .all(|c| c.is_ascii_hexdigit())
+    {
+        return Err("scenario parent content hash must be 64 hex characters".to_string());
+    }
+    validate_input(&doc.baseline_input)?;
+    validate_scenario(&doc.scenario, &doc.baseline_input)?;
+    if doc.personas.is_empty()
+        || doc.personas.len() != doc.baseline_decisions.len()
+        || doc.personas.len() != doc.decisions.len()
+    {
+        return Err("scenario persona and decision counts must match and be non-empty".to_string());
+    }
+    for (index, persona) in doc.personas.iter().enumerate() {
+        if persona.id != format!("persona-{:03}", index + 1) {
+            return Err(
+                "scenario persona ids must be sequential persona-001.. in order".to_string(),
+            );
+        }
+        validate_persona(persona)?;
+    }
+    let recomputed_baseline = evaluate_population(&doc.personas, &doc.baseline_input);
+    if !decisions_match(&doc.baseline_decisions, &recomputed_baseline) {
+        return Err("stored baseline decisions do not match recomputation".to_string());
+    }
+    for decision in doc.baseline_decisions.iter().chain(doc.decisions.iter()) {
+        if !matches!(
+            decision.decision.as_str(),
+            "Convert" | "Confused" | "Reject"
+        ) {
+            return Err("scenario decisions must be Convert, Confused, or Reject".to_string());
+        }
+        if decision.decision == "Convert" && decision.key_objection.is_some() {
+            return Err("Convert decisions must not carry a key objection".to_string());
+        }
+        if decision.decision != "Convert" && decision.key_objection.is_none() {
+            return Err("Confused and Reject decisions must carry a key objection".to_string());
+        }
+    }
+    let recomputed_scenario = evaluate_scenario_population(
+        &doc.personas,
+        &doc.baseline_input,
+        &doc.baseline_decisions,
+        &doc.scenario,
+    );
+    if !decisions_match(&doc.decisions, &recomputed_scenario) {
+        return Err("stored scenario decisions do not match recomputation".to_string());
+    }
+    let effective_price = doc
+        .scenario
+        .price_monthly
+        .or(doc.baseline_input.price_amount);
+    let comparison = compute_scenario_comparison(
+        &doc.baseline_decisions,
+        &doc.decisions,
+        doc.baseline_input.price_amount,
+        effective_price,
+    );
+    if serde_json::to_value(&doc.transitions).unwrap_or_default()
+        != serde_json::to_value(&comparison.transitions).unwrap_or_default()
+    {
+        return Err("stored scenario transitions do not match recomputation".to_string());
+    }
+    let metrics_match = |a: &ScenarioMetrics, b: &ScenarioMetrics| {
+        a.total == b.total
+            && a.converts == b.converts
+            && a.confused == b.confused
+            && a.rejects == b.rejects
+            && (a.conversion_rate - b.conversion_rate).abs() <= f64::EPSILON
+            && (a.average_willingness_to_pay - b.average_willingness_to_pay).abs() <= f64::EPSILON
+            && (a.average_perceived_value - b.average_perceived_value).abs() <= f64::EPSILON
+    };
+    if !metrics_match(&doc.metrics.baseline, &comparison.metrics.baseline)
+        || !metrics_match(&doc.metrics.scenario, &comparison.metrics.scenario)
+        || doc.metrics.price_elasticity != comparison.metrics.price_elasticity
+    {
+        return Err("stored scenario metrics do not match recomputation".to_string());
+    }
+    if canonical_scenario_hash(doc) != doc.content_hash {
+        return Err("swarmtank scenario content hash mismatch".to_string());
+    }
+    Ok(())
+}
+
+fn parse_scenario_doc(raw: &str) -> Result<SwarmtankScenarioDoc, CommandError> {
+    let doc: SwarmtankScenarioDoc = serde_json::from_str(raw)
+        .map_err(|_| invalid("The SwarmTank scenario body is not readable."))?;
+    validate_swarmtank_scenario_doc(&doc).map_err(|e| invalid(&e))?;
+    Ok(doc)
+}
+
+pub fn build_scenario_doc(
+    run: &SwarmtankRunDoc,
+    parent_artifact_id: &str,
+    parent_version: u32,
+    parent_content_hash: &str,
+    scenario: &SwarmtankScenario,
+) -> Result<SwarmtankScenarioDoc, String> {
+    validate_scenario(scenario, &run.input)?;
+    let decisions =
+        evaluate_scenario_population(&run.personas, &run.input, &run.decisions, scenario);
+    let effective_price = scenario.price_monthly.or(run.input.price_amount);
+    let comparison = compute_scenario_comparison(
+        &run.decisions,
+        &decisions,
+        run.input.price_amount,
+        effective_price,
+    );
+    let mut doc = SwarmtankScenarioDoc {
+        format: "anansi-swarmtank-scenario".to_string(),
+        version: 1,
+        parent_artifact_id: parent_artifact_id.to_string(),
+        parent_version,
+        parent_content_hash: parent_content_hash.to_string(),
+        scenario: scenario.clone(),
+        personas: run.personas.clone(),
+        baseline_input: run.input.clone(),
+        baseline_decisions: run.decisions.clone(),
+        decisions,
+        transitions: comparison.transitions,
+        metrics: comparison.metrics,
+        content_hash: String::new(),
+    };
+    doc.content_hash = canonical_scenario_hash(&doc);
+    validate_swarmtank_scenario_doc(&doc)?;
+    Ok(doc)
 }
 
 // ---------------------------------------------------------------------------
@@ -1563,13 +2327,62 @@ fn transfer_op(value: Value, scope: &CallerScope) -> Result<Value, CommandError>
     }
     let mut concept_doc = crate::transfer::validate_transfer_concept(&concept_latest.body)
         .map_err(|e| invalid(&e))?;
+    // M9 Slice 3: an optional scenario branch, resolved
+    // and validated server-side — never trusted from
+    // the client. The branch must belong to the run
+    // being transferred.
+    let scenario_branch: Option<(crate::artifacts::ArtifactRecord, SwarmtankScenarioDoc)> =
+        match (req.scenario_artifact_id.clone(), req.scenario_version) {
+            (None, None) => None,
+            (Some(artifact_id), Some(version)) => {
+                let branch = storage
+                    .artifact_read(&workspace, &artifact_id, Some(version))
+                    .map_err(|_| {
+                        not_found("The SwarmTank scenario branch does not exist in this workspace.")
+                    })?;
+                if branch.artifact.artifact_type != "scenario" {
+                    return Err(invalid(
+                        "The selected artifact is not a SwarmTank scenario branch.",
+                    ));
+                }
+                if branch.artifact.project_id != req.project_id {
+                    return Err(invalid(
+                        "The SwarmTank scenario branch does not belong to this project.",
+                    ));
+                }
+                let branch_doc = parse_scenario_doc(&branch.body)?;
+                if branch_doc.parent_artifact_id != req.run_artifact_id
+                    || branch_doc.parent_version != req.run_version
+                    || branch_doc.parent_content_hash != run.artifact.content_hash
+                {
+                    return Err(invalid("The scenario branch does not belong to this run."));
+                }
+                Some((branch.artifact, branch_doc))
+            }
+            _ => {
+                return Err(invalid(
+                    "scenarioArtifactId and scenarioVersion must be given together.",
+                ));
+            }
+        };
     // Structural idempotency, mirroring §27: a
     // concept version already carrying this run's
-    // addendum is returned unchanged.
+    // addendum (and, when given, this scenario's
+    // diff) is returned unchanged.
+    let diff_matches = match (&concept_doc.swarmtank_scenario_diff, &scenario_branch) {
+        (None, None) => true,
+        (Some(diff), Some((artifact, _))) => {
+            diff.scenario_artifact_id == artifact.artifact_id
+                && diff.scenario_version == artifact.version
+                && diff.scenario_content_hash == artifact.content_hash
+        }
+        _ => false,
+    };
     if let Some(addendum) = &concept_doc.swarmtank_addendum
         && addendum.run_artifact_id == req.run_artifact_id
         && addendum.run_version == req.run_version
         && addendum.run_content_hash == run.artifact.content_hash
+        && diff_matches
     {
         return serde_json::to_value(SwarmtankTransferResponse {
             contract_version: 1,
@@ -1585,14 +2398,91 @@ fn transfer_op(value: Value, scope: &CallerScope) -> Result<Value, CommandError>
         ));
     }
     let report = derive_report(&run_doc);
+    let (recommendations, scenario_diff) = match &scenario_branch {
+        Some((artifact, branch_doc)) => {
+            let scenario_run = SwarmtankRunDoc {
+                format: "anansi-swarmtank-run".to_string(),
+                version: 1,
+                input: branch_doc.baseline_input.clone(),
+                seed: String::new(),
+                preset: branch_doc.personas.len() as u32,
+                personas: branch_doc.personas.clone(),
+                decisions: branch_doc.decisions.clone(),
+                source: None,
+                content_hash: String::new(),
+            };
+            let scenario_report = derive_report(&scenario_run);
+            let price_text = |price: Option<f64>| match price {
+                Some(value) => format!("${value}"),
+                None => "unstated".to_string(),
+            };
+            let effective_price = branch_doc
+                .scenario
+                .price_monthly
+                .or(run_doc.input.price_amount);
+            let conversion_delta = round2(scenario_report.conversion_rate - report.conversion_rate);
+            let optimal_price_recommendation = if scenario_report.conversion_rate
+                > report.conversion_rate
+            {
+                format!(
+                    "Scenario price {} raises synthetic conversion by {} points vs the baseline price {}.",
+                    price_text(effective_price),
+                    fmt2(conversion_delta),
+                    price_text(run_doc.input.price_amount)
+                )
+            } else {
+                format!(
+                    "No tested scenario price improved conversion; the baseline price {} remains the synthetic optimum.",
+                    price_text(run_doc.input.price_amount)
+                )
+            };
+            let top_deltas = |deltas: &[ScenarioObjectionDelta]| -> Vec<CountedItem> {
+                deltas
+                    .iter()
+                    .take(3)
+                    .map(|d| CountedItem {
+                        item: d.item.clone(),
+                        count: d.baseline_count.abs_diff(d.scenario_count),
+                    })
+                    .collect()
+            };
+            let comparison = compute_scenario_comparison(
+                &branch_doc.baseline_decisions,
+                &branch_doc.decisions,
+                run_doc.input.price_amount,
+                effective_price,
+            );
+            (
+                scenario_report.recommendations.clone(),
+                Some(SwarmtankScenarioDiff {
+                    scenario_artifact_id: artifact.artifact_id.clone(),
+                    scenario_version: artifact.version,
+                    scenario_content_hash: artifact.content_hash.clone(),
+                    baseline_conversion_rate: report.conversion_rate,
+                    scenario_conversion_rate: scenario_report.conversion_rate,
+                    conversion_delta,
+                    baseline_average_willingness_to_pay: report.average_willingness_to_pay,
+                    scenario_average_willingness_to_pay: scenario_report.average_willingness_to_pay,
+                    optimal_price_recommendation,
+                    resolved_objections: top_deltas(&comparison.resolved_objections),
+                    introduced_objections: top_deltas(&comparison.introduced_objections),
+                    transitions: branch_doc.transitions.clone(),
+                }),
+            )
+        }
+        None => (report.recommendations.clone(), None),
+    };
     concept_doc.swarmtank_addendum = Some(SwarmtankAddendum {
         run_artifact_id: req.run_artifact_id.clone(),
         run_version: req.run_version,
         run_content_hash: run.artifact.content_hash.clone(),
         top_objections: report.top_objections.clone(),
         top_confusion_points: report.top_confusion_points.clone(),
-        recommendations: report.recommendations.clone(),
+        recommendations,
     });
+    // A baseline application clears a stale scenario
+    // diff; a scenario application writes its own.
+    concept_doc.swarmtank_scenario_diff = scenario_diff;
     let body = serde_json::to_string(&concept_doc).map_err(|_| crate::storage::unavailable())?;
     let details = storage.artifact_revise(&ArtifactReviseRequest {
         contract_version: 1,
@@ -1611,6 +2501,99 @@ fn transfer_op(value: Value, scope: &CallerScope) -> Result<Value, CommandError>
     .map_err(|_| crate::storage::unavailable())
 }
 
+fn scenario_op(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
+    let req: SwarmtankScenarioRequest =
+        serde_json::from_value(value).map_err(|_| invalid("Use a supported SwarmTank request."))?;
+    if req.contract_version != 1 {
+        return Err(CommandError::new(
+            ErrorCode::UnsupportedContract,
+            "Use contract version 1.",
+        ));
+    }
+    let (workspace, storage) =
+        require_workspace_and_project(scope, &req.workspace_id, &req.project_id)?;
+    let parent = storage
+        .artifact_read(
+            &workspace,
+            &req.parent_artifact_id,
+            Some(req.parent_version),
+        )
+        .map_err(|_| not_found("The SwarmTank run does not exist in this workspace."))?;
+    if parent.artifact.artifact_type != "simulation" {
+        return Err(invalid("The selected artifact is not a SwarmTank run."));
+    }
+    if parent.artifact.project_id != req.project_id {
+        return Err(invalid(
+            "The SwarmTank run does not belong to this project.",
+        ));
+    }
+    let run_doc = parse_run_doc(&parent.body)?;
+    let branch = build_scenario_doc(
+        &run_doc,
+        &req.parent_artifact_id,
+        req.parent_version,
+        &parent.artifact.content_hash,
+        &req.scenario,
+    )
+    .map_err(|e| invalid(&e))?;
+    let body = serde_json::to_string(&branch).map_err(|_| crate::storage::unavailable())?;
+    let title = {
+        let excerpt: String = run_doc
+            .input
+            .description
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+            .chars()
+            .take(160)
+            .collect();
+        let t = format!("SwarmTank scenario: {excerpt}");
+        if t.chars().count() > 200 {
+            t.chars().take(200).collect()
+        } else {
+            t
+        }
+    };
+    let details = storage.artifact_register_generated(
+        &ArtifactRegisterRequest {
+            contract_version: 1,
+            workspace_id: workspace.clone(),
+            project_id: req.project_id.clone(),
+            artifact_type: "scenario".to_string(),
+            title,
+            body: body.clone(),
+            source_references: vec![],
+            privacy: "private".to_string(),
+        },
+        serde_json::json!({
+            "kind": "deterministic",
+            "generator": "anansi-swarmtank-scenario",
+        }),
+        "validated",
+    )?;
+    let scenario_run = SwarmtankRunDoc {
+        format: "anansi-swarmtank-run".to_string(),
+        version: 1,
+        input: branch.baseline_input.clone(),
+        seed: String::new(),
+        preset: branch.personas.len() as u32,
+        personas: branch.personas.clone(),
+        decisions: branch.decisions.clone(),
+        source: None,
+        content_hash: String::new(),
+    };
+    let report = derive_report(&scenario_run);
+    serde_json::to_value(SwarmtankScenarioResponse {
+        contract_version: 1,
+        artifact: details.artifact,
+        body,
+        report,
+        transitions: branch.transitions.clone(),
+        metrics: branch.metrics.clone(),
+    })
+    .map_err(|_| crate::storage::unavailable())
+}
+
 pub fn swarmtank_command(
     operation: &str,
     value: Value,
@@ -1621,6 +2604,7 @@ pub fn swarmtank_command(
         "swarmtank-evaluate" => evaluate_op(value, scope),
         "swarmtank-report" => report_op(value, scope),
         "swarmtank-transfer-to-forge" => transfer_op(value, scope),
+        "swarmtank-scenario" => scenario_op(value, scope),
         _ => Err(invalid("Use a supported SwarmTank operation.")),
     }
 }
@@ -1844,5 +2828,355 @@ mod tests {
         let mut bad = input();
         bad.features = vec!["x".to_string(); MAX_FEATURES + 1];
         assert!(validate_input(&bad).is_err());
+    }
+
+    // ---- M9 Slice 3 scenario tests. Vectors are
+    // hand-computed from the design formulas and
+    // shared with the TS mirror tests; any formula
+    // change must update both suites. ----
+
+    fn scenario_persona(
+        role: &str,
+        budget: f64,
+        price_sensitivity: f64,
+        skepticism: f64,
+        needs: Vec<&str>,
+        effort: &str,
+    ) -> SwarmtankPersona {
+        SwarmtankPersona {
+            id: "persona-001".to_string(),
+            name: "Test Persona".to_string(),
+            role: role.to_string(),
+            company_size: "11-50".to_string(),
+            approximate_budget: budget,
+            needs: needs.into_iter().map(|s| s.to_string()).collect(),
+            priorities: vec!["Price".to_string()],
+            skepticism,
+            price_sensitivity,
+            purchase_constraints: vec![],
+            required_trust_signals: vec![],
+            expected_implementation_effort: effort.to_string(),
+            synthetic: true,
+        }
+    }
+
+    fn scenario_input(
+        price: Option<f64>,
+        segment: &str,
+        features: Vec<&str>,
+        value_proposition: &str,
+        pricing: &str,
+    ) -> SwarmtankInput {
+        SwarmtankInput {
+            description: "A scheduling tool for small agencies.".to_string(),
+            pricing: pricing.to_string(),
+            price_amount: price,
+            segment: segment.to_string(),
+            industry: "services".to_string(),
+            features: features.into_iter().map(|s| s.to_string()).collect(),
+            value_proposition: value_proposition.to_string(),
+        }
+    }
+
+    fn default_scenario(input: &SwarmtankInput) -> SwarmtankScenario {
+        SwarmtankScenario {
+            price_monthly: None,
+            active_features: input.features.clone(),
+            trust_signals: ScenarioTrustSignals {
+                soc2_security: false,
+                free_trial_available: false,
+                sla_guarantee: false,
+                money_back_guarantee: false,
+            },
+            setup_difficulty: "moderate".to_string(),
+        }
+    }
+
+    #[test]
+    fn scenario_veto_requires_high_price_sensitivity() {
+        // Freelancer, budget 500, sensitivity 0.9:
+        // baseline price 49 converts (score 0.79);
+        // scenario price 600 vetoes at >= 0.7.
+        let persona = scenario_persona(
+            "Cost-sensitive freelancer",
+            500.0,
+            0.9,
+            0.5,
+            vec!["Low monthly cost"],
+            "Low",
+        );
+        let baseline = scenario_input(
+            Some(49.0),
+            "freelanc",
+            vec!["Automated client reporting"],
+            "Agencies save ten hours a week on reporting.",
+            "$49",
+        );
+        let baseline_decision = evaluate_persona(&persona, &baseline);
+        assert_eq!(baseline_decision.decision, "Convert");
+        let mut scenario = default_scenario(&baseline);
+        scenario.price_monthly = Some(600.0);
+        let decision =
+            evaluate_scenario_persona(&persona, &baseline, &baseline_decision, &scenario);
+        assert_eq!(decision.decision, "Reject");
+        assert_eq!(
+            decision.key_objection.as_deref(),
+            Some("Price exceeds budget under high price sensitivity")
+        );
+    }
+
+    #[test]
+    fn scenario_veto_does_not_rewrite_the_baseline_veto() {
+        // Agency owner, budget 100, sensitivity 0.6:
+        // baseline price 500 vetoes at >= 0.5, but the
+        // scenario veto needs >= 0.7, so the same
+        // price re-evaluates by score to Convert
+        // (fit 1.0, score 0.66).
+        let persona = scenario_persona(
+            "Small agency owner",
+            100.0,
+            0.6,
+            0.4,
+            vec!["Client reporting"],
+            "Medium",
+        );
+        let baseline = scenario_input(
+            Some(500.0),
+            "small agencies",
+            vec!["Client reporting"],
+            "Saves time.",
+            "$500",
+        );
+        let baseline_decision = evaluate_persona(&persona, &baseline);
+        assert_eq!(baseline_decision.decision, "Reject");
+        assert_eq!(
+            baseline_decision.key_objection.as_deref(),
+            Some("Price exceeds budget")
+        );
+        let mut scenario = default_scenario(&baseline);
+        scenario.price_monthly = Some(500.0);
+        let decision =
+            evaluate_scenario_persona(&persona, &baseline, &baseline_decision, &scenario);
+        assert_eq!(decision.decision, "Convert");
+        assert_eq!(decision.key_objection, None);
+    }
+
+    #[test]
+    fn free_trial_resolves_freelancer_price_hesitation() {
+        // Freelancer, score 0.5925 Confused on price
+        // sensitivity; the trial's skepticism cut alone
+        // lifts it only to 0.6025, but the explicit
+        // freelancer/agency resolution rule converts it.
+        let persona = scenario_persona(
+            "Cost-sensitive freelancer",
+            300.0,
+            0.9,
+            1.0,
+            vec!["Low monthly cost"],
+            "Low",
+        );
+        let baseline = scenario_input(
+            Some(250.0),
+            "other",
+            vec!["Automated client reporting"],
+            "Saves time.",
+            "$250",
+        );
+        let baseline_decision = evaluate_persona(&persona, &baseline);
+        assert_eq!(baseline_decision.decision, "Confused");
+        assert_eq!(
+            baseline_decision.key_objection.as_deref(),
+            Some("Price sensitivity")
+        );
+        let mut scenario = default_scenario(&baseline);
+        scenario.trust_signals.free_trial_available = true;
+        let decision =
+            evaluate_scenario_persona(&persona, &baseline, &baseline_decision, &scenario);
+        assert_eq!(decision.decision, "Convert");
+        assert_eq!(decision.key_objection, None);
+    }
+
+    #[test]
+    fn feature_drop_downgrades_a_convert_with_exact_objection() {
+        let persona = scenario_persona(
+            "Small agency owner",
+            3000.0,
+            0.5,
+            0.4,
+            vec!["Client reporting"],
+            "Medium",
+        );
+        let baseline = scenario_input(
+            Some(49.0),
+            "small agencies",
+            vec!["Client reporting"],
+            "Saves time.",
+            "$49",
+        );
+        let baseline_decision = evaluate_persona(&persona, &baseline);
+        assert_eq!(baseline_decision.decision, "Convert");
+        let mut scenario = default_scenario(&baseline);
+        scenario.active_features = vec![];
+        let decision =
+            evaluate_scenario_persona(&persona, &baseline, &baseline_decision, &scenario);
+        assert_eq!(decision.decision, "Confused");
+        assert_eq!(
+            decision.key_objection.as_deref(),
+            Some("Missing critical required feature: Client reporting")
+        );
+    }
+
+    #[test]
+    fn complex_setup_downgrades_low_effort_converts() {
+        let persona = scenario_persona(
+            "Cost-sensitive freelancer",
+            5000.0,
+            0.3,
+            0.3,
+            vec!["Fast setup"],
+            "Low",
+        );
+        let baseline = scenario_input(
+            Some(49.0),
+            "freelanc",
+            vec!["Fast setup"],
+            "Saves time.",
+            "$49",
+        );
+        let baseline_decision = evaluate_persona(&persona, &baseline);
+        assert_eq!(baseline_decision.decision, "Convert");
+        let mut scenario = default_scenario(&baseline);
+        scenario.setup_difficulty = "complex".to_string();
+        let decision =
+            evaluate_scenario_persona(&persona, &baseline, &baseline_decision, &scenario);
+        assert_eq!(decision.decision, "Confused");
+        assert_eq!(
+            decision.key_objection.as_deref(),
+            Some("High setup overhead exceeds team capacity")
+        );
+    }
+
+    #[test]
+    fn soc2_floor_lifts_a_trust_confused_enterprise_persona() {
+        // Enterprise finance director, score 0.60
+        // Confused on trust (0.25 lowest); SOC 2
+        // raises trust to 0.80, score to 0.655.
+        let mut persona = scenario_persona(
+            "Enterprise finance director",
+            50.0,
+            0.4,
+            1.0,
+            vec!["Audit trail"],
+            "High",
+        );
+        persona.required_trust_signals = vec!["SOC 2 report".to_string()];
+        persona.purchase_constraints = vec!["Security review required".to_string()];
+        let baseline = scenario_input(
+            Some(100.0),
+            "enterprise finance",
+            vec!["Unrelated widget"],
+            "Saves time.",
+            "$100",
+        );
+        let baseline_decision = evaluate_persona(&persona, &baseline);
+        assert_eq!(baseline_decision.decision, "Confused");
+        assert_eq!(
+            baseline_decision.key_objection.as_deref(),
+            Some("Missing trust signals")
+        );
+        let mut scenario = default_scenario(&baseline);
+        scenario.trust_signals.soc2_security = true;
+        let decision =
+            evaluate_scenario_persona(&persona, &baseline, &baseline_decision, &scenario);
+        assert_eq!(decision.decision, "Convert");
+        assert_eq!(decision.key_objection, None);
+        assert!(decision.reason.contains("trust 0.80"));
+    }
+
+    #[test]
+    fn default_scenario_reproduces_baseline_decisions() {
+        let doc = valid_doc();
+        let scenario = default_scenario(&doc.input);
+        let scenario_decisions =
+            evaluate_scenario_population(&doc.personas, &doc.input, &doc.decisions, &scenario);
+        assert_eq!(scenario_decisions.len(), doc.decisions.len());
+        for (base, scen) in doc.decisions.iter().zip(scenario_decisions.iter()) {
+            // Reason strings are excluded: baseline
+            // reasons use Rust {:.2} while scenario
+            // reasons use integer-cents formatting,
+            // which can differ on exact halves. Every
+            // other field must agree exactly.
+            assert_eq!(base.persona_id, scen.persona_id);
+            assert_eq!(base.decision, scen.decision);
+            assert_eq!(base.key_objection, scen.key_objection);
+            assert_eq!(base.perceived_value, scen.perceived_value);
+            assert_eq!(base.willingness_to_pay, scen.willingness_to_pay);
+            assert_eq!(base.score, scen.score);
+        }
+    }
+
+    #[test]
+    fn scenario_branch_validates_and_tampering_fails_closed() {
+        let doc = valid_doc();
+        let mut scenario = default_scenario(&doc.input);
+        scenario.price_monthly = Some(99.0);
+        let branch = build_scenario_doc(&doc, "artifact-abc", 1, &"b".repeat(64), &scenario)
+            .expect("branch builds");
+        assert!(validate_swarmtank_scenario_doc(&branch).is_ok());
+
+        let mut tampered = branch.clone();
+        tampered.decisions[0].score = 0.99;
+        assert!(validate_swarmtank_scenario_doc(&tampered).is_err());
+
+        let mut tampered = branch.clone();
+        tampered.content_hash = "0".repeat(64);
+        assert!(validate_swarmtank_scenario_doc(&tampered).is_err());
+
+        let mut tampered = branch.clone();
+        tampered.scenario.active_features = vec!["Not a baseline feature".to_string()];
+        assert!(validate_swarmtank_scenario_doc(&tampered).is_err());
+
+        let mut tampered = branch.clone();
+        tampered.transitions.clear();
+        assert!(validate_swarmtank_scenario_doc(&tampered).is_err());
+    }
+
+    #[test]
+    fn transition_matrix_counts_migrations() {
+        let mk = |id: &str, decision: &str, objection: Option<&str>| SwarmtankDecision {
+            persona_id: id.to_string(),
+            decision: decision.to_string(),
+            reason: "Score 0.50.".to_string(),
+            key_objection: objection.map(|s| s.to_string()),
+            perceived_value: 0.5,
+            willingness_to_pay: 100.0,
+            score: 0.5,
+        };
+        let baseline = vec![
+            mk("persona-001", "Convert", None),
+            mk("persona-002", "Confused", Some("Price sensitivity")),
+            mk("persona-003", "Reject", Some("Budget constraints")),
+        ];
+        let scenario = vec![
+            mk("persona-001", "Confused", Some("Price sensitivity")),
+            mk("persona-002", "Convert", None),
+            mk("persona-003", "Reject", Some("Price sensitivity")),
+        ];
+        let comparison = compute_scenario_comparison(&baseline, &scenario, Some(49.0), Some(49.0));
+        assert_eq!(comparison.converted_ids, vec!["persona-002".to_string()]);
+        assert_eq!(comparison.lost_ids, vec!["persona-001".to_string()]);
+        assert_eq!(comparison.unchanged_count, 1);
+        assert_eq!(comparison.transitions.len(), 3);
+        assert_eq!(comparison.resolved_objections.len(), 1);
+        assert_eq!(comparison.resolved_objections[0].item, "Budget constraints");
+        assert_eq!(comparison.resolved_objections[0].baseline_count, 1);
+        assert_eq!(comparison.resolved_objections[0].scenario_count, 0);
+        assert_eq!(comparison.introduced_objections.len(), 1);
+        assert_eq!(
+            comparison.introduced_objections[0].item,
+            "Price sensitivity"
+        );
+        assert_eq!(comparison.introduced_objections[0].baseline_count, 1);
+        assert_eq!(comparison.introduced_objections[0].scenario_count, 2);
     }
 }

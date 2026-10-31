@@ -35,7 +35,7 @@ use serde_json::Value;
 
 /// Manual artifact types for this slice, from §9's list of what
 /// a project may contain.
-pub const ARTIFACT_TYPES: [&str; 19] = [
+pub const ARTIFACT_TYPES: [&str; 20] = [
     "research",
     "source",
     "idea",
@@ -67,6 +67,11 @@ pub const ARTIFACT_TYPES: [&str; 19] = [
     // every pinned reference, so a hand-registered body
     // can never pass as a validated review.
     "source-review",
+    // M9 Slice 3: SwarmTank scenario branches, registered
+    // through the generated path; saving recomputes
+    // every decision server-side, and restore
+    // re-validates the branch self-contained.
+    "scenario",
 ];
 
 fn invalid(message: &str) -> CommandError {

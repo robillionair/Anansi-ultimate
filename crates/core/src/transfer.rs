@@ -117,6 +117,15 @@ pub struct TransferConceptDoc {
     /// application.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub swarmtank_addendum: Option<crate::swarmtank::SwarmtankAddendum>,
+    /// M9 Slice 3 scenario comparison: the priced /
+    /// featured scenario that produced the applied
+    /// recommendations, when the user applied scenario
+    /// recommendations rather than baseline ones.
+    /// Absent on concepts without a SwarmTank scenario
+    /// application, and cleared when a later baseline
+    /// application replaces a scenario one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub swarmtank_scenario_diff: Option<crate::swarmtank::SwarmtankScenarioDiff>,
     pub provider: String,
     pub model: String,
 }
@@ -259,6 +268,61 @@ pub fn validate_transfer_concept(raw: &str) -> Result<TransferConceptDoc, String
             {
                 return Err(
                     "swarmtank addendum recommendations must carry assumption, evidence, uncertainty, and validation"
+                        .to_string(),
+                );
+            }
+        }
+    }
+    if let Some(diff) = &doc.swarmtank_scenario_diff {
+        if diff.scenario_artifact_id.trim().is_empty()
+            || diff.scenario_version == 0
+            || diff.scenario_content_hash.len() != 64
+            || !diff
+                .scenario_content_hash
+                .chars()
+                .all(|c| c.is_ascii_hexdigit())
+        {
+            return Err(
+                "swarmtank scenario diff must pin a scenario artifact version and hash".to_string(),
+            );
+        }
+        for rate in [
+            diff.baseline_conversion_rate,
+            diff.scenario_conversion_rate,
+            diff.conversion_delta,
+        ] {
+            if !rate.is_finite() {
+                return Err("swarmtank scenario diff rates must be finite".to_string());
+            }
+        }
+        if !(0.0..=100.0).contains(&diff.baseline_conversion_rate)
+            || !(0.0..=100.0).contains(&diff.scenario_conversion_rate)
+        {
+            return Err("swarmtank scenario diff conversion rates must be percentages".to_string());
+        }
+        if diff.baseline_average_willingness_to_pay < 0.0
+            || !diff.baseline_average_willingness_to_pay.is_finite()
+            || diff.scenario_average_willingness_to_pay < 0.0
+            || !diff.scenario_average_willingness_to_pay.is_finite()
+        {
+            return Err(
+                "swarmtank scenario diff willingness to pay must be finite and non-negative"
+                    .to_string(),
+            );
+        }
+        if diff.optimal_price_recommendation.trim().is_empty() {
+            return Err("swarmtank scenario diff must carry a price recommendation".to_string());
+        }
+        if diff.resolved_objections.len() > 3 || diff.introduced_objections.len() > 3 {
+            return Err("swarmtank scenario diff top lists must hold at most 3 items".to_string());
+        }
+        for transition in &diff.transitions {
+            if !matches!(transition.from.as_str(), "Convert" | "Confused" | "Reject")
+                || !matches!(transition.to.as_str(), "Convert" | "Confused" | "Reject")
+                || transition.count == 0
+            {
+                return Err(
+                    "swarmtank scenario diff transitions must name decisions with counts"
                         .to_string(),
                 );
             }
@@ -561,6 +625,7 @@ pub fn transfer(value: Value, scope: &CallerScope) -> Result<Value, CommandError
             "ARCHITECTURE.md",
         ),
         swarmtank_addendum: None,
+        swarmtank_scenario_diff: None,
         provider: provider.clone(),
         model: model.clone(),
     };
