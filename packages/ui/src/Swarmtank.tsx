@@ -517,7 +517,10 @@ export function SwarmtankReportView({
                 <td>{decision?.perceivedValue ?? '—'}</td>
                 <td>{decision?.willingnessToPay ?? '—'}</td>
                 <td>
-                  <button onClick={() => onSelectPersona(persona.id)}>
+                  <button
+                    aria-label={`Select ${persona.name} in arena`}
+                    onClick={() => onSelectPersona(persona.id)}
+                  >
                     Select in arena
                   </button>
                 </td>
