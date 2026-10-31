@@ -45,6 +45,10 @@ type Session = {
   fakeHits: () => number;
   artifactIdByType: (workspaceId: string, projectId: string, type: string) => Promise<string>;
   openProject: () => Promise<void>;
+  workspaceId: string;
+  projectId: string;
+  call: (group: string, operation: string, input: Record<string, unknown>) => Promise<{ status: number; body: Record<string, any> }>;
+  pairAndOpen: (ws: string) => Promise<void>;
 };
 
 export async function startSession(page: Page, reducedMotion: boolean): Promise<Session> {
@@ -170,6 +174,10 @@ export async function startSession(page: Page, reducedMotion: boolean): Promise<
       await page.getByRole('button', { name: 'Harbor App' }).click();
       await expect(page.getByRole('heading', { name: 'Artifacts' })).toBeVisible();
     },
+    workspaceId,
+    projectId,
+    call,
+    pairAndOpen,
   };
 }
 
