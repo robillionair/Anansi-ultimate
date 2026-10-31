@@ -143,7 +143,7 @@ export async function startSession(page: Page, reducedMotion: boolean): Promise<
     await page.getByRole('button', { name: 'Open workspace', exact: true }).click();
     await page.getByRole('button', { name: 'Projects', exact: true }).click();
     await page.getByRole('button', { name: 'Harbor App' }).click();
-    await expect(page.getByRole('heading', { name: 'Artifacts' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Artifacts', exact: true })).toBeVisible();
   }
 
   await pairAndOpen(workspaceId);
@@ -172,7 +172,7 @@ export async function startSession(page: Page, reducedMotion: boolean): Promise<
     openProject: async () => {
       await page.getByRole('button', { name: 'Projects', exact: true }).click();
       await page.getByRole('button', { name: 'Harbor App' }).click();
-      await expect(page.getByRole('heading', { name: 'Artifacts' })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Artifacts', exact: true })).toBeVisible();
     },
     workspaceId,
     projectId,
