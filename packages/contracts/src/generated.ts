@@ -1051,6 +1051,10 @@ export interface ControlJobRequest {
   id: string;
   workspaceId: string;
 }
+export interface CountedItem {
+  count: number;
+  item: string;
+}
 export interface CreateRelationshipRequest {
   contractVersion: number;
   draft: RelationshipDraft;
@@ -3441,6 +3445,469 @@ export interface SuppliedSourceInput {
   text: string;
 }
 /**
+ * The revision note a transfer writes onto a Forge
+ * concept's new version.
+ */
+export interface SwarmtankAddendum {
+  recommendations: SwarmtankRecommendation[];
+  runArtifactId: string;
+  runContentHash: string;
+  runVersion: number;
+  topConfusionPoints: CountedItem[];
+  topObjections: CountedItem[];
+}
+export interface SwarmtankRecommendation {
+  assumption: string;
+  detail: string;
+  syntheticEvidence: string;
+  title: string;
+  uncertainty: string;
+  validation: string;
+}
+export interface CountedItem {
+  count: number;
+  item: string;
+}
+export interface SwarmtankBatchInfo {
+  count: number;
+  index: number;
+}
+/**
+ * One decision. `key_objection` is required for
+ * Confused/Reject and null for Convert.
+ */
+export interface SwarmtankDecision {
+  decision: string;
+  keyObjection?: string | null;
+  perceivedValue: number;
+  personaId: string;
+  reason: string;
+  score: number;
+  willingnessToPay: number;
+}
+export interface SwarmtankEvaluateRequest {
+  contractVersion?: number;
+  input: SwarmtankInput;
+  preset: number;
+  projectId: string;
+  seed?: string | null;
+  source?: SwarmtankSource | null;
+  workspaceId: string;
+}
+/**
+ * A SwarmTank run input: manual fields, or fields
+ * copied from a saved experiment / Forge concept.
+ * `pricing` is display text; `price_amount` is the
+ * optional numeric monthly price the decision engine
+ * compares against budgets. A missing numeric price
+ * is never invented from the text.
+ */
+export interface SwarmtankInput {
+  description: string;
+  features?: string[];
+  industry?: string;
+  priceAmount?: number | null;
+  pricing?: string;
+  segment?: string;
+  valueProposition?: string;
+}
+/**
+ * The import source pin: an exact experiment or
+ * concept version, never a floating "latest".
+ */
+export interface SwarmtankSource {
+  artifactId: string;
+  contentHash: string;
+  kind: string;
+  version: number;
+}
+export interface SwarmtankEvaluateResponse {
+  artifact: ArtifactRecord;
+  body: string;
+  contractVersion: number;
+  report: SwarmtankReport;
+}
+/**
+ * One artifact version's metadata — the §9 field set.
+ */
+export interface ArtifactRecord {
+  artifactId: string;
+  contentHash: string;
+  /**
+   * Generator/model metadata: `{"kind":"manual"}` in this
+   * slice; generator slices record model provenance here.
+   */
+  generator?: {
+    [k: string]: unknown;
+  };
+  privacy: string;
+  projectId: string;
+  sourceReferences: string[];
+  /**
+   * The §9 timestamp: when this version was registered.
+   */
+  timestamp: string;
+  title: string;
+  type: string;
+  validationStatus: string;
+  version: number;
+}
+export interface SwarmtankReport {
+  averageWillingnessToPay: number;
+  confused: number;
+  conversionRate: number;
+  converts: number;
+  objectionBreakdown: CountedItem[];
+  recommendations: SwarmtankRecommendation[];
+  rejects: number;
+  segments: CountedItem[];
+  topConfusionPoints: CountedItem[];
+  topObjections: CountedItem[];
+  total: number;
+}
+export interface CountedItem {
+  count: number;
+  item: string;
+}
+export interface SwarmtankRecommendation {
+  assumption: string;
+  detail: string;
+  syntheticEvidence: string;
+  title: string;
+  uncertainty: string;
+  validation: string;
+}
+/**
+ * A SwarmTank run input: manual fields, or fields
+ * copied from a saved experiment / Forge concept.
+ * `pricing` is display text; `price_amount` is the
+ * optional numeric monthly price the decision engine
+ * compares against budgets. A missing numeric price
+ * is never invented from the text.
+ */
+export interface SwarmtankInput {
+  description: string;
+  features?: string[];
+  industry?: string;
+  priceAmount?: number | null;
+  pricing?: string;
+  segment?: string;
+  valueProposition?: string;
+}
+/**
+ * One synthetic buyer. Every surface rendering a
+ * persona must label it simulated; the `synthetic`
+ * field is always true and is part of the stored
+ * record so no consumer can render it unlabeled
+ * by accident.
+ */
+export interface SwarmtankPersona {
+  approximateBudget: number;
+  companySize: string;
+  expectedImplementationEffort: string;
+  id: string;
+  name: string;
+  needs: string[];
+  priceSensitivity: number;
+  priorities: string[];
+  purchaseConstraints: string[];
+  requiredTrustSignals: string[];
+  role: string;
+  skepticism: number;
+  synthetic: boolean;
+}
+export interface SwarmtankPersonasRequest {
+  contractVersion?: number;
+  input: SwarmtankInput;
+  preset: number;
+  projectId: string;
+  seed?: string | null;
+  source?: SwarmtankSource | null;
+  workspaceId: string;
+}
+/**
+ * A SwarmTank run input: manual fields, or fields
+ * copied from a saved experiment / Forge concept.
+ * `pricing` is display text; `price_amount` is the
+ * optional numeric monthly price the decision engine
+ * compares against budgets. A missing numeric price
+ * is never invented from the text.
+ */
+export interface SwarmtankInput {
+  description: string;
+  features?: string[];
+  industry?: string;
+  priceAmount?: number | null;
+  pricing?: string;
+  segment?: string;
+  valueProposition?: string;
+}
+/**
+ * The import source pin: an exact experiment or
+ * concept version, never a floating "latest".
+ */
+export interface SwarmtankSource {
+  artifactId: string;
+  contentHash: string;
+  kind: string;
+  version: number;
+}
+export interface SwarmtankPersonasResponse {
+  batches: SwarmtankBatchInfo[];
+  contractVersion: number;
+  personas: SwarmtankPersona[];
+  preset: number;
+  seed: string;
+}
+export interface SwarmtankBatchInfo {
+  count: number;
+  index: number;
+}
+/**
+ * One synthetic buyer. Every surface rendering a
+ * persona must label it simulated; the `synthetic`
+ * field is always true and is part of the stored
+ * record so no consumer can render it unlabeled
+ * by accident.
+ */
+export interface SwarmtankPersona {
+  approximateBudget: number;
+  companySize: string;
+  expectedImplementationEffort: string;
+  id: string;
+  name: string;
+  needs: string[];
+  priceSensitivity: number;
+  priorities: string[];
+  purchaseConstraints: string[];
+  requiredTrustSignals: string[];
+  role: string;
+  skepticism: number;
+  synthetic: boolean;
+}
+export interface SwarmtankRecommendation {
+  assumption: string;
+  detail: string;
+  syntheticEvidence: string;
+  title: string;
+  uncertainty: string;
+  validation: string;
+}
+export interface SwarmtankReport {
+  averageWillingnessToPay: number;
+  confused: number;
+  conversionRate: number;
+  converts: number;
+  objectionBreakdown: CountedItem[];
+  recommendations: SwarmtankRecommendation[];
+  rejects: number;
+  segments: CountedItem[];
+  topConfusionPoints: CountedItem[];
+  topObjections: CountedItem[];
+  total: number;
+}
+export interface CountedItem {
+  count: number;
+  item: string;
+}
+export interface SwarmtankRecommendation {
+  assumption: string;
+  detail: string;
+  syntheticEvidence: string;
+  title: string;
+  uncertainty: string;
+  validation: string;
+}
+export interface SwarmtankReportRequest {
+  artifactId: string;
+  contractVersion?: number;
+  version?: number | null;
+  workspaceId: string;
+}
+export interface SwarmtankReportResponse {
+  artifact: ArtifactRecord;
+  contractVersion: number;
+  report: SwarmtankReport;
+}
+/**
+ * One artifact version's metadata — the §9 field set.
+ */
+export interface ArtifactRecord {
+  artifactId: string;
+  contentHash: string;
+  /**
+   * Generator/model metadata: `{"kind":"manual"}` in this
+   * slice; generator slices record model provenance here.
+   */
+  generator?: {
+    [k: string]: unknown;
+  };
+  privacy: string;
+  projectId: string;
+  sourceReferences: string[];
+  /**
+   * The §9 timestamp: when this version was registered.
+   */
+  timestamp: string;
+  title: string;
+  type: string;
+  validationStatus: string;
+  version: number;
+}
+export interface SwarmtankReport {
+  averageWillingnessToPay: number;
+  confused: number;
+  conversionRate: number;
+  converts: number;
+  objectionBreakdown: CountedItem[];
+  recommendations: SwarmtankRecommendation[];
+  rejects: number;
+  segments: CountedItem[];
+  topConfusionPoints: CountedItem[];
+  topObjections: CountedItem[];
+  total: number;
+}
+export interface CountedItem {
+  count: number;
+  item: string;
+}
+export interface SwarmtankRecommendation {
+  assumption: string;
+  detail: string;
+  syntheticEvidence: string;
+  title: string;
+  uncertainty: string;
+  validation: string;
+}
+/**
+ * The stored run document. `content_hash` is the
+ * SHA-256 of the canonical serialization with the
+ * hash field itself empty; validation recomputes
+ * it fail-closed.
+ */
+export interface SwarmtankRunDoc {
+  contentHash: string;
+  decisions: SwarmtankDecision[];
+  format: string;
+  input: SwarmtankInput;
+  personas: SwarmtankPersona[];
+  preset: number;
+  seed: string;
+  source?: SwarmtankSource | null;
+  version: number;
+}
+/**
+ * One decision. `key_objection` is required for
+ * Confused/Reject and null for Convert.
+ */
+export interface SwarmtankDecision {
+  decision: string;
+  keyObjection?: string | null;
+  perceivedValue: number;
+  personaId: string;
+  reason: string;
+  score: number;
+  willingnessToPay: number;
+}
+/**
+ * A SwarmTank run input: manual fields, or fields
+ * copied from a saved experiment / Forge concept.
+ * `pricing` is display text; `price_amount` is the
+ * optional numeric monthly price the decision engine
+ * compares against budgets. A missing numeric price
+ * is never invented from the text.
+ */
+export interface SwarmtankInput {
+  description: string;
+  features?: string[];
+  industry?: string;
+  priceAmount?: number | null;
+  pricing?: string;
+  segment?: string;
+  valueProposition?: string;
+}
+/**
+ * One synthetic buyer. Every surface rendering a
+ * persona must label it simulated; the `synthetic`
+ * field is always true and is part of the stored
+ * record so no consumer can render it unlabeled
+ * by accident.
+ */
+export interface SwarmtankPersona {
+  approximateBudget: number;
+  companySize: string;
+  expectedImplementationEffort: string;
+  id: string;
+  name: string;
+  needs: string[];
+  priceSensitivity: number;
+  priorities: string[];
+  purchaseConstraints: string[];
+  requiredTrustSignals: string[];
+  role: string;
+  skepticism: number;
+  synthetic: boolean;
+}
+/**
+ * The import source pin: an exact experiment or
+ * concept version, never a floating "latest".
+ */
+export interface SwarmtankSource {
+  artifactId: string;
+  contentHash: string;
+  kind: string;
+  version: number;
+}
+/**
+ * The import source pin: an exact experiment or
+ * concept version, never a floating "latest".
+ */
+export interface SwarmtankSource {
+  artifactId: string;
+  contentHash: string;
+  kind: string;
+  version: number;
+}
+export interface SwarmtankTransferRequest {
+  conceptArtifactId: string;
+  contractVersion?: number;
+  expectedConceptVersion: number;
+  projectId: string;
+  runArtifactId: string;
+  runVersion: number;
+  workspaceId: string;
+}
+export interface SwarmtankTransferResponse {
+  alreadyApplied: boolean;
+  artifact: ArtifactRecord;
+  contractVersion: number;
+}
+/**
+ * One artifact version's metadata — the §9 field set.
+ */
+export interface ArtifactRecord {
+  artifactId: string;
+  contentHash: string;
+  /**
+   * Generator/model metadata: `{"kind":"manual"}` in this
+   * slice; generator slices record model provenance here.
+   */
+  generator?: {
+    [k: string]: unknown;
+  };
+  privacy: string;
+  projectId: string;
+  sourceReferences: string[];
+  /**
+   * The §9 timestamp: when this version was registered.
+   */
+  timestamp: string;
+  title: string;
+  type: string;
+  validationStatus: string;
+  version: number;
+}
+/**
  * A durable Forge-compatible concept: one approved
  * collider combination plus its provenance. The
  * `format` discriminator is what separates this body
@@ -3466,6 +3933,15 @@ export interface TransferConceptDoc {
   sourceExperimentArtifactId: string;
   sourceExperimentContentHash: string;
   sourceExperimentVersion: number;
+  /**
+   * M9 Slice 1 SwarmTank revision note: the top
+   * objections, confusion points, and recommended
+   * adjustments from one evaluated run, written by
+   * swarmtank-transfer-to-forge onto a new concept
+   * version. Absent on concepts without a SwarmTank
+   * application.
+   */
+  swarmtankAddendum?: SwarmtankAddendum | null;
   unknowns: string[];
   version: number;
 }
@@ -3475,6 +3951,30 @@ export interface TransferConceptDoc {
 export interface ColliderCombination {
   description: string;
   name: string;
+}
+/**
+ * The revision note a transfer writes onto a Forge
+ * concept's new version.
+ */
+export interface SwarmtankAddendum {
+  recommendations: SwarmtankRecommendation[];
+  runArtifactId: string;
+  runContentHash: string;
+  runVersion: number;
+  topConfusionPoints: CountedItem[];
+  topObjections: CountedItem[];
+}
+export interface SwarmtankRecommendation {
+  assumption: string;
+  detail: string;
+  syntheticEvidence: string;
+  title: string;
+  uncertainty: string;
+  validation: string;
+}
+export interface CountedItem {
+  count: number;
+  item: string;
 }
 /**
  * The transfer request: an exact experiment version,

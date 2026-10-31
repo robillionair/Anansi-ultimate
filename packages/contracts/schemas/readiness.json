@@ -3716,6 +3716,26 @@
     "title": "ControlJobRequest",
     "type": "object"
   },
+  "CountedItem": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "count": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "item": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "item",
+      "count"
+    ],
+    "title": "CountedItem",
+    "type": "object"
+  },
   "CreateRelationshipRequest": {
     "$defs": {
       "RelationshipDraft": {
@@ -12919,6 +12939,1716 @@
     "title": "SuppliedSourceInput",
     "type": "object"
   },
+  "SwarmtankAddendum": {
+    "$defs": {
+      "CountedItem": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "item": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "item",
+          "count"
+        ],
+        "type": "object"
+      },
+      "SwarmtankRecommendation": {
+        "additionalProperties": false,
+        "properties": {
+          "assumption": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "syntheticEvidence": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "uncertainty": {
+            "type": "string"
+          },
+          "validation": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "detail",
+          "assumption",
+          "syntheticEvidence",
+          "uncertainty",
+          "validation"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "description": "The revision note a transfer writes onto a Forge\nconcept's new version.",
+    "properties": {
+      "recommendations": {
+        "items": {
+          "$ref": "#/$defs/SwarmtankRecommendation"
+        },
+        "type": "array"
+      },
+      "runArtifactId": {
+        "type": "string"
+      },
+      "runContentHash": {
+        "type": "string"
+      },
+      "runVersion": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "topConfusionPoints": {
+        "items": {
+          "$ref": "#/$defs/CountedItem"
+        },
+        "type": "array"
+      },
+      "topObjections": {
+        "items": {
+          "$ref": "#/$defs/CountedItem"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "runArtifactId",
+      "runVersion",
+      "runContentHash",
+      "topObjections",
+      "topConfusionPoints",
+      "recommendations"
+    ],
+    "title": "SwarmtankAddendum",
+    "type": "object"
+  },
+  "SwarmtankBatchInfo": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "count": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "index": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "index",
+      "count"
+    ],
+    "title": "SwarmtankBatchInfo",
+    "type": "object"
+  },
+  "SwarmtankDecision": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "description": "One decision. `key_objection` is required for\nConfused/Reject and null for Convert.",
+    "properties": {
+      "decision": {
+        "type": "string"
+      },
+      "keyObjection": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "perceivedValue": {
+        "format": "double",
+        "type": "number"
+      },
+      "personaId": {
+        "type": "string"
+      },
+      "reason": {
+        "type": "string"
+      },
+      "score": {
+        "format": "double",
+        "type": "number"
+      },
+      "willingnessToPay": {
+        "format": "double",
+        "type": "number"
+      }
+    },
+    "required": [
+      "personaId",
+      "decision",
+      "reason",
+      "perceivedValue",
+      "willingnessToPay",
+      "score"
+    ],
+    "title": "SwarmtankDecision",
+    "type": "object"
+  },
+  "SwarmtankEvaluateRequest": {
+    "$defs": {
+      "SwarmtankInput": {
+        "additionalProperties": false,
+        "description": "A SwarmTank run input: manual fields, or fields\ncopied from a saved experiment / Forge concept.\n`pricing` is display text; `price_amount` is the\noptional numeric monthly price the decision engine\ncompares against budgets. A missing numeric price\nis never invented from the text.",
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "features": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "industry": {
+            "default": "",
+            "type": "string"
+          },
+          "priceAmount": {
+            "default": null,
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "pricing": {
+            "default": "",
+            "type": "string"
+          },
+          "segment": {
+            "default": "",
+            "type": "string"
+          },
+          "valueProposition": {
+            "default": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "description"
+        ],
+        "type": "object"
+      },
+      "SwarmtankSource": {
+        "additionalProperties": false,
+        "description": "The import source pin: an exact experiment or\nconcept version, never a floating \"latest\".",
+        "properties": {
+          "artifactId": {
+            "type": "string"
+          },
+          "contentHash": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "version": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "kind",
+          "artifactId",
+          "version",
+          "contentHash"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "contractVersion": {
+        "default": 1,
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "input": {
+        "$ref": "#/$defs/SwarmtankInput"
+      },
+      "preset": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "projectId": {
+        "type": "string"
+      },
+      "seed": {
+        "default": null,
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "source": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/SwarmtankSource"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "workspaceId",
+      "projectId",
+      "input",
+      "preset"
+    ],
+    "title": "SwarmtankEvaluateRequest",
+    "type": "object"
+  },
+  "SwarmtankEvaluateResponse": {
+    "$defs": {
+      "ArtifactRecord": {
+        "description": "One artifact version's metadata — the §9 field set.",
+        "properties": {
+          "artifactId": {
+            "type": "string"
+          },
+          "contentHash": {
+            "type": "string"
+          },
+          "generator": {
+            "description": "Generator/model metadata: `{\"kind\":\"manual\"}` in this\nslice; generator slices record model provenance here."
+          },
+          "privacy": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "sourceReferences": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "timestamp": {
+            "description": "The §9 timestamp: when this version was registered.",
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "validationStatus": {
+            "type": "string"
+          },
+          "version": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "artifactId",
+          "projectId",
+          "type",
+          "version",
+          "title",
+          "timestamp",
+          "sourceReferences",
+          "validationStatus",
+          "privacy",
+          "contentHash"
+        ],
+        "type": "object"
+      },
+      "CountedItem": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "item": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "item",
+          "count"
+        ],
+        "type": "object"
+      },
+      "SwarmtankRecommendation": {
+        "additionalProperties": false,
+        "properties": {
+          "assumption": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "syntheticEvidence": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "uncertainty": {
+            "type": "string"
+          },
+          "validation": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "detail",
+          "assumption",
+          "syntheticEvidence",
+          "uncertainty",
+          "validation"
+        ],
+        "type": "object"
+      },
+      "SwarmtankReport": {
+        "additionalProperties": false,
+        "properties": {
+          "averageWillingnessToPay": {
+            "format": "double",
+            "type": "number"
+          },
+          "confused": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "conversionRate": {
+            "format": "double",
+            "type": "number"
+          },
+          "converts": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "objectionBreakdown": {
+            "items": {
+              "$ref": "#/$defs/CountedItem"
+            },
+            "type": "array"
+          },
+          "recommendations": {
+            "items": {
+              "$ref": "#/$defs/SwarmtankRecommendation"
+            },
+            "type": "array"
+          },
+          "rejects": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "segments": {
+            "items": {
+              "$ref": "#/$defs/CountedItem"
+            },
+            "type": "array"
+          },
+          "topConfusionPoints": {
+            "items": {
+              "$ref": "#/$defs/CountedItem"
+            },
+            "type": "array"
+          },
+          "topObjections": {
+            "items": {
+              "$ref": "#/$defs/CountedItem"
+            },
+            "type": "array"
+          },
+          "total": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "converts",
+          "confused",
+          "rejects",
+          "conversionRate",
+          "averageWillingnessToPay",
+          "topConfusionPoints",
+          "topObjections",
+          "objectionBreakdown",
+          "segments",
+          "recommendations"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "artifact": {
+        "$ref": "#/$defs/ArtifactRecord"
+      },
+      "body": {
+        "type": "string"
+      },
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "report": {
+        "$ref": "#/$defs/SwarmtankReport"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "artifact",
+      "body",
+      "report"
+    ],
+    "title": "SwarmtankEvaluateResponse",
+    "type": "object"
+  },
+  "SwarmtankInput": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "description": "A SwarmTank run input: manual fields, or fields\ncopied from a saved experiment / Forge concept.\n`pricing` is display text; `price_amount` is the\noptional numeric monthly price the decision engine\ncompares against budgets. A missing numeric price\nis never invented from the text.",
+    "properties": {
+      "description": {
+        "type": "string"
+      },
+      "features": {
+        "default": [],
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "industry": {
+        "default": "",
+        "type": "string"
+      },
+      "priceAmount": {
+        "default": null,
+        "format": "double",
+        "type": [
+          "number",
+          "null"
+        ]
+      },
+      "pricing": {
+        "default": "",
+        "type": "string"
+      },
+      "segment": {
+        "default": "",
+        "type": "string"
+      },
+      "valueProposition": {
+        "default": "",
+        "type": "string"
+      }
+    },
+    "required": [
+      "description"
+    ],
+    "title": "SwarmtankInput",
+    "type": "object"
+  },
+  "SwarmtankPersona": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "description": "One synthetic buyer. Every surface rendering a\npersona must label it simulated; the `synthetic`\nfield is always true and is part of the stored\nrecord so no consumer can render it unlabeled\nby accident.",
+    "properties": {
+      "approximateBudget": {
+        "format": "double",
+        "type": "number"
+      },
+      "companySize": {
+        "type": "string"
+      },
+      "expectedImplementationEffort": {
+        "type": "string"
+      },
+      "id": {
+        "type": "string"
+      },
+      "name": {
+        "type": "string"
+      },
+      "needs": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "priceSensitivity": {
+        "format": "double",
+        "type": "number"
+      },
+      "priorities": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "purchaseConstraints": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "requiredTrustSignals": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "role": {
+        "type": "string"
+      },
+      "skepticism": {
+        "format": "double",
+        "type": "number"
+      },
+      "synthetic": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "id",
+      "name",
+      "role",
+      "companySize",
+      "approximateBudget",
+      "needs",
+      "priorities",
+      "skepticism",
+      "priceSensitivity",
+      "purchaseConstraints",
+      "requiredTrustSignals",
+      "expectedImplementationEffort",
+      "synthetic"
+    ],
+    "title": "SwarmtankPersona",
+    "type": "object"
+  },
+  "SwarmtankPersonasRequest": {
+    "$defs": {
+      "SwarmtankInput": {
+        "additionalProperties": false,
+        "description": "A SwarmTank run input: manual fields, or fields\ncopied from a saved experiment / Forge concept.\n`pricing` is display text; `price_amount` is the\noptional numeric monthly price the decision engine\ncompares against budgets. A missing numeric price\nis never invented from the text.",
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "features": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "industry": {
+            "default": "",
+            "type": "string"
+          },
+          "priceAmount": {
+            "default": null,
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "pricing": {
+            "default": "",
+            "type": "string"
+          },
+          "segment": {
+            "default": "",
+            "type": "string"
+          },
+          "valueProposition": {
+            "default": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "description"
+        ],
+        "type": "object"
+      },
+      "SwarmtankSource": {
+        "additionalProperties": false,
+        "description": "The import source pin: an exact experiment or\nconcept version, never a floating \"latest\".",
+        "properties": {
+          "artifactId": {
+            "type": "string"
+          },
+          "contentHash": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "version": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "kind",
+          "artifactId",
+          "version",
+          "contentHash"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "contractVersion": {
+        "default": 1,
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "input": {
+        "$ref": "#/$defs/SwarmtankInput"
+      },
+      "preset": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "projectId": {
+        "type": "string"
+      },
+      "seed": {
+        "default": null,
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "source": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/SwarmtankSource"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "workspaceId",
+      "projectId",
+      "input",
+      "preset"
+    ],
+    "title": "SwarmtankPersonasRequest",
+    "type": "object"
+  },
+  "SwarmtankPersonasResponse": {
+    "$defs": {
+      "SwarmtankBatchInfo": {
+        "properties": {
+          "count": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "index": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "index",
+          "count"
+        ],
+        "type": "object"
+      },
+      "SwarmtankPersona": {
+        "additionalProperties": false,
+        "description": "One synthetic buyer. Every surface rendering a\npersona must label it simulated; the `synthetic`\nfield is always true and is part of the stored\nrecord so no consumer can render it unlabeled\nby accident.",
+        "properties": {
+          "approximateBudget": {
+            "format": "double",
+            "type": "number"
+          },
+          "companySize": {
+            "type": "string"
+          },
+          "expectedImplementationEffort": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "needs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "priceSensitivity": {
+            "format": "double",
+            "type": "number"
+          },
+          "priorities": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "purchaseConstraints": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "requiredTrustSignals": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "role": {
+            "type": "string"
+          },
+          "skepticism": {
+            "format": "double",
+            "type": "number"
+          },
+          "synthetic": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "role",
+          "companySize",
+          "approximateBudget",
+          "needs",
+          "priorities",
+          "skepticism",
+          "priceSensitivity",
+          "purchaseConstraints",
+          "requiredTrustSignals",
+          "expectedImplementationEffort",
+          "synthetic"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "batches": {
+        "items": {
+          "$ref": "#/$defs/SwarmtankBatchInfo"
+        },
+        "type": "array"
+      },
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "personas": {
+        "items": {
+          "$ref": "#/$defs/SwarmtankPersona"
+        },
+        "type": "array"
+      },
+      "preset": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "seed": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "personas",
+      "batches",
+      "seed",
+      "preset"
+    ],
+    "title": "SwarmtankPersonasResponse",
+    "type": "object"
+  },
+  "SwarmtankRecommendation": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "assumption": {
+        "type": "string"
+      },
+      "detail": {
+        "type": "string"
+      },
+      "syntheticEvidence": {
+        "type": "string"
+      },
+      "title": {
+        "type": "string"
+      },
+      "uncertainty": {
+        "type": "string"
+      },
+      "validation": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "title",
+      "detail",
+      "assumption",
+      "syntheticEvidence",
+      "uncertainty",
+      "validation"
+    ],
+    "title": "SwarmtankRecommendation",
+    "type": "object"
+  },
+  "SwarmtankReport": {
+    "$defs": {
+      "CountedItem": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "item": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "item",
+          "count"
+        ],
+        "type": "object"
+      },
+      "SwarmtankRecommendation": {
+        "additionalProperties": false,
+        "properties": {
+          "assumption": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "syntheticEvidence": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "uncertainty": {
+            "type": "string"
+          },
+          "validation": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "detail",
+          "assumption",
+          "syntheticEvidence",
+          "uncertainty",
+          "validation"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "averageWillingnessToPay": {
+        "format": "double",
+        "type": "number"
+      },
+      "confused": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "conversionRate": {
+        "format": "double",
+        "type": "number"
+      },
+      "converts": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "objectionBreakdown": {
+        "items": {
+          "$ref": "#/$defs/CountedItem"
+        },
+        "type": "array"
+      },
+      "recommendations": {
+        "items": {
+          "$ref": "#/$defs/SwarmtankRecommendation"
+        },
+        "type": "array"
+      },
+      "rejects": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "segments": {
+        "items": {
+          "$ref": "#/$defs/CountedItem"
+        },
+        "type": "array"
+      },
+      "topConfusionPoints": {
+        "items": {
+          "$ref": "#/$defs/CountedItem"
+        },
+        "type": "array"
+      },
+      "topObjections": {
+        "items": {
+          "$ref": "#/$defs/CountedItem"
+        },
+        "type": "array"
+      },
+      "total": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "total",
+      "converts",
+      "confused",
+      "rejects",
+      "conversionRate",
+      "averageWillingnessToPay",
+      "topConfusionPoints",
+      "topObjections",
+      "objectionBreakdown",
+      "segments",
+      "recommendations"
+    ],
+    "title": "SwarmtankReport",
+    "type": "object"
+  },
+  "SwarmtankReportRequest": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "artifactId": {
+        "type": "string"
+      },
+      "contractVersion": {
+        "default": 1,
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "version": {
+        "default": null,
+        "format": "uint32",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "workspaceId",
+      "artifactId"
+    ],
+    "title": "SwarmtankReportRequest",
+    "type": "object"
+  },
+  "SwarmtankReportResponse": {
+    "$defs": {
+      "ArtifactRecord": {
+        "description": "One artifact version's metadata — the §9 field set.",
+        "properties": {
+          "artifactId": {
+            "type": "string"
+          },
+          "contentHash": {
+            "type": "string"
+          },
+          "generator": {
+            "description": "Generator/model metadata: `{\"kind\":\"manual\"}` in this\nslice; generator slices record model provenance here."
+          },
+          "privacy": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "sourceReferences": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "timestamp": {
+            "description": "The §9 timestamp: when this version was registered.",
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "validationStatus": {
+            "type": "string"
+          },
+          "version": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "artifactId",
+          "projectId",
+          "type",
+          "version",
+          "title",
+          "timestamp",
+          "sourceReferences",
+          "validationStatus",
+          "privacy",
+          "contentHash"
+        ],
+        "type": "object"
+      },
+      "CountedItem": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "item": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "item",
+          "count"
+        ],
+        "type": "object"
+      },
+      "SwarmtankRecommendation": {
+        "additionalProperties": false,
+        "properties": {
+          "assumption": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "syntheticEvidence": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "uncertainty": {
+            "type": "string"
+          },
+          "validation": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "detail",
+          "assumption",
+          "syntheticEvidence",
+          "uncertainty",
+          "validation"
+        ],
+        "type": "object"
+      },
+      "SwarmtankReport": {
+        "additionalProperties": false,
+        "properties": {
+          "averageWillingnessToPay": {
+            "format": "double",
+            "type": "number"
+          },
+          "confused": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "conversionRate": {
+            "format": "double",
+            "type": "number"
+          },
+          "converts": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "objectionBreakdown": {
+            "items": {
+              "$ref": "#/$defs/CountedItem"
+            },
+            "type": "array"
+          },
+          "recommendations": {
+            "items": {
+              "$ref": "#/$defs/SwarmtankRecommendation"
+            },
+            "type": "array"
+          },
+          "rejects": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "segments": {
+            "items": {
+              "$ref": "#/$defs/CountedItem"
+            },
+            "type": "array"
+          },
+          "topConfusionPoints": {
+            "items": {
+              "$ref": "#/$defs/CountedItem"
+            },
+            "type": "array"
+          },
+          "topObjections": {
+            "items": {
+              "$ref": "#/$defs/CountedItem"
+            },
+            "type": "array"
+          },
+          "total": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "converts",
+          "confused",
+          "rejects",
+          "conversionRate",
+          "averageWillingnessToPay",
+          "topConfusionPoints",
+          "topObjections",
+          "objectionBreakdown",
+          "segments",
+          "recommendations"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "artifact": {
+        "$ref": "#/$defs/ArtifactRecord"
+      },
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "report": {
+        "$ref": "#/$defs/SwarmtankReport"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "artifact",
+      "report"
+    ],
+    "title": "SwarmtankReportResponse",
+    "type": "object"
+  },
+  "SwarmtankRunDoc": {
+    "$defs": {
+      "SwarmtankDecision": {
+        "additionalProperties": false,
+        "description": "One decision. `key_objection` is required for\nConfused/Reject and null for Convert.",
+        "properties": {
+          "decision": {
+            "type": "string"
+          },
+          "keyObjection": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "perceivedValue": {
+            "format": "double",
+            "type": "number"
+          },
+          "personaId": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "score": {
+            "format": "double",
+            "type": "number"
+          },
+          "willingnessToPay": {
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "required": [
+          "personaId",
+          "decision",
+          "reason",
+          "perceivedValue",
+          "willingnessToPay",
+          "score"
+        ],
+        "type": "object"
+      },
+      "SwarmtankInput": {
+        "additionalProperties": false,
+        "description": "A SwarmTank run input: manual fields, or fields\ncopied from a saved experiment / Forge concept.\n`pricing` is display text; `price_amount` is the\noptional numeric monthly price the decision engine\ncompares against budgets. A missing numeric price\nis never invented from the text.",
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "features": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "industry": {
+            "default": "",
+            "type": "string"
+          },
+          "priceAmount": {
+            "default": null,
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "pricing": {
+            "default": "",
+            "type": "string"
+          },
+          "segment": {
+            "default": "",
+            "type": "string"
+          },
+          "valueProposition": {
+            "default": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "description"
+        ],
+        "type": "object"
+      },
+      "SwarmtankPersona": {
+        "additionalProperties": false,
+        "description": "One synthetic buyer. Every surface rendering a\npersona must label it simulated; the `synthetic`\nfield is always true and is part of the stored\nrecord so no consumer can render it unlabeled\nby accident.",
+        "properties": {
+          "approximateBudget": {
+            "format": "double",
+            "type": "number"
+          },
+          "companySize": {
+            "type": "string"
+          },
+          "expectedImplementationEffort": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "needs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "priceSensitivity": {
+            "format": "double",
+            "type": "number"
+          },
+          "priorities": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "purchaseConstraints": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "requiredTrustSignals": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "role": {
+            "type": "string"
+          },
+          "skepticism": {
+            "format": "double",
+            "type": "number"
+          },
+          "synthetic": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "role",
+          "companySize",
+          "approximateBudget",
+          "needs",
+          "priorities",
+          "skepticism",
+          "priceSensitivity",
+          "purchaseConstraints",
+          "requiredTrustSignals",
+          "expectedImplementationEffort",
+          "synthetic"
+        ],
+        "type": "object"
+      },
+      "SwarmtankSource": {
+        "additionalProperties": false,
+        "description": "The import source pin: an exact experiment or\nconcept version, never a floating \"latest\".",
+        "properties": {
+          "artifactId": {
+            "type": "string"
+          },
+          "contentHash": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "version": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "kind",
+          "artifactId",
+          "version",
+          "contentHash"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "description": "The stored run document. `content_hash` is the\nSHA-256 of the canonical serialization with the\nhash field itself empty; validation recomputes\nit fail-closed.",
+    "properties": {
+      "contentHash": {
+        "type": "string"
+      },
+      "decisions": {
+        "items": {
+          "$ref": "#/$defs/SwarmtankDecision"
+        },
+        "type": "array"
+      },
+      "format": {
+        "type": "string"
+      },
+      "input": {
+        "$ref": "#/$defs/SwarmtankInput"
+      },
+      "personas": {
+        "items": {
+          "$ref": "#/$defs/SwarmtankPersona"
+        },
+        "type": "array"
+      },
+      "preset": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "seed": {
+        "type": "string"
+      },
+      "source": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/SwarmtankSource"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "version": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "format",
+      "version",
+      "input",
+      "seed",
+      "preset",
+      "personas",
+      "decisions",
+      "contentHash"
+    ],
+    "title": "SwarmtankRunDoc",
+    "type": "object"
+  },
+  "SwarmtankSource": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "description": "The import source pin: an exact experiment or\nconcept version, never a floating \"latest\".",
+    "properties": {
+      "artifactId": {
+        "type": "string"
+      },
+      "contentHash": {
+        "type": "string"
+      },
+      "kind": {
+        "type": "string"
+      },
+      "version": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "kind",
+      "artifactId",
+      "version",
+      "contentHash"
+    ],
+    "title": "SwarmtankSource",
+    "type": "object"
+  },
+  "SwarmtankTransferRequest": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "conceptArtifactId": {
+        "type": "string"
+      },
+      "contractVersion": {
+        "default": 1,
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "expectedConceptVersion": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "projectId": {
+        "type": "string"
+      },
+      "runArtifactId": {
+        "type": "string"
+      },
+      "runVersion": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "workspaceId",
+      "projectId",
+      "runArtifactId",
+      "runVersion",
+      "conceptArtifactId",
+      "expectedConceptVersion"
+    ],
+    "title": "SwarmtankTransferRequest",
+    "type": "object"
+  },
+  "SwarmtankTransferResponse": {
+    "$defs": {
+      "ArtifactRecord": {
+        "description": "One artifact version's metadata — the §9 field set.",
+        "properties": {
+          "artifactId": {
+            "type": "string"
+          },
+          "contentHash": {
+            "type": "string"
+          },
+          "generator": {
+            "description": "Generator/model metadata: `{\"kind\":\"manual\"}` in this\nslice; generator slices record model provenance here."
+          },
+          "privacy": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "sourceReferences": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "timestamp": {
+            "description": "The §9 timestamp: when this version was registered.",
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "validationStatus": {
+            "type": "string"
+          },
+          "version": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "artifactId",
+          "projectId",
+          "type",
+          "version",
+          "title",
+          "timestamp",
+          "sourceReferences",
+          "validationStatus",
+          "privacy",
+          "contentHash"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "alreadyApplied": {
+        "type": "boolean"
+      },
+      "artifact": {
+        "$ref": "#/$defs/ArtifactRecord"
+      },
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "artifact",
+      "alreadyApplied"
+    ],
+    "title": "SwarmtankTransferResponse",
+    "type": "object"
+  },
   "TransferConceptDoc": {
     "$defs": {
       "ColliderCombination": {
@@ -12935,6 +14665,100 @@
         "required": [
           "name",
           "description"
+        ],
+        "type": "object"
+      },
+      "CountedItem": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "item": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "item",
+          "count"
+        ],
+        "type": "object"
+      },
+      "SwarmtankAddendum": {
+        "additionalProperties": false,
+        "description": "The revision note a transfer writes onto a Forge\nconcept's new version.",
+        "properties": {
+          "recommendations": {
+            "items": {
+              "$ref": "#/$defs/SwarmtankRecommendation"
+            },
+            "type": "array"
+          },
+          "runArtifactId": {
+            "type": "string"
+          },
+          "runContentHash": {
+            "type": "string"
+          },
+          "runVersion": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "topConfusionPoints": {
+            "items": {
+              "$ref": "#/$defs/CountedItem"
+            },
+            "type": "array"
+          },
+          "topObjections": {
+            "items": {
+              "$ref": "#/$defs/CountedItem"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "runArtifactId",
+          "runVersion",
+          "runContentHash",
+          "topObjections",
+          "topConfusionPoints",
+          "recommendations"
+        ],
+        "type": "object"
+      },
+      "SwarmtankRecommendation": {
+        "additionalProperties": false,
+        "properties": {
+          "assumption": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "syntheticEvidence": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "uncertainty": {
+            "type": "string"
+          },
+          "validation": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "detail",
+          "assumption",
+          "syntheticEvidence",
+          "uncertainty",
+          "validation"
         ],
         "type": "object"
       }
@@ -12989,6 +14813,17 @@
         "format": "uint32",
         "minimum": 0,
         "type": "integer"
+      },
+      "swarmtankAddendum": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/SwarmtankAddendum"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "M9 Slice 1 SwarmTank revision note: the top\nobjections, confusion points, and recommended\nadjustments from one evaluated run, written by\nswarmtank-transfer-to-forge onto a new concept\nversion. Absent on concepts without a SwarmTank\napplication."
       },
       "unknowns": {
         "items": {

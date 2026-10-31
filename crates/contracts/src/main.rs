@@ -1,4 +1,4 @@
-#![recursion_limit = "512"]
+#![recursion_limit = "1024"]
 
 use anansi_core::artifacts::{
     ArtifactDetails, ArtifactListRequest, ArtifactListResponse, ArtifactReadRequest,
@@ -52,6 +52,13 @@ use anansi_core::relationships::{
     CreateRelationshipRequest, DeleteRelationshipRequest, ListRelationshipsRequest,
     RelationshipDetails, RelationshipDraft, RelationshipList, RelationshipRecord,
 };
+use anansi_core::swarmtank::{
+    CountedItem, SwarmtankAddendum, SwarmtankBatchInfo, SwarmtankDecision,
+    SwarmtankEvaluateRequest, SwarmtankEvaluateResponse, SwarmtankInput, SwarmtankPersona,
+    SwarmtankPersonasRequest, SwarmtankPersonasResponse, SwarmtankRecommendation, SwarmtankReport,
+    SwarmtankReportRequest, SwarmtankReportResponse, SwarmtankRunDoc, SwarmtankSource,
+    SwarmtankTransferRequest, SwarmtankTransferResponse,
+};
 use anansi_core::transfer::{TransferConceptDoc, TransferRequest, TransferResponse};
 use anansi_core::workspace::{
     CreateWorkspaceRequest, OpenWorkspaceRequest, UpdateSettingsRequest, WorkspaceDetails,
@@ -101,6 +108,24 @@ fn main() {
         "TransferRequest":schemars::schema_for!(TransferRequest),
         "TransferResponse":schemars::schema_for!(TransferResponse),
         "TransferConceptDoc":schemars::schema_for!(TransferConceptDoc),
+        "SwarmtankInput":schemars::schema_for!(SwarmtankInput),
+        "SwarmtankSource":schemars::schema_for!(SwarmtankSource),
+        "SwarmtankPersona":schemars::schema_for!(SwarmtankPersona),
+        "SwarmtankDecision":schemars::schema_for!(SwarmtankDecision),
+        "SwarmtankRunDoc":schemars::schema_for!(SwarmtankRunDoc),
+        "SwarmtankAddendum":schemars::schema_for!(SwarmtankAddendum),
+        "CountedItem":schemars::schema_for!(CountedItem),
+        "SwarmtankRecommendation":schemars::schema_for!(SwarmtankRecommendation),
+        "SwarmtankReport":schemars::schema_for!(SwarmtankReport),
+        "SwarmtankPersonasRequest":schemars::schema_for!(SwarmtankPersonasRequest),
+        "SwarmtankBatchInfo":schemars::schema_for!(SwarmtankBatchInfo),
+        "SwarmtankPersonasResponse":schemars::schema_for!(SwarmtankPersonasResponse),
+        "SwarmtankEvaluateRequest":schemars::schema_for!(SwarmtankEvaluateRequest),
+        "SwarmtankEvaluateResponse":schemars::schema_for!(SwarmtankEvaluateResponse),
+        "SwarmtankReportRequest":schemars::schema_for!(SwarmtankReportRequest),
+        "SwarmtankReportResponse":schemars::schema_for!(SwarmtankReportResponse),
+        "SwarmtankTransferRequest":schemars::schema_for!(SwarmtankTransferRequest),
+        "SwarmtankTransferResponse":schemars::schema_for!(SwarmtankTransferResponse),
         "IdeasGenerateStartRequest":schemars::schema_for!(IdeasGenerateStartRequest),
         "IdeasRunRequest":schemars::schema_for!(IdeasRunRequest),
         "IdeasGenerateStartResponse":schemars::schema_for!(IdeasGenerateStartResponse),

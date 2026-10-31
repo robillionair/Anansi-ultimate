@@ -52,6 +52,90 @@ function textList(
   return out;
 }
 
+function isCountedItem(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  if (!exactKeys(value, ['item', 'count'])) return false;
+  return (
+    typeof value.item === 'string' &&
+    value.item.trim() !== '' &&
+    typeof value.count === 'number' &&
+    Number.isInteger(value.count) &&
+    value.count >= 0
+  );
+}
+
+function isCountedList(value: unknown, max: number): boolean {
+  if (!Array.isArray(value) || value.length > max) return false;
+  return value.every(isCountedItem);
+}
+
+// M9 Slice 1: shape validation for the SwarmTank
+// revision note, mirroring the backend bounds in
+// crates/core/src/transfer.rs. A malformed
+// addendum refuses the whole concept body.
+function isSwarmtankAddendum(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  if (
+    !exactKeys(value, [
+      'runArtifactId',
+      'runVersion',
+      'runContentHash',
+      'topObjections',
+      'topConfusionPoints',
+      'recommendations',
+    ])
+  ) {
+    return false;
+  }
+  if (
+    typeof value.runArtifactId !== 'string' ||
+    value.runArtifactId.trim() === '' ||
+    typeof value.runVersion !== 'number' ||
+    !Number.isInteger(value.runVersion) ||
+    value.runVersion < 1 ||
+    typeof value.runContentHash !== 'string' ||
+    !/^[0-9a-f]{64}$/.test(value.runContentHash)
+  ) {
+    return false;
+  }
+  if (
+    !isCountedList(value.topObjections, 3) ||
+    !isCountedList(value.topConfusionPoints, 3) ||
+    !Array.isArray(value.recommendations) ||
+    value.recommendations.length > 6
+  ) {
+    return false;
+  }
+  return (value.recommendations as unknown[]).every(rec => {
+    if (!isRecord(rec)) return false;
+    if (
+      !exactKeys(rec, [
+        'title',
+        'detail',
+        'assumption',
+        'syntheticEvidence',
+        'uncertainty',
+        'validation',
+      ])
+    ) {
+      return false;
+    }
+    return (
+      typeof rec.title === 'string' &&
+      rec.title.trim() !== '' &&
+      typeof rec.detail === 'string' &&
+      typeof rec.assumption === 'string' &&
+      rec.assumption.trim() !== '' &&
+      typeof rec.syntheticEvidence === 'string' &&
+      rec.syntheticEvidence.trim() !== '' &&
+      typeof rec.uncertainty === 'string' &&
+      rec.uncertainty.trim() !== '' &&
+      typeof rec.validation === 'string' &&
+      rec.validation.trim() !== ''
+    );
+  });
+}
+
 export function parseTransferConceptBody(
   body: string,
 ): TransferConceptDoc | null {
@@ -77,13 +161,19 @@ export function parseTransferConceptBody(
     'provider',
     'model',
   ];
-  // `initialSpecification` is optional: concepts
-  // transferred before the §27 slice carry none.
-  // Every other key must be exactly the required set.
+  // `initialSpecification` and `swarmtankAddendum`
+  // are optional: concepts transferred before the
+  // §27 slice carry no specification, and concepts
+  // without a SwarmTank application carry no
+  // addendum. Every other key must be exactly the
+  // required set.
   if (
     !requiredKeys.every(key => Object.keys(parsed).includes(key)) ||
     !Object.keys(parsed).every(
-      key => requiredKeys.includes(key) || key === 'initialSpecification',
+      key =>
+        requiredKeys.includes(key) ||
+        key === 'initialSpecification' ||
+        key === 'swarmtankAddendum',
     )
   ) {
     return null;
@@ -92,6 +182,13 @@ export function parseTransferConceptBody(
     parsed.initialSpecification !== undefined &&
     (typeof parsed.initialSpecification !== 'string' ||
       parsed.initialSpecification.length > 20000)
+  ) {
+    return null;
+  }
+  if (
+    parsed.swarmtankAddendum !== undefined &&
+    parsed.swarmtankAddendum !== null &&
+    !isSwarmtankAddendum(parsed.swarmtankAddendum)
   ) {
     return null;
   }
@@ -166,6 +263,46 @@ export function TransferConceptView({ doc }: { doc: TransferConceptDoc }) {
           </p>
           <SafeMarkdown text={doc.initialSpecification} />
         </>
+      ) : null}
+      {doc.swarmtankAddendum ? (
+        <section aria-label="SwarmTank revision note">
+          <p>
+            <strong>
+              SwarmTank revision note (synthetic feedback, not real
+              customer data).
+            </strong>{' '}
+            From SwarmTank run {doc.swarmtankAddendum.runArtifactId} version{' '}
+            {doc.swarmtankAddendum.runVersion} (content hash{' '}
+            {doc.swarmtankAddendum.runContentHash.slice(0, 16)}…).
+          </p>
+          <p>
+            <strong>Top objections.</strong>{' '}
+            {doc.swarmtankAddendum.topObjections.length
+              ? doc.swarmtankAddendum.topObjections
+                  .map(entry => `${entry.item} (${entry.count})`)
+                  .join('; ')
+              : 'None.'}
+          </p>
+          <p>
+            <strong>Top confusion points.</strong>{' '}
+            {doc.swarmtankAddendum.topConfusionPoints.length
+              ? doc.swarmtankAddendum.topConfusionPoints
+                  .map(entry => `${entry.item} (${entry.count})`)
+                  .join('; ')
+              : 'None.'}
+          </p>
+          {doc.swarmtankAddendum.recommendations.map((rec, i) => (
+            <section key={i} aria-label={`Recommendation ${i + 1}`}>
+              <p>
+                <strong>{rec.title}.</strong> {rec.detail}
+              </p>
+              <p>Assumption: {rec.assumption}</p>
+              <p>Synthetic evidence: {rec.syntheticEvidence}</p>
+              <p>Uncertainty: {rec.uncertainty}</p>
+              <p>Validate with real customers: {rec.validation}</p>
+            </section>
+          ))}
+        </section>
       ) : null}
       <p>
         <strong>Assumptions (model-derived, verbatim).</strong>
