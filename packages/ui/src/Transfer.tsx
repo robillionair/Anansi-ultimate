@@ -5,6 +5,7 @@ import type {
   ColliderExperimentDoc,
   TransferConceptDoc,
 } from '@anansi/contracts';
+import { SafeMarkdown } from './colliderMarkdown';
 
 // ---------------------------------------------------------------------------
 // Strict client-side parsing for transferred concepts (mirrors the
@@ -61,22 +62,36 @@ export function parseTransferConceptBody(
     return null;
   }
   if (!isRecord(parsed)) return null;
+  const requiredKeys = [
+    'format',
+    'version',
+    'sourceExperimentArtifactId',
+    'sourceExperimentVersion',
+    'sourceExperimentContentHash',
+    'selectedCombinationIndex',
+    'selectedCombination',
+    'approvedBrief',
+    'assumptions',
+    'unknowns',
+    'productizationBrief',
+    'provider',
+    'model',
+  ];
+  // `initialSpecification` is optional: concepts
+  // transferred before the §27 slice carry none.
+  // Every other key must be exactly the required set.
   if (
-    !exactKeys(parsed, [
-      'format',
-      'version',
-      'sourceExperimentArtifactId',
-      'sourceExperimentVersion',
-      'sourceExperimentContentHash',
-      'selectedCombinationIndex',
-      'selectedCombination',
-      'approvedBrief',
-      'assumptions',
-      'unknowns',
-      'productizationBrief',
-      'provider',
-      'model',
-    ])
+    !requiredKeys.every(key => Object.keys(parsed).includes(key)) ||
+    !Object.keys(parsed).every(
+      key => requiredKeys.includes(key) || key === 'initialSpecification',
+    )
+  ) {
+    return null;
+  }
+  if (
+    parsed.initialSpecification !== undefined &&
+    (typeof parsed.initialSpecification !== 'string' ||
+      parsed.initialSpecification.length > 20000)
   ) {
     return null;
   }
@@ -133,9 +148,25 @@ export function TransferConceptView({ doc }: { doc: TransferConceptDoc }) {
         {doc.selectedCombination.name}: {doc.selectedCombination.description}
       </p>
       <p>
-        <strong>Approved brief (user-authored).</strong>
+        <strong>
+          Approved brief{' '}
+          {doc.approvedBrief === doc.productizationBrief
+            ? "(the record's concept brief, used verbatim by Build This Product)."
+            : '(user-authored).'}
+        </strong>
       </p>
       <pre>{doc.approvedBrief}</pre>
+      {doc.initialSpecification ? (
+        <>
+          <p>
+            <strong>
+              Initial technical specification (derived from the pinned
+              experiment&apos;s ARCHITECTURE.md).
+            </strong>
+          </p>
+          <SafeMarkdown text={doc.initialSpecification} />
+        </>
+      ) : null}
       <p>
         <strong>Assumptions (model-derived, verbatim).</strong>
       </p>

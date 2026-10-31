@@ -20,6 +20,11 @@ import {
 } from './documentInput';
 import { UrlFetchSession, urlSourceFromFetch } from './urlFetch';
 import {
+  deriveAllArtifacts,
+  utf8Bytes,
+  type ArtifactSourceDoc,
+} from './colliderArtifacts';
+import {
   ColliderPipelineOverview,
   colliderResultHeadingId,
   pipelineStateForRun,
@@ -513,6 +518,48 @@ export function parseColliderUrlSource(
   return value as unknown as ColliderUrlSource;
 }
 
+// §27 artifact hashes: strict shape, plus a
+// recomputation of every byte count from the
+// derivation. A length mismatch fails the whole
+// document closed (no viewer, no export, no Build).
+// Hash equality itself is the backend's job —
+// `validate_experiment_doc` recomputes it at restore
+// and transfer — and the export manifest's job; the
+// parser cannot run SHA-256 synchronously in the
+// browser, so it does not pretend to.
+function parseColliderArtifacts(value: unknown, doc: ArtifactSourceDoc): boolean {
+  if (!isRecord(value)) return false;
+  const keys = ['concept', 'architecture', 'feasibility', 'roadmap', 'risks', 'testPlan'];
+  if (
+    !keys.every(key => Object.keys(value).includes(key)) ||
+    !Object.keys(value).every(key => keys.includes(key))
+  ) {
+    return false;
+  }
+  for (const key of keys) {
+    const entry = value[key];
+    if (!isRecord(entry) || !exactKeys(entry, ['sha256', 'bytes'])) return false;
+    if (typeof entry.sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(entry.sha256)) {
+      return false;
+    }
+    if (typeof entry.bytes !== 'number' || !Number.isInteger(entry.bytes) || entry.bytes < 0) {
+      return false;
+    }
+  }
+  const byFile: Record<string, { bytes: number }> = {
+    'CONCEPT.md': value.concept as { bytes: number },
+    'ARCHITECTURE.md': value.architecture as { bytes: number },
+    'FEASIBILITY.md': value.feasibility as { bytes: number },
+    'ROADMAP.md': value.roadmap as { bytes: number },
+    'RISKS.md': value.risks as { bytes: number },
+    'TEST_PLAN.md': value.testPlan as { bytes: number },
+  };
+  for (const { file, text } of deriveAllArtifacts(doc)) {
+    if (utf8Bytes(text) !== byFile[file].bytes) return false;
+  }
+  return true;
+}
+
 export function parseColliderExperimentBody(
   body: string,
 ): ColliderExperimentDoc | null {
@@ -540,6 +587,10 @@ export function parseColliderExperimentBody(
   // saved before Slice 4 carry none and must parse.
   // documentA/documentB are likewise optional: manual
   // beams and older experiments carry none.
+  // artifacts is likewise optional: experiments saved
+  // before the §27 slice carry no hashes and must
+  // still parse; when present it is shape-checked and
+  // its byte counts are recomputed below.
   const allowed = [
     ...required,
     'memoryContext',
@@ -548,6 +599,7 @@ export function parseColliderExperimentBody(
     'documentB',
     'urlA',
     'urlB',
+    'artifacts',
   ];
   if (
     !required.every(key => Object.keys(parsed).includes(key)) ||
@@ -617,6 +669,19 @@ export function parseColliderExperimentBody(
   if (result === null) return null;
   if (typeof parsed.provider !== 'string' || typeof parsed.model !== 'string') {
     return null;
+  }
+  if (parsed.artifacts !== undefined) {
+    if (
+      !parseColliderArtifacts(parsed.artifacts, {
+        beamA,
+        beamB,
+        provider: parsed.provider as string,
+        model: parsed.model as string,
+        result,
+      })
+    ) {
+      return null;
+    }
   }
   if (!isRecord(parsed.disclosure)) return null;
   return {

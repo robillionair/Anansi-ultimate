@@ -14,6 +14,8 @@ import {
   TransferConceptView,
   parseTransferConceptBody,
 } from './Transfer';
+import { ColliderArtifactViewer } from './ColliderArtifactViewer';
+import { ColliderBuildProduct } from './ColliderBuildProduct';
 import { OpportunityRunController } from './opportunityRun';
 import {
   DeliverablePanel,
@@ -967,6 +969,35 @@ export function Projects({ client, workspaceId }: { client: Client; workspaceId:
                               artifactId={viewedArtifact.artifact.artifactId}
                               version={viewedArtifact.artifact.version}
                             />
+                            <ColliderArtifactViewer
+                              key={`artifacts:${workspaceId}:${current?.memory.id ?? ''}:${viewedArtifact.artifact.artifactId}:${viewedArtifact.artifact.version}`}
+                              doc={parsedExperiment}
+                              body={viewedArtifact.body}
+                              artifactId={viewedArtifact.artifact.artifactId}
+                              version={viewedArtifact.artifact.version}
+                              timestamp={viewedArtifact.artifact.timestamp}
+                              notify={(message, isError) => { if (isError) setError(message); else setNotice(message); }}
+                            />
+                            {current && (
+                              <ColliderBuildProduct
+                                key={`build:${workspaceId}:${current.memory.id}:${viewedArtifact.artifact.artifactId}:${viewedArtifact.artifact.version}`}
+                                client={client}
+                                workspaceId={workspaceId}
+                                projectId={current.memory.id}
+                                doc={parsedExperiment}
+                                experimentArtifactId={viewedArtifact.artifact.artifactId}
+                                experimentVersion={viewedArtifact.artifact.version}
+                                notify={(message, isError) => { if (isError) setError(message); else setNotice(message); }}
+                                onTransferred={conceptId => {
+                                  void (async () => {
+                                    const artList = await client.listProjectArtifacts(workspaceId, current.memory.id);
+                                    setArtifacts(artList.artifacts);
+                                    await openArtifact(conceptId);
+                                  })();
+                                }}
+                                busy={busy}
+                              />
+                            )}
                             {current && (
                               <ColliderTransferPanel
                                 key={`transfer:${workspaceId}:${current.memory.id}:${viewedArtifact.artifact.artifactId}:${viewedArtifact.artifact.version}`}
