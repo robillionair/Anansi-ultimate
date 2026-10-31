@@ -98,7 +98,7 @@ promotion, pushes, or CI.
   gone).
 - TypeScript: exit 0 with casing checks intact.
   Vite web build: exit 0. Contracts `--check`:
-  exit 0. Docs validation: PASS, 202 files. API +
+  exit 0. Docs validation: PASS, 204 files. API +
   web builds pass. rustfmt/Clippy: no Rust files
   changed; prior broad totals stand (full core
   405/4, only the 4 known live-Ollama failures;
