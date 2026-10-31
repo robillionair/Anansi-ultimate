@@ -1,6 +1,6 @@
 /**
  * M8 visualization: the saved-experiment view's scene.
- * Renders the derived scene (see colliderVisualization)
+ * Renders the derived scene (see colliderVisualizationScene)
  * on one canvas plus a complete text/list alternative
  * that is always present and is the keyboard path.
  *
@@ -27,7 +27,7 @@ import {
   layoutVisualizationScene,
   sectionTitleFor,
   type VisualizationScene,
-} from './colliderVisualization';
+} from './colliderVisualizationScene';
 
 const BEAM_COLORS: Record<string, string> = {
   'beam-a': '#a78bfa',
@@ -113,14 +113,20 @@ function drawScene(
       ctx.strokeStyle = '#fbbf24';
       ctx.stroke();
     }
-    ctx.fillStyle = '#0b2545';
+    // VIS-02: labels were drawn in the canvas background
+    // color (#0b2545) and unreadable. Draw restrained
+    // white text over a dark backing rect so labels stay
+    // legible over nodes, edges, and the navy field.
+    const label =
+      node.label.length > 18 ? `${node.label.slice(0, 17)}…` : node.label;
     ctx.font = '11px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(
-      node.label.length > 18 ? `${node.label.slice(0, 17)}…` : node.label,
-      x,
-      y + pos.r + 14,
-    );
+    const labelWidth = ctx.measureText(label).width;
+    const labelY = y + pos.r + 14;
+    ctx.fillStyle = 'rgba(11, 37, 69, 0.85)';
+    ctx.fillRect(x - labelWidth / 2 - 3, labelY - 11, labelWidth + 6, 15);
+    ctx.fillStyle = '#f5f5f4';
+    ctx.fillText(label, x, labelY);
   }
 }
 

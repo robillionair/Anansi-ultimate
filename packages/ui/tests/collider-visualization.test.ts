@@ -7,7 +7,7 @@ import {
   deriveVisualizationScene,
   hitTestVisualization,
   layoutVisualizationScene,
-} from '../src/colliderVisualization';
+} from '../src/colliderVisualizationScene';
 import { ColliderVisualization } from '../src/ColliderVisualization';
 import type { ColliderExperimentDoc } from '@anansi/contracts';
 
@@ -187,7 +187,7 @@ test('visualization renders the list alternative with no selection initially', (
 
 test('new visualization files never assign markup', () => {
   for (const file of [
-    'packages/ui/src/colliderVisualization.ts',
+    'packages/ui/src/colliderVisualizationScene.ts',
     'packages/ui/src/ColliderVisualization.tsx',
   ]) {
     const src = readFileSync(file, 'utf8');
