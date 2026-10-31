@@ -1123,6 +1123,9 @@ pub fn providers_command(
     if operation.starts_with("collider-") {
         return crate::collider::collider_command(operation, value, scope);
     }
+    if operation.starts_with("swarmtank-") {
+        return crate::swarmtank::swarmtank_command(operation, value, scope);
+    }
     if operation.starts_with("opportunities-") {
         return crate::opportunities::opportunities_command(operation, value, scope);
     }

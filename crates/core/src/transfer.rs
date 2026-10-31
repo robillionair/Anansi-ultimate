@@ -109,6 +109,14 @@ pub struct TransferConceptDoc {
     /// concepts transferred before this slice.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub initial_specification: Option<String>,
+    /// M9 Slice 1 SwarmTank revision note: the top
+    /// objections, confusion points, and recommended
+    /// adjustments from one evaluated run, written by
+    /// swarmtank-transfer-to-forge onto a new concept
+    /// version. Absent on concepts without a SwarmTank
+    /// application.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub swarmtank_addendum: Option<crate::swarmtank::SwarmtankAddendum>,
     pub provider: String,
     pub model: String,
 }
@@ -228,6 +236,34 @@ pub fn validate_transfer_concept(raw: &str) -> Result<TransferConceptDoc, String
     check_list(&doc.assumptions, "assumptions", 1, 8, 600)?;
     check_list(&doc.unknowns, "unknowns", 0, 16, 300)?;
     check_text(&doc.productization_brief, "productizationBrief", 2000)?;
+    if let Some(addendum) = &doc.swarmtank_addendum {
+        if addendum.run_artifact_id.trim().is_empty()
+            || addendum.run_version == 0
+            || addendum.run_content_hash.len() != 64
+            || !addendum
+                .run_content_hash
+                .chars()
+                .all(|c| c.is_ascii_hexdigit())
+        {
+            return Err("swarmtank addendum must pin a run artifact version and hash".to_string());
+        }
+        if addendum.top_objections.len() > 3 || addendum.top_confusion_points.len() > 3 {
+            return Err("swarmtank addendum top lists must hold at most 3 items".to_string());
+        }
+        for recommendation in &addendum.recommendations {
+            if recommendation.title.trim().is_empty()
+                || recommendation.assumption.trim().is_empty()
+                || recommendation.synthetic_evidence.trim().is_empty()
+                || recommendation.uncertainty.trim().is_empty()
+                || recommendation.validation.trim().is_empty()
+            {
+                return Err(
+                    "swarmtank addendum recommendations must carry assumption, evidence, uncertainty, and validation"
+                        .to_string(),
+                );
+            }
+        }
+    }
     Ok(doc)
 }
 
@@ -524,6 +560,7 @@ pub fn transfer(value: Value, scope: &CallerScope) -> Result<Value, CommandError
             &experiment,
             "ARCHITECTURE.md",
         ),
+        swarmtank_addendum: None,
         provider: provider.clone(),
         model: model.clone(),
     };

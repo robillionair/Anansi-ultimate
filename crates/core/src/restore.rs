@@ -1697,6 +1697,51 @@ fn validate_original_experiment_bindings(
     Ok(())
 }
 
+/// M9 Slice 1: a saved SwarmTank run whose body
+/// declares the run format must fully validate
+/// before any destination write, mirroring the
+/// experiment format guard. Generic `simulation`
+/// rows (manual artifacts with other bodies)
+/// restore untouched: the registry type alone does
+/// not identify a SwarmTank run, so only
+/// format-matching rows are gated. A tampered run
+/// body refuses the whole restore with nothing
+/// published. The run's source pin is historical
+/// provenance (the pre-restore source id); it is
+/// shape-checked only, never remapped and never
+/// dereferenced by report or transfer, so a
+/// remapped restore leaves the run itself fully
+/// functional.
+fn validate_original_swarmtank_bindings(source: &rusqlite::Connection) -> Result<(), CommandError> {
+    let mut q = source
+        .prepare(
+            "SELECT workspace_id, body, content_hash FROM artifact_versions WHERE artifact_type = 'simulation'",
+        )
+        .map_err(|_| crate::jobs::invalid())?;
+    let mut rows = q.query([]).map_err(|_| crate::jobs::invalid())?;
+    while let Some(row) = rows.next().map_err(|_| crate::jobs::invalid())? {
+        let _artifact_workspace: String = row.get(0).map_err(|_| crate::jobs::invalid())?;
+        let body: String = row.get(1).map_err(|_| crate::jobs::invalid())?;
+        let content_hash: String = row.get(2).map_err(|_| crate::jobs::invalid())?;
+        // A body that is not JSON at all cannot be a
+        // SwarmTank record: generic manual simulations
+        // restore untouched.
+        let Ok(value) = serde_json::from_str::<serde_json::Value>(&body) else {
+            continue;
+        };
+        if value.get("format").and_then(|v| v.as_str()) != Some("anansi-swarmtank-run") {
+            continue;
+        }
+        if crate::content::hash(body.as_bytes()) != content_hash {
+            return Err(crate::jobs::invalid());
+        }
+        let doc: crate::swarmtank::SwarmtankRunDoc =
+            serde_json::from_str(&body).map_err(|_| crate::jobs::invalid())?;
+        crate::swarmtank::validate_swarmtank_run_doc(&doc).map_err(|_| crate::jobs::invalid())?;
+    }
+    Ok(())
+}
+
 fn remap_artifact_row(
     names: &[String],
     columns: &mut [rusqlite::types::Value],
@@ -2033,6 +2078,7 @@ impl crate::storage::Storage {
         validate_original_deliverable_bindings(&source)?;
         validate_original_review_bindings(&source)?;
         validate_original_experiment_bindings(&source)?;
+        validate_original_swarmtank_bindings(&source)?;
         validate_original_transfer_bindings(&source)?;
         // Validate and prepare every mapped row before any managed content is written.
         let mut tables = vec![
