@@ -203,9 +203,10 @@ export function ColliderPipelineOverview({
       <p role="status">{stateText(state, partialChars, error)}</p>
       <p className="help">
         One provider request produces all six sections at once; they are the
-        structure of a single model output, not six executed stages. A 3D
-        presentation remains unfinished; the diagram below and the list
-        after it describe the same relationships.
+        structure of a single model output, not six executed stages.{' '}
+        {instanceScope
+          ? 'The experiment visualization below presents these same relationships as a scene, with a text list alternative.'
+          : 'A 3D presentation remains unfinished; the diagram below and the list after it describe the same relationships.'}
       </p>
       <nav aria-label="Collision sections">
         <ol>

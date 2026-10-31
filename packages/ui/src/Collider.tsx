@@ -24,6 +24,7 @@ import {
   colliderResultHeadingId,
   pipelineStateForRun,
 } from './ColliderOverview';
+import { ColliderVisualization } from './ColliderVisualization';
 
 // ---------------------------------------------------------------------------
 // Strict client-side parsing (mirrors the backend bounds in
@@ -743,10 +744,20 @@ export function ColliderResultView({
 export function ColliderExperimentView({
   doc,
   instanceScope,
+  artifactId,
+  version,
 }: {
   doc: ColliderExperimentDoc;
   /** Instance scope for overview links and result headings. */
   instanceScope?: string;
+  /**
+   * Pinned identity of the viewed version. The
+   * visualization renders only when both are present:
+   * an unpinned view must not present a scene as a
+   * particular version's.
+   */
+  artifactId?: string;
+  version?: number;
 }) {
   return (
     <div>
@@ -894,6 +905,9 @@ export function ColliderExperimentView({
         </section>
       )}
       <ColliderResultView result={doc.result} instanceScope={instanceScope} />
+      {artifactId !== undefined && version !== undefined && (
+        <ColliderVisualization doc={doc} artifactId={artifactId} version={version} />
+      )}
     </div>
   );
 }

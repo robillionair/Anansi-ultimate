@@ -27,7 +27,7 @@
     "build:web": "pnpm --filter @anansi/web build",
     "dev:api": "node scripts/cargo.mjs run --locked -p anansi-api",
     "test:rust": "node scripts/cargo.mjs test --workspace --locked",
-    "test:ui": "node --import tsx --test tests/contracts.test.ts packages/ui/tests/components.test.tsx packages/ui/tests/idea-run.test.ts packages/ui/tests/opportunity-run.test.ts packages/ui/tests/forge-run.test.ts packages/ui/tests/collider-run.test.ts packages/ui/tests/collider.test.tsx packages/ui/tests/transfer.test.tsx"
+    "test:ui": "node --import tsx --test tests/contracts.test.ts packages/ui/tests/components.test.tsx packages/ui/tests/idea-run.test.ts packages/ui/tests/opportunity-run.test.ts packages/ui/tests/forge-run.test.ts packages/ui/tests/collider-run.test.ts packages/ui/tests/collider.test.tsx packages/ui/tests/collider-visualization.test.ts packages/ui/tests/transfer.test.tsx"
   },
   "devDependencies": {
     "typescript": "7.0.2",
