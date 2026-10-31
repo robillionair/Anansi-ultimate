@@ -165,7 +165,7 @@ test('collider visualization screenshots at high DPI', async ({ page }) => {
     await page.getByRole('button', { name: 'Projects', exact: true }).click();
     await page.getByRole('button', { name: 'Harbor App' }).click();
     await artifacts.getByRole('button', { name: /Collider experiment: Shot beam about kitchens/ }).click();
-    await expect(viz.getByText('Motion reduced (system setting) — static view.')).toBeVisible();
+    await expect(viz.getByText('Motion reduced — static view.')).toBeVisible();
     await shot(canvas, 'viz-hidpi-reduced-motion.png');
   } finally {
     await stopApi();

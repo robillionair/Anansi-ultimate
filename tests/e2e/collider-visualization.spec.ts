@@ -197,7 +197,11 @@ test('collider visualization: pinned version -> select -> switch clears -> resta
     expect(fakeHits).toBe(hitsAfterFirstCollide);
 
     // Canvas selection: pause motion for determinism, then
-    // click the Beam A hub (top of the ring).
+    // click the Beam A hub. The 3D view uses a fixed
+    // camera (fov 45, distance 900), so the hub's screen
+    // position is its world position projected through
+    // that camera: NDC y = ring / (900 * tan(fov / 2)),
+    // screen y = (1 - NDC y) / 2 of the canvas height.
     const pause = viz.getByRole('button', { name: 'Pause motion' });
     if (await pause.count() > 0) await pause.click();
     const canvas = viz.locator('canvas');
@@ -205,10 +209,12 @@ test('collider visualization: pinned version -> select -> switch clears -> resta
       w: (el as HTMLCanvasElement).clientWidth,
       h: (el as HTMLCanvasElement).clientHeight,
     }));
+    const ring = 0.34 * Math.min(dims.w, dims.h);
+    const ndcY = ring / (900 * Math.tan(Math.PI / 8));
     await canvas.click({
       position: {
         x: dims.w * 0.5,
-        y: dims.h * 0.5 - 0.34 * Math.min(dims.w, dims.h),
+        y: dims.h * ((1 - ndcY) / 2),
       },
     });
     await expect(viz.getByRole('heading', { name: 'Selected: Beam A — Beam A' })).toBeVisible();
@@ -305,7 +311,7 @@ test('collider visualization: pinned version -> select -> switch clears -> resta
     await page.getByRole('button', { name: 'Projects', exact: true }).click();
     await page.getByRole('button', { name: 'Harbor App' }).click();
     await artifacts.getByRole('button', { name: /Collider experiment: First beam about kitchens/ }).click();
-    await expect(viz.getByText('Motion reduced (system setting) — static view.')).toBeVisible();
+    await expect(viz.getByText('Motion reduced — static view.')).toBeVisible();
     await expect(viz.getByRole('button', { name: 'Pause motion' })).toHaveCount(0);
     await expect(viz.getByRole('button', { name: 'Resume motion' })).toHaveCount(0);
     // VIS-02 evidence (opt-in): the reduced-motion frame.

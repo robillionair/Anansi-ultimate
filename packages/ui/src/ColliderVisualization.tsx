@@ -147,22 +147,30 @@ export function ColliderVisualization({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [paused, setPaused] = useState(false);
   const [canvasFailed, setCanvasFailed] = useState(false);
-  const [webglFailed, setWebglFailed] = useState(false);
+  // The identity whose 3D view reported WebGL failure.
+  // Derived per identity (not reset by an effect) so a
+  // fallback signal can never be clobbered by the
+  // identity-change effect: child effects run before
+  // parent effects, so resetting here on identity
+  // change would overwrite the child's signal in the
+  // same commit. A new identity simply does not match
+  // the failed one, so the 3D view is tried again.
+  const [failedIdentity, setFailedIdentity] = useState<string | null>(null);
   const [reducedMotion, setReducedMotion] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const angleRef = useRef(0);
-  // Stable so the 3D view's build effect does not
-  // rebuild when the parent re-renders.
+  // Stable per identity so the 3D view's build effect
+  // does not rebuild when the parent re-renders.
   const handleThreeUnavailable = useCallback(() => {
-    setWebglFailed(true);
-  }, []);
+    setFailedIdentity(scene.identity);
+  }, [scene.identity]);
+  const webglFailed = failedIdentity === scene.identity;
 
   // Identity change clears stale selection and animation
   // state before the new scene renders.
   useEffect(() => {
     setSelectedId(null);
     setPaused(false);
-    setWebglFailed(false);
     angleRef.current = 0;
   }, [scene.identity]);
 
