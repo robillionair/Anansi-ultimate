@@ -16,6 +16,7 @@ import {
 } from './Transfer';
 import { ColliderArtifactViewer } from './ColliderArtifactViewer';
 import { ColliderBuildProduct } from './ColliderBuildProduct';
+import { SwarmtankPanel } from './Swarmtank';
 import { OpportunityRunController } from './opportunityRun';
 import {
   DeliverablePanel,
@@ -569,6 +570,30 @@ export function Projects({ client, workspaceId }: { client: Client; workspaceId:
                   const artList = await client.listProjectArtifacts(workspaceId, current.memory.id);
                   setArtifacts(artList.artifacts);
                 }}
+                busy={busy}
+              />
+            )}
+          </section>
+
+          <section aria-labelledby="project-swarmtank-heading">
+            <h3 id="project-swarmtank-heading">SwarmTank</h3>
+            <p className="help">
+              Explore how simulated buyer profiles might respond to a
+              product. Personas are synthetic, decisions are a transparent
+              seeded model, and the report never claims real demand.
+            </p>
+            {current && (
+              <SwarmtankPanel
+                key={`swarmtank:${workspaceId}:${current.memory.id}`}
+                client={client}
+                workspaceId={workspaceId}
+                projectId={current.memory.id}
+                artifacts={artifacts}
+                onSaved={async () => {
+                  const artList = await client.listProjectArtifacts(workspaceId, current.memory.id);
+                  setArtifacts(artList.artifacts);
+                }}
+                notify={(message, isError) => { if (isError) setError(message); else setNotice(message); }}
                 busy={busy}
               />
             )}

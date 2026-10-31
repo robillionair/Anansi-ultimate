@@ -3,7 +3,7 @@ export const plannedGroups = [
   {name:'HOME',items:['Dashboard']},
   {name:'KNOWLEDGE',items:['Files','Big Brain']},
   {name:'CREATE',items:['My Products']},
-  {name:'VALIDATE',items:['SwarmTank','SOMNIA','Experiments']},
+  {name:'VALIDATE',items:['SOMNIA','Experiments']},
   {name:'WORK',items:['Team Workspace','Automations']},
   {name:'SYSTEM',items:['AI Matrix','Integrations','MCP']},
 ];

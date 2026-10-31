@@ -1,0 +1,999 @@
+// ---------------------------------------------------------------------------
+// SwarmTank (M9 Slice 1): synthetic personas, seeded
+// decisions, report, and the Forge bridge. This
+// panel makes no provider calls on load — or ever,
+// in this slice: generation and evaluation are
+// deterministic backend operations over seeded
+// archetypes. Every persona is labeled simulated.
+// ---------------------------------------------------------------------------
+
+import { useState } from 'react';
+import type {
+  ArtifactRecord,
+  Client,
+  SwarmtankDecision,
+  SwarmtankInput,
+  SwarmtankPersona,
+  SwarmtankReport,
+  SwarmtankRunDoc,
+  SwarmtankSource,
+} from '@anansi/contracts';
+
+// ---------------------------------------------------------------------------
+// Strict client-side parsing for saved run bodies
+// (mirrors the backend bounds in
+// crates/core/src/swarmtank.rs). Hash verification
+// stays backend-side: the browser has no sync
+// SHA-256, so this parser checks shape and bounds
+// only, and an unrenderable body never renders.
+// ---------------------------------------------------------------------------
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function exactKeys(value: Record<string, unknown>, keys: string[]): boolean {
+  const actual = Object.keys(value).sort();
+  const expected = [...keys].sort();
+  return (
+    actual.length === expected.length && actual.every((key, i) => key === expected[i])
+  );
+}
+
+function textField(value: unknown, max: number, allowEmpty: boolean): string | null {
+  if (typeof value !== 'string') return null;
+  if (value.trim().length === 0 && !allowEmpty) return null;
+  if (value.length > max) return null;
+  return value;
+}
+
+function textList(value: unknown, max: number, maxChars: number): string[] | null {
+  if (!Array.isArray(value) || value.length > max) return null;
+  const out: string[] = [];
+  for (const item of value) {
+    const text = textField(item, maxChars, false);
+    if (text === null) return null;
+    out.push(text);
+  }
+  return out;
+}
+
+function numberIn(value: unknown, min: number, max: number): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null;
+  if (value < min || value > max) return null;
+  return value;
+}
+
+function parseInput(value: unknown): SwarmtankInput | null {
+  if (!isRecord(value)) return null;
+  if (
+    !exactKeys(value, [
+      'description',
+      'pricing',
+      'priceAmount',
+      'segment',
+      'industry',
+      'features',
+      'valueProposition',
+    ])
+  ) {
+    return null;
+  }
+  const description = textField(value.description, 8000, false);
+  const pricing = textField(value.pricing, 500, true);
+  const segment = textField(value.segment, 500, true);
+  const industry = textField(value.industry, 500, true);
+  const valueProposition = textField(value.valueProposition, 3000, true);
+  const features = textList(value.features, 50, 300);
+  if (
+    description === null ||
+    pricing === null ||
+    segment === null ||
+    industry === null ||
+    valueProposition === null ||
+    features === null
+  ) {
+    return null;
+  }
+  let priceAmount: number | null = null;
+  if (value.priceAmount !== null) {
+    priceAmount = numberIn(value.priceAmount, 0, Number.MAX_SAFE_INTEGER);
+    if (priceAmount === null) return null;
+  }
+  return {
+    description,
+    pricing,
+    priceAmount,
+    segment,
+    industry,
+    features,
+    valueProposition,
+  };
+}
+
+function parseSource(value: unknown): SwarmtankSource | null {
+  if (!isRecord(value)) return null;
+  if (!exactKeys(value, ['kind', 'artifactId', 'version', 'contentHash'])) return null;
+  if (
+    (value.kind !== 'experiment' && value.kind !== 'concept') ||
+    typeof value.artifactId !== 'string' ||
+    value.artifactId.trim() === '' ||
+    typeof value.version !== 'number' ||
+    !Number.isInteger(value.version) ||
+    value.version < 1 ||
+    typeof value.contentHash !== 'string' ||
+    !/^[0-9a-f]{64}$/.test(value.contentHash)
+  ) {
+    return null;
+  }
+  return {
+    kind: value.kind,
+    artifactId: value.artifactId,
+    version: value.version,
+    contentHash: value.contentHash,
+  };
+}
+
+function parsePersona(value: unknown, index: number): SwarmtankPersona | null {
+  if (!isRecord(value)) return null;
+  if (
+    !exactKeys(value, [
+      'id',
+      'name',
+      'role',
+      'companySize',
+      'approximateBudget',
+      'needs',
+      'priorities',
+      'skepticism',
+      'priceSensitivity',
+      'purchaseConstraints',
+      'requiredTrustSignals',
+      'expectedImplementationEffort',
+      'synthetic',
+    ])
+  ) {
+    return null;
+  }
+  if (value.id !== `persona-${String(index + 1).padStart(3, '0')}`) return null;
+  const name = textField(value.name, 120, false);
+  const role = textField(value.role, 120, false);
+  const companySize = textField(value.companySize, 500, false);
+  const budget = numberIn(value.approximateBudget, 0, Number.MAX_SAFE_INTEGER);
+  const needs = textList(value.needs, 12, 300);
+  const priorities = textList(value.priorities, 12, 300);
+  const constraints = textList(value.purchaseConstraints, 12, 300);
+  const signals = textList(value.requiredTrustSignals, 12, 300);
+  const effort = textField(value.expectedImplementationEffort, 500, false);
+  const skepticism = numberIn(value.skepticism, 0, 1);
+  const priceSensitivity = numberIn(value.priceSensitivity, 0, 1);
+  if (
+    name === null ||
+    role === null ||
+    companySize === null ||
+    budget === null ||
+    needs === null ||
+    priorities === null ||
+    constraints === null ||
+    signals === null ||
+    effort === null ||
+    skepticism === null ||
+    priceSensitivity === null ||
+    value.synthetic !== true
+  ) {
+    return null;
+  }
+  return {
+    id: value.id as string,
+    name,
+    role,
+    companySize,
+    approximateBudget: budget,
+    needs,
+    priorities,
+    skepticism,
+    priceSensitivity,
+    purchaseConstraints: constraints,
+    requiredTrustSignals: signals,
+    expectedImplementationEffort: effort,
+    synthetic: true,
+  };
+}
+
+function parseDecision(value: unknown): SwarmtankDecision | null {
+  if (!isRecord(value)) return null;
+  if (
+    !exactKeys(value, [
+      'personaId',
+      'decision',
+      'reason',
+      'keyObjection',
+      'perceivedValue',
+      'willingnessToPay',
+      'score',
+    ])
+  ) {
+    return null;
+  }
+  if (
+    typeof value.personaId !== 'string' ||
+    (value.decision !== 'Convert' &&
+      value.decision !== 'Confused' &&
+      value.decision !== 'Reject') ||
+    typeof value.reason !== 'string'
+  ) {
+    return null;
+  }
+  if (
+    value.keyObjection !== null &&
+    (typeof value.keyObjection !== 'string' || value.keyObjection.trim() === '')
+  ) {
+    return null;
+  }
+  if (value.decision === 'Convert' && value.keyObjection !== null) return null;
+  if (value.decision !== 'Convert' && value.keyObjection === null) return null;
+  const perceivedValue = numberIn(value.perceivedValue, 0, 1);
+  const score = numberIn(value.score, 0, 1);
+  const willingnessToPay = numberIn(value.willingnessToPay, 0, Number.MAX_SAFE_INTEGER);
+  if (perceivedValue === null || score === null || willingnessToPay === null) return null;
+  return {
+    personaId: value.personaId,
+    decision: value.decision,
+    reason: value.reason,
+    keyObjection: value.keyObjection as string | null,
+    perceivedValue,
+    willingnessToPay,
+    score,
+  };
+}
+
+export function parseSwarmtankRunBody(body: string): SwarmtankRunDoc | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return null;
+  }
+  if (!isRecord(parsed)) return null;
+  const keys = Object.keys(parsed);
+  const required = [
+    'format',
+    'version',
+    'input',
+    'seed',
+    'preset',
+    'personas',
+    'decisions',
+    'contentHash',
+  ];
+  if (
+    !required.every(key => keys.includes(key)) ||
+    !keys.every(key => required.includes(key) || key === 'source')
+  ) {
+    return null;
+  }
+  if (parsed.format !== 'anansi-swarmtank-run' || parsed.version !== 1) return null;
+  if (
+    typeof parsed.seed !== 'string' ||
+    parsed.seed.trim() === '' ||
+    (parsed.preset !== 20 && parsed.preset !== 50 && parsed.preset !== 100) ||
+    typeof parsed.contentHash !== 'string' ||
+    !/^[0-9a-f]{64}$/.test(parsed.contentHash)
+  ) {
+    return null;
+  }
+  const input = parseInput(parsed.input);
+  if (input === null) return null;
+  let source: SwarmtankSource | undefined;
+  if (parsed.source !== undefined && parsed.source !== null) {
+    const parsedSource = parseSource(parsed.source);
+    if (parsedSource === null) return null;
+    source = parsedSource;
+  }
+  if (!Array.isArray(parsed.personas) || parsed.personas.length !== parsed.preset) {
+    return null;
+  }
+  if (!Array.isArray(parsed.decisions) || parsed.decisions.length !== parsed.preset) {
+    return null;
+  }
+  const personas: SwarmtankPersona[] = [];
+  for (let i = 0; i < parsed.personas.length; i++) {
+    const persona = parsePersona(parsed.personas[i], i);
+    if (persona === null) return null;
+    personas.push(persona);
+  }
+  const decisions: SwarmtankDecision[] = [];
+  for (const raw of parsed.decisions) {
+    const decision = parseDecision(raw);
+    if (decision === null) return null;
+    decisions.push(decision);
+  }
+  return {
+    format: 'anansi-swarmtank-run',
+    version: 1,
+    input,
+    seed: parsed.seed,
+    preset: parsed.preset,
+    personas,
+    decisions,
+    source,
+    contentHash: parsed.contentHash,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Panel: input, import, generate, evaluate, report,
+// export, and the Forge bridge. Rendering,
+// selecting, or previewing saves nothing; only
+// Evaluate registers a run, and only the explicit
+// transfer action revises a Forge concept.
+// ---------------------------------------------------------------------------
+
+import { parseColliderExperimentBody } from './Collider';
+import { parseTransferConceptBody } from './Transfer';
+
+function emptyInput(): SwarmtankInput {
+  return {
+    description: '',
+    pricing: '',
+    priceAmount: null,
+    segment: '',
+    industry: '',
+    features: [],
+    valueProposition: '',
+  };
+}
+
+function downloadJson(filename: string, text: string) {
+  const blob = new Blob([text], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+// Pure table filtering, unit-tested in
+// packages/ui/tests/swarmtank.test.tsx.
+export function filterRunPersonas(
+  run: SwarmtankRunDoc,
+  search: string,
+  decisionFilter: string,
+): SwarmtankPersona[] {
+  const decisionByPersona = new Map(
+    run.decisions.map(decision => [decision.personaId, decision]),
+  );
+  return run.personas.filter(persona => {
+    const decision = decisionByPersona.get(persona.id);
+    if (decisionFilter !== 'All' && decision?.decision !== decisionFilter) return false;
+    if (search.trim() === '') return true;
+    const haystack =
+      `${persona.name} ${persona.role} ${persona.companySize} ${persona.needs.join(' ')}`.toLowerCase();
+    return haystack.includes(search.trim().toLowerCase());
+  });
+}
+
+// Presentational report view: metrics, §40
+// recommendation fields, and the persona table.
+// Plain text only, no HTML rendering of content.
+export function SwarmtankReportView({
+  report,
+  run,
+  search,
+  decisionFilter,
+  onSearchChange,
+  onFilterChange,
+  onExport,
+  exportDisabled,
+}: {
+  report: SwarmtankReport;
+  run: SwarmtankRunDoc;
+  search: string;
+  decisionFilter: string;
+  onSearchChange: (value: string) => void;
+  onFilterChange: (value: string) => void;
+  onExport: () => void;
+  exportDisabled: boolean;
+}) {
+  const decisionByPersona = new Map(
+    run.decisions.map(decision => [decision.personaId, decision]),
+  );
+  const visiblePersonas = filterRunPersonas(run, search, decisionFilter);
+  return (
+    <section aria-label="SwarmTank report">
+      <h3>SwarmTank report</h3>
+      <p>
+        Synthetic scenario output: simulated personas, not real customers.
+        Not a substitute for real interviews, conversion data, or market
+        research.
+      </p>
+      <p>
+        Conversion rate: {report.conversionRate}% ({report.converts} of{' '}
+        {report.total} convert, {report.confused} confused, {report.rejects}{' '}
+        reject).
+      </p>
+      <p>Average willingness to pay: {report.averageWillingnessToPay}.</p>
+      <p>
+        Top confusion points:{' '}
+        {report.topConfusionPoints.length
+          ? report.topConfusionPoints
+              .map(entry => `${entry.item} (${entry.count})`)
+              .join('; ')
+          : 'None.'}
+      </p>
+      <p>
+        Top objections:{' '}
+        {report.topObjections.length
+          ? report.topObjections
+              .map(entry => `${entry.item} (${entry.count})`)
+              .join('; ')
+          : 'None.'}
+      </p>
+      <p>
+        Objection breakdown:{' '}
+        {report.objectionBreakdown.length
+          ? report.objectionBreakdown
+              .map(entry => `${entry.item} (${entry.count})`)
+              .join('; ')
+          : 'None.'}
+      </p>
+      <p>
+        Segments:{' '}
+        {report.segments.map(entry => `${entry.item} (${entry.count})`).join('; ')}
+      </p>
+      {report.recommendations.map((rec, i) => (
+        <section key={i} aria-label={`Recommendation ${i + 1}`}>
+          <p>
+            <strong>{rec.title}.</strong> {rec.detail}
+          </p>
+          <p>Assumption: {rec.assumption}</p>
+          <p>Synthetic evidence: {rec.syntheticEvidence}</p>
+          <p>Uncertainty: {rec.uncertainty}</p>
+          <p>Validate with real customers: {rec.validation}</p>
+        </section>
+      ))}
+      <p>
+        <label>
+          Search personas{' '}
+          <input
+            aria-label="Search personas"
+            value={search}
+            onChange={event => onSearchChange(event.target.value)}
+          />
+        </label>{' '}
+        <label>
+          Filter by decision{' '}
+          <select
+            aria-label="Filter by decision"
+            value={decisionFilter}
+            onChange={event => onFilterChange(event.target.value)}
+          >
+            <option value="All">All decisions</option>
+            <option value="Convert">Convert</option>
+            <option value="Confused">Confused</option>
+            <option value="Reject">Reject</option>
+          </select>
+        </label>
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>Persona</th>
+            <th>Role</th>
+            <th>Decision</th>
+            <th>Key objection</th>
+            <th>Perceived value</th>
+            <th>Willingness to pay</th>
+          </tr>
+        </thead>
+        <tbody>
+          {visiblePersonas.map(persona => {
+            const decision = decisionByPersona.get(persona.id);
+            return (
+              <tr key={persona.id}>
+                <td>
+                  {persona.name} <span>Simulated persona.</span>
+                </td>
+                <td>{persona.role}</td>
+                <td>{decision?.decision ?? '—'}</td>
+                <td>{decision?.keyObjection ?? '—'}</td>
+                <td>{decision?.perceivedValue ?? '—'}</td>
+                <td>{decision?.willingnessToPay ?? '—'}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      <p>
+        <button disabled={exportDisabled} onClick={onExport}>
+          Export report
+        </button>
+      </p>
+    </section>
+  );
+}
+
+export function SwarmtankPanel({
+  client,
+  workspaceId,
+  projectId,
+  artifacts,
+  onSaved,
+  notify,
+  busy,
+}: {
+  client: Client;
+  workspaceId: string;
+  projectId: string;
+  artifacts: ArtifactRecord[];
+  onSaved: () => Promise<void>;
+  notify: (message: string, isError: boolean) => void;
+  busy: boolean;
+}) {
+  const [input, setInput] = useState<SwarmtankInput>(emptyInput());
+  const [preset, setPreset] = useState(20);
+  const [seed, setSeed] = useState('');
+  const [source, setSource] = useState<SwarmtankSource | undefined>(undefined);
+  const [preview, setPreview] = useState<SwarmtankPersona[] | null>(null);
+  const [previewBatches, setPreviewBatches] = useState(0);
+  const [savedRun, setSavedRun] = useState<SwarmtankRunDoc | null>(null);
+  const [savedArtifact, setSavedArtifact] = useState<ArtifactRecord | null>(null);
+  const [report, setReport] = useState<SwarmtankReport | null>(null);
+  const [reportArtifact, setReportArtifact] = useState<ArtifactRecord | null>(null);
+  const [search, setSearch] = useState('');
+  const [decisionFilter, setDecisionFilter] = useState('All');
+  const [importExperimentId, setImportExperimentId] = useState('');
+  const [importConceptId, setImportConceptId] = useState('');
+  const [transferConceptId, setTransferConceptId] = useState('');
+  const [running, setRunning] = useState(false);
+
+  const experiments = artifacts.filter(artifact => artifact.type === 'experiment');
+  const concepts = artifacts.filter(artifact => artifact.type === 'concept');
+  const runs = artifacts.filter(artifact => artifact.type === 'simulation');
+
+  function setField<K extends keyof SwarmtankInput>(key: K, value: SwarmtankInput[K]) {
+    setInput(current => ({ ...current, [key]: value }));
+  }
+
+  async function importExperiment() {
+    if (!importExperimentId) return;
+    setRunning(true);
+    try {
+      const details = await client.readProjectArtifact(
+        workspaceId,
+        importExperimentId,
+        undefined,
+      );
+      const doc = parseColliderExperimentBody(details.body);
+      if (doc === null) {
+        notify('That experiment body is not a readable saved experiment.', true);
+        return;
+      }
+      setInput(current => ({
+        ...current,
+        description: doc.result.productization.conceptBrief,
+        features: doc.result.conceptualPrimitives.slice(0, 50),
+      }));
+      setSource({
+        kind: 'experiment',
+        artifactId: details.artifact.artifactId,
+        version: details.artifact.version,
+        contentHash: details.artifact.contentHash,
+      });
+      notify('Imported from the saved experiment. Fields the record does not state stay empty.', false);
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'Import failed. Retry.', true);
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  async function importConcept() {
+    if (!importConceptId) return;
+    setRunning(true);
+    try {
+      const details = await client.readProjectArtifact(workspaceId, importConceptId, undefined);
+      const doc = parseTransferConceptBody(details.body);
+      if (doc === null) {
+        notify('That concept body is not a readable Forge concept.', true);
+        return;
+      }
+      setInput(current => ({ ...current, description: doc.approvedBrief }));
+      setSource({
+        kind: 'concept',
+        artifactId: details.artifact.artifactId,
+        version: details.artifact.version,
+        contentHash: details.artifact.contentHash,
+      });
+      notify('Imported from the Forge concept. Fields the record does not state stay empty.', false);
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'Import failed. Retry.', true);
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  async function generate() {
+    setRunning(true);
+    try {
+      const response = await client.generateSwarmtankPersonas(workspaceId, {
+        projectId,
+        input,
+        preset,
+        seed: seed.trim() === '' ? undefined : seed,
+        source,
+      });
+      setPreview(response.personas);
+      setPreviewBatches(response.batches.length);
+      if (seed.trim() === '') setSeed(response.seed);
+      notify(
+        `Generated ${response.personas.length} simulated personas in ${response.batches.length} batches. Nothing is saved until you evaluate.`,
+        false,
+      );
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'Generation failed. Retry.', true);
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  async function evaluate() {
+    setRunning(true);
+    try {
+      const response = await client.evaluateSwarmtank(workspaceId, {
+        projectId,
+        input,
+        preset,
+        seed: seed.trim() === '' ? undefined : seed,
+        source,
+      });
+      const doc = parseSwarmtankRunBody(response.body);
+      if (doc === null) {
+        notify('The saved run body is not readable.', true);
+        return;
+      }
+      setSavedRun(doc);
+      setSavedArtifact(response.artifact);
+      setReport(response.report);
+      setReportArtifact(response.artifact);
+      setPreview(null);
+      await onSaved();
+      notify('Evaluated and saved the SwarmTank run.', false);
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'Evaluation failed. Retry.', true);
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  async function viewReport(artifact: ArtifactRecord) {
+    setRunning(true);
+    try {
+      const response = await client.reportSwarmtank(workspaceId, {
+        artifactId: artifact.artifactId,
+        version: artifact.version,
+      });
+      const details = await client.readProjectArtifact(
+        workspaceId,
+        artifact.artifactId,
+        artifact.version,
+      );
+      const doc = parseSwarmtankRunBody(details.body);
+      if (doc === null) {
+        notify('The saved run body is not readable.', true);
+        return;
+      }
+      setSavedRun(doc);
+      setSavedArtifact(response.artifact);
+      setReport(response.report);
+      setReportArtifact(response.artifact);
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'Report failed. Retry.', true);
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  function exportReport() {
+    if (report === null || reportArtifact === null) return;
+    downloadJson(
+      `anansi-swarmtank-${reportArtifact.artifactId}-v${reportArtifact.version}-report.json`,
+      JSON.stringify(
+        {
+          artifactId: reportArtifact.artifactId,
+          version: reportArtifact.version,
+          contentHash: reportArtifact.contentHash,
+          disclaimer:
+            'Synthetic scenario output: simulated personas, not real customers. Not a substitute for real interviews, conversion data, or market research.',
+          report,
+        },
+        null,
+        2,
+      ),
+    );
+  }
+
+  async function transferToForge() {
+    if (savedRun === null || savedArtifact === null) return;
+    const conceptId =
+      source !== undefined && source.kind === 'concept'
+        ? source.artifactId
+        : transferConceptId;
+    if (!conceptId) {
+      notify('Choose a Forge concept to apply the recommendations to.', true);
+      return;
+    }
+    const concept = concepts.find(item => item.artifactId === conceptId);
+    if (!concept) {
+      notify('The chosen Forge concept is not in this project.', true);
+      return;
+    }
+    setRunning(true);
+    try {
+      const response = await client.transferSwarmtankToForge(workspaceId, {
+        projectId,
+        runArtifactId: savedArtifact.artifactId,
+        runVersion: savedArtifact.version,
+        conceptArtifactId: conceptId,
+        expectedConceptVersion: concept.version,
+      });
+      if (response.alreadyApplied) {
+        notify('Already applied: this run already revised that Forge concept.', false);
+      } else {
+        notify(
+          `Applied: Forge concept revised to version ${response.artifact.version} with the SwarmTank revision note.`,
+          false,
+        );
+      }
+      await onSaved();
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'Transfer failed. Retry.', true);
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  return (
+    <section aria-label="SwarmTank">
+      <p className="help">
+        SwarmTank explores how simulated buyer profiles might respond to a
+        product. This is scenario planning: every persona below is simulated,
+        not a real customer, and nothing here measures real demand. Opening
+        this panel triggers no provider call; generation and evaluation are
+        deterministic backend operations over seeded archetypes.
+      </p>
+      <h3>SwarmTank input</h3>
+      <label>
+        Product description{' '}
+        <textarea
+          aria-label="SwarmTank description"
+          value={input.description}
+          onChange={event => setField('description', event.target.value)}
+        />
+      </label>
+      <label>
+        Pricing{' '}
+        <input
+          aria-label="SwarmTank pricing"
+          value={input.pricing}
+          onChange={event => setField('pricing', event.target.value)}
+        />
+      </label>
+      <label>
+        Monthly price amount (optional number){' '}
+        <input
+          aria-label="SwarmTank monthly price amount"
+          type="number"
+          value={input.priceAmount ?? ''}
+          onChange={event =>
+            setField(
+              'priceAmount',
+              event.target.value === '' ? null : Number(event.target.value),
+            )
+          }
+        />
+      </label>
+      <label>
+        Target customer segment{' '}
+        <input
+          aria-label="SwarmTank segment"
+          value={input.segment}
+          onChange={event => setField('segment', event.target.value)}
+        />
+      </label>
+      <label>
+        Industry{' '}
+        <input
+          aria-label="SwarmTank industry"
+          value={input.industry}
+          onChange={event => setField('industry', event.target.value)}
+        />
+      </label>
+      <label>
+        Features (one per line){' '}
+        <textarea
+          aria-label="SwarmTank features"
+          value={(input.features ?? []).join('\n')}
+          onChange={event =>
+            setField(
+              'features',
+              event.target.value.split('\n').filter(line => line.trim() !== ''),
+            )
+          }
+        />
+      </label>
+      <label>
+        Value proposition{' '}
+        <textarea
+          aria-label="SwarmTank value proposition"
+          value={input.valueProposition}
+          onChange={event => setField('valueProposition', event.target.value)}
+        />
+      </label>
+      <label>
+        Population{' '}
+        <select
+          aria-label="SwarmTank population"
+          value={preset}
+          onChange={event => setPreset(Number(event.target.value))}
+        >
+          <option value={20}>20 personas</option>
+          <option value={50}>50 personas</option>
+          <option value={100}>100 personas</option>
+        </select>
+      </label>
+      <label>
+        Seed (optional; empty generates and records one){' '}
+        <input
+          aria-label="SwarmTank seed"
+          value={seed}
+          onChange={event => setSeed(event.target.value)}
+        />
+      </label>
+      {source ? (
+        <p>
+          Imported from {source.kind} {source.artifactId} version {source.version}.
+        </p>
+      ) : null}
+      {experiments.length > 0 ? (
+        <p>
+          <label>
+            Import from saved experiment{' '}
+            <select
+              aria-label="Import from saved experiment"
+              value={importExperimentId}
+              onChange={event => setImportExperimentId(event.target.value)}
+            >
+              <option value="">Choose an experiment</option>
+              {experiments.map(artifact => (
+                <option key={artifact.artifactId} value={artifact.artifactId}>
+                  {artifact.title}
+                </option>
+              ))}
+            </select>
+          </label>{' '}
+          <button disabled={running || busy || !importExperimentId} onClick={importExperiment}>
+            Import experiment
+          </button>
+        </p>
+      ) : null}
+      {concepts.length > 0 ? (
+        <p>
+          <label>
+            Import from Forge concept{' '}
+            <select
+              aria-label="Import from Forge concept"
+              value={importConceptId}
+              onChange={event => setImportConceptId(event.target.value)}
+            >
+              <option value="">Choose a concept</option>
+              {concepts.map(artifact => (
+                <option key={artifact.artifactId} value={artifact.artifactId}>
+                  {artifact.title}
+                </option>
+              ))}
+            </select>
+          </label>{' '}
+          <button disabled={running || busy || !importConceptId} onClick={importConcept}>
+            Import concept
+          </button>
+        </p>
+      ) : null}
+      <p>
+        <button disabled={running || busy || input.description.trim() === ''} onClick={generate}>
+          Generate personas
+        </button>{' '}
+        <button disabled={running || busy || input.description.trim() === ''} onClick={evaluate}>
+          Evaluate decisions
+        </button>
+      </p>
+      {preview !== null ? (
+        <section aria-label="Simulated personas preview">
+          <h3>Simulated personas (preview, not saved)</h3>
+          <p>
+            {preview.length} simulated personas in {previewBatches} batches. Every
+            persona below is simulated. Evaluate to save this population as a run.
+          </p>
+          <ul>
+            {preview.map(persona => (
+              <li key={persona.id}>
+                <strong>{persona.name}</strong> — {persona.role}, company size{' '}
+                {persona.companySize}, budget {persona.approximateBudget}.{' '}
+                <span>Simulated persona.</span> Skepticism {persona.skepticism},
+                price sensitivity {persona.priceSensitivity}. Needs:{' '}
+                {persona.needs.join('; ')}.
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+      {runs.length > 0 ? (
+        <section aria-label="Saved SwarmTank runs">
+          <h3>Saved SwarmTank runs</h3>
+          <ul>
+            {runs.map(artifact => (
+              <li key={artifact.artifactId}>
+                {artifact.title} (version {artifact.version}){' '}
+                <button disabled={running || busy} onClick={() => viewReport(artifact)}>
+                  View report
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+      {report !== null && savedRun !== null && reportArtifact !== null ? (
+        <>
+          <SwarmtankReportView
+            report={report}
+            run={savedRun}
+            search={search}
+            decisionFilter={decisionFilter}
+            onSearchChange={setSearch}
+            onFilterChange={setDecisionFilter}
+            onExport={exportReport}
+            exportDisabled={running || busy}
+          />
+          {source === undefined || source.kind !== 'concept' ? (
+            <p>
+              <label>
+                Apply recommendations to Forge concept{' '}
+                <select
+                  aria-label="Apply recommendations to Forge concept"
+                  value={transferConceptId}
+                  onChange={event => setTransferConceptId(event.target.value)}
+                >
+                  <option value="">Choose a concept</option>
+                  {concepts.map(artifact => (
+                    <option key={artifact.artifactId} value={artifact.artifactId}>
+                      {artifact.title}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </p>
+          ) : (
+            <p>
+              Associated Forge concept: {source.artifactId} (from import).
+            </p>
+          )}
+          <p>
+            <button
+              disabled={
+                running ||
+                busy ||
+                (source === undefined || source.kind !== 'concept'
+                  ? transferConceptId === ''
+                  : false)
+              }
+              onClick={transferToForge}
+            >
+              Apply Recommendations to Forge
+            </button>
+          </p>
+        </>
+      ) : null}
+    </section>
+  );
+}
