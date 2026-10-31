@@ -1,3 +1,5 @@
+Latest focused Windows review (2026-10-31): Canvas/list runtime `cdae30bca` passes UI105/105, TypeScript/web build and browser4/4, with4 rendered Windows screenshots inspected. [Evidence](../docs/reviews/windows-m8-visualization-verified.md). VIS-01/02 closed; dense label overlap remains. This is the accessible fallback only: Three.js and remaining section26 requirements are unfinished, M8 stays in progress.
+
 Latest focused Windows acceptance (2026-10-31): URL runtime `d0a86d5e3` passes3 reviewer probes,21 URL integration tests,99 UI/contracts and4 browser workflows. [Evidence](../docs/reviews/windows-m8-url-input-verified-2026-10-31.md). URL findings closed; no promotion. M8 remains in progress for deferred scope and native/product gates. Earlier pending/red entries below describe their named historical checkpoints.
 
 # M8 — LEXI-COLLIDER

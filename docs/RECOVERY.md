@@ -1,3 +1,7 @@
+## Resume point — 2026-10-31 visualization fallback
+
+Focused Windows-verified runtime: `cdae30bcac2c231c2e12f6fde5b7210544559fb5`; review branch `codex/review-m8-visualization-repair` adds docs only. [Evidence](reviews/windows-m8-visualization-verified.md). Preserve closed document/URL and visualization repair findings. Section26 Three.js and remaining GPU/adaptive-quality work stay deferred. Coordinate release integration independently; retain owner previews and data.
+
 ## Resume point — 2026-10-31
 
 Last focused Windows-verified URL runtime: `d0a86d5e34884a2d604b5cf21ab586876e170786`. Review branch `codex/review-m8-url-input-repair2` adds documentation only. [Evidence](reviews/windows-m8-url-input-verified-2026-10-31.md). Preserve this runtime and the closed document/URL probes. Release tooling source `df7241829` remains separate: integrate only its three assigned directories onto a new branch from this reviewed application tip. Do not replace the runtime with the tooling's old application baseline. Native/release/production gates stay open.

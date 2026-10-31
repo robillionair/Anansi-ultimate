@@ -1,3 +1,7 @@
+## 2026-10-31 — Canvas visualization repair verified on Windows
+
+Runtime `cdae30bca` closes VIS-01/02 in focused scope: UI105/105, TypeScript/web build/contracts/docs pass; browser4/4 incl. pinned selection, restart/restore, URL/document regressions and high-DPI screenshots. All4 Windows images inspected; visible label contrast restored, dense overlap remains. [Evidence](reviews/windows-m8-visualization-verified.md). Canvas/list is a fallback, not completed section26 Three.js. No native acceptance or promotion.
+
 ## 2026-10-31 — M8 visualization repair (Linux; independent Windows rerun pending)
 
 On branch `muse/m8-visualization-repair` from
