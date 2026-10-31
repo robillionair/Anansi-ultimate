@@ -1,3 +1,7 @@
+## 2026-10-31 — visualization Windows review: changes required
+
+Runtime `93cf77605` has a case-insensitive module-name collision: TypeScript/Vite fail and3 UI test files cannot load (43 individual tests pass). Canvas labels also use the background color by source inspection. [Review](reviews/windows-m8-visualization.md). Browser acceptance not run on stale assets; section26 Three.js remains deferred, not complete.
+
 ## 2026-10-31 — M8 visualization workflow (Linux; independent Windows rerun pending)
 
 On branch `muse/m8-visualization` from reviewer
