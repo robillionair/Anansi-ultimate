@@ -363,6 +363,15 @@ export type RoutingMode = "auto" | "autoFree" | "private" | "fast" | "deep" | "c
  * manually typed beams) carry none and still parse.
  */
 export interface ColliderExperimentDoc {
+  /**
+   * §27 artifact hashes, embedded at save time by
+   * `collider_artifacts::compute_artifacts`. Absent on
+   * experiments saved before this slice (legacy).
+   * When present, `validate_experiment_doc`
+   * recomputes every document and rejects ANY hash
+   * or byte-count mismatch fail-closed.
+   */
+  artifacts?: ColliderArtifacts | null;
   beamA: string;
   beamB: string;
   controls: ColliderControls;
@@ -378,6 +387,18 @@ export interface ColliderExperimentDoc {
   urlA?: ColliderUrlSource | null;
   urlB?: ColliderUrlSource | null;
   version: number;
+}
+export interface ColliderArtifacts {
+  architecture: ColliderArtifactHash;
+  concept: ColliderArtifactHash;
+  feasibility: ColliderArtifactHash;
+  risks: ColliderArtifactHash;
+  roadmap: ColliderArtifactHash;
+  testPlan: ColliderArtifactHash;
+}
+export interface ColliderArtifactHash {
+  bytes: number;
+  sha256: string;
 }
 /**
  * Advanced controls (§24). Every field carries a
@@ -3430,6 +3451,13 @@ export interface TransferConceptDoc {
   approvedBrief: string;
   assumptions: string[];
   format: string;
+  /**
+   * §27 initial technical specification: the pinned
+   * experiment's derived ARCHITECTURE.md, embedded
+   * by the transfer op at transfer time. Absent on
+   * concepts transferred before this slice.
+   */
+  initialSpecification?: string | null;
   model: string;
   productizationBrief: string;
   provider: string;

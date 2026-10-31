@@ -472,6 +472,14 @@ pub struct ColliderExperimentDoc {
     pub provider: String,
     pub model: String,
     pub disclosure: DisclosureRecord,
+    /// §27 artifact hashes, embedded at save time by
+    /// `collider_artifacts::compute_artifacts`. Absent on
+    /// experiments saved before this slice (legacy).
+    /// When present, `validate_experiment_doc`
+    /// recomputes every document and rejects ANY hash
+    /// or byte-count mismatch fail-closed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub artifacts: Option<crate::collider_artifacts::ColliderArtifacts>,
 }
 
 #[derive(Debug, Serialize, JsonSchema)]
@@ -848,6 +856,9 @@ pub fn validate_experiment_doc(doc: &ColliderExperimentDoc) -> Result<(), String
         }
     }
     validate_collider_result(&doc.result)?;
+    if let Some(artifacts) = &doc.artifacts {
+        crate::collider_artifacts::check_artifacts(doc, artifacts)?;
+    }
     Ok(())
 }
 
@@ -2385,7 +2396,7 @@ fn save(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
     let disclosure = disclosure.ok_or_else(crate::storage::unavailable)?;
     let storage = storage(scope)?;
     let workspace_id = logical(scope)?;
-    let doc = ColliderExperimentDoc {
+    let mut doc = ColliderExperimentDoc {
         format: "anansi-collider-experiment".to_string(),
         version: 1,
         beam_a: beam_a.clone(),
@@ -2401,7 +2412,13 @@ fn save(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
         provider: disclosure.provider.clone(),
         model: disclosure.model.clone(),
         disclosure,
+        artifacts: None,
     };
+    // §27 hashes are computed from the document itself
+    // before registration, so the saved row permanently
+    // carries them and validation can recompute them.
+    let derived = crate::collider_artifacts::compute_artifacts(&doc);
+    doc.artifacts = Some(derived);
     let body = serde_json::to_string(&doc).map_err(|_| crate::storage::unavailable())?;
     let title = {
         let excerpt: String = beam_a

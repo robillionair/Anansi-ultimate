@@ -8,6 +8,7 @@ pub mod backup;
 pub mod backup_commands;
 pub mod backup_upload;
 pub mod collider;
+pub mod collider_artifacts;
 pub mod content;
 pub mod context;
 pub mod entities;

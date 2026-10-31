@@ -1364,6 +1364,54 @@
         ],
         "type": "object"
       },
+      "ColliderArtifactHash": {
+        "properties": {
+          "bytes": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sha256": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "sha256",
+          "bytes"
+        ],
+        "type": "object"
+      },
+      "ColliderArtifacts": {
+        "properties": {
+          "architecture": {
+            "$ref": "#/$defs/ColliderArtifactHash"
+          },
+          "concept": {
+            "$ref": "#/$defs/ColliderArtifactHash"
+          },
+          "feasibility": {
+            "$ref": "#/$defs/ColliderArtifactHash"
+          },
+          "risks": {
+            "$ref": "#/$defs/ColliderArtifactHash"
+          },
+          "roadmap": {
+            "$ref": "#/$defs/ColliderArtifactHash"
+          },
+          "testPlan": {
+            "$ref": "#/$defs/ColliderArtifactHash"
+          }
+        },
+        "required": [
+          "concept",
+          "architecture",
+          "feasibility",
+          "roadmap",
+          "risks",
+          "testPlan"
+        ],
+        "type": "object"
+      },
       "ColliderCombination": {
         "additionalProperties": false,
         "description": "One proposed combination or architecture (§25 stage 4).",
@@ -1869,6 +1917,17 @@
     "additionalProperties": false,
     "description": "The saved experiment body (format\n`anansi-collider-experiment` v1): exact beams,\nresolved controls, validated result, and\nprovider/model provenance with disclosure.\n`memory_context` is optional and defaulted so\nexperiments saved before Slice 3 (no memory\ncontext) still parse: absence means no context.\n`document_a`/`document_b` are likewise optional:\nexperiments saved before document input (or from\nmanually typed beams) carry none and still parse.",
     "properties": {
+      "artifacts": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/ColliderArtifacts"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "§27 artifact hashes, embedded at save time by\n`collider_artifacts::compute_artifacts`. Absent on\nexperiments saved before this slice (legacy).\nWhen present, `validate_experiment_doc`\nrecomputes every document and rejects ANY hash\nor byte-count mismatch fail-closed."
+      },
       "beamA": {
         "type": "string"
       },
@@ -12895,6 +12954,13 @@
       },
       "format": {
         "type": "string"
+      },
+      "initialSpecification": {
+        "description": "§27 initial technical specification: the pinned\nexperiment's derived ARCHITECTURE.md, embedded\nby the transfer op at transfer time. Absent on\nconcepts transferred before this slice.",
+        "type": [
+          "string",
+          "null"
+        ]
       },
       "model": {
         "type": "string"

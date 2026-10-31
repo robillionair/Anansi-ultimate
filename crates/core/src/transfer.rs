@@ -103,6 +103,12 @@ pub struct TransferConceptDoc {
     pub assumptions: Vec<String>,
     pub unknowns: Vec<String>,
     pub productization_brief: String,
+    /// §27 initial technical specification: the pinned
+    /// experiment's derived ARCHITECTURE.md, embedded
+    /// by the transfer op at transfer time. Absent on
+    /// concepts transferred before this slice.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub initial_specification: Option<String>,
     pub provider: String,
     pub model: String,
 }
@@ -511,6 +517,11 @@ pub fn transfer(value: Value, scope: &CallerScope) -> Result<Value, CommandError
         assumptions: assumptions.clone(),
         unknowns: unknowns.clone(),
         productization_brief: productization_brief.clone(),
+        // The derived architecture travels with the
+        // concept so the Forge side starts from the
+        // approved outputs, not from a fresh summary.
+        initial_specification:
+            crate::collider_artifacts::derive_artifact(&experiment, "ARCHITECTURE.md"),
         provider: provider.clone(),
         model: model.clone(),
     };
