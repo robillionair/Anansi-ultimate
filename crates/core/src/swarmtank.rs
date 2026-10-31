@@ -108,7 +108,7 @@ fn round2(value: f64) -> f64 {
 /// optional numeric monthly price the decision engine
 /// compares against budgets. A missing numeric price
 /// is never invented from the text.
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SwarmtankInput {
     pub description: String,
@@ -124,20 +124,6 @@ pub struct SwarmtankInput {
     pub features: Vec<String>,
     #[serde(default)]
     pub value_proposition: String,
-}
-
-impl Default for SwarmtankInput {
-    fn default() -> Self {
-        Self {
-            description: String::new(),
-            pricing: String::new(),
-            price_amount: None,
-            segment: String::new(),
-            industry: String::new(),
-            features: Vec::new(),
-            value_proposition: String::new(),
-        }
-    }
 }
 
 /// The import source pin: an exact experiment or
@@ -714,10 +700,10 @@ fn validate_input(input: &SwarmtankInput) -> Result<(), String> {
         MAX_VALUE_PROPOSITION_CHARS,
     )?;
     check_list(&input.features, "features", MAX_FEATURES, MAX_FEATURE_CHARS)?;
-    if let Some(price) = input.price_amount {
-        if !price.is_finite() || price < 0.0 {
-            return Err("priceAmount must be a finite non-negative number".to_string());
-        }
+    if let Some(price) = input.price_amount
+        && (!price.is_finite() || price < 0.0)
+    {
+        return Err("priceAmount must be a finite non-negative number".to_string());
     }
     Ok(())
 }
@@ -1348,22 +1334,24 @@ fn parse_run_doc(raw: &str) -> Result<SwarmtankRunDoc, CommandError> {
 /// Import mapping: field copy only. Fields the
 /// source does not state stay empty.
 pub fn import_from_experiment(doc: &crate::collider::ColliderExperimentDoc) -> SwarmtankInput {
-    let mut input = SwarmtankInput::default();
-    input.description = doc.result.productization.concept_brief.clone();
-    input.features = doc
-        .result
-        .conceptual_primitives
-        .iter()
-        .take(MAX_FEATURES)
-        .cloned()
-        .collect();
-    input
+    SwarmtankInput {
+        description: doc.result.productization.concept_brief.clone(),
+        features: doc
+            .result
+            .conceptual_primitives
+            .iter()
+            .take(MAX_FEATURES)
+            .cloned()
+            .collect(),
+        ..Default::default()
+    }
 }
 
 pub fn import_from_concept(doc: &crate::transfer::TransferConceptDoc) -> SwarmtankInput {
-    let mut input = SwarmtankInput::default();
-    input.description = doc.approved_brief.clone();
-    input
+    SwarmtankInput {
+        description: doc.approved_brief.clone(),
+        ..Default::default()
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1414,10 +1402,10 @@ fn personas_op(value: Value, scope: &CallerScope) -> Result<Value, CommandError>
     }
     require_workspace_and_project(scope, &req.workspace_id, &req.project_id)?;
     validate_input(&req.input).map_err(|e| invalid(&e))?;
-    if let Some(source) = &req.source {
-        if !matches!(source.kind.as_str(), "experiment" | "concept") {
-            return Err(invalid("The source kind must be experiment or concept."));
-        }
+    if let Some(source) = &req.source
+        && !matches!(source.kind.as_str(), "experiment" | "concept")
+    {
+        return Err(invalid("The source kind must be experiment or concept."));
     }
     let seed = resolve_seed(req.seed)?;
     let (personas, batches) = generate_personas(&seed, req.preset).map_err(|e| invalid(&e))?;
@@ -1578,18 +1566,17 @@ fn transfer_op(value: Value, scope: &CallerScope) -> Result<Value, CommandError>
     // Structural idempotency, mirroring §27: a
     // concept version already carrying this run's
     // addendum is returned unchanged.
-    if let Some(addendum) = &concept_doc.swarmtank_addendum {
-        if addendum.run_artifact_id == req.run_artifact_id
-            && addendum.run_version == req.run_version
-            && addendum.run_content_hash == run.artifact.content_hash
-        {
-            return serde_json::to_value(SwarmtankTransferResponse {
-                contract_version: 1,
-                artifact: concept_latest.artifact,
-                already_applied: true,
-            })
-            .map_err(|_| crate::storage::unavailable());
-        }
+    if let Some(addendum) = &concept_doc.swarmtank_addendum
+        && addendum.run_artifact_id == req.run_artifact_id
+        && addendum.run_version == req.run_version
+        && addendum.run_content_hash == run.artifact.content_hash
+    {
+        return serde_json::to_value(SwarmtankTransferResponse {
+            contract_version: 1,
+            artifact: concept_latest.artifact,
+            already_applied: true,
+        })
+        .map_err(|_| crate::storage::unavailable());
     }
     if concept_latest.artifact.version != req.expected_concept_version {
         return Err(CommandError::new(
