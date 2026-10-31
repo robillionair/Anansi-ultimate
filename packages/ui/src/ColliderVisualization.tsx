@@ -156,7 +156,14 @@ export function ColliderVisualization({
   // same commit. A new identity simply does not match
   // the failed one, so the 3D view is tried again.
   const [failedIdentity, setFailedIdentity] = useState<string | null>(null);
-  const [reducedMotion, setReducedMotion] = useState(false);
+  const [reducedMotion, setReducedMotion] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return Boolean(
+      (window.matchMedia &&
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches) ||
+        document.documentElement.dataset.reducedMotion === 'true',
+    );
+  });
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const angleRef = useRef(0);
   // Stable per identity so the 3D view's build effect

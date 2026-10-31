@@ -29,7 +29,9 @@ promotion, M5 gates, §32 sandbox, and Slice 4 /
 Three.js Windows verification remain open; M8 is
 not complete.
 
-## 2026-10-31 — M8 Three.js visualization (Linux; independent Windows rerun pending)
+## 2026-10-31 — M8 Three.js visualization (§26) verified on Windows
+
+Incoming delivery `anansi-m8-threejs-visualization-2026-10-31.zip` (tip `7632f9476` over reviewer baseline `9147e3494`) verified on Windows. Scope: §26 Three.js / WebGL renderer with 2D Canvas resilient fallback and persistent accessible node list. Dependencies `three@0.187.0` and `@types/three@0.187.0` pinned. Static checks: `tsc --noEmit` 0 errors, contracts drift 0, docs 207 files. UI component suite `pnpm test:ui` 115/115 PASS. Production web build clean (767ms). Windows Chromium Playwright battery under shared lease: 5/5 PASS (1.2m) across standard and 2x high-DPI viewports, raycast selection, version switches, and WebGL context loss fallback. Reviewer fix: synchronous initialization of `reducedMotion` state prevents initial-mount animation flicker and unmounting race condition during high-DPI screenshot tests. Seven screenshots captured and visually inspected in `docs/reviews/evidence/windows-m8-threejs/`. [Evidence](reviews/windows-m8-threejs-visualization-verified.md). No backend, schema, or contract changes.
 
 On branch `muse/m8-threejs-visualization` from
 reviewer tip `9147e349` (the Windows-verified
