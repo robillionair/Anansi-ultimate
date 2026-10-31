@@ -1,3 +1,24 @@
+## Resume point — 2026-10-31 M9 SwarmTank Slice 3
+
+Owner-authorized M9 slice on branch
+`muse/m9-swarmtank-slice3` from Windows-verified
+Slice 2 baseline `3d0537ea`. Interactive scenario
+controls over a saved run with an instant local
+sensitivity engine (Rust + TS mirrors), dynamic
+arena re-clustering, comparison studio, versioned
+scenario-branch persistence, Forge bridge for
+baseline or scenario recommendations, and
+deterministic comparison export. Linux
+verification: node 152/152, e2e scenario spec
+3/3, Rust 571 passed + 4 known live-Ollama
+failures, browser battery 45/46 specs (single
+failure: search real-semantic test, live Ollama
+absent), tsc/contracts/docs (219 files)/web
+build clean. Independent Windows rerun pending
+(checklist in the delivery MANIFEST). This is the
+final M9 slice. Native/release/production gates
+stay open.
+
 ## Resume point — 2026-10-31 M9 SwarmTank Slice 2
 
 Owner-authorized M9 slice on branch
