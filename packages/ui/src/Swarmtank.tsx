@@ -18,6 +18,7 @@ import type {
   SwarmtankRunDoc,
   SwarmtankSource,
 } from '@anansi/contracts';
+import { SwarmtankArena } from './SwarmtankArena';
 
 // ---------------------------------------------------------------------------
 // Strict client-side parsing for saved run bodies
@@ -380,6 +381,9 @@ export function filterRunPersonas(
 export function SwarmtankReportView({
   report,
   run,
+  runKey,
+  selectedPersonaId,
+  onSelectPersona,
   search,
   decisionFilter,
   onSearchChange,
@@ -389,6 +393,9 @@ export function SwarmtankReportView({
 }: {
   report: SwarmtankReport;
   run: SwarmtankRunDoc;
+  runKey: string;
+  selectedPersonaId: string | null;
+  onSelectPersona: (id: string | null) => void;
   search: string;
   decisionFilter: string;
   onSearchChange: (value: string) => void;
@@ -453,6 +460,12 @@ export function SwarmtankReportView({
           <p>Validate with real customers: {rec.validation}</p>
         </section>
       ))}
+      <SwarmtankArena
+        run={run}
+        runKey={runKey}
+        selectedPersonaId={selectedPersonaId}
+        onSelectPersona={onSelectPersona}
+      />
       <p>
         <label>
           Search personas{' '}
@@ -485,21 +498,29 @@ export function SwarmtankReportView({
             <th>Key objection</th>
             <th>Perceived value</th>
             <th>Willingness to pay</th>
+            <th>Arena</th>
           </tr>
         </thead>
         <tbody>
           {visiblePersonas.map(persona => {
             const decision = decisionByPersona.get(persona.id);
+            const selected = persona.id === selectedPersonaId;
             return (
               <tr key={persona.id}>
                 <td>
-                  {persona.name} <span>Simulated persona.</span>
+                  {persona.name} <span>Simulated persona.</span>{' '}
+                  {selected ? <strong>Selected in arena.</strong> : null}
                 </td>
                 <td>{persona.role}</td>
                 <td>{decision?.decision ?? '—'}</td>
                 <td>{decision?.keyObjection ?? '—'}</td>
                 <td>{decision?.perceivedValue ?? '—'}</td>
                 <td>{decision?.willingnessToPay ?? '—'}</td>
+                <td>
+                  <button onClick={() => onSelectPersona(persona.id)}>
+                    Select in arena
+                  </button>
+                </td>
               </tr>
             );
           })}
@@ -541,6 +562,7 @@ export function SwarmtankPanel({
   const [savedArtifact, setSavedArtifact] = useState<ArtifactRecord | null>(null);
   const [report, setReport] = useState<SwarmtankReport | null>(null);
   const [reportArtifact, setReportArtifact] = useState<ArtifactRecord | null>(null);
+  const [selectedPersonaId, setSelectedPersonaId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [decisionFilter, setDecisionFilter] = useState('All');
   const [importExperimentId, setImportExperimentId] = useState('');
@@ -657,6 +679,7 @@ export function SwarmtankPanel({
       setSavedArtifact(response.artifact);
       setReport(response.report);
       setReportArtifact(response.artifact);
+      setSelectedPersonaId(null);
       setPreview(null);
       await onSaved();
       notify('Evaluated and saved the SwarmTank run.', false);
@@ -688,6 +711,7 @@ export function SwarmtankPanel({
       setSavedArtifact(response.artifact);
       setReport(response.report);
       setReportArtifact(response.artifact);
+      setSelectedPersonaId(null);
     } catch (err) {
       notify(err instanceof Error ? err.message : 'Report failed. Retry.', true);
     } finally {
@@ -948,6 +972,9 @@ export function SwarmtankPanel({
           <SwarmtankReportView
             report={report}
             run={savedRun}
+            runKey={`${reportArtifact.artifactId}-v${reportArtifact.version}`}
+            selectedPersonaId={selectedPersonaId}
+            onSelectPersona={setSelectedPersonaId}
             search={search}
             decisionFilter={decisionFilter}
             onSearchChange={setSearch}

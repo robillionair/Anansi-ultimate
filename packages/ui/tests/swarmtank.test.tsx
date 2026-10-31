@@ -168,6 +168,9 @@ test('report view renders metrics, recommendations, and labeled rows', () => {
     React.createElement(SwarmtankReportView, {
       report: validReport(),
       run: doc,
+      runKey: 'test-run-v1',
+      selectedPersonaId: null,
+      onSelectPersona: () => {},
       search: '',
       decisionFilter: 'All',
       onSearchChange: () => {},
@@ -194,6 +197,9 @@ test('report view with a decision filter hides other rows', () => {
     React.createElement(SwarmtankReportView, {
       report: validReport(),
       run: doc,
+      runKey: 'test-run-v1',
+      selectedPersonaId: null,
+      onSelectPersona: () => {},
       search: '',
       decisionFilter: 'Reject',
       onSearchChange: () => {},
@@ -207,7 +213,7 @@ test('report view with a decision filter hides other rows', () => {
 });
 
 test('swarmtank files contain zero innerHTML', () => {
-  for (const file of ['packages/ui/src/Swarmtank.tsx', 'packages/ui/src/Transfer.tsx']) {
+  for (const file of ['packages/ui/src/Swarmtank.tsx', 'packages/ui/src/Transfer.tsx', 'packages/ui/src/swarmtankArenaLayout.ts', 'packages/ui/src/swarmtankThreeScene.ts', 'packages/ui/src/SwarmtankThreeView.tsx', 'packages/ui/src/SwarmtankArena.tsx']) {
     const source = readFileSync(file, 'utf8');
     assert.ok(!source.includes('innerHTML'), file);
     assert.ok(!source.includes('dangerouslySetInnerHTML'), file);
