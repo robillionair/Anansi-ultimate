@@ -18,7 +18,7 @@
  * saved experiment text is displayed, never executed.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ColliderExperimentDoc } from '@anansi/contracts';
 import {
   VISUALIZATION_SECTIONS,
@@ -28,6 +28,7 @@ import {
   sectionTitleFor,
   type VisualizationScene,
 } from './colliderVisualizationScene';
+import { ColliderThreeView } from './ColliderThreeView';
 
 const BEAM_COLORS: Record<string, string> = {
   'beam-a': '#a78bfa',
@@ -146,22 +147,35 @@ export function ColliderVisualization({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [paused, setPaused] = useState(false);
   const [canvasFailed, setCanvasFailed] = useState(false);
+  const [webglFailed, setWebglFailed] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const angleRef = useRef(0);
+  // Stable so the 3D view's build effect does not
+  // rebuild when the parent re-renders.
+  const handleThreeUnavailable = useCallback(() => {
+    setWebglFailed(true);
+  }, []);
 
   // Identity change clears stale selection and animation
   // state before the new scene renders.
   useEffect(() => {
     setSelectedId(null);
     setPaused(false);
+    setWebglFailed(false);
     angleRef.current = 0;
   }, [scene.identity]);
 
   useEffect(() => {
     if (typeof window === 'undefined' || !window.matchMedia) return;
     const query = window.matchMedia('(prefers-reduced-motion: reduce)');
-    const update = () => setReducedMotion(query.matches);
+    // System preference OR the workspace setting (the
+    // app writes it to documentElement.dataset).
+    const update = () =>
+      setReducedMotion(
+        query.matches ||
+          document.documentElement.dataset.reducedMotion === 'true',
+      );
     update();
     query.addEventListener('change', update);
     return () => query.removeEventListener('change', update);
@@ -199,7 +213,7 @@ export function ColliderVisualization({
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [scene, selectedId, paused, reducedMotion]);
+  }, [scene, selectedId, paused, reducedMotion, webglFailed]);
 
   const selected = scene.nodes.find(n => n.id === selectedId) ?? null;
 
@@ -248,24 +262,36 @@ export function ColliderVisualization({
         relationships are the pipeline flow between sections, not links
         mined from the text.
       </p>
-      {canvasFailed ? (
-        <p>
-          Canvas rendering is unavailable here; the full node list below is
-          the visualization.
-        </p>
+      {webglFailed ? (
+        canvasFailed ? (
+          <p>
+            Canvas rendering is unavailable here; the full node list below is
+            the visualization.
+          </p>
+        ) : (
+          <canvas
+            ref={canvasRef}
+            data-canvas-2d
+            role="img"
+            aria-label={`Visualization of the saved experiment: two beams feeding six result sections, ${scene.nodes.length} nodes in total. Use the node list below to select an element.`}
+            width={640}
+            height={480}
+            style={{ width: '100%', maxWidth: 640, background: '#0b2545' }}
+            onClick={onCanvasClick}
+          />
+        )
       ) : (
-        <canvas
-          ref={canvasRef}
-          role="img"
-          aria-label={`Visualization of the saved experiment: two beams feeding six result sections, ${scene.nodes.length} nodes in total. Use the node list below to select an element.`}
-          width={640}
-          height={480}
-          style={{ width: '100%', maxWidth: 640, background: '#0b2545' }}
-          onClick={onCanvasClick}
+        <ColliderThreeView
+          scene={scene}
+          selectedId={selectedId}
+          onSelect={setSelectedId}
+          paused={paused}
+          reducedMotion={reducedMotion}
+          onUnavailable={handleThreeUnavailable}
         />
       )}
       {reducedMotion ? (
-        <p>Motion reduced (system setting) — static view.</p>
+        <p>Motion reduced — static view.</p>
       ) : (
         <button type="button" onClick={() => setPaused(p => !p)}>
           {paused ? 'Resume motion' : 'Pause motion'}
