@@ -9,8 +9,12 @@
   },
   "dependencies": {
     "@anansi/contracts": "workspace:*",
+    "@tauri-apps/api": "2.12.4",
     "react": "19.3.1",
     "react-dom": "19.3.1",
-    "@tauri-apps/api": "2.12.4"
+    "three": "0.187.0"
+  },
+  "devDependencies": {
+    "@types/three": "0.187.0"
   }
 }
