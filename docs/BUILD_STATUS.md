@@ -1,3 +1,7 @@
+## 2026-10-31 — URL input repair2 verified on Windows
+
+Runtime `d0a86d5e3` passes reviewer probes3/3, URL integration21/21, UI/contracts99/99, strict core all-target Clippy/fmt, TypeScript/contracts/docs, API/web builds and browser4/4 (URL plus document regressions, save/restart/restore). URL-01/02/02b closed in focused scope. [Evidence](reviews/windows-m8-url-input-verified-2026-10-31.md). No native acceptance, preview promotion, release installer or complete M8 claim; earlier red sections are historical.
+
 ## 2026-10-30 — M8 URL input repair 2: deadline beneath rustls (Linux; independent Windows rerun pending)
 
 On branch `muse/m8-url-input-repair2` from reviewer

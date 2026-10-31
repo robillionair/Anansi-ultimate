@@ -1,3 +1,7 @@
+## URL-input focused Windows acceptance — 2026-10-31
+
+AN-013 remains in progress. URL/document beam input gains [focused Windows evidence](reviews/windows-m8-url-input-verified-2026-10-31.md): address/deadline probes, TLS fragmentation, 21 URL integration cases and4 browser workflows pass. This closes named URL repair findings, not deferred 3D, native promotion, full M8 or production gates.
+
 # ANANSI Ultimate — Requirements Matrix
 
 ## M8 lineage focused Windows acceptance — 2026-10-30
