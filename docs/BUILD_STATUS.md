@@ -1,3 +1,36 @@
+## 2026-10-31 — M8 Three.js visualization (Linux; independent Windows rerun pending)
+
+On branch `muse/m8-threejs-visualization` from
+reviewer tip `9147e349` (the Windows-verified
+visualization repair runtime; design committed before
+code, record in
+`docs/handoffs/M8-threejs-visualization-design.md` and
+`docs/handoffs/M8-threejs-visualization-addendum.md`).
+The §26 renderer is implemented: `three@0.187.0` and
+`@types/three@0.187.0` pinned in `@anansi/ui` via pnpm
+11.25.0 (frozen install verified); a pure
+scene-graph builder over the shared derived scene
+(two toroidal beam streams, orbiting fragments,
+central collision marker, instanced output nodes,
+section-flow edges, text sprites), a renderer
+lifecycle component (DPR clamped to 2, resize,
+disposal, rAF cancellation, reduced-motion static
+frame, `webglcontextlost` fallback), and the Canvas
+2D view preserved as the resilient fallback with the
+list always present. One real defect found by the
+fallback spec and fixed: the parent's identity effect
+clobbered the child's WebGL-failure signal (child
+effects run first), so fallback is now tracked per
+identity. Linux verification: node 115/115, tsc/build/
+contracts clean, docs 207 files, browser battery 8/8
+across 7 specs incl. raycast selection, version-switch
+clearing, byte-identical reduced-motion frames, and
+1x/2x screenshots. No Rust/schema/contract change.
+Windows rerun, native acceptance, preview promotion,
+M5 gates, §32 sandbox, and Slice 4 Windows
+verification remain open; this slice completes the
+§26 renderer, not M8.
+
 ## 2026-10-31 — Canvas visualization repair verified on Windows
 
 Runtime `cdae30bca` closes VIS-01/02 in focused scope: UI105/105, TypeScript/web build/contracts/docs pass; browser4/4 incl. pinned selection, restart/restore, URL/document regressions and high-DPI screenshots. All4 Windows images inspected; visible label contrast restored, dense overlap remains. [Evidence](reviews/windows-m8-visualization-verified.md). Canvas/list is a fallback, not completed section26 Three.js. No native acceptance or promotion.

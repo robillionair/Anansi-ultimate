@@ -1,3 +1,18 @@
+## Resume point — 2026-10-31 Three.js visualization
+
+Owner-authorized M8 slice on branch
+`muse/m8-threejs-visualization` from reviewer tip
+`9147e349` (Windows-verified visualization repair
+runtime). The §26 Three.js renderer is implemented
+over the shared derived scene with the Canvas 2D view
+as fallback; Linux verification: node 115/115,
+tsc/build/contracts clean, docs 207 files, browser
+battery 8/8. Independent Windows rerun pending
+(checklist in the delivery MANIFEST). Preserve closed
+document/URL, visualization repair, and Three.js
+fallback findings. Native/release/production gates
+stay open.
+
 ## Resume point — 2026-10-31 visualization fallback
 
 Focused Windows-verified runtime: `cdae30bcac2c231c2e12f6fde5b7210544559fb5`; review branch `codex/review-m8-visualization-repair` adds docs only. [Evidence](reviews/windows-m8-visualization-verified.md). Preserve closed document/URL and visualization repair findings. Section26 Three.js and remaining GPU/adaptive-quality work stay deferred. Coordinate release integration independently; retain owner previews and data.
