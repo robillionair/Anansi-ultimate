@@ -1,3 +1,20 @@
+## Resume point — 2026-10-31 M9 SwarmTank Slice 1
+
+Owner-authorized M9 slice on branch
+`muse/m9-swarmtank-slice1` from Windows-verified
+baseline `7c576b85`. Deterministic provider-free
+personas, decision engine, derived report, JSON
+export, and Forge transfer with idempotent
+addendum; runs persist as versioned `simulation`
+artifacts with restore-time recomputation.
+Linux verification: Rust 562 passed + 4 known
+live-Ollama failures, node 131/131, tsc/build/
+contracts clean, docs 212 files, browser battery
+15/15. Independent Windows rerun pending
+(checklist in the delivery MANIFEST). Run source
+pins are historical provenance, not remapped on
+restore. Native/release/production gates stay open.
+
 ## Resume point — 2026-10-31 §27 artifacts & Forge provisioning
 
 Owner-authorized M8 slice on branch
