@@ -1,33 +1,6 @@
-## 2026-10-31 — M8 §27 artifacts & Forge provisioning (Linux; independent Windows rerun pending)
+## 2026-10-31 — M8 §27 artifacts & Forge provisioning verified on Windows
 
-On branch `muse/m8-artifacts-forge` from
-reviewer tip `7632f947` (the Three.js runtime;
-design committed before code, record in
-`docs/handoffs/M8-artifacts-forge-design.md` and
-`docs/handoffs/M8-artifacts-forge-addendum.md`).
-Six deterministic markdown artifacts derived purely
-from the saved experiment (Rust canonical, TS
-mirror byte-identical, pinned hash vectors agree),
-with SHA-256 + byte counts embedded in the
-document at save time and fail-closed recomputation
-in validation (covers restore and transfer);
-tabbed viewer with a safe renderer (zero raw-HTML
-injection), search, copy, and a deterministic STORE
-zip export whose MANIFEST hashes match the entries
-and the stored hashes; "Build This Product" reuses
-the existing transfer op (record brief as approved
-brief, derived ARCHITECTURE.md as the concept's
-initial specification, structural idempotency, no
-spec auto-start). Linux verification: Rust workspace
-553 passed + 4 known live-Ollama failures, Clippy/
-fmt clean, node 125/125, tsc/build/contracts clean,
-docs 209 files, browser battery 12/12 specs incl.
-backup/restore leg with already-transferred
-re-Build. Native save dialog recorded as open, not
-claimed; Windows rerun, native acceptance, preview
-promotion, M5 gates, §32 sandbox, and Slice 4 /
-Three.js Windows verification remain open; M8 is
-not complete.
+Incoming delivery `anansi-m8-complete-artifacts-forge-2026-10-31.zip` (tip `dbc49bd16` over `7632f9476`) verified on Windows. Scope: §27 six-artifact deterministic derivation (`crates/core/src/collider_artifacts.rs` and `packages/ui/src/colliderArtifacts.ts`), embedded SHA-256 and byte counts, safe tabbed markdown viewer, deterministic STORE zip export with MANIFEST hashes, and "Build This Product" Forge bridge (`ColliderBuildProduct.tsx`) using derived `ARCHITECTURE.md` as initial spec. Static checks: `tsc --noEmit` 0 errors, contracts drift 0, docs 210 files. UI component suite `pnpm test:ui` 125/125 PASS. Backend Rust test suites on Windows: `collider.rs` 49/49 PASS, `forge_restore.rs` 4/4 PASS, `transfer.rs` 19/19 PASS, `anansi-api` clean. Browser Playwright vertical slice under shared lease: `collider-artifacts-forge.spec.ts` PASS in 37.5s, verifying tabs, line search, export byte-identity and manifest hashes, Forge concept creation, and backup/restore survival. Screenshots captured and inspected in `docs/reviews/evidence/windows-m8-artifacts/`. [Evidence](reviews/windows-m8-artifacts-forge-verified.md). Native host file save dialog remains open; M8 in progress.
 
 ## 2026-10-31 — M8 Three.js visualization (§26) verified on Windows
 
