@@ -12922,6 +12922,1935 @@
     "title": "SnapshotRequest",
     "type": "object"
   },
+  "SomniaCategoryCount": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "category": {
+        "type": "string"
+      },
+      "count": {
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "category",
+      "count"
+    ],
+    "title": "SomniaCategoryCount",
+    "type": "object"
+  },
+  "SomniaConstraint": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "id": {
+        "type": "string"
+      },
+      "rule": {
+        "description": "`no-untrusted-execution`, `evidence-required`, or\n`max-tool-calls:N` with N a non-negative integer.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "id",
+      "rule"
+    ],
+    "title": "SomniaConstraint",
+    "type": "object"
+  },
+  "SomniaEvaluateRequest": {
+    "$defs": {
+      "SomniaConstraint": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "rule": {
+            "description": "`no-untrusted-execution`, `evidence-required`, or\n`max-tool-calls:N` with N a non-negative integer.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "rule"
+        ],
+        "type": "object"
+      },
+      "SomniaEvidenceRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "privacy": {
+            "description": "One of `standard | private | public`. `sealed` is refused\nfail-closed wherever it appears.",
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "text",
+          "privacy"
+        ],
+        "type": "object"
+      },
+      "SomniaReplayInput": {
+        "additionalProperties": false,
+        "properties": {
+          "scenarios": {
+            "items": {
+              "$ref": "#/$defs/SomniaScenario"
+            },
+            "type": "array"
+          },
+          "seed": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "scenarios",
+          "seed"
+        ],
+        "type": "object"
+      },
+      "SomniaRetrievedRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "trusted": {
+            "description": "The scenario author's claim. The evaluator never executes\nretrieved text regardless of this flag.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "text",
+          "source",
+          "trusted"
+        ],
+        "type": "object"
+      },
+      "SomniaScenario": {
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "type": "string"
+          },
+          "constraints": {
+            "items": {
+              "$ref": "#/$defs/SomniaConstraint"
+            },
+            "type": "array"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/$defs/SomniaEvidenceRecord"
+            },
+            "type": "array"
+          },
+          "id": {
+            "type": "string"
+          },
+          "instruction": {
+            "type": "string"
+          },
+          "instructionConflict": {
+            "description": "True when the scenario declares two instruction-bearing\nrecords in conflict. The conflicting texts are carried in\n`evidence` / `retrieved` for display; the flag is the fact\nthe rule engine reads.",
+            "type": "boolean"
+          },
+          "requiredEvidence": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "retrieved": {
+            "items": {
+              "$ref": "#/$defs/SomniaRetrievedRecord"
+            },
+            "type": "array"
+          },
+          "title": {
+            "type": "string"
+          },
+          "toolEvents": {
+            "items": {
+              "$ref": "#/$defs/SomniaToolEvent"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "category",
+          "instruction",
+          "instructionConflict",
+          "evidence",
+          "retrieved",
+          "toolEvents",
+          "requiredEvidence",
+          "constraints"
+        ],
+        "type": "object"
+      },
+      "SomniaToolEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "outcome": {
+            "description": "One of `ok | timeout | error`. All simulated; no tool runs.",
+            "type": "string"
+          },
+          "tool": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "tool",
+          "outcome"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "input": {
+        "$ref": "#/$defs/SomniaReplayInput"
+      },
+      "projectId": {
+        "type": "string"
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "workspaceId",
+      "projectId",
+      "input"
+    ],
+    "title": "SomniaEvaluateRequest",
+    "type": "object"
+  },
+  "SomniaEvaluateResponse": {
+    "$defs": {
+      "SomniaCategoryCount": {
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "type": "string"
+          },
+          "count": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "category",
+          "count"
+        ],
+        "type": "object"
+      },
+      "SomniaConstraint": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "rule": {
+            "description": "`no-untrusted-execution`, `evidence-required`, or\n`max-tool-calls:N` with N a non-negative integer.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "rule"
+        ],
+        "type": "object"
+      },
+      "SomniaEvaluationDoc": {
+        "additionalProperties": false,
+        "properties": {
+          "contentHash": {
+            "type": "string"
+          },
+          "format": {
+            "type": "string"
+          },
+          "input": {
+            "$ref": "#/$defs/SomniaReplayInput"
+          },
+          "metrics": {
+            "$ref": "#/$defs/SomniaMetrics"
+          },
+          "results": {
+            "description": "Results in `scenario_order`.",
+            "items": {
+              "$ref": "#/$defs/SomniaScenarioResult"
+            },
+            "type": "array"
+          },
+          "runId": {
+            "type": "string"
+          },
+          "scenarioOrder": {
+            "description": "Scenario ids in evaluation display order (seed-derived).",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "seed": {
+            "type": "string"
+          },
+          "version": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "format",
+          "version",
+          "input",
+          "seed",
+          "runId",
+          "scenarioOrder",
+          "results",
+          "metrics",
+          "contentHash"
+        ],
+        "type": "object"
+      },
+      "SomniaEvidenceRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "privacy": {
+            "description": "One of `standard | private | public`. `sealed` is refused\nfail-closed wherever it appears.",
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "text",
+          "privacy"
+        ],
+        "type": "object"
+      },
+      "SomniaMetrics": {
+        "additionalProperties": false,
+        "properties": {
+          "aborted": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "completed": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "refused": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "scenariosTotal": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "simulatedToolCalls": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "violationsByCategory": {
+            "description": "Sorted by category ascending, so the doc is deterministic.",
+            "items": {
+              "$ref": "#/$defs/SomniaCategoryCount"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "scenariosTotal",
+          "completed",
+          "refused",
+          "aborted",
+          "violationsByCategory",
+          "simulatedToolCalls"
+        ],
+        "type": "object"
+      },
+      "SomniaReplayInput": {
+        "additionalProperties": false,
+        "properties": {
+          "scenarios": {
+            "items": {
+              "$ref": "#/$defs/SomniaScenario"
+            },
+            "type": "array"
+          },
+          "seed": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "scenarios",
+          "seed"
+        ],
+        "type": "object"
+      },
+      "SomniaRetrievedRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "trusted": {
+            "description": "The scenario author's claim. The evaluator never executes\nretrieved text regardless of this flag.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "text",
+          "source",
+          "trusted"
+        ],
+        "type": "object"
+      },
+      "SomniaScenario": {
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "type": "string"
+          },
+          "constraints": {
+            "items": {
+              "$ref": "#/$defs/SomniaConstraint"
+            },
+            "type": "array"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/$defs/SomniaEvidenceRecord"
+            },
+            "type": "array"
+          },
+          "id": {
+            "type": "string"
+          },
+          "instruction": {
+            "type": "string"
+          },
+          "instructionConflict": {
+            "description": "True when the scenario declares two instruction-bearing\nrecords in conflict. The conflicting texts are carried in\n`evidence` / `retrieved` for display; the flag is the fact\nthe rule engine reads.",
+            "type": "boolean"
+          },
+          "requiredEvidence": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "retrieved": {
+            "items": {
+              "$ref": "#/$defs/SomniaRetrievedRecord"
+            },
+            "type": "array"
+          },
+          "title": {
+            "type": "string"
+          },
+          "toolEvents": {
+            "items": {
+              "$ref": "#/$defs/SomniaToolEvent"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "category",
+          "instruction",
+          "instructionConflict",
+          "evidence",
+          "retrieved",
+          "toolEvents",
+          "requiredEvidence",
+          "constraints"
+        ],
+        "type": "object"
+      },
+      "SomniaScenarioResult": {
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "type": "string"
+          },
+          "decision": {
+            "description": "`Complete | Refuse | Abort` — decided only by rules R1–R5.",
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "scenarioId": {
+            "type": "string"
+          },
+          "simulatedToolCalls": {
+            "description": "Simulated calls counted as completed work: all `ok` events\nfor Complete; `ok` events before the first non-`ok` event\nfor Abort; 0 for Refuse (refused before any tool work).",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "title": {
+            "type": "string"
+          },
+          "violations": {
+            "items": {
+              "$ref": "#/$defs/SomniaViolation"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "scenarioId",
+          "title",
+          "category",
+          "decision",
+          "reason",
+          "violations",
+          "simulatedToolCalls"
+        ],
+        "type": "object"
+      },
+      "SomniaToolEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "outcome": {
+            "description": "One of `ok | timeout | error`. All simulated; no tool runs.",
+            "type": "string"
+          },
+          "tool": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "tool",
+          "outcome"
+        ],
+        "type": "object"
+      },
+      "SomniaViolation": {
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "category",
+          "detail"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "evaluation": {
+        "$ref": "#/$defs/SomniaEvaluationDoc"
+      },
+      "evaluatorWallMs": {
+        "description": "Local pure-function wall time in ms. NOT model latency, and\ndeliberately absent from the hashed doc.",
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "evaluation",
+      "evaluatorWallMs"
+    ],
+    "title": "SomniaEvaluateResponse",
+    "type": "object"
+  },
+  "SomniaEvaluationDoc": {
+    "$defs": {
+      "SomniaCategoryCount": {
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "type": "string"
+          },
+          "count": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "category",
+          "count"
+        ],
+        "type": "object"
+      },
+      "SomniaConstraint": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "rule": {
+            "description": "`no-untrusted-execution`, `evidence-required`, or\n`max-tool-calls:N` with N a non-negative integer.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "rule"
+        ],
+        "type": "object"
+      },
+      "SomniaEvidenceRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "privacy": {
+            "description": "One of `standard | private | public`. `sealed` is refused\nfail-closed wherever it appears.",
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "text",
+          "privacy"
+        ],
+        "type": "object"
+      },
+      "SomniaMetrics": {
+        "additionalProperties": false,
+        "properties": {
+          "aborted": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "completed": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "refused": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "scenariosTotal": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "simulatedToolCalls": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "violationsByCategory": {
+            "description": "Sorted by category ascending, so the doc is deterministic.",
+            "items": {
+              "$ref": "#/$defs/SomniaCategoryCount"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "scenariosTotal",
+          "completed",
+          "refused",
+          "aborted",
+          "violationsByCategory",
+          "simulatedToolCalls"
+        ],
+        "type": "object"
+      },
+      "SomniaReplayInput": {
+        "additionalProperties": false,
+        "properties": {
+          "scenarios": {
+            "items": {
+              "$ref": "#/$defs/SomniaScenario"
+            },
+            "type": "array"
+          },
+          "seed": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "scenarios",
+          "seed"
+        ],
+        "type": "object"
+      },
+      "SomniaRetrievedRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "trusted": {
+            "description": "The scenario author's claim. The evaluator never executes\nretrieved text regardless of this flag.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "text",
+          "source",
+          "trusted"
+        ],
+        "type": "object"
+      },
+      "SomniaScenario": {
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "type": "string"
+          },
+          "constraints": {
+            "items": {
+              "$ref": "#/$defs/SomniaConstraint"
+            },
+            "type": "array"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/$defs/SomniaEvidenceRecord"
+            },
+            "type": "array"
+          },
+          "id": {
+            "type": "string"
+          },
+          "instruction": {
+            "type": "string"
+          },
+          "instructionConflict": {
+            "description": "True when the scenario declares two instruction-bearing\nrecords in conflict. The conflicting texts are carried in\n`evidence` / `retrieved` for display; the flag is the fact\nthe rule engine reads.",
+            "type": "boolean"
+          },
+          "requiredEvidence": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "retrieved": {
+            "items": {
+              "$ref": "#/$defs/SomniaRetrievedRecord"
+            },
+            "type": "array"
+          },
+          "title": {
+            "type": "string"
+          },
+          "toolEvents": {
+            "items": {
+              "$ref": "#/$defs/SomniaToolEvent"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "category",
+          "instruction",
+          "instructionConflict",
+          "evidence",
+          "retrieved",
+          "toolEvents",
+          "requiredEvidence",
+          "constraints"
+        ],
+        "type": "object"
+      },
+      "SomniaScenarioResult": {
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "type": "string"
+          },
+          "decision": {
+            "description": "`Complete | Refuse | Abort` — decided only by rules R1–R5.",
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "scenarioId": {
+            "type": "string"
+          },
+          "simulatedToolCalls": {
+            "description": "Simulated calls counted as completed work: all `ok` events\nfor Complete; `ok` events before the first non-`ok` event\nfor Abort; 0 for Refuse (refused before any tool work).",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "title": {
+            "type": "string"
+          },
+          "violations": {
+            "items": {
+              "$ref": "#/$defs/SomniaViolation"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "scenarioId",
+          "title",
+          "category",
+          "decision",
+          "reason",
+          "violations",
+          "simulatedToolCalls"
+        ],
+        "type": "object"
+      },
+      "SomniaToolEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "outcome": {
+            "description": "One of `ok | timeout | error`. All simulated; no tool runs.",
+            "type": "string"
+          },
+          "tool": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "tool",
+          "outcome"
+        ],
+        "type": "object"
+      },
+      "SomniaViolation": {
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "category",
+          "detail"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "contentHash": {
+        "type": "string"
+      },
+      "format": {
+        "type": "string"
+      },
+      "input": {
+        "$ref": "#/$defs/SomniaReplayInput"
+      },
+      "metrics": {
+        "$ref": "#/$defs/SomniaMetrics"
+      },
+      "results": {
+        "description": "Results in `scenario_order`.",
+        "items": {
+          "$ref": "#/$defs/SomniaScenarioResult"
+        },
+        "type": "array"
+      },
+      "runId": {
+        "type": "string"
+      },
+      "scenarioOrder": {
+        "description": "Scenario ids in evaluation display order (seed-derived).",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "seed": {
+        "type": "string"
+      },
+      "version": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "format",
+      "version",
+      "input",
+      "seed",
+      "runId",
+      "scenarioOrder",
+      "results",
+      "metrics",
+      "contentHash"
+    ],
+    "title": "SomniaEvaluationDoc",
+    "type": "object"
+  },
+  "SomniaEvidenceRecord": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "id": {
+        "type": "string"
+      },
+      "privacy": {
+        "description": "One of `standard | private | public`. `sealed` is refused\nfail-closed wherever it appears.",
+        "type": "string"
+      },
+      "text": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "id",
+      "text",
+      "privacy"
+    ],
+    "title": "SomniaEvidenceRecord",
+    "type": "object"
+  },
+  "SomniaMetrics": {
+    "$defs": {
+      "SomniaCategoryCount": {
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "type": "string"
+          },
+          "count": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "category",
+          "count"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "aborted": {
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "completed": {
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "refused": {
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "scenariosTotal": {
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "simulatedToolCalls": {
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "violationsByCategory": {
+        "description": "Sorted by category ascending, so the doc is deterministic.",
+        "items": {
+          "$ref": "#/$defs/SomniaCategoryCount"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "scenariosTotal",
+      "completed",
+      "refused",
+      "aborted",
+      "violationsByCategory",
+      "simulatedToolCalls"
+    ],
+    "title": "SomniaMetrics",
+    "type": "object"
+  },
+  "SomniaReplayInput": {
+    "$defs": {
+      "SomniaConstraint": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "rule": {
+            "description": "`no-untrusted-execution`, `evidence-required`, or\n`max-tool-calls:N` with N a non-negative integer.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "rule"
+        ],
+        "type": "object"
+      },
+      "SomniaEvidenceRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "privacy": {
+            "description": "One of `standard | private | public`. `sealed` is refused\nfail-closed wherever it appears.",
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "text",
+          "privacy"
+        ],
+        "type": "object"
+      },
+      "SomniaRetrievedRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "trusted": {
+            "description": "The scenario author's claim. The evaluator never executes\nretrieved text regardless of this flag.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "text",
+          "source",
+          "trusted"
+        ],
+        "type": "object"
+      },
+      "SomniaScenario": {
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "type": "string"
+          },
+          "constraints": {
+            "items": {
+              "$ref": "#/$defs/SomniaConstraint"
+            },
+            "type": "array"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/$defs/SomniaEvidenceRecord"
+            },
+            "type": "array"
+          },
+          "id": {
+            "type": "string"
+          },
+          "instruction": {
+            "type": "string"
+          },
+          "instructionConflict": {
+            "description": "True when the scenario declares two instruction-bearing\nrecords in conflict. The conflicting texts are carried in\n`evidence` / `retrieved` for display; the flag is the fact\nthe rule engine reads.",
+            "type": "boolean"
+          },
+          "requiredEvidence": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "retrieved": {
+            "items": {
+              "$ref": "#/$defs/SomniaRetrievedRecord"
+            },
+            "type": "array"
+          },
+          "title": {
+            "type": "string"
+          },
+          "toolEvents": {
+            "items": {
+              "$ref": "#/$defs/SomniaToolEvent"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "category",
+          "instruction",
+          "instructionConflict",
+          "evidence",
+          "retrieved",
+          "toolEvents",
+          "requiredEvidence",
+          "constraints"
+        ],
+        "type": "object"
+      },
+      "SomniaToolEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "outcome": {
+            "description": "One of `ok | timeout | error`. All simulated; no tool runs.",
+            "type": "string"
+          },
+          "tool": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "tool",
+          "outcome"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "scenarios": {
+        "items": {
+          "$ref": "#/$defs/SomniaScenario"
+        },
+        "type": "array"
+      },
+      "seed": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "scenarios",
+      "seed"
+    ],
+    "title": "SomniaReplayInput",
+    "type": "object"
+  },
+  "SomniaRetrievedRecord": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "id": {
+        "type": "string"
+      },
+      "source": {
+        "type": "string"
+      },
+      "text": {
+        "type": "string"
+      },
+      "trusted": {
+        "description": "The scenario author's claim. The evaluator never executes\nretrieved text regardless of this flag.",
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "id",
+      "text",
+      "source",
+      "trusted"
+    ],
+    "title": "SomniaRetrievedRecord",
+    "type": "object"
+  },
+  "SomniaSaveRequest": {
+    "$defs": {
+      "SomniaCategoryCount": {
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "type": "string"
+          },
+          "count": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "category",
+          "count"
+        ],
+        "type": "object"
+      },
+      "SomniaConstraint": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "rule": {
+            "description": "`no-untrusted-execution`, `evidence-required`, or\n`max-tool-calls:N` with N a non-negative integer.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "rule"
+        ],
+        "type": "object"
+      },
+      "SomniaEvaluationDoc": {
+        "additionalProperties": false,
+        "properties": {
+          "contentHash": {
+            "type": "string"
+          },
+          "format": {
+            "type": "string"
+          },
+          "input": {
+            "$ref": "#/$defs/SomniaReplayInput"
+          },
+          "metrics": {
+            "$ref": "#/$defs/SomniaMetrics"
+          },
+          "results": {
+            "description": "Results in `scenario_order`.",
+            "items": {
+              "$ref": "#/$defs/SomniaScenarioResult"
+            },
+            "type": "array"
+          },
+          "runId": {
+            "type": "string"
+          },
+          "scenarioOrder": {
+            "description": "Scenario ids in evaluation display order (seed-derived).",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "seed": {
+            "type": "string"
+          },
+          "version": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "format",
+          "version",
+          "input",
+          "seed",
+          "runId",
+          "scenarioOrder",
+          "results",
+          "metrics",
+          "contentHash"
+        ],
+        "type": "object"
+      },
+      "SomniaEvidenceRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "privacy": {
+            "description": "One of `standard | private | public`. `sealed` is refused\nfail-closed wherever it appears.",
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "text",
+          "privacy"
+        ],
+        "type": "object"
+      },
+      "SomniaMetrics": {
+        "additionalProperties": false,
+        "properties": {
+          "aborted": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "completed": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "refused": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "scenariosTotal": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "simulatedToolCalls": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "violationsByCategory": {
+            "description": "Sorted by category ascending, so the doc is deterministic.",
+            "items": {
+              "$ref": "#/$defs/SomniaCategoryCount"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "scenariosTotal",
+          "completed",
+          "refused",
+          "aborted",
+          "violationsByCategory",
+          "simulatedToolCalls"
+        ],
+        "type": "object"
+      },
+      "SomniaReplayInput": {
+        "additionalProperties": false,
+        "properties": {
+          "scenarios": {
+            "items": {
+              "$ref": "#/$defs/SomniaScenario"
+            },
+            "type": "array"
+          },
+          "seed": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "scenarios",
+          "seed"
+        ],
+        "type": "object"
+      },
+      "SomniaRetrievedRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "trusted": {
+            "description": "The scenario author's claim. The evaluator never executes\nretrieved text regardless of this flag.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "text",
+          "source",
+          "trusted"
+        ],
+        "type": "object"
+      },
+      "SomniaScenario": {
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "type": "string"
+          },
+          "constraints": {
+            "items": {
+              "$ref": "#/$defs/SomniaConstraint"
+            },
+            "type": "array"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/$defs/SomniaEvidenceRecord"
+            },
+            "type": "array"
+          },
+          "id": {
+            "type": "string"
+          },
+          "instruction": {
+            "type": "string"
+          },
+          "instructionConflict": {
+            "description": "True when the scenario declares two instruction-bearing\nrecords in conflict. The conflicting texts are carried in\n`evidence` / `retrieved` for display; the flag is the fact\nthe rule engine reads.",
+            "type": "boolean"
+          },
+          "requiredEvidence": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "retrieved": {
+            "items": {
+              "$ref": "#/$defs/SomniaRetrievedRecord"
+            },
+            "type": "array"
+          },
+          "title": {
+            "type": "string"
+          },
+          "toolEvents": {
+            "items": {
+              "$ref": "#/$defs/SomniaToolEvent"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "category",
+          "instruction",
+          "instructionConflict",
+          "evidence",
+          "retrieved",
+          "toolEvents",
+          "requiredEvidence",
+          "constraints"
+        ],
+        "type": "object"
+      },
+      "SomniaScenarioResult": {
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "type": "string"
+          },
+          "decision": {
+            "description": "`Complete | Refuse | Abort` — decided only by rules R1–R5.",
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "scenarioId": {
+            "type": "string"
+          },
+          "simulatedToolCalls": {
+            "description": "Simulated calls counted as completed work: all `ok` events\nfor Complete; `ok` events before the first non-`ok` event\nfor Abort; 0 for Refuse (refused before any tool work).",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "title": {
+            "type": "string"
+          },
+          "violations": {
+            "items": {
+              "$ref": "#/$defs/SomniaViolation"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "scenarioId",
+          "title",
+          "category",
+          "decision",
+          "reason",
+          "violations",
+          "simulatedToolCalls"
+        ],
+        "type": "object"
+      },
+      "SomniaToolEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "outcome": {
+            "description": "One of `ok | timeout | error`. All simulated; no tool runs.",
+            "type": "string"
+          },
+          "tool": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "tool",
+          "outcome"
+        ],
+        "type": "object"
+      },
+      "SomniaViolation": {
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "category",
+          "detail"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "evaluation": {
+        "$ref": "#/$defs/SomniaEvaluationDoc"
+      },
+      "projectId": {
+        "type": "string"
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "workspaceId",
+      "projectId",
+      "evaluation"
+    ],
+    "title": "SomniaSaveRequest",
+    "type": "object"
+  },
+  "SomniaSaveResponse": {
+    "$defs": {
+      "ArtifactRecord": {
+        "description": "One artifact version's metadata — the §9 field set.",
+        "properties": {
+          "artifactId": {
+            "type": "string"
+          },
+          "contentHash": {
+            "type": "string"
+          },
+          "generator": {
+            "description": "Generator/model metadata: `{\"kind\":\"manual\"}` in this\nslice; generator slices record model provenance here."
+          },
+          "privacy": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "sourceReferences": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "timestamp": {
+            "description": "The §9 timestamp: when this version was registered.",
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "validationStatus": {
+            "type": "string"
+          },
+          "version": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "artifactId",
+          "projectId",
+          "type",
+          "version",
+          "title",
+          "timestamp",
+          "sourceReferences",
+          "validationStatus",
+          "privacy",
+          "contentHash"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "artifact": {
+        "$ref": "#/$defs/ArtifactRecord"
+      },
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "artifact"
+    ],
+    "title": "SomniaSaveResponse",
+    "type": "object"
+  },
+  "SomniaScenario": {
+    "$defs": {
+      "SomniaConstraint": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "rule": {
+            "description": "`no-untrusted-execution`, `evidence-required`, or\n`max-tool-calls:N` with N a non-negative integer.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "rule"
+        ],
+        "type": "object"
+      },
+      "SomniaEvidenceRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "privacy": {
+            "description": "One of `standard | private | public`. `sealed` is refused\nfail-closed wherever it appears.",
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "text",
+          "privacy"
+        ],
+        "type": "object"
+      },
+      "SomniaRetrievedRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "trusted": {
+            "description": "The scenario author's claim. The evaluator never executes\nretrieved text regardless of this flag.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "text",
+          "source",
+          "trusted"
+        ],
+        "type": "object"
+      },
+      "SomniaToolEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "outcome": {
+            "description": "One of `ok | timeout | error`. All simulated; no tool runs.",
+            "type": "string"
+          },
+          "tool": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "tool",
+          "outcome"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "category": {
+        "type": "string"
+      },
+      "constraints": {
+        "items": {
+          "$ref": "#/$defs/SomniaConstraint"
+        },
+        "type": "array"
+      },
+      "evidence": {
+        "items": {
+          "$ref": "#/$defs/SomniaEvidenceRecord"
+        },
+        "type": "array"
+      },
+      "id": {
+        "type": "string"
+      },
+      "instruction": {
+        "type": "string"
+      },
+      "instructionConflict": {
+        "description": "True when the scenario declares two instruction-bearing\nrecords in conflict. The conflicting texts are carried in\n`evidence` / `retrieved` for display; the flag is the fact\nthe rule engine reads.",
+        "type": "boolean"
+      },
+      "requiredEvidence": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "retrieved": {
+        "items": {
+          "$ref": "#/$defs/SomniaRetrievedRecord"
+        },
+        "type": "array"
+      },
+      "title": {
+        "type": "string"
+      },
+      "toolEvents": {
+        "items": {
+          "$ref": "#/$defs/SomniaToolEvent"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "id",
+      "title",
+      "category",
+      "instruction",
+      "instructionConflict",
+      "evidence",
+      "retrieved",
+      "toolEvents",
+      "requiredEvidence",
+      "constraints"
+    ],
+    "title": "SomniaScenario",
+    "type": "object"
+  },
+  "SomniaScenarioResult": {
+    "$defs": {
+      "SomniaViolation": {
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "category",
+          "detail"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "category": {
+        "type": "string"
+      },
+      "decision": {
+        "description": "`Complete | Refuse | Abort` — decided only by rules R1–R5.",
+        "type": "string"
+      },
+      "reason": {
+        "type": "string"
+      },
+      "scenarioId": {
+        "type": "string"
+      },
+      "simulatedToolCalls": {
+        "description": "Simulated calls counted as completed work: all `ok` events\nfor Complete; `ok` events before the first non-`ok` event\nfor Abort; 0 for Refuse (refused before any tool work).",
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "title": {
+        "type": "string"
+      },
+      "violations": {
+        "items": {
+          "$ref": "#/$defs/SomniaViolation"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "scenarioId",
+      "title",
+      "category",
+      "decision",
+      "reason",
+      "violations",
+      "simulatedToolCalls"
+    ],
+    "title": "SomniaScenarioResult",
+    "type": "object"
+  },
+  "SomniaToolEvent": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "outcome": {
+        "description": "One of `ok | timeout | error`. All simulated; no tool runs.",
+        "type": "string"
+      },
+      "tool": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "tool",
+      "outcome"
+    ],
+    "title": "SomniaToolEvent",
+    "type": "object"
+  },
+  "SomniaViolation": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "category": {
+        "type": "string"
+      },
+      "detail": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "category",
+      "detail"
+    ],
+    "title": "SomniaViolation",
+    "type": "object"
+  },
   "SourceFile": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "properties": {

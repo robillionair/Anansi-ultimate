@@ -35,7 +35,7 @@ use serde_json::Value;
 
 /// Manual artifact types for this slice, from §9's list of what
 /// a project may contain.
-pub const ARTIFACT_TYPES: [&str; 20] = [
+pub const ARTIFACT_TYPES: [&str; 21] = [
     "research",
     "source",
     "idea",
@@ -72,6 +72,11 @@ pub const ARTIFACT_TYPES: [&str; 20] = [
     // every decision server-side, and restore
     // re-validates the branch self-contained.
     "scenario",
+    // M10 Slice 1: SOMNIA evaluation artifacts, registered
+    // through the generated path; saving recomputes
+    // every decision server-side, and restore
+    // re-validates the evaluation self-contained.
+    "somnia-evaluation",
 ];
 
 fn invalid(message: &str) -> CommandError {

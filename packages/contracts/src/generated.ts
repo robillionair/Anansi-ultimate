@@ -3399,6 +3399,625 @@ export interface SnapshotRequest {
   jobId: string;
   workspaceId: string;
 }
+export interface SomniaCategoryCount {
+  category: string;
+  count: number;
+}
+export interface SomniaConstraint {
+  id: string;
+  /**
+   * `no-untrusted-execution`, `evidence-required`, or
+   * `max-tool-calls:N` with N a non-negative integer.
+   */
+  rule: string;
+}
+export interface SomniaEvaluateRequest {
+  contractVersion: number;
+  input: SomniaReplayInput;
+  projectId: string;
+  workspaceId: string;
+}
+export interface SomniaReplayInput {
+  scenarios: SomniaScenario[];
+  seed: string;
+}
+export interface SomniaScenario {
+  category: string;
+  constraints: SomniaConstraint[];
+  evidence: SomniaEvidenceRecord[];
+  id: string;
+  instruction: string;
+  /**
+   * True when the scenario declares two instruction-bearing
+   * records in conflict. The conflicting texts are carried in
+   * `evidence` / `retrieved` for display; the flag is the fact
+   * the rule engine reads.
+   */
+  instructionConflict: boolean;
+  requiredEvidence: string[];
+  retrieved: SomniaRetrievedRecord[];
+  title: string;
+  toolEvents: SomniaToolEvent[];
+}
+export interface SomniaConstraint {
+  id: string;
+  /**
+   * `no-untrusted-execution`, `evidence-required`, or
+   * `max-tool-calls:N` with N a non-negative integer.
+   */
+  rule: string;
+}
+export interface SomniaEvidenceRecord {
+  id: string;
+  /**
+   * One of `standard | private | public`. `sealed` is refused
+   * fail-closed wherever it appears.
+   */
+  privacy: string;
+  text: string;
+}
+export interface SomniaRetrievedRecord {
+  id: string;
+  source: string;
+  text: string;
+  /**
+   * The scenario author's claim. The evaluator never executes
+   * retrieved text regardless of this flag.
+   */
+  trusted: boolean;
+}
+export interface SomniaToolEvent {
+  /**
+   * One of `ok | timeout | error`. All simulated; no tool runs.
+   */
+  outcome: string;
+  tool: string;
+}
+export interface SomniaEvaluateResponse {
+  contractVersion: number;
+  evaluation: SomniaEvaluationDoc;
+  /**
+   * Local pure-function wall time in ms. NOT model latency, and
+   * deliberately absent from the hashed doc.
+   */
+  evaluatorWallMs: number;
+}
+export interface SomniaEvaluationDoc {
+  contentHash: string;
+  format: string;
+  input: SomniaReplayInput;
+  metrics: SomniaMetrics;
+  /**
+   * Results in `scenario_order`.
+   */
+  results: SomniaScenarioResult[];
+  runId: string;
+  /**
+   * Scenario ids in evaluation display order (seed-derived).
+   */
+  scenarioOrder: string[];
+  seed: string;
+  version: number;
+}
+export interface SomniaReplayInput {
+  scenarios: SomniaScenario[];
+  seed: string;
+}
+export interface SomniaScenario {
+  category: string;
+  constraints: SomniaConstraint[];
+  evidence: SomniaEvidenceRecord[];
+  id: string;
+  instruction: string;
+  /**
+   * True when the scenario declares two instruction-bearing
+   * records in conflict. The conflicting texts are carried in
+   * `evidence` / `retrieved` for display; the flag is the fact
+   * the rule engine reads.
+   */
+  instructionConflict: boolean;
+  requiredEvidence: string[];
+  retrieved: SomniaRetrievedRecord[];
+  title: string;
+  toolEvents: SomniaToolEvent[];
+}
+export interface SomniaConstraint {
+  id: string;
+  /**
+   * `no-untrusted-execution`, `evidence-required`, or
+   * `max-tool-calls:N` with N a non-negative integer.
+   */
+  rule: string;
+}
+export interface SomniaEvidenceRecord {
+  id: string;
+  /**
+   * One of `standard | private | public`. `sealed` is refused
+   * fail-closed wherever it appears.
+   */
+  privacy: string;
+  text: string;
+}
+export interface SomniaRetrievedRecord {
+  id: string;
+  source: string;
+  text: string;
+  /**
+   * The scenario author's claim. The evaluator never executes
+   * retrieved text regardless of this flag.
+   */
+  trusted: boolean;
+}
+export interface SomniaToolEvent {
+  /**
+   * One of `ok | timeout | error`. All simulated; no tool runs.
+   */
+  outcome: string;
+  tool: string;
+}
+export interface SomniaMetrics {
+  aborted: number;
+  completed: number;
+  refused: number;
+  scenariosTotal: number;
+  simulatedToolCalls: number;
+  /**
+   * Sorted by category ascending, so the doc is deterministic.
+   */
+  violationsByCategory: SomniaCategoryCount[];
+}
+export interface SomniaCategoryCount {
+  category: string;
+  count: number;
+}
+export interface SomniaScenarioResult {
+  category: string;
+  /**
+   * `Complete | Refuse | Abort` — decided only by rules R1–R5.
+   */
+  decision: string;
+  reason: string;
+  scenarioId: string;
+  /**
+   * Simulated calls counted as completed work: all `ok` events
+   * for Complete; `ok` events before the first non-`ok` event
+   * for Abort; 0 for Refuse (refused before any tool work).
+   */
+  simulatedToolCalls: number;
+  title: string;
+  violations: SomniaViolation[];
+}
+export interface SomniaViolation {
+  category: string;
+  detail: string;
+}
+export interface SomniaEvaluationDoc {
+  contentHash: string;
+  format: string;
+  input: SomniaReplayInput;
+  metrics: SomniaMetrics;
+  /**
+   * Results in `scenario_order`.
+   */
+  results: SomniaScenarioResult[];
+  runId: string;
+  /**
+   * Scenario ids in evaluation display order (seed-derived).
+   */
+  scenarioOrder: string[];
+  seed: string;
+  version: number;
+}
+export interface SomniaReplayInput {
+  scenarios: SomniaScenario[];
+  seed: string;
+}
+export interface SomniaScenario {
+  category: string;
+  constraints: SomniaConstraint[];
+  evidence: SomniaEvidenceRecord[];
+  id: string;
+  instruction: string;
+  /**
+   * True when the scenario declares two instruction-bearing
+   * records in conflict. The conflicting texts are carried in
+   * `evidence` / `retrieved` for display; the flag is the fact
+   * the rule engine reads.
+   */
+  instructionConflict: boolean;
+  requiredEvidence: string[];
+  retrieved: SomniaRetrievedRecord[];
+  title: string;
+  toolEvents: SomniaToolEvent[];
+}
+export interface SomniaConstraint {
+  id: string;
+  /**
+   * `no-untrusted-execution`, `evidence-required`, or
+   * `max-tool-calls:N` with N a non-negative integer.
+   */
+  rule: string;
+}
+export interface SomniaEvidenceRecord {
+  id: string;
+  /**
+   * One of `standard | private | public`. `sealed` is refused
+   * fail-closed wherever it appears.
+   */
+  privacy: string;
+  text: string;
+}
+export interface SomniaRetrievedRecord {
+  id: string;
+  source: string;
+  text: string;
+  /**
+   * The scenario author's claim. The evaluator never executes
+   * retrieved text regardless of this flag.
+   */
+  trusted: boolean;
+}
+export interface SomniaToolEvent {
+  /**
+   * One of `ok | timeout | error`. All simulated; no tool runs.
+   */
+  outcome: string;
+  tool: string;
+}
+export interface SomniaMetrics {
+  aborted: number;
+  completed: number;
+  refused: number;
+  scenariosTotal: number;
+  simulatedToolCalls: number;
+  /**
+   * Sorted by category ascending, so the doc is deterministic.
+   */
+  violationsByCategory: SomniaCategoryCount[];
+}
+export interface SomniaCategoryCount {
+  category: string;
+  count: number;
+}
+export interface SomniaScenarioResult {
+  category: string;
+  /**
+   * `Complete | Refuse | Abort` — decided only by rules R1–R5.
+   */
+  decision: string;
+  reason: string;
+  scenarioId: string;
+  /**
+   * Simulated calls counted as completed work: all `ok` events
+   * for Complete; `ok` events before the first non-`ok` event
+   * for Abort; 0 for Refuse (refused before any tool work).
+   */
+  simulatedToolCalls: number;
+  title: string;
+  violations: SomniaViolation[];
+}
+export interface SomniaViolation {
+  category: string;
+  detail: string;
+}
+export interface SomniaEvidenceRecord {
+  id: string;
+  /**
+   * One of `standard | private | public`. `sealed` is refused
+   * fail-closed wherever it appears.
+   */
+  privacy: string;
+  text: string;
+}
+export interface SomniaMetrics {
+  aborted: number;
+  completed: number;
+  refused: number;
+  scenariosTotal: number;
+  simulatedToolCalls: number;
+  /**
+   * Sorted by category ascending, so the doc is deterministic.
+   */
+  violationsByCategory: SomniaCategoryCount[];
+}
+export interface SomniaCategoryCount {
+  category: string;
+  count: number;
+}
+export interface SomniaReplayInput {
+  scenarios: SomniaScenario[];
+  seed: string;
+}
+export interface SomniaScenario {
+  category: string;
+  constraints: SomniaConstraint[];
+  evidence: SomniaEvidenceRecord[];
+  id: string;
+  instruction: string;
+  /**
+   * True when the scenario declares two instruction-bearing
+   * records in conflict. The conflicting texts are carried in
+   * `evidence` / `retrieved` for display; the flag is the fact
+   * the rule engine reads.
+   */
+  instructionConflict: boolean;
+  requiredEvidence: string[];
+  retrieved: SomniaRetrievedRecord[];
+  title: string;
+  toolEvents: SomniaToolEvent[];
+}
+export interface SomniaConstraint {
+  id: string;
+  /**
+   * `no-untrusted-execution`, `evidence-required`, or
+   * `max-tool-calls:N` with N a non-negative integer.
+   */
+  rule: string;
+}
+export interface SomniaEvidenceRecord {
+  id: string;
+  /**
+   * One of `standard | private | public`. `sealed` is refused
+   * fail-closed wherever it appears.
+   */
+  privacy: string;
+  text: string;
+}
+export interface SomniaRetrievedRecord {
+  id: string;
+  source: string;
+  text: string;
+  /**
+   * The scenario author's claim. The evaluator never executes
+   * retrieved text regardless of this flag.
+   */
+  trusted: boolean;
+}
+export interface SomniaToolEvent {
+  /**
+   * One of `ok | timeout | error`. All simulated; no tool runs.
+   */
+  outcome: string;
+  tool: string;
+}
+export interface SomniaRetrievedRecord {
+  id: string;
+  source: string;
+  text: string;
+  /**
+   * The scenario author's claim. The evaluator never executes
+   * retrieved text regardless of this flag.
+   */
+  trusted: boolean;
+}
+export interface SomniaSaveRequest {
+  contractVersion: number;
+  evaluation: SomniaEvaluationDoc;
+  projectId: string;
+  workspaceId: string;
+}
+export interface SomniaEvaluationDoc {
+  contentHash: string;
+  format: string;
+  input: SomniaReplayInput;
+  metrics: SomniaMetrics;
+  /**
+   * Results in `scenario_order`.
+   */
+  results: SomniaScenarioResult[];
+  runId: string;
+  /**
+   * Scenario ids in evaluation display order (seed-derived).
+   */
+  scenarioOrder: string[];
+  seed: string;
+  version: number;
+}
+export interface SomniaReplayInput {
+  scenarios: SomniaScenario[];
+  seed: string;
+}
+export interface SomniaScenario {
+  category: string;
+  constraints: SomniaConstraint[];
+  evidence: SomniaEvidenceRecord[];
+  id: string;
+  instruction: string;
+  /**
+   * True when the scenario declares two instruction-bearing
+   * records in conflict. The conflicting texts are carried in
+   * `evidence` / `retrieved` for display; the flag is the fact
+   * the rule engine reads.
+   */
+  instructionConflict: boolean;
+  requiredEvidence: string[];
+  retrieved: SomniaRetrievedRecord[];
+  title: string;
+  toolEvents: SomniaToolEvent[];
+}
+export interface SomniaConstraint {
+  id: string;
+  /**
+   * `no-untrusted-execution`, `evidence-required`, or
+   * `max-tool-calls:N` with N a non-negative integer.
+   */
+  rule: string;
+}
+export interface SomniaEvidenceRecord {
+  id: string;
+  /**
+   * One of `standard | private | public`. `sealed` is refused
+   * fail-closed wherever it appears.
+   */
+  privacy: string;
+  text: string;
+}
+export interface SomniaRetrievedRecord {
+  id: string;
+  source: string;
+  text: string;
+  /**
+   * The scenario author's claim. The evaluator never executes
+   * retrieved text regardless of this flag.
+   */
+  trusted: boolean;
+}
+export interface SomniaToolEvent {
+  /**
+   * One of `ok | timeout | error`. All simulated; no tool runs.
+   */
+  outcome: string;
+  tool: string;
+}
+export interface SomniaMetrics {
+  aborted: number;
+  completed: number;
+  refused: number;
+  scenariosTotal: number;
+  simulatedToolCalls: number;
+  /**
+   * Sorted by category ascending, so the doc is deterministic.
+   */
+  violationsByCategory: SomniaCategoryCount[];
+}
+export interface SomniaCategoryCount {
+  category: string;
+  count: number;
+}
+export interface SomniaScenarioResult {
+  category: string;
+  /**
+   * `Complete | Refuse | Abort` — decided only by rules R1–R5.
+   */
+  decision: string;
+  reason: string;
+  scenarioId: string;
+  /**
+   * Simulated calls counted as completed work: all `ok` events
+   * for Complete; `ok` events before the first non-`ok` event
+   * for Abort; 0 for Refuse (refused before any tool work).
+   */
+  simulatedToolCalls: number;
+  title: string;
+  violations: SomniaViolation[];
+}
+export interface SomniaViolation {
+  category: string;
+  detail: string;
+}
+export interface SomniaSaveResponse {
+  artifact: ArtifactRecord;
+  contractVersion: number;
+}
+/**
+ * One artifact version's metadata — the §9 field set.
+ */
+export interface ArtifactRecord {
+  artifactId: string;
+  contentHash: string;
+  /**
+   * Generator/model metadata: `{"kind":"manual"}` in this
+   * slice; generator slices record model provenance here.
+   */
+  generator?: {
+    [k: string]: unknown;
+  };
+  privacy: string;
+  projectId: string;
+  sourceReferences: string[];
+  /**
+   * The §9 timestamp: when this version was registered.
+   */
+  timestamp: string;
+  title: string;
+  type: string;
+  validationStatus: string;
+  version: number;
+}
+export interface SomniaScenario {
+  category: string;
+  constraints: SomniaConstraint[];
+  evidence: SomniaEvidenceRecord[];
+  id: string;
+  instruction: string;
+  /**
+   * True when the scenario declares two instruction-bearing
+   * records in conflict. The conflicting texts are carried in
+   * `evidence` / `retrieved` for display; the flag is the fact
+   * the rule engine reads.
+   */
+  instructionConflict: boolean;
+  requiredEvidence: string[];
+  retrieved: SomniaRetrievedRecord[];
+  title: string;
+  toolEvents: SomniaToolEvent[];
+}
+export interface SomniaConstraint {
+  id: string;
+  /**
+   * `no-untrusted-execution`, `evidence-required`, or
+   * `max-tool-calls:N` with N a non-negative integer.
+   */
+  rule: string;
+}
+export interface SomniaEvidenceRecord {
+  id: string;
+  /**
+   * One of `standard | private | public`. `sealed` is refused
+   * fail-closed wherever it appears.
+   */
+  privacy: string;
+  text: string;
+}
+export interface SomniaRetrievedRecord {
+  id: string;
+  source: string;
+  text: string;
+  /**
+   * The scenario author's claim. The evaluator never executes
+   * retrieved text regardless of this flag.
+   */
+  trusted: boolean;
+}
+export interface SomniaToolEvent {
+  /**
+   * One of `ok | timeout | error`. All simulated; no tool runs.
+   */
+  outcome: string;
+  tool: string;
+}
+export interface SomniaScenarioResult {
+  category: string;
+  /**
+   * `Complete | Refuse | Abort` — decided only by rules R1–R5.
+   */
+  decision: string;
+  reason: string;
+  scenarioId: string;
+  /**
+   * Simulated calls counted as completed work: all `ok` events
+   * for Complete; `ok` events before the first non-`ok` event
+   * for Abort; 0 for Refuse (refused before any tool work).
+   */
+  simulatedToolCalls: number;
+  title: string;
+  violations: SomniaViolation[];
+}
+export interface SomniaViolation {
+  category: string;
+  detail: string;
+}
+export interface SomniaToolEvent {
+  /**
+   * One of `ok | timeout | error`. All simulated; no tool runs.
+   */
+  outcome: string;
+  tool: string;
+}
+export interface SomniaViolation {
+  category: string;
+  detail: string;
+}
 export interface SourceFile {
   content: string;
   path: string;

@@ -827,6 +827,8 @@ impl Core {
             | "swarmtank-report"
             | "swarmtank-transfer-to-forge"
             | "swarmtank-scenario"
+            | "somnia-evaluate"
+            | "somnia-save-evaluation"
             | "ideas-generate-start"
             | "ideas-generate-poll"
             | "ideas-generate-cancel"

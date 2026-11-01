@@ -30,6 +30,7 @@ pub mod search;
 pub mod semantic;
 pub mod settings;
 pub mod snapshots;
+pub mod somnia;
 pub mod storage;
 pub mod swarmtank;
 pub mod transfer;

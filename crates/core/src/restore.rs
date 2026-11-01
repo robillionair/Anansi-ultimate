@@ -1760,6 +1760,35 @@ fn validate_original_swarmtank_bindings(source: &rusqlite::Connection) -> Result
     Ok(())
 }
 
+fn validate_original_somnia_bindings(source: &rusqlite::Connection) -> Result<(), CommandError> {
+    let mut q = source
+        .prepare(
+            "SELECT workspace_id, body, content_hash FROM artifact_versions WHERE artifact_type = 'somnia-evaluation'",
+        )
+        .map_err(|_| crate::jobs::invalid())?;
+    let mut rows = q.query([]).map_err(|_| crate::jobs::invalid())?;
+    while let Some(row) = rows.next().map_err(|_| crate::jobs::invalid())? {
+        let _artifact_workspace: String = row.get(0).map_err(|_| crate::jobs::invalid())?;
+        let body: String = row.get(1).map_err(|_| crate::jobs::invalid())?;
+        let content_hash: String = row.get(2).map_err(|_| crate::jobs::invalid())?;
+        // A body that is not JSON at all cannot be a SOMNIA
+        // record: generic manual evaluations restore untouched.
+        let Ok(value) = serde_json::from_str::<serde_json::Value>(&body) else {
+            continue;
+        };
+        let format = value.get("format").and_then(|v| v.as_str());
+        if format == Some("anansi-somnia-evaluation") {
+            if crate::content::hash(body.as_bytes()) != content_hash {
+                return Err(crate::jobs::invalid());
+            }
+            let doc: crate::somnia::SomniaEvaluationDoc =
+                serde_json::from_str(&body).map_err(|_| crate::jobs::invalid())?;
+            crate::somnia::validate_evaluation_doc(&doc).map_err(|_| crate::jobs::invalid())?;
+        }
+    }
+    Ok(())
+}
+
 fn remap_artifact_row(
     names: &[String],
     columns: &mut [rusqlite::types::Value],
@@ -2097,6 +2126,7 @@ impl crate::storage::Storage {
         validate_original_review_bindings(&source)?;
         validate_original_experiment_bindings(&source)?;
         validate_original_swarmtank_bindings(&source)?;
+        validate_original_somnia_bindings(&source)?;
         validate_original_transfer_bindings(&source)?;
         // Validate and prepare every mapped row before any managed content is written.
         let mut tables = vec![

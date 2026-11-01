@@ -1126,6 +1126,9 @@ pub fn providers_command(
     if operation.starts_with("swarmtank-") {
         return crate::swarmtank::swarmtank_command(operation, value, scope);
     }
+    if operation.starts_with("somnia-") {
+        return crate::somnia::somnia_command(operation, value, scope);
+    }
     if operation.starts_with("opportunities-") {
         return crate::opportunities::opportunities_command(operation, value, scope);
     }
