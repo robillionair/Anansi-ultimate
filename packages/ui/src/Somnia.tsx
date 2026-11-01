@@ -643,7 +643,7 @@ export function SomniaPanel({
           }
           onClick={doSave}
         >
-          {savedArtifactId !== null ? 'Evaluation saved' : 'Save evaluation'}
+          {savedArtifactId !== null ? 'SOMNIA evaluation saved' : 'Save SOMNIA evaluation'}
         </button>{' '}
         <button disabled={busy} onClick={startOver}>
           Start over

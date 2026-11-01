@@ -165,7 +165,7 @@ test('SOMNIA Slice 1: preview, approve, run, save, restart, backup/restore', asy
     expect(session.fakeHits()).toBe(hitsBefore);
 
     // Explicit save registers one immutable artifact.
-    await somnia.getByRole('button', { name: 'Save evaluation' }).click();
+    await somnia.getByRole('button', { name: 'Save SOMNIA evaluation' }).click();
     await expect(page.getByText('SOMNIA evaluation saved.')).toBeVisible();
     await expect(savedList.getByText(/SOMNIA evaluation:/)).toBeVisible();
     const afterList = await session.call('artifacts', 'list', { workspaceId, projectId });

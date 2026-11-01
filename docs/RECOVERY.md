@@ -1,3 +1,21 @@
+## Resume point — 2026-11-02 M10 SOMNIA Slice 1
+
+Owner-authorized M10 slice on branch
+`muse/m10-somnia-slice1` from Windows coordination
+baseline `68ee3532`. Deterministic, seeded, manual,
+data-only replay: project-scoped panel, preview-approve
+workflow, R1–R5 reference evaluator over simulated tool
+events, immutable `somnia-evaluation` artifacts with
+server-side recomputation and a fail-closed restore gate.
+Linux verification: Rust 583 passed + 4 known live-Ollama
+environment failures, node 159/159, e2e SOMNIA spec 2/2,
+browser battery 46/47 specs (single failure the known
+pre-existing search real-semantic test). Windows rerun
+pending; do not claim Windows acceptance from Linux
+evidence. Next slice (recommended, not started): §45 seeded
+nightmare generation + §47 review-only consolidation
+proposals + §87.9 before/after comparison.
+
 ## Resume point — 2026-10-31 M9 SwarmTank Slice 3
 
 Owner-authorized M9 slice on branch
