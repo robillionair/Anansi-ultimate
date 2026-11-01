@@ -17,6 +17,7 @@ import {
 import { ColliderArtifactViewer } from './ColliderArtifactViewer';
 import { ColliderBuildProduct } from './ColliderBuildProduct';
 import { SwarmtankPanel } from './Swarmtank';
+import { SomniaPanel } from './Somnia';
 import { OpportunityRunController } from './opportunityRun';
 import {
   DeliverablePanel,
@@ -585,6 +586,32 @@ export function Projects({ client, workspaceId }: { client: Client; workspaceId:
             {current && (
               <SwarmtankPanel
                 key={`swarmtank:${workspaceId}:${current.memory.id}`}
+                client={client}
+                workspaceId={workspaceId}
+                projectId={current.memory.id}
+                artifacts={artifacts}
+                onSaved={async () => {
+                  const artList = await client.listProjectArtifacts(workspaceId, current.memory.id);
+                  setArtifacts(artList.artifacts);
+                }}
+                notify={(message, isError) => { if (isError) setError(message); else setNotice(message); }}
+                busy={busy}
+              />
+            )}
+          </section>
+
+          <section aria-labelledby="project-somnia-heading">
+            <h3 id="project-somnia-heading">SOMNIA</h3>
+            <p className="help">
+              Isolated, manual, data-only replay of synthetic or redacted
+              scenarios. The reference evaluator is deterministic and
+              model-free; results are findings, never proof of real
+              improvement, and nothing is applied, consolidated, or
+              scheduled from here.
+            </p>
+            {current && (
+              <SomniaPanel
+                key={`somnia:${workspaceId}:${current.memory.id}`}
                 client={client}
                 workspaceId={workspaceId}
                 projectId={current.memory.id}
