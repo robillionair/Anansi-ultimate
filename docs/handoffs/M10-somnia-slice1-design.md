@@ -82,12 +82,15 @@ map and the hand-maintained client.
   - `constraints`: `[{ id, rule }]` with `rule` ∈
     `no-untrusted-execution | evidence-required | max-tool-calls:N`.
 - `SomniaEvaluationDoc`: format `anansi-somnia-evaluation`, version 1:
-  `{ format, version, projectId, input, seed, runId, scenarios (with
-  decisions), metrics, contentHash }`. Artifact type `somnia-evaluation`
+  `{ format, version, input, seed, runId, scenarioOrder, results,
+  metrics, contentHash }`. Artifact type `somnia-evaluation`
   (21st entry in `ARTIFACT_TYPES`, following the simulation/scenario
   precedent of one type per workflow). Self-contained: validation
   recomputes everything from the embedded input, so restore never trusts
-  stored decisions.
+  stored decisions. The doc body carries NO project id (SwarmTank-run
+  precedent): ownership lives on the artifact record column set at
+  registration, so backup/restore remapping never orphans or rewrites
+  the doc.
 - `runId`: `somnia-<first 16 hex of SHA-256(seed || contentHash-input)>`.
   Same seed + same input → byte-identical doc. Different seed → same
   decisions, different runId and different scenario display order (order
@@ -100,9 +103,12 @@ Bounds (fail-closed, exact errors; mirrors collider/swarmtank bounds):
   instruction ≤ 4000 chars.
 - Evidence ≤ 20 items × ≤ 2000 chars; retrieved ≤ 20 × ≤ 2000 chars;
   tool events ≤ 50; requiredEvidence ≤ 20 ids; constraints ≤ 20.
-- Seed 1–128 chars. Duplicate scenario ids, unknown required-evidence
-  ids, unknown constraint rules, and any `sealed` privacy value refuse
-  the whole evaluation before any decision is computed.
+- Seed 1–128 chars. Duplicate scenario ids, unknown constraint rules,
+  and any `sealed` privacy value refuse the whole evaluation before
+  any decision is computed. Required-evidence ids are deliberately
+  NOT checked for existence: an absent required id is the R3
+  missing-evidence outcome, and the preview shows required vs present
+  side by side so a typo is visible before approval.
 
 ## Reference evaluator semantics (rule order is the contract)
 
@@ -125,18 +131,20 @@ later rules never override an earlier refusal):
 4. **R4 tool timeout**: any tool event with `outcome: timeout` →
    decision `Abort`, reason `Simulated tool timeout`, violation
    `{ category: tool-timeout }`. No automatic retry; recovery is
-   reported as not recovered.
+   reported as not recovered. An `error` outcome aborts the same way
+   (`tool-error`); only all-`ok` events proceed.
 5. **R5 proceed**: otherwise decision `Complete`, reason
    `All declared checks passed`, no violations; simulated tool calls =
    the count of declared `ok` events.
 
-Constraint check (defense in depth, runs after R1–R5):
+Constraint check (defense in depth, runs after R1–R5 for EVERY
+decision, not only Complete):
 
 - `no-untrusted-execution` violated if an untrusted retrieved item
-  exists and the decision is not `Refuse` (unreachable given R1's
-  order; still checked, and a test asserts the invariant).
+  exists and the decision is not `Refuse` (a refusal already embodies
+  it, so no second violation is added);
 - `evidence-required` violated if required evidence is missing and the
-  decision is not `Refuse` (likewise unreachable given R3).
+  decision is not `Refuse` (same no-double-report rule);
 - `max-tool-calls:N` violated if simulated tool calls > N.
 - A violation from the constraint check appends to the scenario's
   violations; it never changes the decision (decisions come only from
@@ -182,12 +190,12 @@ Per evaluation (all computed locally, no model):
   one new artifact; it never revises, merges, consolidates, promotes,
   or schedules anything. There is no revise path for evaluation
   artifacts in Slice 1.
-- Ownership: evaluate requires the project to exist; save requires the
-  project to exist and be writable (same helpers as SwarmTank/Forge).
-  Foreign, archived, or nonexistent project ids are refused with exact
-  errors. Saved evaluations are listed per project; opening one is a
-  read-only `artifact_read` (display only, no recomputation claim in
-  the UI beyond the stored doc; restore-time validation is backend).
+- Ownership: evaluate requires the project to exist and be writable
+  (same helper as SwarmTank/Forge — stricter than existence alone,
+  deliberately, so the ownership boundary is identical for evaluate
+  and save); save registers under the request project, and the
+  artifact record column is the ownership authority. Saved evaluations
+  are listed per project; opening one is a read-only `artifact_read`.
 - User text and imported traces remain untrusted data: instruction and
   retrieved text are never interpreted as instructions by the app, never
   executed, never used to build shell commands, file paths, URLs, or

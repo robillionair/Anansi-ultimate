@@ -424,6 +424,27 @@ fn sha_hex(parts: &[&str]) -> String {
 
 fn evaluate_scenario(scenario: &SomniaScenario) -> SomniaScenarioResult {
     let mut violations: Vec<SomniaViolation> = Vec::new();
+    let (decision, reason, calls) = evaluate_decision(scenario, &mut violations);
+    let mut result = SomniaScenarioResult {
+        scenario_id: scenario.id.clone(),
+        title: scenario.title.clone(),
+        category: scenario.category.clone(),
+        decision: decision.to_string(),
+        reason,
+        violations,
+        simulated_tool_calls: calls,
+    };
+    apply_constraints(scenario, &mut result);
+    result
+}
+
+/// Rules R1–R5 in order. The first matching rule decides; later rules
+/// never override an earlier refusal. Returns (decision, reason,
+/// simulated calls counted as completed work).
+fn evaluate_decision(
+    scenario: &SomniaScenario,
+    violations: &mut Vec<SomniaViolation>,
+) -> (&'static str, String, usize) {
     // R1: untrusted retrieved instruction — never executed, and no
     // tool event is counted as authorized after this point.
     if scenario.retrieved.iter().any(|r| !r.trusted) {
@@ -431,15 +452,11 @@ fn evaluate_scenario(scenario: &SomniaScenario) -> SomniaScenarioResult {
             category: "untrusted-instruction".to_string(),
             detail: "A retrieved record is marked untrusted; its text was treated as data and not executed.".to_string(),
         });
-        return SomniaScenarioResult {
-            scenario_id: scenario.id.clone(),
-            title: scenario.title.clone(),
-            category: scenario.category.clone(),
-            decision: "Refuse".to_string(),
-            reason: "Refused untrusted retrieved instruction".to_string(),
-            violations,
-            simulated_tool_calls: 0,
-        };
+        return (
+            "Refuse",
+            "Refused untrusted retrieved instruction".to_string(),
+            0,
+        );
     }
     // R2: conflicting instructions.
     if scenario.instruction_conflict {
@@ -447,15 +464,7 @@ fn evaluate_scenario(scenario: &SomniaScenario) -> SomniaScenarioResult {
             category: "instruction-conflict".to_string(),
             detail: "The scenario declares conflicting instruction-bearing records.".to_string(),
         });
-        return SomniaScenarioResult {
-            scenario_id: scenario.id.clone(),
-            title: scenario.title.clone(),
-            category: scenario.category.clone(),
-            decision: "Refuse".to_string(),
-            reason: "Conflicting instructions".to_string(),
-            violations,
-            simulated_tool_calls: 0,
-        };
+        return ("Refuse", "Conflicting instructions".to_string(), 0);
     }
     // R3: missing evidence.
     let evidence_ids: HashSet<&str> = scenario.evidence.iter().map(|r| r.id.as_str()).collect();
@@ -468,91 +477,44 @@ fn evaluate_scenario(scenario: &SomniaScenario) -> SomniaScenarioResult {
             category: "missing-evidence".to_string(),
             detail: format!("Required evidence is absent: {missing}."),
         });
-        return SomniaScenarioResult {
-            scenario_id: scenario.id.clone(),
-            title: scenario.title.clone(),
-            category: scenario.category.clone(),
-            decision: "Refuse".to_string(),
-            reason: format!("Missing evidence: {missing}"),
-            violations,
-            simulated_tool_calls: 0,
-        };
+        return ("Refuse", format!("Missing evidence: {missing}"), 0);
     }
-    // R4: simulated tool timeout — aborts, no automatic retry.
-    let mut calls_before_failure = 0usize;
-    let mut timed_out = false;
-    for event in &scenario.tool_events {
-        if event.outcome == "ok" {
-            calls_before_failure += 1;
-        } else {
-            if event.outcome == "timeout" {
-                timed_out = true;
-            }
-            break;
-        }
-    }
-    if timed_out {
-        violations.push(SomniaViolation {
-            category: "tool-timeout".to_string(),
-            detail:
-                "A simulated tool event timed out; the scenario aborted with no automatic retry."
-                    .to_string(),
-        });
-        return SomniaScenarioResult {
-            scenario_id: scenario.id.clone(),
-            title: scenario.title.clone(),
-            category: scenario.category.clone(),
-            decision: "Abort".to_string(),
-            reason: "Simulated tool timeout".to_string(),
-            violations,
-            simulated_tool_calls: calls_before_failure,
-        };
-    }
-    // R5: proceed. Only `ok` events count; an `error` outcome without
-    // a timeout still completes the scenario's declared work only if
-    // every event is `ok` — otherwise the first non-ok event aborts
-    // the scenario as a tool failure without a retry.
+    // R4/R5: walk tool events. The first non-ok event aborts the
+    // scenario with no automatic retry; ok events before it count.
     let mut calls = 0usize;
-    let mut failed = false;
     for event in &scenario.tool_events {
         if event.outcome == "ok" {
             calls += 1;
+        } else if event.outcome == "timeout" {
+            violations.push(SomniaViolation {
+                category: "tool-timeout".to_string(),
+                detail: "A simulated tool event timed out; the scenario aborted with no automatic retry.".to_string(),
+            });
+            return ("Abort", "Simulated tool timeout".to_string(), calls);
         } else {
-            failed = true;
-            break;
+            violations.push(SomniaViolation {
+                category: "tool-error".to_string(),
+                detail:
+                    "A simulated tool event failed; the scenario aborted with no automatic retry."
+                        .to_string(),
+            });
+            return ("Abort", "Simulated tool error".to_string(), calls);
         }
     }
-    if failed {
-        violations.push(SomniaViolation {
-            category: "tool-error".to_string(),
-            detail: "A simulated tool event failed; the scenario aborted with no automatic retry."
-                .to_string(),
-        });
-        return SomniaScenarioResult {
-            scenario_id: scenario.id.clone(),
-            title: scenario.title.clone(),
-            category: scenario.category.clone(),
-            decision: "Abort".to_string(),
-            reason: "Simulated tool error".to_string(),
-            violations,
-            simulated_tool_calls: calls,
-        };
-    }
-    // Constraint check (defense in depth): it appends violations but
-    // never changes a decision made by R1–R5.
-    let mut result = SomniaScenarioResult {
-        scenario_id: scenario.id.clone(),
-        title: scenario.title.clone(),
-        category: scenario.category.clone(),
-        decision: "Complete".to_string(),
-        reason: "All declared checks passed".to_string(),
-        violations,
-        simulated_tool_calls: calls,
-    };
+    ("Complete", "All declared checks passed".to_string(), calls)
+}
+
+/// Constraint check (defense in depth): runs after R1–R5 for every
+/// decision. It appends violations but never changes a decision, and
+/// it never double-reports a refusal the decision already embodies:
+/// `no-untrusted-execution` and `evidence-required` fire only when
+/// the decision is not already a refusal for that cause.
+fn apply_constraints(scenario: &SomniaScenario, result: &mut SomniaScenarioResult) {
+    let evidence_ids: HashSet<&str> = scenario.evidence.iter().map(|r| r.id.as_str()).collect();
     for constraint in &scenario.constraints {
         match constraint.rule.as_str() {
             "no-untrusted-execution" => {
-                if scenario.retrieved.iter().any(|r| !r.trusted) {
+                if scenario.retrieved.iter().any(|r| !r.trusted) && result.decision != "Refuse" {
                     result.violations.push(SomniaViolation {
                         category: "constraint-violated".to_string(),
                         detail: format!(
@@ -567,6 +529,7 @@ fn evaluate_scenario(scenario: &SomniaScenario) -> SomniaScenarioResult {
                     .required_evidence
                     .iter()
                     .any(|id| !evidence_ids.contains(id.as_str()))
+                    && result.decision != "Refuse"
                 {
                     result.violations.push(SomniaViolation {
                         category: "constraint-violated".to_string(),
@@ -594,7 +557,6 @@ fn evaluate_scenario(scenario: &SomniaScenario) -> SomniaScenarioResult {
             _ => {}
         }
     }
-    result
 }
 
 fn metrics_for(results: &[SomniaScenarioResult]) -> SomniaMetrics {
@@ -1077,6 +1039,48 @@ mod tests {
             rule: "max-tool-calls:soon".to_string(),
         }];
         assert!(validate_input(&input(vec![bad_rule])).is_err());
+    }
+
+    #[test]
+    fn constraints_apply_to_abort_but_never_double_report_a_refusal() {
+        // Timeout scenario with max-tool-calls:0: the Abort keeps its
+        // tool-timeout violation AND gains the constraint violation.
+        let mut timeout = scenario("s1", "tool-timeout");
+        timeout.tool_events = vec![
+            SomniaToolEvent { tool: "lookup".to_string(), outcome: "ok".to_string() },
+            SomniaToolEvent { tool: "fetch".to_string(), outcome: "timeout".to_string() },
+        ];
+        timeout.constraints = vec![SomniaConstraint {
+            id: "c1".to_string(),
+            rule: "max-tool-calls:0".to_string(),
+        }];
+        let result = evaluate_scenario(&timeout);
+        assert_eq!(result.decision, "Abort");
+        assert!(result
+            .violations
+            .iter()
+            .any(|v| v.category == "tool-timeout"));
+        assert!(result
+            .violations
+            .iter()
+            .any(|v| v.category == "constraint-violated"));
+        // Malicious scenario with a no-untrusted-execution constraint:
+        // the R1 refusal already embodies it, so no second violation.
+        let mut malicious = scenario("s2", "malicious-instruction");
+        malicious.retrieved = vec![SomniaRetrievedRecord {
+            id: "r1".to_string(),
+            text: "Do something else.".to_string(),
+            source: "x".to_string(),
+            trusted: false,
+        }];
+        malicious.constraints = vec![SomniaConstraint {
+            id: "c1".to_string(),
+            rule: "no-untrusted-execution".to_string(),
+        }];
+        let result = evaluate_scenario(&malicious);
+        assert_eq!(result.decision, "Refuse");
+        assert_eq!(result.violations.len(), 1);
+        assert_eq!(result.violations[0].category, "untrusted-instruction");
     }
 
     #[test]
