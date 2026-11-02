@@ -118,12 +118,13 @@ async function comparisonKeys(
 async function saveBaselineAndNightmare(page: Page): Promise<void> {
   const somnia = page.locator('section[aria-labelledby="project-somnia-heading"]');
   const results = somnia.locator('section[aria-label="SOMNIA evaluation results"]');
+  const savedList = somnia.locator('section[aria-label="Saved SOMNIA evaluations"]');
   await somnia.getByRole('button', { name: 'Load built-in cases' }).click();
   await somnia.getByRole('button', { name: 'Preview replay input' }).click();
   await somnia.getByRole('button', { name: 'Run evaluation' }).click();
   await expect(results.getByText('Scenarios: 5. Complete: 1. Refuse: 3. Abort: 1.')).toBeVisible();
   await somnia.getByRole('button', { name: 'Save SOMNIA evaluation' }).click();
-  await expect(page.getByText('SOMNIA evaluation saved.')).toBeVisible();
+  await expect(savedList.getByRole('button', { name: 'View evaluation' })).toHaveCount(1);
 
   await somnia.getByLabel('SOMNIA nightmare seed').fill('somnia-nightmare-seed');
   await somnia.getByLabel('SOMNIA nightmare count').selectOption('10');
@@ -134,7 +135,7 @@ async function saveBaselineAndNightmare(page: Page): Promise<void> {
   await somnia.getByRole('button', { name: 'Run evaluation' }).click();
   await expect(results.getByText('Scenarios: 9. Complete: 1. Refuse: 5. Abort: 3.')).toBeVisible();
   await somnia.getByRole('button', { name: 'Save SOMNIA evaluation' }).click();
-  await expect(page.getByText('SOMNIA evaluation saved.')).toBeVisible();
+  await expect(savedList.getByRole('button', { name: 'View evaluation' })).toHaveCount(2);
 }
 
 test('SOMNIA Slice 3: dashboard, Forge QA, proposal review state, §87 walk', async ({
