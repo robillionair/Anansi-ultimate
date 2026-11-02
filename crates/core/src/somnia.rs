@@ -1397,36 +1397,44 @@ pub fn compute_dashboard(pairs: &[(&SomniaEvaluationDoc, &str)]) -> SomniaDashbo
             }
         }
         let failures = m.refused + m.aborted;
-        if let Some((previous_doc, previous_failures)) = previous {
-            if failures > previous_failures {
-                dashboard.regressions.push(SomniaDashboardRegression {
-                    from_run_id: previous_doc.run_id.clone(),
-                    to_run_id: doc.run_id.clone(),
-                    from_failures: previous_failures,
-                    to_failures: failures,
-                });
-            }
+        if let Some((previous_doc, previous_failures)) = previous.filter(|(_, pf)| failures > *pf) {
+            dashboard.regressions.push(SomniaDashboardRegression {
+                from_run_id: previous_doc.run_id.clone(),
+                to_run_id: doc.run_id.clone(),
+                from_failures: previous_failures,
+                to_failures: failures,
+            });
         }
         previous = Some((doc, failures));
     }
     dashboard.duplicate_evidence_ids = evidence_counts.values().filter(|&&n| n > 1).count();
     dashboard.duplicate_sources = source_counts.values().filter(|&&n| n > 1).count();
     dashboard.coverage_classes = classes.len();
-    if dashboard.total_scenarios > 0 {
-        dashboard.failure_rate_tenths =
-            (dashboard.total_refused + dashboard.total_aborted) * 1000 / dashboard.total_scenarios;
+    if let Some(rate) = (dashboard.total_refused + dashboard.total_aborted)
+        .checked_mul(1000)
+        .and_then(|n| n.checked_div(dashboard.total_scenarios))
+    {
+        dashboard.failure_rate_tenths = rate;
     }
     let (latest, latest_timestamp) = sorted.last().unwrap();
     let (baseline, _) = sorted.first().unwrap();
     dashboard.latest_run_id = latest.run_id.clone();
     dashboard.latest_timestamp = latest_timestamp.to_string();
-    if latest.metrics.scenarios_total > 0 {
-        dashboard.latest_calls_per_scenario_hundredths =
-            latest.metrics.simulated_tool_calls * 100 / latest.metrics.scenarios_total;
+    if let Some(cps) = latest
+        .metrics
+        .simulated_tool_calls
+        .checked_mul(100)
+        .and_then(|n| n.checked_div(latest.metrics.scenarios_total))
+    {
+        dashboard.latest_calls_per_scenario_hundredths = cps;
     }
-    if baseline.metrics.scenarios_total > 0 {
-        dashboard.baseline_calls_per_scenario_hundredths =
-            baseline.metrics.simulated_tool_calls * 100 / baseline.metrics.scenarios_total;
+    if let Some(cps) = baseline
+        .metrics
+        .simulated_tool_calls
+        .checked_mul(100)
+        .and_then(|n| n.checked_div(baseline.metrics.scenarios_total))
+    {
+        dashboard.baseline_calls_per_scenario_hundredths = cps;
     }
     if baseline.metrics.simulated_tool_calls > 0
         && baseline.metrics.scenarios_total > 0
