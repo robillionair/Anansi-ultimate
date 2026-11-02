@@ -1,3 +1,25 @@
+## Resume point — 2026-11-02 M10 SOMNIA Slice 2
+
+Owner-authorized M10 slice on branch
+`muse/m10-somnia-slice2` from owner tip
+`8ba785aeb`. Seeded nightmare generator (seven
+failure classes, Rust/TS byte-identical mirror),
+review-only inert consolidation proposals derived
+from saved evaluations, before/after comparison
+studio with deterministic exports, and the
+SwarmTank re-run wording repair. Linux
+verification: Rust 589 passed + 4 known
+live-Ollama environment failures, node 165/165,
+e2e SOMNIA Slice 2 spec 2/2, browser battery
+47/48 specs (single failure the known
+pre-existing search real-semantic test). AN-015
+is verified for the Slice 1 scope on the
+reviewer's Windows evidence; Slice 2 Windows
+rerun pending; do not claim Windows acceptance
+from Linux evidence. Next slice (recommended,
+not started): §50 read-only dashboard aggregates
+over saved evaluations.
+
 ## Resume point — 2026-11-02 M10 SOMNIA Slice 1
 
 Owner-authorized M10 slice on branch
