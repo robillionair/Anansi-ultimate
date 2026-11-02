@@ -973,15 +973,16 @@ pub fn derive_consolidation_proposals(
         }
         if let Some(result) = results_by_id.get(scenario.id.as_str()) {
             for constraint in &scenario.constraints {
-                if let Some(rule) = constraint.rule.strip_prefix("max-tool-calls:") {
-                    if let Ok(max) = rule.parse::<usize>() {
-                        if result.simulated_tool_calls > max {
-                            cost_rules
-                                .entry(constraint.rule.clone())
-                                .or_default()
-                                .push(scenario.id.clone());
-                        }
-                    }
+                let exceeds = constraint
+                    .rule
+                    .strip_prefix("max-tool-calls:")
+                    .and_then(|rule| rule.parse::<usize>().ok())
+                    .is_some_and(|max| result.simulated_tool_calls > max);
+                if exceeds {
+                    cost_rules
+                        .entry(constraint.rule.clone())
+                        .or_default()
+                        .push(scenario.id.clone());
                 }
             }
         }
