@@ -249,14 +249,12 @@ impl GhostSession {
             return false;
         }
         if let Some(last) = self.last_edit_ms {
-            if now_ms > last {
-                let gap = now_ms - last;
-                if gap > self.pause_threshold_ms {
-                    self.pauses.push(GhostPauseEvent {
-                        duration_ms: gap,
-                        elapsed_ms: now_ms,
-                    });
-                }
+            let gap = now_ms.saturating_sub(last);
+            if gap > self.pause_threshold_ms {
+                self.pauses.push(GhostPauseEvent {
+                    duration_ms: gap,
+                    elapsed_ms: now_ms,
+                });
             }
         }
         let kind = kind_hint.unwrap_or_else(|| infer_kind(&diff));
@@ -281,8 +279,7 @@ impl GhostSession {
         self.current_text_fnv = fnv1a_hex(new_text);
         self.current_text_sha256 = sha256_hex(new_text);
         self.last_edit_ms = Some(now_ms);
-        while self.events.len() > MAX_EDIT_EVENTS || self.event_text_bytes > MAX_EVENT_TEXT_BYTES
-        {
+        while self.events.len() > MAX_EDIT_EVENTS || self.event_text_bytes > MAX_EVENT_TEXT_BYTES {
             if let Some(oldest) = self.events.first() {
                 self.event_text_bytes = self
                     .event_text_bytes
@@ -426,12 +423,7 @@ mod tests {
         assert_eq!(e.inserted, "hello world");
         assert!(e.deleted.is_empty());
         // Replace a middle word: "world" -> "there".
-        assert!(s.record(
-            "hello world",
-            "hello there",
-            Some(EditKind::Replace),
-            500
-        ));
+        assert!(s.record("hello world", "hello there", Some(EditKind::Replace), 500));
         let e = s.events.last().unwrap();
         assert_eq!(e.offset, 6);
         assert_eq!(e.deleted, "world");
