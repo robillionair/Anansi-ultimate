@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import type { GhostSession, GhostDeletedFragment, GhostPauseEvent } from './ghostPrompt';
+import type { GhostSession, GhostDeletedFragment, GhostPauseEvent } from './ghostPrompt.ts';
+import { GhostPrompt3D } from './GhostPrompt3D.tsx';
 
 export const GHOST_CONSENT_TEXT =
   'When enabled, ANANSI can temporarily track revisions made in this editor. Deleted text remains available for your review until you discard it or explicitly save it.';
@@ -80,6 +81,7 @@ export function GhostPromptStrip({
 }) {
   const [showConsent, setShowConsent] = useState(false);
   const [showReview, setShowReview] = useState(false);
+  const [show3D, setShow3D] = useState(false);
   const [purged, setPurged] = useState(false);
   const isOn = engine.state === 'recording' || engine.state === 'paused';
   const fragments = engine.deletedFragments();
@@ -163,13 +165,28 @@ export function GhostPromptStrip({
       </div>
       {showPurged && <p>Draft history purged.</p>}
       {showReview && (
-        <GhostFragmentsTable
-          currentText={engine.currentText}
-          fragments={fragments}
-          pauses={engine.pauses}
-          insertedChars={cadence.insertedChars}
-          editCount={cadence.editCount}
-        />
+        <div>
+          <GhostFragmentsTable
+            currentText={engine.currentText}
+            fragments={fragments}
+            pauses={engine.pauses}
+            insertedChars={cadence.insertedChars}
+            editCount={cadence.editCount}
+          />
+          <button type="button" onClick={() => setShow3D((value) => !value)}>
+            {show3D ? 'Collapse 3D view' : 'Expand 3D view'}
+          </button>
+          {show3D && (
+            <GhostPrompt3D
+              snapshot={{
+                currentText: engine.currentText,
+                fragments,
+                pauses: engine.pauses,
+                events: engine.events,
+              }}
+            />
+          )}
+        </div>
       )}
     </section>
   );
