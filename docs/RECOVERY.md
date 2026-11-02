@@ -1,3 +1,26 @@
+## Resume point — 2026-11-02 M11 GHOST-PROMPT Slice 1 (Linux; Windows rerun pending)
+
+Owner-authorized M11 slice on branch
+`muse/m11-ghost-prompt-slice1` from verified
+Windows review tip `d7887ad82` (M10 closed).
+§53 consent model (OFF by default, verbatim modal
+text, persistent badge, Pause/Resume/Review/Clear/
+Stop), §54–55 in-memory session engine (Rust
+reference + TS mirror, diff spans, factual pauses,
+500/50KB bounds, password refusal, observable
+wipe), and the Ask ANANSI fragments inspection
+table (§86.1–4, §86.8–9). No server op, no new
+artifact type, no schema change. Linux
+verification: Rust 603 passed + 4 known
+live-Ollama environment failures, node 178/178,
+e2e ghost spec 2/2, browser battery 68/69 (single
+failure the known pre-existing search
+real-semantic test). AN-016 is in progress for
+the Slice 1 scope; Slice 1 Windows rerun pending;
+do not claim Windows acceptance from Linux
+evidence. Slices 2/3 are deferred and
+uncommissioned.
+
 ## Resume point — 2026-11-02 M10 SOMNIA Slice 3 (Milestone 10 closed)
 
 Owner-authorized M10 slice on branch
@@ -15,9 +38,9 @@ e2e SOMNIA Slice 3 spec 2/2, browser battery
 48/49 specs (single failure the known
 pre-existing search real-semantic test). AN-015
 is complete for Milestone 10; Slice 3 Windows
-rerun pending; do not claim Windows acceptance
-from Linux evidence. No next milestone is
-commissioned.
+verification PASSED 2026-11-02 (review tip
+d7887ad82, the baseline of M11 Slice 1). No next
+milestone was commissioned at that point.
 
 ## Resume point — 2026-11-02 M10 SOMNIA Slice 2
 
