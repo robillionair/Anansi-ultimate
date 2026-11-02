@@ -1,3 +1,24 @@
+## Resume point — 2026-11-02 M10 SOMNIA Slice 3 (Milestone 10 closed)
+
+Owner-authorized M10 slice on branch
+`muse/m10-somnia-slice3` from owner tip
+`b9f9edfc`. §50 dashboard aggregates over saved
+evaluations, §51 Forge QA bridge (seven QA
+scenarios per registered Forge concept through
+the unchanged evaluator, saved via the existing
+op, JSON/Markdown export, §51 disclosure
+verbatim), reviewed + dismissed proposal state
+(local-only), and dashboard action triggers.
+Linux verification: Rust 592 passed + 4 known
+live-Ollama environment failures, node 168/168,
+e2e SOMNIA Slice 3 spec 2/2, browser battery
+48/49 specs (single failure the known
+pre-existing search real-semantic test). AN-015
+is complete for Milestone 10; Slice 3 Windows
+rerun pending; do not claim Windows acceptance
+from Linux evidence. No next milestone is
+commissioned.
+
 ## Resume point — 2026-11-02 M10 SOMNIA Slice 2
 
 Owner-authorized M10 slice on branch
