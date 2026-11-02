@@ -187,13 +187,14 @@ export default function SwarmtankScenarioControls({
           Reset to Baseline
         </button>{' '}
         <button type="button" onClick={onRerun} disabled={rerunDisabled}>
-          🤖 Re-run Full AI Simulation
+          Re-run Deterministic Scenario Simulation
         </button>
       </div>
       <p>
-        Re-run re-evaluates the scenario inputs through the same
-        deterministic evaluate operation as the baseline run, with
-        the same seed. It makes no model call.
+        Re-run invokes the deterministic model-free PRNG evaluator
+        using the specified seed, through the same evaluate operation
+        as the baseline run. It does not perform live AI inference
+        and does not contact a model provider.
       </p>
     </section>
   );

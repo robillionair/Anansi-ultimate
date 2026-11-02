@@ -46,13 +46,17 @@ pub const EVALUATION_FORMAT: &str = "anansi-somnia-evaluation";
 pub const EVALUATION_VERSION: u32 = 1;
 pub const EVALUATION_ARTIFACT_TYPE: &str = "somnia-evaluation";
 
-const CATEGORIES: [&str; 6] = [
+const CATEGORIES: [&str; 10] = [
     "missing-evidence",
     "conflicting-instructions",
     "tool-timeout",
+    "tool-error",
     "malicious-instruction",
     "contradictory-memory",
     "sufficient-evidence",
+    "untrusted-retrieved-instruction",
+    "cost-limit-exhaustion",
+    "privacy-boundary-challenge",
 ];
 const PRIVACY_VALUES: [&str; 3] = ["standard", "private", "public"];
 const TOOL_OUTCOMES: [&str; 3] = ["ok", "timeout", "error"];
@@ -659,6 +663,524 @@ pub fn validate_evaluation_doc(doc: &SomniaEvaluationDoc) -> Result<(), String> 
 }
 
 // ---------------------------------------------------------------------------
+// Slice 2: seeded nightmare generator, inert consolidation proposals,
+// and before/after comparison (MASTER_SPEC §45, §47, §87.6, §87.9).
+//
+// The generator is a pure function: no clock, no randomness source,
+// no I/O, no model, no network. Determinism across Rust and the TS
+// preview mirror uses exact integer arithmetic only — FNV-1a for
+// the seed state and xorshift32 for the stream — because the TS
+// side has no synchronous SHA-256 in the browser. A given
+// (seed, count) always yields the same scenario sequence in both
+// languages; the golden test pins it byte-identically.
+// ---------------------------------------------------------------------------
+
+pub const MAX_NIGHTMARES: usize = 20;
+
+const NIGHTMARE_CLASSES: [&str; 7] = [
+    "conflicting-instructions",
+    "missing-evidence",
+    "simulated-tool-error",
+    "simulated-tool-timeout",
+    "untrusted-retrieved-instruction",
+    "cost-limit-exhaustion",
+    "privacy-boundary-challenge",
+];
+
+const NIGHTMARE_CLASS_CATEGORIES: [&str; 7] = [
+    "conflicting-instructions",
+    "missing-evidence",
+    "tool-error",
+    "tool-timeout",
+    "untrusted-retrieved-instruction",
+    "cost-limit-exhaustion",
+    "privacy-boundary-challenge",
+];
+
+const NIGHTMARE_CLASS_LABELS: [&str; 7] = [
+    "conflicting instructions",
+    "missing evidence",
+    "simulated tool error",
+    "simulated tool timeout",
+    "untrusted retrieved instruction",
+    "cost-limit exhaustion",
+    "privacy-boundary challenge",
+];
+
+const NIGHTMARE_EVIDENCE_WORDS: [&str; 6] = [
+    "receipt", "approval", "invoice", "contract", "audit-log", "sign-off",
+];
+
+const NIGHTMARE_SOURCES: [&str; 4] = [
+    "pastebin-note",
+    "forwarded-thread",
+    "unknown-feed",
+    "shared-doc",
+];
+
+const NIGHTMARE_TOOLS: [&str; 4] = [
+    "fetch-record",
+    "lookup-policy",
+    "read-archive",
+    "check-ledger",
+];
+
+struct NightmarePrng {
+    state: u32,
+}
+
+impl NightmarePrng {
+    fn new(seed: &str) -> Self {
+        let mut state: u32 = 2166136261;
+        for byte in seed.as_bytes() {
+            state ^= *byte as u32;
+            state = state.wrapping_mul(16777619);
+        }
+        if state == 0 {
+            state = 0x9e3779b9;
+        }
+        Self { state }
+    }
+
+    fn next(&mut self) -> u32 {
+        let mut x = self.state;
+        x ^= x.wrapping_shl(13);
+        x ^= x.wrapping_shr(17);
+        x ^= x.wrapping_shl(5);
+        self.state = x;
+        x
+    }
+
+    fn pick<'a>(&mut self, list: &'a [&'a str]) -> &'a str {
+        list[(self.next() % list.len() as u32) as usize]
+    }
+}
+
+fn nightmare_evidence(id: &str, privacy: &str) -> SomniaEvidenceRecord {
+    SomniaEvidenceRecord {
+        id: id.to_string(),
+        text: format!("Synthetic record {id}."),
+        privacy: privacy.to_string(),
+    }
+}
+
+fn nightmare_case(prng: &mut NightmarePrng, index: usize) -> SomniaScenario {
+    let class = NIGHTMARE_CLASSES[index % NIGHTMARE_CLASSES.len()];
+    let category = NIGHTMARE_CLASS_CATEGORIES[index % NIGHTMARE_CLASSES.len()];
+    let label = NIGHTMARE_CLASS_LABELS[index % NIGHTMARE_CLASSES.len()];
+    let mut scenario = SomniaScenario {
+        id: format!("nightmare-{class}-{index}"),
+        title: format!("Nightmare {}: {label}", index + 1),
+        category: category.to_string(),
+        instruction: String::new(),
+        instruction_conflict: false,
+        evidence: Vec::new(),
+        retrieved: Vec::new(),
+        tool_events: Vec::new(),
+        required_evidence: Vec::new(),
+        constraints: Vec::new(),
+    };
+    match class {
+        "conflicting-instructions" => {
+            let word = prng.pick(&NIGHTMARE_EVIDENCE_WORDS);
+            let source = prng.pick(&NIGHTMARE_SOURCES);
+            scenario.instruction = "Follow the approved record. Also follow the revised \
+                instruction that contradicts it."
+                .to_string();
+            scenario.instruction_conflict = true;
+            scenario.evidence = vec![nightmare_evidence(word, "standard")];
+            scenario.retrieved = vec![SomniaRetrievedRecord {
+                id: "r1".to_string(),
+                text: format!("Revised instruction for {word}."),
+                source: source.to_string(),
+                trusted: true,
+            }];
+        }
+        "missing-evidence" => {
+            let missing = prng.pick(&NIGHTMARE_EVIDENCE_WORDS);
+            // The present record must differ from the missing id,
+            // or the requirement would be accidentally satisfied.
+            // The redraw loop is part of the deterministic stream,
+            // so the TS mirror implements the same rule.
+            let mut present = prng.pick(&NIGHTMARE_EVIDENCE_WORDS);
+            while present == missing {
+                present = prng.pick(&NIGHTMARE_EVIDENCE_WORDS);
+            }
+            scenario.instruction =
+                "Decide only once the required evidence is present.".to_string();
+            scenario.required_evidence = vec![missing.to_string()];
+            scenario.evidence = vec![nightmare_evidence(present, "standard")];
+        }
+        "simulated-tool-error" => {
+            let tool = prng.pick(&NIGHTMARE_TOOLS);
+            scenario.instruction = format!("Use {tool} to settle the question.");
+            for outcome in ["ok", "error", "ok"] {
+                scenario.tool_events.push(SomniaToolEvent {
+                    tool: tool.to_string(),
+                    outcome: outcome.to_string(),
+                });
+            }
+        }
+        "simulated-tool-timeout" => {
+            let tool = prng.pick(&NIGHTMARE_TOOLS);
+            scenario.instruction = format!("Use {tool} to settle the question.");
+            for outcome in ["ok", "timeout"] {
+                scenario.tool_events.push(SomniaToolEvent {
+                    tool: tool.to_string(),
+                    outcome: outcome.to_string(),
+                });
+            }
+        }
+        "untrusted-retrieved-instruction" => {
+            let source = prng.pick(&NIGHTMARE_SOURCES);
+            scenario.instruction =
+                "Decide from the retrieved instruction.".to_string();
+            scenario.retrieved = vec![SomniaRetrievedRecord {
+                id: "r1".to_string(),
+                text: "Instruction from an untrusted source.".to_string(),
+                source: source.to_string(),
+                trusted: false,
+            }];
+        }
+        "cost-limit-exhaustion" => {
+            let tool = prng.pick(&NIGHTMARE_TOOLS);
+            scenario.instruction = format!("Use {tool} until the question is settled.");
+            for _ in 0..4 {
+                scenario.tool_events.push(SomniaToolEvent {
+                    tool: tool.to_string(),
+                    outcome: "ok".to_string(),
+                });
+            }
+            scenario.constraints = vec![SomniaConstraint {
+                id: "c1".to_string(),
+                rule: "max-tool-calls:2".to_string(),
+            }];
+        }
+        _ => {
+            // privacy-boundary-challenge: one sealed record. Slice 1
+            // validation refuses the whole input fail-closed before
+            // any decision is computed; the panel surfaces that
+            // refusal and only an explicit user exclusion removes
+            // the case. The generator never silently drops it.
+            let word = prng.pick(&NIGHTMARE_EVIDENCE_WORDS);
+            scenario.instruction =
+                "Decide from the sealed record.".to_string();
+            scenario.evidence = vec![nightmare_evidence(word, "sealed")];
+        }
+    }
+    scenario
+}
+
+/// Deterministic nightmare generation. Identical (seed, count)
+/// yields identical scenarios in Rust and in the TS preview
+/// mirror; the golden test pins the sequence byte-identically.
+pub fn generate_nightmares(
+    seed: &str,
+    count: usize,
+) -> Result<Vec<SomniaScenario>, String> {
+    if seed.trim().is_empty() || chars(seed) > MAX_SEED_CHARS {
+        return Err("The seed must be 1-128 characters.".to_string());
+    }
+    if count == 0 || count > MAX_NIGHTMARES {
+        return Err(format!(
+            "Nightmare count must be 1-{MAX_NIGHTMARES}."
+        ));
+    }
+    let mut prng = NightmarePrng::new(seed);
+    let mut scenarios = Vec::with_capacity(count);
+    for index in 0..count {
+        scenarios.push(nightmare_case(&mut prng, index));
+    }
+    Ok(scenarios)
+}
+
+// ---------------------------------------------------------------------------
+// Inert consolidation proposals: a pure derivation over a saved
+// evaluation doc. Proposals are displayed, never applied: there is
+// no op, no API call, and no button that mutates a memory or a
+// policy. Originals stay untouched because nothing in this slice
+// can write to them. Because proposals derive at view time, they
+// recompute identically from a restored doc — no new artifact
+// type, no restore-gate change, no schema change.
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct SomniaConsolidationProposal {
+    pub id: String,
+    pub action: String,
+    pub target: String,
+    pub rationale: String,
+    pub proposed_change: String,
+    pub evidence: Vec<String>,
+}
+
+fn proposal(
+    action: &str,
+    target: &str,
+    rationale: String,
+    proposed_change: String,
+    evidence: Vec<String>,
+) -> SomniaConsolidationProposal {
+    SomniaConsolidationProposal {
+        id: String::new(),
+        action: action.to_string(),
+        target: target.to_string(),
+        rationale,
+        proposed_change,
+        evidence,
+    }
+}
+
+pub fn derive_consolidation_proposals(
+    doc: &SomniaEvaluationDoc,
+) -> Vec<SomniaConsolidationProposal> {
+    let mut missing: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let mut untrusted_sources: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let mut timeout_tools: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let mut conflict_scenarios: Vec<String> = Vec::new();
+    let mut cost_rules: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let results_by_id: BTreeMap<&str, &SomniaScenarioResult> = doc
+        .results
+        .iter()
+        .map(|r| (r.scenario_id.as_str(), r))
+        .collect();
+    for scenario in &doc.input.scenarios {
+        let evidence_ids: HashSet<&str> =
+            scenario.evidence.iter().map(|r| r.id.as_str()).collect();
+        for required in &scenario.required_evidence {
+            if !evidence_ids.contains(required.as_str()) {
+                missing
+                    .entry(required.clone())
+                    .or_default()
+                    .push(scenario.id.clone());
+            }
+        }
+        for retrieved in &scenario.retrieved {
+            if !retrieved.trusted {
+                untrusted_sources
+                    .entry(retrieved.source.clone())
+                    .or_default()
+                    .push(scenario.id.clone());
+            }
+        }
+        for event in &scenario.tool_events {
+            if event.outcome == "timeout" {
+                timeout_tools
+                    .entry(event.tool.clone())
+                    .or_default()
+                    .push(scenario.id.clone());
+            }
+        }
+        if scenario.instruction_conflict {
+            conflict_scenarios.push(scenario.id.clone());
+        }
+        if let Some(result) = results_by_id.get(scenario.id.as_str()) {
+            for constraint in &scenario.constraints {
+                if let Some(rule) = constraint.rule.strip_prefix("max-tool-calls:") {
+                    if let Ok(max) = rule.parse::<usize>() {
+                        if result.simulated_tool_calls > max {
+                            cost_rules
+                                .entry(constraint.rule.clone())
+                                .or_default()
+                                .push(scenario.id.clone());
+                        }
+                    }
+                }
+            }
+        }
+    }
+    let mut proposals: Vec<SomniaConsolidationProposal> = Vec::new();
+    for (id, scenarios) in &missing {
+        if scenarios.len() >= 2 {
+            proposals.push(proposal(
+                "flag-missing-evidence",
+                id,
+                format!(
+                    "Required evidence '{id}' was absent in {} scenarios; every one refused on it.",
+                    scenarios.len()
+                ),
+                format!(
+                    "Add a pre-decision checklist entry: require '{id}' before any decision in this workflow."
+                ),
+                scenarios.clone(),
+            ));
+        }
+    }
+    for (source, scenarios) in &untrusted_sources {
+        if scenarios.len() >= 2 {
+            proposals.push(proposal(
+                "archive-untrusted",
+                source,
+                format!(
+                    "Source '{source}' supplied untrusted retrieved instructions in {} scenarios; each refused without executing them.",
+                    scenarios.len()
+                ),
+                format!(
+                    "Archive source '{source}' from the trusted retrieval set; route its records through manual review."
+                ),
+                scenarios.clone(),
+            ));
+        }
+    }
+    for (tool, scenarios) in &timeout_tools {
+        if scenarios.len() >= 2 {
+            proposals.push(proposal(
+                "procedural-rule",
+                tool,
+                format!(
+                    "Tool '{tool}' timed out in {} scenarios, aborting each run.",
+                    scenarios.len()
+                ),
+                format!(
+                    "Add a procedural rule: on '{tool}' timeout, back off and retry once with a deadline before aborting; record the retry in the scenario."
+                ),
+                scenarios.clone(),
+            ));
+        }
+    }
+    if conflict_scenarios.len() >= 2 {
+        proposals.push(proposal(
+            "supersede-conflict",
+            "instruction-conflict",
+            format!(
+                "{} scenarios declared conflicting instruction-bearing records.",
+                conflict_scenarios.len()
+            ),
+            "Adopt a superseding-record convention: when two instruction records conflict, the newer dated record supersedes the older, and the superseded record is kept for audit.".to_string(),
+            conflict_scenarios,
+        ));
+    }
+    for (rule, scenarios) in &cost_rules {
+        proposals.push(proposal(
+            "procedural-rule",
+            rule,
+            format!(
+                "{} scenarios exceeded '{rule}' while still completing.",
+                scenarios.len()
+            ),
+            "Add a procedural rule: raise the declared budget or split the work before running scenarios shaped like these; never silently drop calls.".to_string(),
+            scenarios.clone(),
+        ));
+    }
+    proposals.sort_by(|a, b| {
+        a.action
+            .cmp(&b.action)
+            .then_with(|| a.target.cmp(&b.target))
+    });
+    for (index, item) in proposals.iter_mut().enumerate() {
+        item.id = format!("proposal-{}-{index}", item.action);
+    }
+    proposals
+}
+
+// ---------------------------------------------------------------------------
+// Before/after comparison: pure delta math over two evaluation docs.
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SomniaComparisonCategoryRow {
+    pub category: String,
+    pub baseline: usize,
+    pub comparison: usize,
+    pub delta: i64,
+    pub newly_exposed: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SomniaComparison {
+    pub baseline_run_id: String,
+    pub comparison_run_id: String,
+    pub baseline_completed: usize,
+    pub baseline_refused: usize,
+    pub baseline_aborted: usize,
+    pub baseline_simulated_tool_calls: usize,
+    pub baseline_violations: usize,
+    pub comparison_completed: usize,
+    pub comparison_refused: usize,
+    pub comparison_aborted: usize,
+    pub comparison_simulated_tool_calls: usize,
+    pub comparison_violations: usize,
+    pub delta_completed: i64,
+    pub delta_refused: i64,
+    pub delta_aborted: i64,
+    pub delta_simulated_tool_calls: i64,
+    pub delta_violations: i64,
+    pub categories: Vec<SomniaComparisonCategoryRow>,
+}
+
+fn violation_total(metrics: &SomniaMetrics) -> usize {
+    metrics
+        .violations_by_category
+        .iter()
+        .map(|c| c.count)
+        .sum()
+}
+
+fn category_map(metrics: &SomniaMetrics) -> BTreeMap<String, usize> {
+    metrics
+        .violations_by_category
+        .iter()
+        .map(|c| (c.category.clone(), c.count))
+        .collect()
+}
+
+pub fn compare_evaluations(
+    baseline: &SomniaEvaluationDoc,
+    comparison: &SomniaEvaluationDoc,
+) -> SomniaComparison {
+    let base_map = category_map(&baseline.metrics);
+    let comp_map = category_map(&comparison.metrics);
+    let mut categories: Vec<SomniaComparisonCategoryRow> = Vec::new();
+    let mut all: Vec<String> = base_map.keys().cloned().collect();
+    for key in comp_map.keys() {
+        if !base_map.contains_key(key) {
+            all.push(key.clone());
+        }
+    }
+    all.sort();
+    for category in all {
+        let base = base_map.get(&category).copied().unwrap_or(0);
+        let comp = comp_map.get(&category).copied().unwrap_or(0);
+        categories.push(SomniaComparisonCategoryRow {
+            category,
+            baseline: base,
+            comparison: comp,
+            delta: comp as i64 - base as i64,
+            newly_exposed: base == 0 && comp > 0,
+        });
+    }
+    let base_violations = violation_total(&baseline.metrics);
+    let comp_violations = violation_total(&comparison.metrics);
+    SomniaComparison {
+        baseline_run_id: baseline.run_id.clone(),
+        comparison_run_id: comparison.run_id.clone(),
+        baseline_completed: baseline.metrics.completed,
+        baseline_refused: baseline.metrics.refused,
+        baseline_aborted: baseline.metrics.aborted,
+        baseline_simulated_tool_calls: baseline.metrics.simulated_tool_calls,
+        baseline_violations: base_violations,
+        comparison_completed: comparison.metrics.completed,
+        comparison_refused: comparison.metrics.refused,
+        comparison_aborted: comparison.metrics.aborted,
+        comparison_simulated_tool_calls: comparison.metrics.simulated_tool_calls,
+        comparison_violations: comp_violations,
+        delta_completed: comparison.metrics.completed as i64
+            - baseline.metrics.completed as i64,
+        delta_refused: comparison.metrics.refused as i64
+            - baseline.metrics.refused as i64,
+        delta_aborted: comparison.metrics.aborted as i64
+            - baseline.metrics.aborted as i64,
+        delta_simulated_tool_calls: comparison.metrics.simulated_tool_calls as i64
+            - baseline.metrics.simulated_tool_calls as i64,
+        delta_violations: comp_violations as i64 - base_violations as i64,
+        categories,
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Ops
 // ---------------------------------------------------------------------------
 
@@ -1100,5 +1622,208 @@ mod tests {
         let mut tampered = doc.clone();
         tampered.run_id = "somnia-forged".to_string();
         assert!(validate_evaluation_doc(&tampered).is_err());
+    }
+
+    #[test]
+    fn nightmare_generator_matches_golden_sequence() {
+        let scenarios =
+            generate_nightmares("somnia-nightmare-golden", 7).unwrap();
+        let actual = serde_json::to_string(&scenarios).unwrap();
+        let expected = r#"[{"id":"nightmare-conflicting-instructions-0","title":"Nightmare 1: conflicting instructions","category":"conflicting-instructions","instruction":"Follow the approved record. Also follow the revised instruction that contradicts it.","instructionConflict":true,"evidence":[{"id":"approval","text":"Synthetic record approval.","privacy":"standard"}],"retrieved":[{"id":"r1","text":"Revised instruction for approval.","source":"forwarded-thread","trusted":true}],"toolEvents":[],"requiredEvidence":[],"constraints":[]},{"id":"nightmare-missing-evidence-1","title":"Nightmare 2: missing evidence","category":"missing-evidence","instruction":"Decide only once the required evidence is present.","instructionConflict":false,"evidence":[{"id":"sign-off","text":"Synthetic record sign-off.","privacy":"standard"}],"retrieved":[],"toolEvents":[],"requiredEvidence":["audit-log"],"constraints":[]},{"id":"nightmare-simulated-tool-error-2","title":"Nightmare 3: simulated tool error","category":"tool-error","instruction":"Use fetch-record to settle the question.","instructionConflict":false,"evidence":[],"retrieved":[],"toolEvents":[{"tool":"fetch-record","outcome":"ok"},{"tool":"fetch-record","outcome":"error"},{"tool":"fetch-record","outcome":"ok"}],"requiredEvidence":[],"constraints":[]},{"id":"nightmare-simulated-tool-timeout-3","title":"Nightmare 4: simulated tool timeout","category":"tool-timeout","instruction":"Use read-archive to settle the question.","instructionConflict":false,"evidence":[],"retrieved":[],"toolEvents":[{"tool":"read-archive","outcome":"ok"},{"tool":"read-archive","outcome":"timeout"}],"requiredEvidence":[],"constraints":[]},{"id":"nightmare-untrusted-retrieved-instruction-4","title":"Nightmare 5: untrusted retrieved instruction","category":"untrusted-retrieved-instruction","instruction":"Decide from the retrieved instruction.","instructionConflict":false,"evidence":[],"retrieved":[{"id":"r1","text":"Instruction from an untrusted source.","source":"shared-doc","trusted":false}],"toolEvents":[],"requiredEvidence":[],"constraints":[]},{"id":"nightmare-cost-limit-exhaustion-5","title":"Nightmare 6: cost-limit exhaustion","category":"cost-limit-exhaustion","instruction":"Use check-ledger until the question is settled.","instructionConflict":false,"evidence":[],"retrieved":[],"toolEvents":[{"tool":"check-ledger","outcome":"ok"},{"tool":"check-ledger","outcome":"ok"},{"tool":"check-ledger","outcome":"ok"},{"tool":"check-ledger","outcome":"ok"}],"requiredEvidence":[],"constraints":[{"id":"c1","rule":"max-tool-calls:2"}]},{"id":"nightmare-privacy-boundary-challenge-6","title":"Nightmare 7: privacy-boundary challenge","category":"privacy-boundary-challenge","instruction":"Decide from the sealed record.","instructionConflict":false,"evidence":[{"id":"receipt","text":"Synthetic record receipt.","privacy":"sealed"}],"retrieved":[],"toolEvents":[],"requiredEvidence":[],"constraints":[]}]"#;
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn nightmare_generator_is_deterministic_and_bounded() {
+        let first = generate_nightmares("seed-a", 10).unwrap();
+        let second = generate_nightmares("seed-a", 10).unwrap();
+        assert_eq!(
+            serde_json::to_string(&first).unwrap(),
+            serde_json::to_string(&second).unwrap()
+        );
+        let other = generate_nightmares("seed-b", 10).unwrap();
+        assert_ne!(
+            serde_json::to_string(&first).unwrap(),
+            serde_json::to_string(&other).unwrap()
+        );
+        assert!(generate_nightmares("seed-a", 0).is_err());
+        assert!(generate_nightmares("seed-a", 21).is_err());
+        assert!(generate_nightmares("", 5).is_err());
+        assert_eq!(first.len(), 10);
+    }
+
+    #[test]
+    fn nightmare_classes_evaluate_to_intended_decisions() {
+        let scenarios = generate_nightmares("seed-a", 6).unwrap();
+        let doc = build_evaluation_doc(&SomniaReplayInput {
+            scenarios,
+            seed: "seed-a".to_string(),
+        })
+        .unwrap();
+        let by_id: BTreeMap<&str, &SomniaScenarioResult> = doc
+            .results
+            .iter()
+            .map(|r| (r.scenario_id.as_str(), r))
+            .collect();
+        let expect = [
+            ("nightmare-conflicting-instructions-0", "Refuse", "instruction-conflict", 0),
+            ("nightmare-missing-evidence-1", "Refuse", "missing-evidence", 0),
+            ("nightmare-simulated-tool-error-2", "Abort", "tool-error", 1),
+            ("nightmare-simulated-tool-timeout-3", "Abort", "tool-timeout", 1),
+            ("nightmare-untrusted-retrieved-instruction-4", "Refuse", "untrusted-instruction", 0),
+            ("nightmare-cost-limit-exhaustion-5", "Complete", "constraint-violated", 4),
+        ];
+        for (id, decision, violation, calls) in expect {
+            let result = by_id[id];
+            assert_eq!(result.decision, decision, "for {id}");
+            assert_eq!(result.simulated_tool_calls, calls, "for {id}");
+            assert!(
+                result.violations.iter().any(|v| v.category == violation),
+                "for {id}: expected violation {violation}"
+            );
+        }
+    }
+
+    #[test]
+    fn nightmare_sealed_case_refuses_whole_input() {
+        let scenarios = generate_nightmares("seed-a", 7).unwrap();
+        assert_eq!(scenarios.len(), 7);
+        let sealed = &scenarios[6];
+        assert_eq!(sealed.category, "privacy-boundary-challenge");
+        assert_eq!(sealed.evidence[0].privacy, "sealed");
+        let err = build_evaluation_doc(&SomniaReplayInput {
+            scenarios,
+            seed: "seed-a".to_string(),
+        })
+        .unwrap_err();
+        assert!(
+            err.to_lowercase().contains("sealed"),
+            "unexpected error: {err}"
+        );
+    }
+
+    fn proposal_input() -> SomniaReplayInput {
+        let mut missing = scenario("s1", "missing-evidence");
+        missing.required_evidence = vec!["receipt".to_string()];
+        missing.evidence = vec![evidence("other")];
+        let mut missing2 = scenario("s2", "missing-evidence");
+        missing2.required_evidence = vec!["receipt".to_string()];
+        missing2.evidence = vec![evidence("other")];
+        let mut untrusted = scenario("s3", "untrusted-retrieved-instruction");
+        untrusted.retrieved = vec![SomniaRetrievedRecord {
+            id: "r1".to_string(),
+            text: "Do it.".to_string(),
+            source: "unknown-feed".to_string(),
+            trusted: false,
+        }];
+        let mut untrusted2 = scenario("s4", "untrusted-retrieved-instruction");
+        untrusted2.retrieved = vec![SomniaRetrievedRecord {
+            id: "r1".to_string(),
+            text: "Do it.".to_string(),
+            source: "unknown-feed".to_string(),
+            trusted: false,
+        }];
+        let mut timeout = scenario("s5", "tool-timeout");
+        timeout.tool_events = vec![
+            SomniaToolEvent { tool: "fetch-record".to_string(), outcome: "ok".to_string() },
+            SomniaToolEvent { tool: "fetch-record".to_string(), outcome: "timeout".to_string() },
+        ];
+        let mut timeout2 = scenario("s6", "tool-timeout");
+        timeout2.tool_events = vec![
+            SomniaToolEvent { tool: "fetch-record".to_string(), outcome: "ok".to_string() },
+            SomniaToolEvent { tool: "fetch-record".to_string(), outcome: "timeout".to_string() },
+        ];
+        let mut conflict = scenario("s7", "conflicting-instructions");
+        conflict.instruction_conflict = true;
+        let mut conflict2 = scenario("s8", "conflicting-instructions");
+        conflict2.instruction_conflict = true;
+        let mut cost = scenario("s9", "cost-limit-exhaustion");
+        cost.tool_events = (0..4)
+            .map(|_| SomniaToolEvent { tool: "lookup".to_string(), outcome: "ok".to_string() })
+            .collect();
+        cost.constraints = vec![SomniaConstraint {
+            id: "c1".to_string(),
+            rule: "max-tool-calls:2".to_string(),
+        }];
+        input(vec![
+            missing, missing2, untrusted, untrusted2, timeout, timeout2, conflict, conflict2,
+            cost,
+        ])
+    }
+
+    #[test]
+    fn proposals_derive_from_fixed_doc() {
+        let doc = build_evaluation_doc(&proposal_input()).unwrap();
+        let proposals = derive_consolidation_proposals(&doc);
+        let actions: Vec<(&str, &str)> = proposals
+            .iter()
+            .map(|p| (p.action.as_str(), p.target.as_str()))
+            .collect();
+        assert_eq!(
+            actions,
+            vec![
+                ("archive-untrusted", "unknown-feed"),
+                ("flag-missing-evidence", "receipt"),
+                ("procedural-rule", "fetch-record"),
+                ("procedural-rule", "max-tool-calls:2"),
+                ("supersede-conflict", "instruction-conflict"),
+            ]
+        );
+        assert_eq!(proposals[0].evidence, vec!["s3".to_string(), "s4".to_string()]);
+        assert_eq!(proposals[1].evidence, vec!["s1".to_string(), "s2".to_string()]);
+        assert_eq!(proposals[2].evidence, vec!["s5".to_string(), "s6".to_string()]);
+        assert_eq!(proposals[3].evidence, vec!["s9".to_string()]);
+        assert_eq!(proposals[4].evidence, vec!["s7".to_string(), "s8".to_string()]);
+        assert_eq!(proposals[0].id, "proposal-archive-untrusted-0");
+        assert_eq!(proposals[4].id, "proposal-supersede-conflict-4");
+        // Below-threshold patterns produce nothing: a single missing
+        // id, a single untrusted source, a single timeout, a single
+        // conflict, and no cost violation must not appear.
+        let mut single = scenario("only", "missing-evidence");
+        single.required_evidence = vec!["lonely".to_string()];
+        single.evidence = vec![evidence("other")];
+        let single_doc = build_evaluation_doc(&input(vec![single])).unwrap();
+        assert!(derive_consolidation_proposals(&single_doc).is_empty());
+    }
+
+    #[test]
+    fn comparison_delta_math() {
+        let mut refused = scenario("b2", "missing-evidence");
+        refused.required_evidence = vec!["receipt".to_string()];
+        refused.evidence = vec![evidence("other")];
+        let baseline = build_evaluation_doc(&input(vec![
+            scenario("b1", "sufficient-evidence"),
+            refused,
+        ]))
+        .unwrap();
+        let mut refused2 = scenario("c2", "missing-evidence");
+        refused2.required_evidence = vec!["receipt".to_string()];
+        refused2.evidence = vec![evidence("other")];
+        let mut aborted = scenario("c3", "tool-timeout");
+        aborted.tool_events = vec![
+            SomniaToolEvent { tool: "fetch-record".to_string(), outcome: "ok".to_string() },
+            SomniaToolEvent { tool: "fetch-record".to_string(), outcome: "timeout".to_string() },
+        ];
+        let comparison = build_evaluation_doc(&input(vec![
+            scenario("c1", "sufficient-evidence"),
+            refused2,
+            aborted,
+        ]))
+        .unwrap();
+        let compared = compare_evaluations(&baseline, &comparison);
+        assert_eq!(compared.delta_completed, 0);
+        assert_eq!(compared.delta_refused, 0);
+        assert_eq!(compared.delta_aborted, 1);
+        assert_eq!(compared.delta_simulated_tool_calls, 1);
+        assert_eq!(compared.delta_violations, 1);
+        assert_eq!(compared.categories.len(), 2);
+        let missing = &compared.categories[0];
+        assert_eq!(missing.category, "missing-evidence");
+        assert_eq!((missing.baseline, missing.comparison, missing.delta), (1, 1, 0));
+        assert!(!missing.newly_exposed);
+        let timeout = &compared.categories[1];
+        assert_eq!(timeout.category, "tool-timeout");
+        assert_eq!((timeout.baseline, timeout.comparison, timeout.delta), (0, 1, 1));
+        assert!(timeout.newly_exposed);
     }
 }

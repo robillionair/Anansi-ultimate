@@ -11,9 +11,13 @@ const CATEGORIES = [
   'missing-evidence',
   'conflicting-instructions',
   'tool-timeout',
+  'tool-error',
   'malicious-instruction',
   'contradictory-memory',
   'sufficient-evidence',
+  'untrusted-retrieved-instruction',
+  'cost-limit-exhaustion',
+  'privacy-boundary-challenge',
 ];
 
 const PRIVACY_VALUES = ['standard', 'private', 'public'];
@@ -130,6 +134,454 @@ export const BUILTIN_SCENARIOS: SomniaScenario[] = [
     constraints: [{ id: 'c-calls', rule: 'max-tool-calls:2' }],
   },
 ];
+
+// ---------------------------------------------------------------------------
+// Slice 2: seeded nightmare generator, inert consolidation proposals,
+// and before/after comparison. This is the TS mirror of the Rust
+// reference implementation in crates/core/src/somnia.rs: identical
+// integer arithmetic (FNV-1a seed state, xorshift32 stream, UTF-8
+// seed bytes), so a given (seed, count) yields identical scenarios
+// in both languages. The golden test pins the sequence
+// byte-identically. Proposals and comparison are pure derivations
+// over an evaluation doc; they never write anywhere.
+// ---------------------------------------------------------------------------
+
+const NIGHTMARE_CLASSES = [
+  'conflicting-instructions',
+  'missing-evidence',
+  'simulated-tool-error',
+  'simulated-tool-timeout',
+  'untrusted-retrieved-instruction',
+  'cost-limit-exhaustion',
+  'privacy-boundary-challenge',
+];
+
+const NIGHTMARE_CLASS_CATEGORIES = [
+  'conflicting-instructions',
+  'missing-evidence',
+  'tool-error',
+  'tool-timeout',
+  'untrusted-retrieved-instruction',
+  'cost-limit-exhaustion',
+  'privacy-boundary-challenge',
+];
+
+const NIGHTMARE_CLASS_LABELS = [
+  'conflicting instructions',
+  'missing evidence',
+  'simulated tool error',
+  'simulated tool timeout',
+  'untrusted retrieved instruction',
+  'cost-limit exhaustion',
+  'privacy-boundary challenge',
+];
+
+const NIGHTMARE_EVIDENCE_WORDS = [
+  'receipt',
+  'approval',
+  'invoice',
+  'contract',
+  'audit-log',
+  'sign-off',
+];
+
+const NIGHTMARE_SOURCES = [
+  'pastebin-note',
+  'forwarded-thread',
+  'unknown-feed',
+  'shared-doc',
+];
+
+const NIGHTMARE_TOOLS = [
+  'fetch-record',
+  'lookup-policy',
+  'read-archive',
+  'check-ledger',
+];
+
+class NightmarePrng {
+  private state: number;
+
+  constructor(seed: string) {
+    let state = 2166136261 >>> 0;
+    for (const byte of new TextEncoder().encode(seed)) {
+      state = (state ^ byte) >>> 0;
+      state = Math.imul(state, 16777619) >>> 0;
+    }
+    if (state === 0) state = 0x9e3779b9;
+    this.state = state;
+  }
+
+  next(): number {
+    let x = this.state;
+    x ^= x << 13;
+    x ^= x >>> 17;
+    x ^= x << 5;
+    this.state = x >>> 0;
+    return this.state;
+  }
+
+  pick(list: string[]): string {
+    return list[this.next() % list.length];
+  }
+}
+
+function nightmareCase(prng: NightmarePrng, index: number): SomniaScenario {
+  const klass = NIGHTMARE_CLASSES[index % NIGHTMARE_CLASSES.length];
+  const category =
+    NIGHTMARE_CLASS_CATEGORIES[index % NIGHTMARE_CLASS_CATEGORIES.length];
+  const label = NIGHTMARE_CLASS_LABELS[index % NIGHTMARE_CLASS_LABELS.length];
+  const scenario: SomniaScenario = {
+    id: `nightmare-${klass}-${index}`,
+    title: `Nightmare ${index + 1}: ${label}`,
+    category,
+    instruction: '',
+    instructionConflict: false,
+    evidence: [],
+    retrieved: [],
+    toolEvents: [],
+    requiredEvidence: [],
+    constraints: [],
+  };
+  if (klass === 'conflicting-instructions') {
+    const word = prng.pick(NIGHTMARE_EVIDENCE_WORDS);
+    const source = prng.pick(NIGHTMARE_SOURCES);
+    scenario.instruction =
+      'Follow the approved record. Also follow the revised instruction that contradicts it.';
+    scenario.instructionConflict = true;
+    scenario.evidence = [
+      { id: word, text: `Synthetic record ${word}.`, privacy: 'standard' },
+    ];
+    scenario.retrieved = [
+      {
+        id: 'r1',
+        text: `Revised instruction for ${word}.`,
+        source,
+        trusted: true,
+      },
+    ];
+  } else if (klass === 'missing-evidence') {
+    const missing = prng.pick(NIGHTMARE_EVIDENCE_WORDS);
+    let present = prng.pick(NIGHTMARE_EVIDENCE_WORDS);
+    while (present === missing) {
+      present = prng.pick(NIGHTMARE_EVIDENCE_WORDS);
+    }
+    scenario.instruction =
+      'Decide only once the required evidence is present.';
+    scenario.requiredEvidence = [missing];
+    scenario.evidence = [
+      { id: present, text: `Synthetic record ${present}.`, privacy: 'standard' },
+    ];
+  } else if (klass === 'simulated-tool-error') {
+    const tool = prng.pick(NIGHTMARE_TOOLS);
+    scenario.instruction = `Use ${tool} to settle the question.`;
+    for (const outcome of ['ok', 'error', 'ok']) {
+      scenario.toolEvents.push({ tool, outcome });
+    }
+  } else if (klass === 'simulated-tool-timeout') {
+    const tool = prng.pick(NIGHTMARE_TOOLS);
+    scenario.instruction = `Use ${tool} to settle the question.`;
+    for (const outcome of ['ok', 'timeout']) {
+      scenario.toolEvents.push({ tool, outcome });
+    }
+  } else if (klass === 'untrusted-retrieved-instruction') {
+    const source = prng.pick(NIGHTMARE_SOURCES);
+    scenario.instruction = 'Decide from the retrieved instruction.';
+    scenario.retrieved = [
+      {
+        id: 'r1',
+        text: 'Instruction from an untrusted source.',
+        source,
+        trusted: false,
+      },
+    ];
+  } else if (klass === 'cost-limit-exhaustion') {
+    const tool = prng.pick(NIGHTMARE_TOOLS);
+    scenario.instruction = `Use ${tool} until the question is settled.`;
+    for (let i = 0; i < 4; i++) {
+      scenario.toolEvents.push({ tool, outcome: 'ok' });
+    }
+    scenario.constraints = [{ id: 'c1', rule: 'max-tool-calls:2' }];
+  } else {
+    // privacy-boundary-challenge: one sealed record. Preview,
+    // evaluate, and save all refuse the whole input fail-closed;
+    // only an explicit user exclusion removes the case. The
+    // generator never silently drops it.
+    const word = prng.pick(NIGHTMARE_EVIDENCE_WORDS);
+    scenario.instruction = 'Decide from the sealed record.';
+    scenario.evidence = [
+      { id: word, text: `Synthetic record ${word}.`, privacy: 'sealed' },
+    ];
+  }
+  return scenario;
+}
+
+export function generateNightmares(seed: string, count: number): SomniaScenario[] {
+  if (seed.trim() === '' || seed.length > 128) {
+    throw new Error('The seed must be 1-128 characters.');
+  }
+  if (!Number.isInteger(count) || count < 1 || count > 20) {
+    throw new Error('Nightmare count must be 1-20.');
+  }
+  const prng = new NightmarePrng(seed);
+  const scenarios: SomniaScenario[] = [];
+  for (let index = 0; index < count; index++) {
+    scenarios.push(nightmareCase(prng, index));
+  }
+  return scenarios;
+}
+
+export interface SomniaConsolidationProposal {
+  id: string;
+  action: string;
+  target: string;
+  rationale: string;
+  proposedChange: string;
+  evidence: string[];
+}
+
+export function deriveConsolidationProposals(
+  doc: SomniaEvaluationDoc,
+): SomniaConsolidationProposal[] {
+  const missing = new Map<string, string[]>();
+  const untrustedSources = new Map<string, string[]>();
+  const timeoutTools = new Map<string, string[]>();
+  const conflictScenarios: string[] = [];
+  const costRules = new Map<string, string[]>();
+  const resultsById = new Map(doc.results.map(r => [r.scenarioId, r]));
+  for (const scenario of doc.input.scenarios) {
+    const evidenceIds = new Set(scenario.evidence.map(e => e.id));
+    for (const required of scenario.requiredEvidence) {
+      if (!evidenceIds.has(required)) {
+        const list = missing.get(required) ?? [];
+        list.push(scenario.id);
+        missing.set(required, list);
+      }
+    }
+    for (const retrieved of scenario.retrieved) {
+      if (!retrieved.trusted) {
+        const list = untrustedSources.get(retrieved.source) ?? [];
+        list.push(scenario.id);
+        untrustedSources.set(retrieved.source, list);
+      }
+    }
+    for (const event of scenario.toolEvents) {
+      if (event.outcome === 'timeout') {
+        const list = timeoutTools.get(event.tool) ?? [];
+        list.push(scenario.id);
+        timeoutTools.set(event.tool, list);
+      }
+    }
+    if (scenario.instructionConflict) {
+      conflictScenarios.push(scenario.id);
+    }
+    const result = resultsById.get(scenario.id);
+    if (result !== undefined) {
+      for (const constraint of scenario.constraints) {
+        const prefix = 'max-tool-calls:';
+        if (constraint.rule.startsWith(prefix)) {
+          const max = Number(constraint.rule.slice(prefix.length));
+          if (
+            Number.isInteger(max) &&
+            result.simulatedToolCalls > max
+          ) {
+            const list = costRules.get(constraint.rule) ?? [];
+            list.push(scenario.id);
+            costRules.set(constraint.rule, list);
+          }
+        }
+      }
+    }
+  }
+  const proposals: SomniaConsolidationProposal[] = [];
+  for (const [id, scenarios] of missing) {
+    if (scenarios.length >= 2) {
+      proposals.push({
+        id: '',
+        action: 'flag-missing-evidence',
+        target: id,
+        rationale: `Required evidence '${id}' was absent in ${scenarios.length} scenarios; every one refused on it.`,
+        proposedChange: `Add a pre-decision checklist entry: require '${id}' before any decision in this workflow.`,
+        evidence: scenarios,
+      });
+    }
+  }
+  for (const [source, scenarios] of untrustedSources) {
+    if (scenarios.length >= 2) {
+      proposals.push({
+        id: '',
+        action: 'archive-untrusted',
+        target: source,
+        rationale: `Source '${source}' supplied untrusted retrieved instructions in ${scenarios.length} scenarios; each refused without executing them.`,
+        proposedChange: `Archive source '${source}' from the trusted retrieval set; route its records through manual review.`,
+        evidence: scenarios,
+      });
+    }
+  }
+  for (const [tool, scenarios] of timeoutTools) {
+    if (scenarios.length >= 2) {
+      proposals.push({
+        id: '',
+        action: 'procedural-rule',
+        target: tool,
+        rationale: `Tool '${tool}' timed out in ${scenarios.length} scenarios, aborting each run.`,
+        proposedChange: `Add a procedural rule: on '${tool}' timeout, back off and retry once with a deadline before aborting; record the retry in the scenario.`,
+        evidence: scenarios,
+      });
+    }
+  }
+  if (conflictScenarios.length >= 2) {
+    proposals.push({
+      id: '',
+      action: 'supersede-conflict',
+      target: 'instruction-conflict',
+      rationale: `${conflictScenarios.length} scenarios declared conflicting instruction-bearing records.`,
+      proposedChange:
+        'Adopt a superseding-record convention: when two instruction records conflict, the newer dated record supersedes the older, and the superseded record is kept for audit.',
+      evidence: conflictScenarios,
+    });
+  }
+  for (const [rule, scenarios] of costRules) {
+    proposals.push({
+      id: '',
+      action: 'procedural-rule',
+      target: rule,
+      rationale: `${scenarios.length} scenarios exceeded '${rule}' while still completing.`,
+      proposedChange:
+        'Add a procedural rule: raise the declared budget or split the work before running scenarios shaped like these; never silently drop calls.',
+      evidence: scenarios,
+    });
+  }
+  proposals.sort(
+    (a, b) =>
+      a.action.localeCompare(b.action) || a.target.localeCompare(b.target),
+  );
+  proposals.forEach((proposal, index) => {
+    proposal.id = `proposal-${proposal.action}-${index}`;
+  });
+  return proposals;
+}
+
+export interface SomniaComparisonCategoryRow {
+  category: string;
+  baseline: number;
+  comparison: number;
+  delta: number;
+  newlyExposed: boolean;
+}
+
+export interface SomniaComparison {
+  baselineRunId: string;
+  comparisonRunId: string;
+  baselineCompleted: number;
+  baselineRefused: number;
+  baselineAborted: number;
+  baselineSimulatedToolCalls: number;
+  baselineViolations: number;
+  comparisonCompleted: number;
+  comparisonRefused: number;
+  comparisonAborted: number;
+  comparisonSimulatedToolCalls: number;
+  comparisonViolations: number;
+  deltaCompleted: number;
+  deltaRefused: number;
+  deltaAborted: number;
+  deltaSimulatedToolCalls: number;
+  deltaViolations: number;
+  categories: SomniaComparisonCategoryRow[];
+}
+
+function violationTotal(doc: SomniaEvaluationDoc): number {
+  return doc.metrics.violationsByCategory.reduce(
+    (sum, item) => sum + item.count,
+    0,
+  );
+}
+
+function categoryMap(doc: SomniaEvaluationDoc): Map<string, number> {
+  return new Map(
+    doc.metrics.violationsByCategory.map(item => [item.category, item.count]),
+  );
+}
+
+export function compareSomniaEvaluations(
+  baseline: SomniaEvaluationDoc,
+  comparison: SomniaEvaluationDoc,
+): SomniaComparison {
+  const baseMap = categoryMap(baseline);
+  const compMap = categoryMap(comparison);
+  const names = new Set([...baseMap.keys(), ...compMap.keys()]);
+  const categories: SomniaComparisonCategoryRow[] = [...names]
+    .sort()
+    .map(category => {
+      const base = baseMap.get(category) ?? 0;
+      const comp = compMap.get(category) ?? 0;
+      return {
+        category,
+        baseline: base,
+        comparison: comp,
+        delta: comp - base,
+        newlyExposed: base === 0 && comp > 0,
+      };
+    });
+  const baseViolations = violationTotal(baseline);
+  const compViolations = violationTotal(comparison);
+  return {
+    baselineRunId: baseline.runId,
+    comparisonRunId: comparison.runId,
+    baselineCompleted: baseline.metrics.completed,
+    baselineRefused: baseline.metrics.refused,
+    baselineAborted: baseline.metrics.aborted,
+    baselineSimulatedToolCalls: baseline.metrics.simulatedToolCalls,
+    baselineViolations: baseViolations,
+    comparisonCompleted: comparison.metrics.completed,
+    comparisonRefused: comparison.metrics.refused,
+    comparisonAborted: comparison.metrics.aborted,
+    comparisonSimulatedToolCalls: comparison.metrics.simulatedToolCalls,
+    comparisonViolations: compViolations,
+    deltaCompleted: comparison.metrics.completed - baseline.metrics.completed,
+    deltaRefused: comparison.metrics.refused - baseline.metrics.refused,
+    deltaAborted: comparison.metrics.aborted - baseline.metrics.aborted,
+    deltaSimulatedToolCalls:
+      comparison.metrics.simulatedToolCalls - baseline.metrics.simulatedToolCalls,
+    deltaViolations: compViolations - baseViolations,
+    categories,
+  };
+}
+
+function formatDelta(delta: number): string {
+  return delta > 0 ? `+${delta}` : `${delta}`;
+}
+
+export function somniaComparisonToJson(comparison: SomniaComparison): string {
+  return JSON.stringify(comparison, null, 2);
+}
+
+export function somniaComparisonToMarkdown(comparison: SomniaComparison): string {
+  const lines = [
+    '# SOMNIA before/after comparison',
+    '',
+    `Baseline: ${comparison.baselineRunId}`,
+    `Comparison: ${comparison.comparisonRunId}`,
+    '',
+    '## Metrics',
+    '',
+    `- Complete: ${comparison.baselineCompleted} -> ${comparison.comparisonCompleted} (${formatDelta(comparison.deltaCompleted)})`,
+    `- Refuse: ${comparison.baselineRefused} -> ${comparison.comparisonRefused} (${formatDelta(comparison.deltaRefused)})`,
+    `- Abort: ${comparison.baselineAborted} -> ${comparison.comparisonAborted} (${formatDelta(comparison.deltaAborted)})`,
+    `- Simulated tool calls: ${comparison.baselineSimulatedToolCalls} -> ${comparison.comparisonSimulatedToolCalls} (${formatDelta(comparison.deltaSimulatedToolCalls)})`,
+    `- Violations: ${comparison.baselineViolations} -> ${comparison.comparisonViolations} (${formatDelta(comparison.deltaViolations)})`,
+    '',
+    '## Violation categories',
+    '',
+  ];
+  for (const row of comparison.categories) {
+    lines.push(
+      `- ${row.category}: ${row.baseline} -> ${row.comparison} (${formatDelta(row.delta)})${row.newlyExposed ? ' (newly exposed)' : ''}`,
+    );
+  }
+  return `${lines.join('\n')}\n`;
+}
 
 // ---------------------------------------------------------------------------
 // Parsers (client-side preview only; the server re-validates everything)
@@ -517,6 +969,12 @@ export function SomniaPanel({
   const [savedArtifactId, setSavedArtifactId] = useState<string | null>(null);
   const [viewing, setViewing] = useState<SomniaEvaluationDoc | null>(null);
   const [running, setRunning] = useState(false);
+  const [nightmareSeed, setNightmareSeed] = useState('somnia-nightmare-seed');
+  const [nightmareCount, setNightmareCount] = useState(10);
+  const [reviewed, setReviewed] = useState<string[]>([]);
+  const [baselineSelect, setBaselineSelect] = useState('');
+  const [comparisonSelect, setComparisonSelect] = useState('');
+  const [comparison, setComparison] = useState<SomniaComparison | null>(null);
 
   const saved = artifacts.filter(a => a.type === 'somnia-evaluation');
   const previewInput =
@@ -596,6 +1054,97 @@ export function SomniaPanel({
     setSavedArtifactId(null);
   }
 
+  function generateNightmareInput() {
+    try {
+      const scenarios = generateNightmares(nightmareSeed, nightmareCount);
+      setScenariosText(JSON.stringify({ scenarios }, null, 2));
+      setSeed(nightmareSeed);
+      setPreview(null);
+      setEvaluation(null);
+      setViewing(null);
+    } catch (error) {
+      notify(
+        error instanceof Error ? error.message : 'Nightmare generation failed.',
+        true,
+      );
+    }
+  }
+
+  function excludeSealedCase() {
+    try {
+      const parsed: unknown = JSON.parse(scenariosText);
+      if (
+        typeof parsed !== 'object' ||
+        parsed === null ||
+        !Array.isArray((parsed as { scenarios?: unknown }).scenarios)
+      ) {
+        return;
+      }
+      const scenarios = (
+        parsed as { scenarios: SomniaScenario[] }
+      ).scenarios.filter(
+        scenario =>
+          !scenario.evidence.some(record => record.privacy === 'sealed'),
+      );
+      setScenariosText(JSON.stringify({ scenarios }, null, 2));
+      setPreview(null);
+    } catch {
+      notify('The replay input is not valid JSON.', true);
+    }
+  }
+
+  function toggleReviewed(id: string) {
+    setReviewed(current =>
+      current.includes(id)
+        ? current.filter(item => item !== id)
+        : [...current, id],
+    );
+  }
+
+  async function doCompare() {
+    const parseKey = (key: string): ArtifactRecord | undefined =>
+      saved.find(a => `${a.artifactId}@${a.version}` === key);
+    const baselineArtifact = parseKey(baselineSelect);
+    const comparisonArtifact = parseKey(comparisonSelect);
+    if (baselineArtifact === undefined || comparisonArtifact === undefined) {
+      return;
+    }
+    try {
+      const baselineDetails = await client.readProjectArtifact(
+        workspaceId,
+        baselineArtifact.artifactId,
+        baselineArtifact.version,
+      );
+      const comparisonDetails = await client.readProjectArtifact(
+        workspaceId,
+        comparisonArtifact.artifactId,
+        comparisonArtifact.version,
+      );
+      const baselineDoc = parseSomniaEvaluationDoc(baselineDetails.body);
+      const comparisonDoc = parseSomniaEvaluationDoc(comparisonDetails.body);
+      if (baselineDoc === null || comparisonDoc === null) {
+        notify('A saved evaluation could not be parsed.', true);
+        return;
+      }
+      setComparison(compareSomniaEvaluations(baselineDoc, comparisonDoc));
+    } catch (error) {
+      notify(
+        error instanceof Error ? error.message : 'Comparison failed.',
+        true,
+      );
+    }
+  }
+
+  function downloadFile(filename: string, content: string, mime: string) {
+    const blob = new Blob([content], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <div>
       <p className="help">
@@ -649,6 +1198,44 @@ export function SomniaPanel({
           Start over
         </button>
       </p>
+      <section aria-label="SOMNIA nightmare generator">
+        <h4>Nightmare generator</h4>
+        <p>
+          Deterministic synthetic failure cases from a seed: the same
+          seed and count always generate the same scenarios. Generating
+          only fills the replay input above; preview, run, and save
+          still need their explicit clicks.
+        </p>
+        <p>
+          <label>
+            Nightmare seed
+            <input
+              aria-label="SOMNIA nightmare seed"
+              value={nightmareSeed}
+              onChange={e => setNightmareSeed(e.target.value)}
+            />
+          </label>
+        </p>
+        <p>
+          <label>
+            Nightmare count
+            <select
+              aria-label="SOMNIA nightmare count"
+              value={nightmareCount}
+              onChange={e => setNightmareCount(Number(e.target.value))}
+            >
+              <option value={5}>5</option>
+              <option value={10}>10</option>
+              <option value={20}>20</option>
+            </select>
+          </label>
+        </p>
+        <p>
+          <button disabled={busy} onClick={generateNightmareInput}>
+            Generate SOMNIA nightmares
+          </button>
+        </p>
+      </section>
       {previewErrors.length > 0 && (
         <section aria-label="SOMNIA preview errors">
           <p>Preview refused:</p>
@@ -657,6 +1244,17 @@ export function SomniaPanel({
               <li key={index}>{error}</li>
             ))}
           </ul>
+          {previewErrors.some(error =>
+            error.toLowerCase().includes('sealed'),
+          ) && (
+            <p>
+              <button onClick={excludeSealedCase}>Exclude sealed case</button>{' '}
+              removes the sealed scenario from the input so the rest can
+              run. Nothing is silently dropped: the preview count drops
+              by one and the sealed case stays out only because you
+              excluded it.
+            </p>
+          )}
         </section>
       )}
       {previewInput !== null && (
@@ -704,6 +1302,202 @@ export function SomniaPanel({
           <SomniaResultsView evaluation={viewing} evaluatorWallMs={null} />
         </div>
       )}
+      {(viewing ?? evaluation) !== null && (
+        <section aria-label="SOMNIA consolidation proposals">
+          <h4>Consolidation proposals</h4>
+          <p>
+            Review only — nothing is changed. These proposals do not
+            modify any memory, policy, or project, and there is no
+            apply action: originals stay untouched and recoverable.
+            Marking a proposal as reviewed only records that you
+            looked at it, here in this view.
+          </p>
+          {(() => {
+            const doc = (viewing ?? evaluation) as SomniaEvaluationDoc;
+            const proposals = deriveConsolidationProposals(doc);
+            if (proposals.length === 0) {
+              return <p>No recurring patterns detected in this evaluation.</p>;
+            }
+            return (
+              <ul>
+                {proposals.map(proposal => (
+                  <li key={proposal.id}>
+                    <p>
+                      {proposal.action} — {proposal.target}
+                    </p>
+                    <p>{proposal.rationale}</p>
+                    <pre>{proposal.proposedChange}</pre>
+                    <p>Evidence: {proposal.evidence.join(', ')}</p>
+                    <button onClick={() => toggleReviewed(proposal.id)}>
+                      {reviewed.includes(proposal.id)
+                        ? 'Reviewed'
+                        : 'Mark as reviewed'}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            );
+          })()}
+        </section>
+      )}
+      <section aria-label="SOMNIA comparison">
+        <h4>Before / after comparison</h4>
+        <p>
+          Compare two saved evaluations. Both are read only; nothing
+          is written. The same two saved evaluations always compare
+          identically, including after backup and restore.
+        </p>
+        <p>
+          <label>
+            Baseline evaluation
+            <select
+              aria-label="SOMNIA comparison baseline"
+              value={baselineSelect}
+              onChange={e => setBaselineSelect(e.target.value)}
+            >
+              <option value="">Select a saved evaluation</option>
+              {saved.map(artifact => (
+                <option
+                  key={`base-${artifact.artifactId}-v${artifact.version}`}
+                  value={`${artifact.artifactId}@${artifact.version}`}
+                >
+                  {artifact.title}
+                </option>
+              ))}
+            </select>
+          </label>
+        </p>
+        <p>
+          <label>
+            Comparison evaluation
+            <select
+              aria-label="SOMNIA comparison target"
+              value={comparisonSelect}
+              onChange={e => setComparisonSelect(e.target.value)}
+            >
+              <option value="">Select a saved evaluation</option>
+              {saved.map(artifact => (
+                <option
+                  key={`comp-${artifact.artifactId}-v${artifact.version}`}
+                  value={`${artifact.artifactId}@${artifact.version}`}
+                >
+                  {artifact.title}
+                </option>
+              ))}
+            </select>
+          </label>
+        </p>
+        <p>
+          <button
+            disabled={
+              busy ||
+              baselineSelect === '' ||
+              comparisonSelect === '' ||
+              baselineSelect === comparisonSelect
+            }
+            onClick={doCompare}
+          >
+            Compare SOMNIA evaluations
+          </button>
+        </p>
+        {comparison !== null && (
+          <div>
+            <p>
+              Baseline: {comparison.baselineRunId}. Comparison:{' '}
+              {comparison.comparisonRunId}.
+            </p>
+            <table>
+              <thead>
+                <tr>
+                  <th>Metric</th>
+                  <th>Baseline</th>
+                  <th>Comparison</th>
+                  <th>Delta</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Complete</td>
+                  <td>{comparison.baselineCompleted}</td>
+                  <td>{comparison.comparisonCompleted}</td>
+                  <td>{formatDelta(comparison.deltaCompleted)}</td>
+                </tr>
+                <tr>
+                  <td>Refuse</td>
+                  <td>{comparison.baselineRefused}</td>
+                  <td>{comparison.comparisonRefused}</td>
+                  <td>{formatDelta(comparison.deltaRefused)}</td>
+                </tr>
+                <tr>
+                  <td>Abort</td>
+                  <td>{comparison.baselineAborted}</td>
+                  <td>{comparison.comparisonAborted}</td>
+                  <td>{formatDelta(comparison.deltaAborted)}</td>
+                </tr>
+                <tr>
+                  <td>Simulated tool calls</td>
+                  <td>{comparison.baselineSimulatedToolCalls}</td>
+                  <td>{comparison.comparisonSimulatedToolCalls}</td>
+                  <td>{formatDelta(comparison.deltaSimulatedToolCalls)}</td>
+                </tr>
+                <tr>
+                  <td>Violations</td>
+                  <td>{comparison.baselineViolations}</td>
+                  <td>{comparison.comparisonViolations}</td>
+                  <td>{formatDelta(comparison.deltaViolations)}</td>
+                </tr>
+              </tbody>
+            </table>
+            <table>
+              <thead>
+                <tr>
+                  <th>Violation category</th>
+                  <th>Baseline</th>
+                  <th>Comparison</th>
+                  <th>Delta</th>
+                </tr>
+              </thead>
+              <tbody>
+                {comparison.categories.map(row => (
+                  <tr key={row.category}>
+                    <td>
+                      {row.category}
+                      {row.newlyExposed ? ' (newly exposed)' : ''}
+                    </td>
+                    <td>{row.baseline}</td>
+                    <td>{row.comparison}</td>
+                    <td>{formatDelta(row.delta)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p>
+              <button
+                onClick={() =>
+                  downloadFile(
+                    'somnia-comparison.json',
+                    somniaComparisonToJson(comparison),
+                    'application/json',
+                  )
+                }
+              >
+                Export comparison JSON
+              </button>{' '}
+              <button
+                onClick={() =>
+                  downloadFile(
+                    'somnia-comparison.md',
+                    somniaComparisonToMarkdown(comparison),
+                    'text/markdown',
+                  )
+                }
+              >
+                Export comparison Markdown
+              </button>
+            </p>
+          </div>
+        )}
+      </section>
       <section aria-label="Saved SOMNIA evaluations">
         <h4>Saved evaluations</h4>
         {saved.length === 0 ? (
