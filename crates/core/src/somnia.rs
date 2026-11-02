@@ -1350,9 +1350,7 @@ fn coverage_class(category: &str) -> Option<usize> {
 /// stable sort, so ties keep caller order. Empty input yields a
 /// zeroed dashboard; the panel renders "no saved evaluations"
 /// instead of numbers in that case.
-pub fn compute_dashboard(
-    pairs: &[(&SomniaEvaluationDoc, &str)],
-) -> SomniaDashboard {
+pub fn compute_dashboard(pairs: &[(&SomniaEvaluationDoc, &str)]) -> SomniaDashboard {
     let mut sorted: Vec<(&SomniaEvaluationDoc, &str)> = pairs.to_vec();
     sorted.sort_by(|a, b| a.1.cmp(b.1));
     let mut dashboard = SomniaDashboard {
@@ -1411,16 +1409,12 @@ pub fn compute_dashboard(
         }
         previous = Some((doc, failures));
     }
-    dashboard.duplicate_evidence_ids =
-        evidence_counts.values().filter(|&&n| n > 1).count();
-    dashboard.duplicate_sources =
-        source_counts.values().filter(|&&n| n > 1).count();
+    dashboard.duplicate_evidence_ids = evidence_counts.values().filter(|&&n| n > 1).count();
+    dashboard.duplicate_sources = source_counts.values().filter(|&&n| n > 1).count();
     dashboard.coverage_classes = classes.len();
     if dashboard.total_scenarios > 0 {
-        dashboard.failure_rate_tenths = (dashboard.total_refused
-            + dashboard.total_aborted)
-            * 1000
-            / dashboard.total_scenarios;
+        dashboard.failure_rate_tenths =
+            (dashboard.total_refused + dashboard.total_aborted) * 1000 / dashboard.total_scenarios;
     }
     let (latest, latest_timestamp) = sorted.last().unwrap();
     let (baseline, _) = sorted.first().unwrap();
@@ -1428,35 +1422,25 @@ pub fn compute_dashboard(
     dashboard.latest_timestamp = latest_timestamp.to_string();
     if latest.metrics.scenarios_total > 0 {
         dashboard.latest_calls_per_scenario_hundredths =
-            latest.metrics.simulated_tool_calls * 100
-                / latest.metrics.scenarios_total;
+            latest.metrics.simulated_tool_calls * 100 / latest.metrics.scenarios_total;
     }
     if baseline.metrics.scenarios_total > 0 {
         dashboard.baseline_calls_per_scenario_hundredths =
-            baseline.metrics.simulated_tool_calls * 100
-                / baseline.metrics.scenarios_total;
+            baseline.metrics.simulated_tool_calls * 100 / baseline.metrics.scenarios_total;
     }
     if baseline.metrics.simulated_tool_calls > 0
         && baseline.metrics.scenarios_total > 0
         && latest.metrics.scenarios_total > 0
     {
         dashboard.efficiency_ratio_hundredths = Some(
-            latest.metrics.simulated_tool_calls
-                * baseline.metrics.scenarios_total
-                * 100
-                / (baseline.metrics.simulated_tool_calls
-                    * latest.metrics.scenarios_total),
+            latest.metrics.simulated_tool_calls * baseline.metrics.scenarios_total * 100
+                / (baseline.metrics.simulated_tool_calls * latest.metrics.scenarios_total),
         );
     }
     dashboard
 }
 
-fn qa_scenario(
-    id: &str,
-    title: String,
-    category: &str,
-    instruction: &str,
-) -> SomniaScenario {
+fn qa_scenario(id: &str, title: String, category: &str, instruction: &str) -> SomniaScenario {
     SomniaScenario {
         id: id.to_string(),
         title,
@@ -1483,9 +1467,7 @@ fn qa_tool(tool: &str, outcome: &str) -> SomniaToolEvent {
 /// evaluator to a known decision (see the Rust test). Categories
 /// reuse the existing allow-list; no new category is introduced.
 pub fn forge_qa_scenarios(concept_title: &str) -> Vec<SomniaScenario> {
-    let title = |condition: &str| {
-        format!("Forge QA [{concept_title}]: {condition}")
-    };
+    let title = |condition: &str| format!("Forge QA [{concept_title}]: {condition}");
     let mut api = qa_scenario(
         "forge-qa-api-failure",
         title("API failure"),
@@ -1511,8 +1493,10 @@ pub fn forge_qa_scenarios(concept_title: &str) -> Vec<SomniaScenario> {
         "tool-timeout",
         "Fetch the record the concept needs and continue.",
     );
-    timeout.tool_events =
-        vec![qa_tool("fetch-record", "ok"), qa_tool("fetch-record", "timeout")];
+    timeout.tool_events = vec![
+        qa_tool("fetch-record", "ok"),
+        qa_tool("fetch-record", "timeout"),
+    ];
     let mut dependency = qa_scenario(
         "forge-qa-unexpected-dependency",
         title("Unexpected dependency"),
@@ -2193,8 +2177,7 @@ mod tests {
         let mut missing = scenario("b2", "missing-evidence");
         missing.required_evidence = vec!["receipt".to_string()];
         missing.evidence = vec![evidence("other")];
-        let baseline =
-            build_evaluation_doc(&input(vec![complete, missing])).unwrap();
+        let baseline = build_evaluation_doc(&input(vec![complete, missing])).unwrap();
         // Later run: 1 Complete (1 call) + 1 Abort (timeout, 1 prior
         // call) + 2 Refuse (same missing receipt id, evidence "other").
         let mut aborted = scenario("c2", "tool-timeout");
@@ -2222,8 +2205,10 @@ mod tests {
         ]))
         .unwrap();
         // Deliberately pass newest first: the function sorts by timestamp.
-        let dashboard =
-            compute_dashboard(&[(&later, "2026-11-02T10:00:00Z"), (&baseline, "2026-11-02T09:00:00Z")]);
+        let dashboard = compute_dashboard(&[
+            (&later, "2026-11-02T10:00:00Z"),
+            (&baseline, "2026-11-02T09:00:00Z"),
+        ]);
         assert_eq!(dashboard.total_runs, 2);
         assert_eq!(dashboard.total_scenarios, 6);
         assert_eq!((dashboard.total_refused, dashboard.total_aborted), (3, 1));
@@ -2263,14 +2248,13 @@ mod tests {
     fn forge_qa_scenarios_evaluate_to_intended_decisions() {
         let scenarios = forge_qa_scenarios("Bean Stock Log");
         assert_eq!(scenarios.len(), 7);
-        assert!(scenarios
-            .iter()
-            .all(|s| s.title.starts_with("Forge QA [Bean Stock Log]: ")));
-        assert_eq!(
+        assert!(
             scenarios
                 .iter()
-                .map(|s| s.id.as_str())
-                .collect::<Vec<_>>(),
+                .all(|s| s.title.starts_with("Forge QA [Bean Stock Log]: "))
+        );
+        assert_eq!(
+            scenarios.iter().map(|s| s.id.as_str()).collect::<Vec<_>>(),
             vec![
                 "forge-qa-api-failure",
                 "forge-qa-incorrect-input",
@@ -2282,11 +2266,7 @@ mod tests {
             ]
         );
         let doc = build_evaluation_doc(&input(scenarios)).unwrap();
-        let decisions: Vec<&str> = doc
-            .results
-            .iter()
-            .map(|r| r.decision.as_str())
-            .collect();
+        let decisions: Vec<&str> = doc.results.iter().map(|r| r.decision.as_str()).collect();
         // Display order is seed-sorted, so sort by scenario id first.
         let mut by_id: Vec<(&SomniaScenarioResult, &str)> = doc
             .results
