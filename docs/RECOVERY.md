@@ -1,23 +1,26 @@
-## Resume point — 2026-11-02 M11 GHOST-PROMPT Slice 1 (Linux; Windows rerun pending)
+## Resume point — 2026-11-02 M11 GHOST-PROMPT Slice 2 (Linux; Windows rerun pending)
 
 Owner-authorized M11 slice on branch
-`muse/m11-ghost-prompt-slice1` from verified
-Windows review tip `d7887ad82` (M10 closed).
-§53 consent model (OFF by default, verbatim modal
-text, persistent badge, Pause/Resume/Review/Clear/
-Stop), §54–55 in-memory session engine (Rust
-reference + TS mirror, diff spans, factual pauses,
-500/50KB bounds, password refusal, observable
-wipe), and the Ask ANANSI fragments inspection
-table (§86.1–4, §86.8–9). No server op, no new
-artifact type, no schema change. Linux
-verification: Rust 603 passed + 4 known
-live-Ollama environment failures, node 178/178,
-e2e ghost spec 2/2, browser battery 68/69 (single
-failure the known pre-existing search
-real-semantic test). AN-016 is in progress for
-the Slice 1 scope; Slice 1 Windows rerun pending;
-do not claim Windows acceptance from Linux
+`muse/m11-ghost-prompt-slice2` from verified
+Windows review head `9ac467fec54c28c957428187d998d73599a6a965`
+(Slice 1 Windows-verified; the assignment's stated
+full SHA `9ac467fe835c…` does not exist — see the
+Slice 2 addendum for the recorded discrepancy).
+§56/§65 visual exploration layer: pure deterministic
+3D layout, Three.js scene builder (pinned 0.187.0,
+no renderer created), `GhostPrompt3D` component
+with WebGL-failure and context-loss fallback to a
+complete 2D view, synchronous reduced-motion init
+with toggle, SVG timeline on the same layout
+numbers, keyboard selection, detail card, and
+semantic `<ol>` history. No server op, no new
+artifact type, no schema change, no Rust change.
+Linux verification: Rust 603 passed + 4 known
+live-Ollama environment failures, node 186/186,
+e2e ghost Slice 2 spec 2/2, regression battery
+20/20. AN-016 is in progress for the Slice 2 scope;
+Slice 2 Windows rerun pending; do not claim Windows
+acceptance from Linux
 evidence. Slices 2/3 are deferred and
 uncommissioned.
 
