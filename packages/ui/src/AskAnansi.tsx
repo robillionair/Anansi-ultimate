@@ -1,5 +1,24 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Client, AskResponse, GroundedCitation } from '@anansi/contracts';
+import { GhostSession } from './ghostPrompt';
+import type { GhostEditKind } from './ghostPrompt';
+import { GhostPromptStrip } from './GhostPrompt';
+
+function ghostKindFromInputType(inputType: string): GhostEditKind | null {
+  switch (inputType) {
+    case 'historyUndo':
+      return 'undo';
+    case 'historyRedo':
+      return 'redo';
+    case 'insertFromPaste':
+    case 'insertFromDrop':
+      return 'paste';
+    case 'insertReplacementText':
+      return 'replace';
+    default:
+      return inputType.startsWith('delete') ? 'delete' : null;
+  }
+}
 
 export function AskAnansi({ client, workspaceId }: { client: Client; workspaceId: string }) {
   const [prompt, setPrompt] = useState('');
@@ -13,6 +32,24 @@ export function AskAnansi({ client, workspaceId }: { client: Client; workspaceId
   const [partial,setPartial]=useState('');
   const active=useRef<string|null>(null);
   const cancelled=useRef(false);
+  const ghostEngineRef=useRef<GhostSession|null>(null);
+  if (ghostEngineRef.current===null) {
+    ghostEngineRef.current=GhostSession.create(`ghost-ask-${workspaceId}`,{id:'ask-prompt',isPassword:false});
+  }
+  const ghostStartRef=useRef(0);
+  const ghostPrevRef=useRef('');
+  const [,setGhostVersion]=useState(0);
+  const bumpGhost=()=>setGhostVersion(value=>value+1);
+  function handleGhostChange(next: string, inputType: string) {
+    const engine=ghostEngineRef.current;
+    if (engine) {
+      const nowMs=Math.max(0,performance.now()-ghostStartRef.current);
+      engine.record(ghostPrevRef.current,next,ghostKindFromInputType(inputType),nowMs);
+    }
+    ghostPrevRef.current=next;
+    setPrompt(next);
+    bumpGhost();
+  }
   useEffect(()=>()=>{cancelled.current=true;const id=active.current;if(id)void client.forgetAsk(workspaceId,id).catch(()=>{});},[client,workspaceId]);
 
   async function handleSubmit(event: React.FormEvent) {
@@ -62,6 +99,32 @@ export function AskAnansi({ client, workspaceId }: { client: Client; workspaceId
           Zero telemetry, zero cloud data transfer.
         </p>
 
+        {ghostEngineRef.current && (
+          <GhostPromptStrip
+            engine={ghostEngineRef.current}
+            onEnable={() => {
+              ghostEngineRef.current?.enable();
+              ghostStartRef.current = performance.now();
+              bumpGhost();
+            }}
+            onPause={() => {
+              ghostEngineRef.current?.pause();
+              bumpGhost();
+            }}
+            onResume={() => {
+              ghostEngineRef.current?.resume();
+              bumpGhost();
+            }}
+            onClear={() => {
+              ghostEngineRef.current?.clear();
+              bumpGhost();
+            }}
+            onStop={() => {
+              ghostEngineRef.current?.stop();
+              bumpGhost();
+            }}
+          />
+        )}
         <form onSubmit={handleSubmit}>
           <fieldset disabled={busy}>
             <label htmlFor="ask-model">Installed Ollama model</label><input id="ask-model" value={model} onChange={event=>setModel(event.target.value)} required autoComplete="off"/>
@@ -72,7 +135,7 @@ export function AskAnansi({ client, workspaceId }: { client: Client; workspaceId
               id="ask-prompt"
               type="text"
               value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
+              onChange={(e) => handleGhostChange(e.target.value,(e.nativeEvent as InputEvent).inputType ?? '')}
               placeholder="e.g. What did we decide about search and offline support?"
               maxLength={500}
               required

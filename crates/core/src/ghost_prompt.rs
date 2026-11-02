@@ -219,6 +219,9 @@ impl GhostSession {
     pub fn resume(&mut self) {
         if self.state == SessionState::Paused {
             self.state = SessionState::Recording;
+            // The paused interval is not an editing interval: the next edit
+            // must not synthesize a pause event for time spent paused.
+            self.last_edit_ms = None;
         }
     }
 
@@ -451,6 +454,16 @@ mod tests {
         // Undo hint is preserved.
         assert!(s.record("hello pasted", "hello", Some(EditKind::Undo), 1500));
         assert_eq!(s.events.last().unwrap().kind, EditKind::Undo);
+    }
+
+    #[test]
+    fn resume_clears_paused_interval() {
+        let mut s = session();
+        s.record("", "a", None, 0);
+        s.pause();
+        s.resume();
+        s.record("a", "ab", None, 100000);
+        assert!(s.pauses.is_empty());
     }
 
     #[test]
