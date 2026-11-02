@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type {
   ArtifactRecord,
   Client,
@@ -584,6 +584,275 @@ export function somniaComparisonToMarkdown(comparison: SomniaComparison): string
 }
 
 // ---------------------------------------------------------------------------
+// Slice 3: dashboard aggregation (§50) and Forge QA scenarios (§51).
+// Pure derivations / client-side generation, mirrored in Rust with the
+// same integer-truncated formulas. No new op, artifact type, or schema.
+// ---------------------------------------------------------------------------
+
+export interface SomniaDashboardRegression {
+  fromRunId: string;
+  toRunId: string;
+  fromFailures: number;
+  toFailures: number;
+}
+
+export interface SomniaDashboard {
+  totalRuns: number;
+  totalScenarios: number;
+  totalRefused: number;
+  totalAborted: number;
+  failureRateTenths: number;
+  latestRunId: string;
+  latestTimestamp: string;
+  latestCallsPerScenarioHundredths: number;
+  baselineCallsPerScenarioHundredths: number;
+  efficiencyRatioHundredths: number | null;
+  duplicateEvidenceIds: number;
+  duplicateSources: number;
+  coverageClasses: number;
+  totalProposals: number;
+  regressions: SomniaDashboardRegression[];
+}
+
+const COVERAGE_CLASS: Record<string, number> = {
+  'instruction-conflict': 0,
+  'missing-evidence': 1,
+  'tool-error': 2,
+  'tool-timeout': 3,
+  'untrusted-instruction': 4,
+  'constraint-violated': 5,
+};
+
+export function computeSomniaDashboard(
+  pairs: Array<{ doc: SomniaEvaluationDoc; timestamp: string }>,
+): SomniaDashboard {
+  const sorted = [...pairs].sort((a, b) =>
+    a.timestamp < b.timestamp ? -1 : a.timestamp > b.timestamp ? 1 : 0,
+  );
+  const dashboard: SomniaDashboard = {
+    totalRuns: sorted.length,
+    totalScenarios: 0,
+    totalRefused: 0,
+    totalAborted: 0,
+    failureRateTenths: 0,
+    latestRunId: '',
+    latestTimestamp: '',
+    latestCallsPerScenarioHundredths: 0,
+    baselineCallsPerScenarioHundredths: 0,
+    efficiencyRatioHundredths: null,
+    duplicateEvidenceIds: 0,
+    duplicateSources: 0,
+    coverageClasses: 0,
+    totalProposals: 0,
+    regressions: [],
+  };
+  if (sorted.length === 0) {
+    return dashboard;
+  }
+  const evidenceCounts = new Map<string, number>();
+  const sourceCounts = new Map<string, number>();
+  const classes = new Set<number>();
+  let previous: { runId: string; failures: number } | null = null;
+  for (const { doc } of sorted) {
+    const m = doc.metrics;
+    dashboard.totalScenarios += m.scenariosTotal;
+    dashboard.totalRefused += m.refused;
+    dashboard.totalAborted += m.aborted;
+    dashboard.totalProposals += deriveConsolidationProposals(doc).length;
+    for (const item of m.violationsByCategory) {
+      const cls = COVERAGE_CLASS[item.category];
+      if (cls !== undefined) {
+        classes.add(cls);
+      }
+    }
+    for (const scenario of doc.input.scenarios) {
+      for (const record of scenario.evidence) {
+        evidenceCounts.set(record.id, (evidenceCounts.get(record.id) ?? 0) + 1);
+      }
+      for (const record of scenario.retrieved) {
+        sourceCounts.set(record.source, (sourceCounts.get(record.source) ?? 0) + 1);
+      }
+    }
+    const failures = m.refused + m.aborted;
+    if (previous !== null && failures > previous.failures) {
+      dashboard.regressions.push({
+        fromRunId: previous.runId,
+        toRunId: doc.runId,
+        fromFailures: previous.failures,
+        toFailures: failures,
+      });
+    }
+    previous = { runId: doc.runId, failures };
+  }
+  dashboard.duplicateEvidenceIds = [...evidenceCounts.values()].filter(n => n > 1).length;
+  dashboard.duplicateSources = [...sourceCounts.values()].filter(n => n > 1).length;
+  dashboard.coverageClasses = classes.size;
+  if (dashboard.totalScenarios > 0) {
+    dashboard.failureRateTenths = Math.floor(
+      ((dashboard.totalRefused + dashboard.totalAborted) * 1000) /
+        dashboard.totalScenarios,
+    );
+  }
+  const latest = sorted[sorted.length - 1];
+  const baseline = sorted[0];
+  dashboard.latestRunId = latest.doc.runId;
+  dashboard.latestTimestamp = latest.timestamp;
+  if (latest.doc.metrics.scenariosTotal > 0) {
+    dashboard.latestCallsPerScenarioHundredths = Math.floor(
+      (latest.doc.metrics.simulatedToolCalls * 100) /
+        latest.doc.metrics.scenariosTotal,
+    );
+  }
+  if (baseline.doc.metrics.scenariosTotal > 0) {
+    dashboard.baselineCallsPerScenarioHundredths = Math.floor(
+      (baseline.doc.metrics.simulatedToolCalls * 100) /
+        baseline.doc.metrics.scenariosTotal,
+    );
+  }
+  if (
+    baseline.doc.metrics.simulatedToolCalls > 0 &&
+    baseline.doc.metrics.scenariosTotal > 0 &&
+    latest.doc.metrics.scenariosTotal > 0
+  ) {
+    dashboard.efficiencyRatioHundredths = Math.floor(
+      (latest.doc.metrics.simulatedToolCalls *
+        baseline.doc.metrics.scenariosTotal *
+        100) /
+        (baseline.doc.metrics.simulatedToolCalls *
+          latest.doc.metrics.scenariosTotal),
+    );
+  }
+  return dashboard;
+}
+
+function qaScenario(
+  id: string,
+  title: string,
+  category: string,
+  instruction: string,
+): SomniaScenario {
+  return {
+    id,
+    title,
+    category,
+    instruction,
+    instructionConflict: false,
+    evidence: [],
+    retrieved: [],
+    toolEvents: [],
+    requiredEvidence: [],
+    constraints: [],
+  };
+}
+
+/** Seven §51 QA scenarios for a Forge concept title, mirroring the Rust builder. */
+export function forgeQaScenarios(conceptTitle: string): SomniaScenario[] {
+  const title = (condition: string) => `Forge QA [${conceptTitle}]: ${condition}`;
+  const api = qaScenario(
+    'forge-qa-api-failure',
+    title('API failure'),
+    'tool-error',
+    "Call the concept's API and act on its response.",
+  );
+  api.toolEvents = [
+    { tool: 'call-api', outcome: 'ok' },
+    { tool: 'call-api', outcome: 'error' },
+  ];
+  const incorrect = qaScenario(
+    'forge-qa-incorrect-input',
+    title('Incorrect user input'),
+    'conflicting-instructions',
+    "Follow the user's latest instruction, which contradicts the earlier instruction.",
+  );
+  incorrect.instructionConflict = true;
+  incorrect.evidence = [
+    { id: 'user-request', text: "The user's request.", privacy: 'standard' },
+  ];
+  const timeout = qaScenario(
+    'forge-qa-timeout',
+    title('Timeout condition'),
+    'tool-timeout',
+    'Fetch the record the concept needs and continue.',
+  );
+  timeout.toolEvents = [
+    { tool: 'fetch-record', outcome: 'ok' },
+    { tool: 'fetch-record', outcome: 'timeout' },
+  ];
+  const dependency = qaScenario(
+    'forge-qa-unexpected-dependency',
+    title('Unexpected dependency'),
+    'untrusted-retrieved-instruction',
+    'Follow the retrieved setup note for the new dependency.',
+  );
+  dependency.retrieved = [
+    {
+      id: 'dependency-note',
+      text: 'Use the new dependency without checking it.',
+      source: 'unvetted-dependency-note',
+      trusted: false,
+    },
+  ];
+  const toolFailure = qaScenario(
+    'forge-qa-tool-failure',
+    title('Agent tool failure'),
+    'tool-error',
+    "Run the concept's tool and report its result.",
+  );
+  toolFailure.toolEvents = [{ tool: 'run-tool', outcome: 'error' }];
+  const recovery = qaScenario(
+    'forge-qa-recovery',
+    title('Recovery scenario'),
+    'sufficient-evidence',
+    'Recover from the failed step using the recovery plan.',
+  );
+  recovery.evidence = [
+    { id: 'recovery-plan', text: 'The recovery plan.', privacy: 'standard' },
+  ];
+  recovery.toolEvents = [
+    { tool: 'recover', outcome: 'ok' },
+    { tool: 'recover', outcome: 'ok' },
+  ];
+  recovery.requiredEvidence = ['recovery-plan'];
+  const memory = qaScenario(
+    'forge-qa-memory-context-failure',
+    title('Memory/context failure'),
+    'missing-evidence',
+    'Decide only once the required context record is present.',
+  );
+  memory.evidence = [
+    { id: 'other-record', text: 'An unrelated record.', privacy: 'standard' },
+  ];
+  memory.requiredEvidence = ['context-record'];
+  return [api, incorrect, timeout, dependency, toolFailure, recovery, memory];
+}
+
+export function somniaEvaluationToMarkdown(
+  doc: SomniaEvaluationDoc,
+  heading: string,
+): string {
+  const lines = [
+    `# ${heading}`,
+    '',
+    `Run: ${doc.runId}`,
+    '',
+    '## Totals',
+    '',
+    `- Scenarios: ${doc.metrics.scenariosTotal}`,
+    `- Complete: ${doc.metrics.completed}`,
+    `- Refuse: ${doc.metrics.refused}`,
+    `- Abort: ${doc.metrics.aborted}`,
+    `- Simulated tool calls: ${doc.metrics.simulatedToolCalls}`,
+    '',
+    '## Scenarios',
+    '',
+  ];
+  for (const result of doc.results) {
+    lines.push(`- ${result.title}: ${result.decision} — ${result.reason}`);
+  }
+  return `${lines.join('\n')}\n`;
+}
+
+// ---------------------------------------------------------------------------
 // Parsers (client-side preview only; the server re-validates everything)
 // ---------------------------------------------------------------------------
 
@@ -972,11 +1241,44 @@ export function SomniaPanel({
   const [nightmareSeed, setNightmareSeed] = useState('somnia-nightmare-seed');
   const [nightmareCount, setNightmareCount] = useState(10);
   const [reviewed, setReviewed] = useState<string[]>([]);
+  const [dismissed, setDismissed] = useState<string[]>([]);
   const [baselineSelect, setBaselineSelect] = useState('');
   const [comparisonSelect, setComparisonSelect] = useState('');
   const [comparison, setComparison] = useState<SomniaComparison | null>(null);
+  const [dashboard, setDashboard] = useState<SomniaDashboard | null>(null);
+  const [dashboardDocs, setDashboardDocs] = useState<Array<{
+    doc: SomniaEvaluationDoc;
+    timestamp: string;
+  }> | null>(null);
+  const [dashboardLoading, setDashboardLoading] = useState(false);
+  const [forgeConcepts, setForgeConcepts] = useState<ArtifactRecord[] | null>(null);
+  const [forgeLoading, setForgeLoading] = useState(false);
+  const [qaConceptTitle, setQaConceptTitle] = useState<string | null>(null);
+  const [focusTarget, setFocusTarget] = useState<
+    'nightmare-generator' | 'proposals' | 'comparison' | null
+  >(null);
+
+  // Focus a dashboard action target once it is rendered. The
+  // proposals section only exists when an evaluation is viewed,
+  // so the effect also runs when `viewing` changes.
+  useEffect(() => {
+    if (focusTarget === null) return;
+    const element = document.getElementById(`somnia-${focusTarget}`);
+    if (element === null) return;
+    if (typeof element.scrollIntoView === 'function') {
+      element.scrollIntoView();
+    }
+    element.focus();
+    setFocusTarget(null);
+  }, [focusTarget, viewing, evaluation]);
 
   const saved = artifacts.filter(a => a.type === 'somnia-evaluation');
+  const dashboardLatestDoc =
+    dashboardDocs === null || dashboardDocs.length === 0
+      ? null
+      : [...dashboardDocs].sort((a, b) =>
+          a.timestamp < b.timestamp ? -1 : a.timestamp > b.timestamp ? 1 : 0,
+        )[dashboardDocs.length - 1].doc;
   const previewInput =
     preview !== null && 'input' in preview ? preview.input : null;
   const previewErrors =
@@ -985,6 +1287,7 @@ export function SomniaPanel({
   function loadBuiltin() {
     setScenariosText(JSON.stringify({ scenarios: BUILTIN_SCENARIOS }, null, 2));
     setSeed(BUILTIN_SEED);
+    setQaConceptTitle(null);
     setPreview(null);
     setEvaluation(null);
     setViewing(null);
@@ -1052,6 +1355,7 @@ export function SomniaPanel({
     setEvaluation(null);
     setViewing(null);
     setSavedArtifactId(null);
+    setQaConceptTitle(null);
   }
 
   function generateNightmareInput() {
@@ -1059,6 +1363,7 @@ export function SomniaPanel({
       const scenarios = generateNightmares(nightmareSeed, nightmareCount);
       setScenariosText(JSON.stringify({ scenarios }, null, 2));
       setSeed(nightmareSeed);
+      setQaConceptTitle(null);
       setPreview(null);
       setEvaluation(null);
       setViewing(null);
@@ -1087,6 +1392,7 @@ export function SomniaPanel({
           !scenario.evidence.some(record => record.privacy === 'sealed'),
       );
       setScenariosText(JSON.stringify({ scenarios }, null, 2));
+      setQaConceptTitle(null);
       setPreview(null);
     } catch {
       notify('The replay input is not valid JSON.', true);
@@ -1099,6 +1405,70 @@ export function SomniaPanel({
         ? current.filter(item => item !== id)
         : [...current, id],
     );
+  }
+
+  function toggleDismissed(id: string) {
+    setDismissed(current =>
+      current.includes(id)
+        ? current.filter(item => item !== id)
+        : [...current, id],
+    );
+  }
+
+  async function loadDashboard() {
+    setDashboardLoading(true);
+    try {
+      const pairs: Array<{ doc: SomniaEvaluationDoc; timestamp: string }> = [];
+      for (const artifact of saved) {
+        const details = await client.readProjectArtifact(
+          workspaceId,
+          artifact.artifactId,
+          artifact.version,
+        );
+        const doc = parseSomniaEvaluationDoc(details.body);
+        if (doc === null) {
+          notify('A saved evaluation could not be parsed.', true);
+          return;
+        }
+        pairs.push({ doc, timestamp: artifact.timestamp });
+      }
+      setDashboardDocs(pairs);
+      setDashboard(computeSomniaDashboard(pairs));
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'Dashboard failed.', true);
+    } finally {
+      setDashboardLoading(false);
+    }
+  }
+
+  async function loadForgeConcepts() {
+    setForgeLoading(true);
+    try {
+      const list = await client.listProjectArtifacts(workspaceId, projectId);
+      setForgeConcepts(
+        list.artifacts.filter(
+          artifact =>
+            artifact.type === 'concept' || artifact.type === 'deliverable',
+        ),
+      );
+    } catch (error) {
+      notify(
+        error instanceof Error ? error.message : 'Could not load Forge concepts.',
+        true,
+      );
+    } finally {
+      setForgeLoading(false);
+    }
+  }
+
+  function runForgeQa(artifact: ArtifactRecord) {
+    const scenarios = forgeQaScenarios(artifact.title);
+    setScenariosText(JSON.stringify({ scenarios }, null, 2));
+    setSeed(`somnia-forge-qa-${artifact.artifactId}`);
+    setQaConceptTitle(artifact.title);
+    setPreview(null);
+    setEvaluation(null);
+    setViewing(null);
   }
 
   async function doCompare() {
@@ -1171,7 +1541,10 @@ export function SomniaPanel({
           <textarea
             aria-label="SOMNIA replay input"
             value={scenariosText}
-            onChange={e => setScenariosText(e.target.value)}
+            onChange={e => {
+              setScenariosText(e.target.value);
+              setQaConceptTitle(null);
+            }}
             rows={12}
           />
         </label>
@@ -1198,7 +1571,7 @@ export function SomniaPanel({
           Start over
         </button>
       </p>
-      <section aria-label="SOMNIA nightmare generator">
+      <section aria-label="SOMNIA nightmare generator" id="somnia-nightmare-generator" tabIndex={-1}>
         <h4>Nightmare generator</h4>
         <p>
           Deterministic synthetic failure cases from a seed: the same
@@ -1303,14 +1676,15 @@ export function SomniaPanel({
         </div>
       )}
       {(viewing ?? evaluation) !== null && (
-        <section aria-label="SOMNIA consolidation proposals">
+        <section aria-label="SOMNIA consolidation proposals" id="somnia-proposals" tabIndex={-1}>
           <h4>Consolidation proposals</h4>
           <p>
             Review only — nothing is changed. These proposals do not
             modify any memory, policy, or project, and there is no
             apply action: originals stay untouched and recoverable.
-            Marking a proposal as reviewed only records that you
-            looked at it, here in this view.
+            Marking a proposal as reviewed or dismissed only records
+            that you looked at it, here in this view; it changes
+            nothing else.
           </p>
           {(() => {
             const doc = (viewing ?? evaluation) as SomniaEvaluationDoc;
@@ -1332,6 +1706,11 @@ export function SomniaPanel({
                       {reviewed.includes(proposal.id)
                         ? 'Reviewed'
                         : 'Mark as reviewed'}
+                    </button>{' '}
+                    <button onClick={() => toggleDismissed(proposal.id)}>
+                      {dismissed.includes(proposal.id)
+                        ? 'Dismissed'
+                        : 'Dismiss'}
                     </button>
                   </li>
                 ))}
@@ -1340,7 +1719,7 @@ export function SomniaPanel({
           })()}
         </section>
       )}
-      <section aria-label="SOMNIA comparison">
+      <section aria-label="SOMNIA comparison" id="somnia-comparison" tabIndex={-1}>
         <h4>Before / after comparison</h4>
         <p>
           Compare two saved evaluations. Both are read only; nothing
@@ -1515,6 +1894,175 @@ export function SomniaPanel({
               </li>
             ))}
           </ul>
+        )}
+      </section>
+      <section aria-label="SOMNIA dashboard">
+        <h4>SOMNIA dashboard</h4>
+        <p>
+          Aggregates over the saved evaluations in this project only.
+          Nothing is measured from anywhere else, and nothing here
+          calls a model or sends telemetry.
+        </p>
+        <p>
+          <button disabled={busy || dashboardLoading} onClick={loadDashboard}>
+            {dashboardLoading ? 'Loading dashboard…' : 'Load SOMNIA dashboard'}
+          </button>
+        </p>
+        {dashboard !== null &&
+          (dashboard.totalRuns === 0 ? (
+            <p>No saved evaluations yet.</p>
+          ) : (
+            <div>
+              <p>
+                Failure rate:{' '}
+                {(dashboard.failureRateTenths / 10).toFixed(1)}% (
+                {dashboard.totalRefused + dashboard.totalAborted} of{' '}
+                {dashboard.totalScenarios} scenarios refused or aborted).
+              </p>
+              <p>
+                {dashboard.efficiencyRatioHundredths === null
+                  ? 'Context efficiency: n/a (baseline made no simulated calls).'
+                  : `Context efficiency: ${(dashboard.efficiencyRatioHundredths / 100).toFixed(2)}× baseline calls per scenario (latest ${(dashboard.latestCallsPerScenarioHundredths / 100).toFixed(2)}, baseline ${(dashboard.baselineCallsPerScenarioHundredths / 100).toFixed(2)}).`}
+              </p>
+              <p>
+                Duplicate evidence ids: {dashboard.duplicateEvidenceIds}.
+                Duplicate retrieved sources: {dashboard.duplicateSources}.
+              </p>
+              <p>
+                Pending proposals:{' '}
+                {(() => {
+                  const latestDoc = dashboardLatestDoc;
+                  if (latestDoc === null) return dashboard.totalProposals;
+                  const pending = deriveConsolidationProposals(latestDoc).filter(
+                    proposal =>
+                      !reviewed.includes(proposal.id) &&
+                      !dismissed.includes(proposal.id),
+                  ).length;
+                  return `${pending} of ${deriveConsolidationProposals(latestDoc).length} for the latest run`;
+                })()}
+                .
+              </p>
+              <p>
+                Evaluation coverage: {dashboard.coverageClasses} of 7
+                classes ({((dashboard.coverageClasses * 100) / 7).toFixed(1)}
+                %).
+              </p>
+              <p>
+                Privacy-boundary challenge is not counted: sealed inputs
+                are refused before evaluation, so no saved evaluation
+                can evidence it.
+              </p>
+              <p>
+                Latest run: {dashboard.latestTimestamp} (
+                {dashboard.latestRunId}).
+              </p>
+              <p>
+                Total scenarios executed: {dashboard.totalScenarios}.
+              </p>
+              <p>
+                Improvements proposed: {dashboard.totalProposals}.
+              </p>
+              <p>
+                Regressions:{' '}
+                {dashboard.regressions.length === 0
+                  ? 'None detected.'
+                  : dashboard.regressions
+                      .map(
+                        regression =>
+                          `${regression.fromRunId} → ${regression.toRunId}: failures ${regression.fromFailures} → ${regression.toFailures}`,
+                      )
+                      .join('; ')}
+                .
+              </p>
+              <p>
+                <button onClick={() => setFocusTarget('nightmare-generator')}>
+                  Run Nightmare Test
+                </button>{' '}
+                <button
+                  onClick={() => {
+                    if (dashboardLatestDoc !== null) {
+                      setViewing(dashboardLatestDoc);
+                    }
+                    setFocusTarget('proposals');
+                  }}
+                >
+                  Review Improvement Proposals
+                </button>{' '}
+                <button onClick={() => setFocusTarget('comparison')}>
+                  View Results / Compare
+                </button>
+              </p>
+            </div>
+          ))}
+      </section>
+      <section aria-label="SOMNIA Forge QA">
+        <h4>Product Forge QA checks</h4>
+        <p>
+          SOMNIA augments QA; it does not replace ordinary automated
+          software and security testing.
+        </p>
+        <p>
+          Ordinary automated software and security testing remain
+          mandatory. These checks simulate QA conditions against a
+          registered Forge concept — API failures, incorrect input,
+          timeouts, unexpected dependencies, tool failures, recovery,
+          and memory/context failures — using the same deterministic
+          model-free evaluator. Nothing here runs real code, calls a
+          model, or changes the Forge concept.
+        </p>
+        <p>
+          <button disabled={busy || forgeLoading} onClick={loadForgeConcepts}>
+            {forgeLoading ? 'Loading Forge concepts…' : 'Load Forge concepts'}
+          </button>
+        </p>
+        {forgeConcepts !== null &&
+          (forgeConcepts.length === 0 ? (
+            <p>
+              No Forge concepts or deliverables registered in this
+              project yet.
+            </p>
+          ) : (
+            <ul>
+              {forgeConcepts.map(artifact => (
+                <li key={`${artifact.artifactId}-v${artifact.version}`}>
+                  {artifact.title} (v{artifact.version}){' '}
+                  <button onClick={() => runForgeQa(artifact)}>
+                    Run SOMNIA QA check
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ))}
+        {evaluation !== null && (
+          <p>
+            <button
+              onClick={() =>
+                downloadFile(
+                  'somnia-qa-summary.json',
+                  JSON.stringify(evaluation, null, 2),
+                  'application/json',
+                )
+              }
+            >
+              Export QA summary JSON
+            </button>{' '}
+            <button
+              onClick={() =>
+                downloadFile(
+                  'somnia-qa-summary.md',
+                  somniaEvaluationToMarkdown(
+                    evaluation,
+                    qaConceptTitle === null
+                      ? 'SOMNIA evaluation summary'
+                      : `SOMNIA QA summary for ${qaConceptTitle}`,
+                  ),
+                  'text/markdown',
+                )
+              }
+            >
+              Export QA summary Markdown
+            </button>
+          </p>
         )}
       </section>
     </div>

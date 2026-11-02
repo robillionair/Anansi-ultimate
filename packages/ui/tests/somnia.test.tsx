@@ -15,12 +15,15 @@ import {
   SomniaPanel,
   SomniaResultsView,
   compareSomniaEvaluations,
+  computeSomniaDashboard,
   deriveConsolidationProposals,
+  forgeQaScenarios,
   generateNightmares,
   parseSomniaEvaluationDoc,
   parseSomniaReplayInput,
   somniaComparisonToJson,
   somniaComparisonToMarkdown,
+  somniaEvaluationToMarkdown,
 } from '../src/Somnia';
 import type {
   Client,
@@ -439,4 +442,195 @@ test('swarmtank re-run button no longer claims a full AI simulation', () => {
   assert.ok(source.includes('Re-run Deterministic Scenario Simulation'));
   assert.ok(!source.includes('Full AI Simulation'));
   assert.ok(source.includes('does not perform live AI inference'));
+});
+
+test('somnia dashboard aggregates match the Rust fixed fixture', () => {
+  const scenario = (
+    id: string,
+    patch: Partial<SomniaScenario>,
+  ): SomniaScenario => ({
+    id,
+    title: `Case ${id}`,
+    category: 'sufficient-evidence',
+    instruction: 'Do the task.',
+    instructionConflict: false,
+    evidence: [{ id: 'e1', text: 'Evidence e1.', privacy: 'standard' }],
+    retrieved: [],
+    toolEvents: [],
+    requiredEvidence: ['e1'],
+    constraints: [],
+    ...patch,
+  });
+  const doc = (
+    runId: string,
+    metrics: SomniaEvaluationDoc['metrics'],
+    scenarios: SomniaScenario[],
+  ): SomniaEvaluationDoc => ({
+    ...proposalDoc(),
+    runId,
+    metrics,
+    input: { scenarios, seed: 'dashboard-seed' },
+  });
+  const baseline = doc(
+    'somnia-base',
+    {
+      scenariosTotal: 2,
+      completed: 1,
+      refused: 1,
+      aborted: 0,
+      violationsByCategory: [{ category: 'missing-evidence', count: 1 }],
+      simulatedToolCalls: 2,
+    },
+    [
+      scenario('b1', {}),
+      scenario('b2', {
+        category: 'missing-evidence',
+        requiredEvidence: ['receipt'],
+        evidence: [{ id: 'other', text: 'Other.', privacy: 'standard' }],
+      }),
+    ],
+  );
+  const later = doc(
+    'somnia-later',
+    {
+      scenariosTotal: 4,
+      completed: 1,
+      refused: 2,
+      aborted: 1,
+      violationsByCategory: [
+        { category: 'missing-evidence', count: 2 },
+        { category: 'tool-timeout', count: 1 },
+      ],
+      simulatedToolCalls: 2,
+    },
+    [
+      scenario('c1', {}),
+      scenario('c2', {
+        category: 'tool-timeout',
+        toolEvents: [
+          { tool: 'fetch-record', outcome: 'ok' },
+          { tool: 'fetch-record', outcome: 'timeout' },
+        ],
+      }),
+      scenario('c3', {
+        category: 'missing-evidence',
+        requiredEvidence: ['receipt'],
+        evidence: [{ id: 'other', text: 'Other.', privacy: 'standard' }],
+      }),
+      scenario('c4', {
+        category: 'missing-evidence',
+        requiredEvidence: ['receipt'],
+        evidence: [{ id: 'other', text: 'Other.', privacy: 'standard' }],
+      }),
+    ],
+  );
+  // Newest first: the function sorts by timestamp.
+  const dashboard = computeSomniaDashboard([
+    { doc: later, timestamp: '2026-11-02T10:00:00Z' },
+    { doc: baseline, timestamp: '2026-11-02T09:00:00Z' },
+  ]);
+  assert.equal(dashboard.totalRuns, 2);
+  assert.equal(dashboard.totalScenarios, 6);
+  assert.equal(dashboard.totalRefused, 3);
+  assert.equal(dashboard.totalAborted, 1);
+  assert.equal(dashboard.failureRateTenths, 666);
+  assert.equal(dashboard.latestRunId, 'somnia-later');
+  assert.equal(dashboard.latestTimestamp, '2026-11-02T10:00:00Z');
+  assert.equal(dashboard.latestCallsPerScenarioHundredths, 50);
+  assert.equal(dashboard.baselineCallsPerScenarioHundredths, 100);
+  assert.equal(dashboard.efficiencyRatioHundredths, 50);
+  assert.equal(dashboard.duplicateEvidenceIds, 2);
+  assert.equal(dashboard.duplicateSources, 0);
+  assert.equal(dashboard.coverageClasses, 2);
+  assert.equal(dashboard.totalProposals, 1);
+  assert.equal(dashboard.regressions.length, 1);
+  assert.deepEqual(
+    [
+      dashboard.regressions[0].fromRunId,
+      dashboard.regressions[0].toRunId,
+      dashboard.regressions[0].fromFailures,
+      dashboard.regressions[0].toFailures,
+    ],
+    ['somnia-base', 'somnia-later', 1, 3],
+  );
+  const empty = computeSomniaDashboard([]);
+  assert.equal(empty.totalRuns, 0);
+  assert.equal(empty.failureRateTenths, 0);
+  assert.equal(empty.efficiencyRatioHundredths, null);
+});
+
+test('somnia forge QA scenarios are deterministic and shaped for the evaluator', () => {
+  const scenarios = forgeQaScenarios('Bean Stock Log');
+  assert.deepEqual(
+    scenarios.map(s => s.id),
+    [
+      'forge-qa-api-failure',
+      'forge-qa-incorrect-input',
+      'forge-qa-timeout',
+      'forge-qa-unexpected-dependency',
+      'forge-qa-tool-failure',
+      'forge-qa-recovery',
+      'forge-qa-memory-context-failure',
+    ],
+  );
+  assert.ok(
+    scenarios.every(s => s.title.startsWith('Forge QA [Bean Stock Log]: ')),
+  );
+  assert.deepEqual(
+    scenarios.map(s => s.toolEvents.map(e => e.outcome).join(',')),
+    ['ok,error', '', 'ok,timeout', '', 'error', 'ok,ok', ''],
+  );
+  assert.equal(scenarios[1].instructionConflict, true);
+  assert.equal(scenarios[3].retrieved[0].trusted, false);
+  assert.deepEqual(scenarios[5].requiredEvidence, ['recovery-plan']);
+  assert.deepEqual(scenarios[6].requiredEvidence, ['context-record']);
+  assert.ok(
+    !scenarios[6].evidence.some(e => e.id === 'context-record'),
+  );
+  assert.deepEqual(forgeQaScenarios('Bean Stock Log'), scenarios);
+  const markdown = somniaEvaluationToMarkdown(
+    { ...proposalDoc(), runId: 'somnia-qa' },
+    'SOMNIA QA summary for Bean Stock Log',
+  );
+  assert.ok(markdown.includes('SOMNIA QA summary for Bean Stock Log'));
+  assert.ok(markdown.includes('Run: somnia-qa'));
+});
+
+test('somnia panel renders dashboard and forge QA sections with the disclosure', () => {
+  const client = {
+    evaluateSomnia: async () => {
+      throw new Error('must not be called on mount');
+    },
+    saveSomniaEvaluation: async () => {
+      throw new Error('must not be called on mount');
+    },
+    readProjectArtifact: async () => {
+      throw new Error('must not be called on mount');
+    },
+    listProjectArtifacts: async () => {
+      throw new Error('must not be called on mount');
+    },
+  } as unknown as Client;
+  const html = renderToStaticMarkup(
+    <SomniaPanel
+      client={client}
+      workspaceId={'w'.repeat(32)}
+      projectId={'p'.repeat(32)}
+      artifacts={[]}
+      onSaved={async () => {}}
+      notify={() => {}}
+      busy={false}
+    />,
+  );
+  assert.ok(html.includes('SOMNIA dashboard'));
+  assert.ok(html.includes('Load SOMNIA dashboard'));
+  assert.ok(html.includes('SOMNIA Forge QA'));
+  assert.ok(html.includes('Load Forge concepts'));
+  assert.ok(
+    html.includes(
+      'SOMNIA augments QA; it does not replace ordinary automated software and security testing.',
+    ),
+  );
+  assert.ok(!html.includes('applyProposal'));
+  assert.ok(!html.includes('Apply proposal'));
 });
