@@ -43,7 +43,8 @@ export function AskAnansi({ client, workspaceId }: { client: Client; workspaceId
   function handleGhostChange(next: string, inputType: string) {
     const engine=ghostEngineRef.current;
     if (engine) {
-      const nowMs=Math.max(0,performance.now()-ghostStartRef.current);
+      // Integer milliseconds, matching the Rust engine's u64 model.
+      const nowMs=Math.max(0,Math.round(performance.now()-ghostStartRef.current));
       engine.record(ghostPrevRef.current,next,ghostKindFromInputType(inputType),nowMs);
     }
     ghostPrevRef.current=next;
