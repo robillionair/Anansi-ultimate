@@ -267,7 +267,10 @@ test('SOMNIA Slice 1: preview and abandonment create nothing; sealed input refus
     );
     await somnia.getByRole('button', { name: 'Preview replay input' }).click();
     await expect(
-      somnia.locator('section[aria-label="SOMNIA preview errors"]').getByText(/sealed/),
+      somnia
+        .locator('section[aria-label="SOMNIA preview errors"]')
+        .locator('li')
+        .filter({ hasText: 'sealed' }),
     ).toBeVisible();
     await expect(somnia.getByRole('button', { name: 'Run evaluation' })).toBeDisabled();
 
