@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { Client, AskResponse, GroundedCitation } from '@anansi/contracts';
 import { GhostSession } from './ghostPrompt';
 import type { GhostEditKind } from './ghostPrompt';
-import { GhostPromptStrip } from './GhostPrompt';
+import { GhostPromptStrip } from './GhostPrompt.tsx';
 
 function ghostKindFromInputType(inputType: string): GhostEditKind | null {
   switch (inputType) {

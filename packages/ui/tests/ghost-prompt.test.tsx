@@ -15,8 +15,8 @@ import {
   GhostSession,
   ghostDiffTexts,
   ghostFnv1aHex,
-} from '../src/ghostPrompt';
-import { GhostFragmentsTable, GhostPromptStrip, GHOST_CONSENT_TEXT } from '../src/GhostPrompt';
+} from '../src/ghostPrompt.ts';
+import { GhostFragmentsTable, GhostPromptStrip, GHOST_CONSENT_TEXT } from '../src/GhostPrompt.tsx';
 
 function enabledSession() {
   const session = GhostSession.create('ghost-test', { id: 'ask-prompt', isPassword: false });
