@@ -1960,6 +1960,25 @@ export function SomniaPanel({
                 Total scenarios executed: {dashboard.totalScenarios}.
               </p>
               <p>
+                Failure categories:{' '}
+                {(() => {
+                  const totals = new Map<string, number>();
+                  for (const { doc } of dashboardDocs ?? []) {
+                    for (const item of doc.metrics.violationsByCategory) {
+                      totals.set(
+                        item.category,
+                        (totals.get(item.category) ?? 0) + item.count,
+                      );
+                    }
+                  }
+                  return [...totals.entries()]
+                    .sort((a, b) => (a[0] < b[0] ? -1 : 1))
+                    .map(([category, count]) => `${category}: ${count}`)
+                    .join(', ');
+                })()}
+                .
+              </p>
+              <p>
                 Improvements proposed: {dashboard.totalProposals}.
               </p>
               <p>
