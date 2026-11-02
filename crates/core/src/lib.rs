@@ -15,6 +15,7 @@ pub mod entities;
 pub mod evaluations;
 pub mod export;
 pub mod forge;
+pub mod ghost_prompt;
 pub mod hybrid;
 pub mod ideas;
 pub mod jobs;
