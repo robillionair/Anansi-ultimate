@@ -1,26 +1,25 @@
-## Resume point — 2026-11-03 LARP Mode Slice 3 (Linux; Windows rerun pending)
+## Resume point — 2026-11-03 LARP Mode Slice 3 verified on Windows
 
-Owner-authorized LARP slice on branch
-`muse/larp-mode-slice3` from the
+Owner-authorized LARP slice on review branch
+`codex/review-larp-mode-slice3` from the
 Windows-verified Slice 2 review tip
-`c8f61c844…` (verified from origin by hash;
-no review ZIP uploaded this round).
-View 3 attention spider (force-directed
-graph, cited nodes white-hot, relationship
-vs layout edges, no fabricated weights)
-and View 4 quant drift spectrum (drift,
-compression, compilation markers,
-confidence strip; resonance not measured;
-event-order axis; window hover readout).
-No server op, no new artifact type, no schema
-change, no Rust change. Linux verification:
-Rust 616 passed + 4 known live-Ollama env
-failures, node 262/262, tsc 0, contracts 0
-drift, docs 255, e2e Slice 3 spec 3/3,
-regression battery 36/36. Views 5–6 still
-placeholders; Slice 4 not commissioned.
-Windows rerun of this slice pending; do not
-claim Windows acceptance from Linux evidence.
+`c8f61c8441e0…` and delivery tip
+`932b357bbca85327d3cc4e704190c5d503efaba1`.
+View 3 attention spider (force-directed WebGL
+graph, real memory nodes, cited nodes white-hot,
+relationship edges bright, no fabricated weights)
+and View 4 quant drift spectrum (high-DPI 2D
+canvas, drift/compression/compilation markers,
+confidence strip, window-level hover readout).
+Zero Rust files touched.
+Windows verification: `tsc --noEmit` 0 errors,
+contracts 0 drift, docs 255 PASS, UI suite
+262/262 PASS in 9.48s, production web build clean,
+Playwright `larp-mode-slice3.spec.ts` 3/3 PASS,
+`larp-mode-slice1.spec.ts` + `larp-mode-slice2.spec.ts`
+5/5 PASS, full regression battery 36/36 PASS in 8.4m.
+Package: `anansi-larp-mode-slice3-windows-verified-2026-11-03.zip`.
+Views 5–6 placeholders; Slice 4 not commissioned.
 
 ## Resume point — 2026-11-03 LARP Mode Slice 2 verified on Windows
 
