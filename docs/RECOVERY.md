@@ -1,3 +1,29 @@
+## Resume point — 2026-11-04 HOME Command Dashboard Slice 2 delivered (Linux; Windows rerun pending)
+
+Owner-authorized dashboard slice on branch
+`muse/dashboard-slice2` from the
+Windows-certified Slice 1 review tip
+`c5de4fad9334b06f88b6114f69e6c19c32dcd34e`
+(verified from origin by hash; only the
+review ZIP's sidecar was uploaded, so the ZIP
+itself was not re-hashed).
+System & storage health on the Dashboard
+(genuine backup schedule + background queue
+reads, no fabricated metrics), projects hub
+recency ordering with a 5-project cap, and
+Dashboard removed from the planned-tools list.
+Zero Rust files touched.
+Linux verification: `tsc --noEmit` 0 errors,
+contracts 0 drift, docs 264 PASS, UI suite
+284/284 PASS, production web build clean,
+cargo `--lib` 215 passed, Playwright
+`dashboard.spec.ts` 6/6 PASS, full regression
+battery 46/46 PASS.
+Windows rerun of Dashboard Slice 2 pending.
+M7 native acceptance, preview promotion,
+§32 sandbox, M5 gates, and M8 Slice 4 Windows
+verification remain open.
+
 ## Resume point — 2026-11-04 HOME Command Dashboard Slice 1 verified on Windows
 
 Owner-authorized dashboard slice on review branch
