@@ -1,26 +1,27 @@
-## Resume point — 2026-11-03 LARP Mode Slice 2 (Linux; Windows rerun pending)
+## Resume point — 2026-11-03 LARP Mode Slice 2 verified on Windows
 
-Owner-authorized LARP slice on branch
-`muse/larp-mode-slice2` from the
+Owner-authorized LARP slice on review branch
+`codex/review-larp-mode-slice2` from the
 Windows-verified Slice 1 review tip
-`f9f8bc245340…` (assignment tail matched
-the bundle head exactly this time — no
-discrepancy; review ZIP hash-verified).
-Post-processing pipeline (bloom, aberration,
-grain, output; DPR ≤ 2), View 1 memory vault
-(50k particles, bokeh, projected tags) and
-View 2 neural funnel (bezier streams, pulses
-from real compilation events), key/button
-view switching, Ask + Memory producers.
-No server op, no new artifact type, no schema
-change, no Rust change. Linux verification:
-Rust 616 passed + 4 known live-Ollama env
-failures, node 253/253, tsc 0, contracts 0
-drift, docs 252, e2e Slice 2 spec 3/3,
-regression battery 33/33. Views 3–6 still
-placeholders; Slice 3 not commissioned.
-Windows rerun of this slice pending; do not
-claim Windows acceptance from Linux evidence.
+`f9f8bc245340…` and delivery tip
+`43ff2cdbb8bae1d666fa15ae145fd9f848a484e7`.
+Multi-pass WebGL post-processing pipeline
+(Render → UnrealBloom → chromatic aberration
+0.0012 → film grain 0.05 → Output; DPR ≤ 2),
+View 1 3D memory vault (50,000 particles,
+optical bokeh, projected cluster tags),
+View 2 neural funnel (high-DPI 2D canvas,
+bezier streams, compilation photon pulses),
+number hotkeys 1–6 and buttons, Ask + Memory
+live telemetry producers. Zero Rust files touched.
+Windows verification: `tsc --noEmit` 0 errors,
+contracts 0 drift, docs 253 PASS, UI suite
+253/253 PASS in 7.0s, production web build clean,
+Playwright `larp-mode-slice2.spec.ts` 3/3 PASS,
+`larp-mode-slice1.spec.ts` 2/2 PASS, full
+regression battery 33/33 PASS in 7.6m.
+Package: `anansi-larp-mode-slice2-windows-verified-2026-11-03.zip`.
+Views 3–6 placeholders; Slice 3 not commissioned.
 
 ## Resume point — 2026-11-03 LARP Mode Slice 1 (Linux; Windows rerun pending)
 
