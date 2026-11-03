@@ -1,0 +1,248 @@
+/* LARP Mode Slice 1. Void background #030305, 0.5px #16161a hairlines,
+   Berkeley Mono / JetBrains Mono stack with tabular-nums. No rounded
+   bubbly cards, no drop-shadows anywhere in the HUD. The toggle pill is
+   the single exception: the assignment explicitly specifies a pill. */
+
+.larp-toggle-frame {
+  display: inline-flex;
+  padding: 1.5px;
+  border-radius: 999px;
+  background: conic-gradient(from 0deg, #00f0ff, #ff1e7a, #8b5cf6, #e8b93c, #a3e635, #00f0ff);
+  opacity: 0.35;
+  align-self: center;
+}
+
+.larp-toggle-frame-on {
+  opacity: 1;
+  animation: larp-rgb-cycle 6s linear infinite, larp-aberration 2.4s ease-in-out infinite;
+}
+
+.larp-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 999px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-family: "Berkeley Mono", "JetBrains Mono", ui-monospace, Menlo, monospace;
+  font-size: 11px;
+  letter-spacing: 1px;
+  font-variant-numeric: tabular-nums;
+  color: #16161a;
+  background: linear-gradient(180deg, #f5f7fa 0%, #c3c9d4 18%, #8f97a8 38%, #e8ecf2 52%, #6f7789 70%, #aab2c2 100%);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6), 0 -1px 0 rgba(0, 0, 0, 0.25);
+}
+
+.larp-toggle-led {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #3a3f4a;
+  flex: none;
+}
+
+.larp-toggle-led-on {
+  background: #00f0ff;
+  animation: larp-led-pulse 1.6s ease-in-out infinite;
+}
+
+.larp-toggle-label {
+  white-space: nowrap;
+}
+
+@keyframes larp-rgb-cycle {
+  from { filter: hue-rotate(0deg); }
+  to { filter: hue-rotate(360deg); }
+}
+
+@keyframes larp-aberration {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.82; }
+}
+
+@keyframes larp-led-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+[data-reduced-motion="true"] .larp-toggle-frame-on {
+  animation: none;
+}
+
+[data-reduced-motion="true"] .larp-toggle-led-on {
+  animation: none;
+}
+
+/* Perimeter HUD frame. The frame is pointer-events: none; only the view
+   selector buttons take pointer events, so the app stays usable under it. */
+
+.larp-hud {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 1000;
+  display: grid;
+  grid-template-columns: 280px 1fr 280px;
+  grid-template-rows: 32px 1fr 28px;
+  grid-template-areas:
+    "top top top"
+    "left center right"
+    "bottom bottom bottom";
+  pointer-events: none;
+  font-family: "Berkeley Mono", "JetBrains Mono", ui-monospace, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+  color: #e8e8ec;
+  font-size: 11px;
+}
+
+.larp-rail {
+  background: #030305;
+  border: 0.5px solid #16161a;
+  overflow: hidden;
+  padding: 8px;
+}
+
+.larp-rail-top {
+  grid-area: top;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 0.5px solid #16161a;
+}
+
+.larp-rail-left {
+  grid-area: left;
+  border-right: 0.5px solid #16161a;
+  overflow-y: auto;
+}
+
+.larp-rail-right {
+  grid-area: right;
+  border-left: 0.5px solid #16161a;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.larp-rail-bottom {
+  grid-area: bottom;
+  display: flex;
+  align-items: center;
+  border-top: 0.5px solid #16161a;
+  color: #71717a;
+  letter-spacing: 1px;
+}
+
+.larp-center {
+  grid-area: center;
+  display: grid;
+  place-items: center;
+}
+
+.larp-hud-title,
+.larp-hud-status {
+  letter-spacing: 2px;
+}
+
+.larp-hud-status {
+  color: #00f0ff;
+}
+
+.larp-panel {
+  border: 0.5px solid #16161a;
+  padding: 8px;
+  background: #030305;
+}
+
+.larp-panel h3 {
+  margin: 0 0 8px;
+  font-size: 11px;
+  letter-spacing: 1.5px;
+  color: #a1a1aa;
+}
+
+.larp-legend {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: #a1a1aa;
+}
+
+.larp-swatch {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
+.larp-empty {
+  color: #71717a;
+  margin: 8px 0 0;
+}
+
+.larp-delta-log {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.larp-delta-log li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.larp-centerpiece {
+  pointer-events: none;
+  background: #030305;
+  border: 0.5px solid #16161a;
+  padding: 16px;
+  text-align: center;
+  max-width: 420px;
+}
+
+.larp-centerpiece h3 {
+  margin: 0 0 8px;
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: #a1a1aa;
+}
+
+.larp-view-buttons {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  margin-top: 12px;
+  pointer-events: auto;
+}
+
+.larp-view-button {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0.5px solid #16161a;
+  border-radius: 0;
+  background: #030305;
+  color: #e8e8ec;
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.larp-view-button-on {
+  border-color: #00f0ff;
+  color: #00f0ff;
+}
