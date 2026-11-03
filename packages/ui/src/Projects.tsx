@@ -18,7 +18,7 @@ import { ColliderArtifactViewer } from './ColliderArtifactViewer';
 import { ColliderBuildProduct } from './ColliderBuildProduct';
 import { SwarmtankPanel } from './Swarmtank';
 import { SomniaPanel } from './Somnia';
-import { PipelineNavigator } from './PipelineNavigator';
+import { PipelineNavigator } from './PipelineNavigator.tsx';
 import { OpportunityRunController } from './opportunityRun';
 import {
   DeliverablePanel,
