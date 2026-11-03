@@ -94,7 +94,7 @@ function gateMet(id: PipelineStageId, has: (t: string) => boolean): boolean {
   }
 }
 
-function missingSentence(id: PipelineStageId): string | null {
+export function missingSentence(id: PipelineStageId): string | null {
   switch (id) {
     case 'build':
     case 'simulate':

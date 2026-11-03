@@ -19,6 +19,7 @@ import { ColliderBuildProduct } from './ColliderBuildProduct';
 import { SwarmtankPanel } from './Swarmtank';
 import { SomniaPanel } from './Somnia';
 import { PipelineNavigator } from './PipelineNavigator.tsx';
+import { GuidedWalk } from './GuidedWalk.tsx';
 import { LaunchStudio } from './LaunchStudio.tsx';
 import { OpportunityRunController } from './opportunityRun';
 import {
@@ -461,6 +462,13 @@ export function Projects({ client, workspaceId, onNavigateToAsk }: { client: Cli
       {current && <EntityHistory key={current.memory.id} client={client} workspaceId={workspaceId} current={current} refresh={() => open(current.memory.id)} />}
       {current && (
         <PipelineNavigator
+          artifactTypes={artifacts.map(a => a.type)}
+          onNavigateToAsk={onNavigateToAsk}
+          onSelectLaunch={() => setLaunchStudioOpen(true)}
+        />
+      )}
+      {current && (
+        <GuidedWalk
           artifactTypes={artifacts.map(a => a.type)}
           onNavigateToAsk={onNavigateToAsk}
           onSelectLaunch={() => setLaunchStudioOpen(true)}
