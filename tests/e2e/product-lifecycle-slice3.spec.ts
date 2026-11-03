@@ -154,12 +154,20 @@ test('product lifecycle slice 3: complete guided walk with a mid-walk restart', 
     await somnia.getByLabel('SOMNIA nightmare seed').fill('walk-nightmare-seed');
     await somnia.getByLabel('SOMNIA nightmare count').selectOption('10');
     await somnia.getByRole('button', { name: 'Generate SOMNIA nightmares' }).click();
-    // Run stays disabled until the replay input is previewed.
+    // The generator fills the replay textarea; wait for its content
+    // before previewing, so Preview never parses a stale empty input.
+    await expect(somnia.getByLabel('SOMNIA replay input')).toHaveValue(/nightmare-/);
+    // The generated set always contains a sealed-record scenario, and
+    // the validator refuses sealed records as replay input — the
+    // privacy boundary working as designed. Exclude it, then preview
+    // again; only then does Run enable.
+    await somnia.getByRole('button', { name: 'Preview replay input' }).click();
+    await somnia.getByRole('button', { name: 'Exclude sealed case' }).click();
     await somnia.getByRole('button', { name: 'Preview replay input' }).click();
     await expect(somnia.getByRole('button', { name: 'Run evaluation' })).toBeEnabled();
     await somnia.getByRole('button', { name: 'Run evaluation' }).click();
     await somnia.getByRole('button', { name: 'Save SOMNIA evaluation' }).click();
-    await expect(page.getByText(/SOMNIA evaluation saved/)).toBeVisible();
+    await expect(page.getByText('SOMNIA evaluation saved.', { exact: true })).toBeVisible();
     await expectWalkStep(walk, 'Pressure-Test', 'Complete');
 
     // 6. Refine: GHOST-PROMPT session in Ask ANANSI, revised, then wiped.
