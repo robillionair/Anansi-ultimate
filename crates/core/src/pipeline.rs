@@ -147,10 +147,7 @@ fn gate_met(stage: PipelineStage, has: &dyn Fn(&str) -> bool) -> bool {
         }
         // A completed simulation or evaluation artifact.
         PipelineStage::Launch => {
-            has("simulation")
-                || has("scenario")
-                || has("somnia-evaluation")
-                || has("evaluation")
+            has("simulation") || has("scenario") || has("somnia-evaluation") || has("evaluation")
         }
     }
 }
@@ -161,9 +158,7 @@ fn missing_sentence(stage: PipelineStage) -> Option<&'static str> {
         PipelineStage::Build | PipelineStage::Simulate | PipelineStage::PressureTest => {
             Some("Needs at least one Forge concept artifact.")
         }
-        PipelineStage::Launch => {
-            Some("Needs a completed simulation or evaluation artifact.")
-        }
+        PipelineStage::Launch => Some("Needs a completed simulation or evaluation artifact."),
         _ => None,
     }
 }
@@ -171,7 +166,7 @@ fn missing_sentence(stage: PipelineStage) -> Option<&'static str> {
 /// Derive the pipeline state from artifact type strings (duplicates
 /// count: two concepts are two pieces of evidence).
 pub fn derive_pipeline(artifact_types: &[&str]) -> PipelineDerivation {
-    let has = |t: &str| artifact_types.iter().any(|a| *a == t);
+    let has = |t: &str| artifact_types.contains(&t);
     let stages = PipelineStage::all();
     let has_evidence: Vec<bool> = stages
         .iter()
@@ -183,7 +178,7 @@ pub fn derive_pipeline(artifact_types: &[&str]) -> PipelineDerivation {
     // met. Scanning after `furthest` (never from the start) keeps the
     // recommendation moving forward past work already done.
     let current = stages.iter().enumerate().find_map(|(i, s)| {
-        let after_furthest = furthest.map_or(true, |f| i > f);
+        let after_furthest = furthest.is_none_or(|f| i > f);
         if after_furthest && s.is_advanceable() && gate_met(*s, &has) {
             Some(*s)
         } else {
@@ -308,11 +303,12 @@ mod tests {
         ]);
         assert_eq!(d.current, None);
         assert_eq!(d.stages[5].status, PipelineStatus::Available);
-        assert!(d
-            .stages
-            .iter()
-            .filter(|s| s.stage != PipelineStage::Refine)
-            .all(|s| s.status == PipelineStatus::Complete));
+        assert!(
+            d.stages
+                .iter()
+                .filter(|s| s.stage != PipelineStage::Refine)
+                .all(|s| s.status == PipelineStatus::Complete)
+        );
     }
 
     #[test]
