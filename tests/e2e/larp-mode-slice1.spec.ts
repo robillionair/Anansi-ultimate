@@ -31,8 +31,8 @@ test('toggle click enters LARP mode and hotkey exits cleanly', async ({ page }) 
     }
     await expect(page.getByText('No telemetry events yet.')).toBeVisible();
 
-    await page.getByLabel('LARP view 3').click();
-    await expect(page.getByText('View 3 — arrives in a later slice.')).toBeVisible();
+    await page.getByLabel('LARP view 5').click();
+    await expect(page.getByText('View 5 — arrives in a later slice.')).toBeVisible();
 
     await page.keyboard.press('Control+Shift+L');
     await expect(hud).toHaveCount(0);
