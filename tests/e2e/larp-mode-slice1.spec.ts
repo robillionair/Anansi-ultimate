@@ -21,7 +21,8 @@ test('toggle click enters LARP mode and hotkey exits cleanly', async ({ page }) 
     await toggle.click();
     const hud = page.getByLabel('LARP telemetry frame');
     await expect(hud).toBeVisible();
-    await expect(page.getByText('[ LARP: ACTIVE ]', { exact: true })).toBeVisible();
+    await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    await expect(hud.getByText('[ LARP: ACTIVE ]', { exact: true })).toBeVisible();
     await expect(page.getByLabel('Memory allocation matrix')).toBeVisible();
     await expect(page.getByText('Token Compression Delta Stream')).toBeVisible();
     await expect(page.getByLabel('Token velocity coherence waveforms')).toBeVisible();
