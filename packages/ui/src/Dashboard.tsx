@@ -8,7 +8,7 @@
 // props while click behavior is covered by e2e.
 
 import { useEffect, useState } from 'react';
-import type { Client, MemoryMetadata, WorkspaceDetails } from '@anansi/contracts';
+import type { Client, Job, MemoryMetadata, WorkspaceDetails } from '@anansi/contracts';
 import { derivePipeline, type PipelineDerivation } from './lifecycle.ts';
 import { toggleLarpMode, useLarpModeStore } from './larp-mode/store.ts';
 import type { View } from './Navigation.tsx';
@@ -60,6 +60,91 @@ export function stageBadge(derivation: PipelineDerivation): string {
   return `Current stage: ${stage ? stage.label : derivation.current}`;
 }
 
+export function formatBackupInterval(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) return '0s';
+  if (seconds % 86400 === 0) return `${seconds / 86400}d`;
+  if (seconds % 3600 === 0) return `${seconds / 3600}h`;
+  if (seconds % 60 === 0) return `${seconds / 60}m`;
+  return `${seconds}s`;
+}
+
+export function formatBackupStatus(schedule: {
+  enabled: boolean;
+  intervalSeconds: number;
+}): string {
+  return schedule.enabled
+    ? `Auto-backup every ${formatBackupInterval(schedule.intervalSeconds)}`
+    : 'Manual backups only';
+}
+
+// Job-type label reusing Jobs.tsx's exact selection mapping: Job
+// carries no dedicated type field, so the label derives from its
+// export selection.
+export function jobTypeLabel(job: Job): string {
+  const selection = job.selection;
+  if (selection.kind === 'backup') {
+    return selection.application ? 'Application data backup' : 'Workspace backup';
+  }
+  if (selection.kind === 'project') return 'Project export';
+  if (selection.kind === 'records') return 'Selected records export';
+  return 'Workspace export';
+}
+
+export interface QueueStatus {
+  idle: boolean;
+  activeCount: number;
+  latestType: string | null;
+}
+
+// Contract correction: JobState values are capitalized ("Queued" |
+// "Running" | ...). There is no lowercase 'running' / 'pending'
+// status. Active work is Queued or Running — the same set Jobs.tsx
+// treats as pausable; Paused is not active work.
+export function deriveQueueStatus(jobs: Job[]): QueueStatus {
+  const active = jobs.filter((j) => j.state === 'Queued' || j.state === 'Running');
+  if (!active.length) return { idle: true, activeCount: 0, latestType: null };
+  let latest = active[0];
+  for (const job of active) {
+    const time = Date.parse(job.createdAt);
+    const latestTime = Date.parse(latest.createdAt);
+    if (Number.isFinite(time) && (!Number.isFinite(latestTime) || time > latestTime)) {
+      latest = job;
+    }
+  }
+  return { idle: false, activeCount: active.length, latestType: jobTypeLabel(latest) };
+}
+
+export interface SortableProject {
+  id: string;
+  updatedAt: string;
+  latestArtifactAt: string | null;
+}
+
+export function latestArtifactTimestamp(timestamps: string[]): string | null {
+  let best: string | null = null;
+  let bestTime = Number.NaN;
+  for (const timestamp of timestamps) {
+    const time = Date.parse(timestamp);
+    if (Number.isFinite(time) && (!Number.isFinite(bestTime) || time > bestTime)) {
+      best = timestamp;
+      bestTime = time;
+    }
+  }
+  return best;
+}
+
+function recencyKey(project: SortableProject): number {
+  const times = [Date.parse(project.updatedAt)];
+  if (project.latestArtifactAt) times.push(Date.parse(project.latestArtifactAt));
+  const finite = times.filter(Number.isFinite);
+  return finite.length ? Math.max(...finite) : 0;
+}
+
+// Most recent first; ties keep list order (Array sort is stable).
+export function sortProjectsByRecency<T extends SortableProject>(projects: T[]): T[] {
+  return [...projects].sort((a, b) => recencyKey(b) - recencyKey(a));
+}
+
 export interface DashboardProject {
   id: string;
   title: string;
@@ -70,6 +155,9 @@ export interface DashboardProject {
 export interface DashboardData {
   telemetry: DashboardTelemetry;
   projects: DashboardProject[];
+  totalProjects: number;
+  backupStatus: string;
+  queue: QueueStatus;
   uptime: string | null;
 }
 
@@ -125,6 +213,24 @@ export function DashboardView({
         </div>
       </section>
 
+      <section className="card" role="region" aria-labelledby="dashboard-health-heading">
+        <h2 id="dashboard-health-heading">System &amp; storage health</h2>
+        <p>Backup: {data.backupStatus}</p>
+        <p>
+          {data.queue.idle
+            ? 'Background queue idle'
+            : `${data.queue.activeCount} active job(s) · latest: ${data.queue.latestType}`}
+        </p>
+        <div className="actions">
+          <button className="secondary" onClick={() => onNavigate('backups')}>
+            Backups
+          </button>
+          <button className="secondary" onClick={() => onNavigate('jobs')}>
+            Jobs
+          </button>
+        </div>
+      </section>
+
       <section className="card" role="region" aria-labelledby="dashboard-projects-heading">
         <h2 id="dashboard-projects-heading">Recent &amp; active projects</h2>
         {data.projects.length === 0 ? (
@@ -146,6 +252,13 @@ export function DashboardView({
               </li>
             ))}
           </ul>
+        )}
+        {data.totalProjects > 5 && (
+          <div className="actions">
+            <button className="secondary" onClick={() => onNavigate('projects')}>
+              View all in Projects
+            </button>
+          </div>
         )}
       </section>
 
@@ -200,16 +313,27 @@ export function Dashboard({
     async function load() {
       try {
         const projectList = await client.listMemories(workspaceId, { kind: 'project' });
-        const projects: DashboardProject[] = [];
+        const sortable: (DashboardProject & SortableProject)[] = [];
         for (const project of projectList.memories) {
           const artList = await client.listProjectArtifacts(workspaceId, project.id);
-          projects.push({
+          sortable.push({
             id: project.id,
             title: project.title,
             excerpt: projectExcerpt(project.snippet),
             stageBadge: stageBadge(derivePipeline(artList.artifacts.map((a) => a.type))),
+            updatedAt: project.updatedAt,
+            latestArtifactAt: latestArtifactTimestamp(artList.artifacts.map((a) => a.timestamp)),
           });
         }
+        const ordered = sortProjectsByRecency(sortable);
+        const projects: DashboardProject[] = ordered
+          .slice(0, 5)
+          .map(({ id, title, excerpt, stageBadge: badge }) => ({
+            id,
+            title,
+            excerpt,
+            stageBadge: badge,
+          }));
         const memories: MemoryMetadata[] = [];
         let offset: number | undefined;
         for (;;) {
@@ -220,6 +344,16 @@ export function Dashboard({
           offset = next;
         }
         const relList = await client.listRelationships(workspaceId);
+        const schedule = await client.readBackupSchedule(workspaceId);
+        const jobs: Job[] = [];
+        let jobOffset = 0;
+        for (;;) {
+          const page = await client.listJobs(workspaceId, jobOffset);
+          jobs.push(...page.jobs);
+          const next = page.nextOffset ?? undefined;
+          if (next === undefined || next === jobOffset) break;
+          jobOffset = next;
+        }
         let uptime: string | null = null;
         try {
           const readiness = await client.readiness();
@@ -231,6 +365,9 @@ export function Dashboard({
           setData({
             telemetry: countTelemetry(memories, relList.relationships.length),
             projects,
+            totalProjects: ordered.length,
+            backupStatus: formatBackupStatus(schedule),
+            queue: deriveQueueStatus(jobs),
             uptime,
           });
           setError('');

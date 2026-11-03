@@ -109,3 +109,33 @@ test('a workspace with no projects shows the empty-state invitation', async ({ p
     await session.cleanup();
   }
 });
+
+function healthSection(page: import('@playwright/test').Page) {
+  return page.getByRole('region', { name: 'System & storage health' });
+}
+
+test('health section shows manual backups and jumps to Backups', async ({ page }) => {
+  test.setTimeout(300000);
+  const session = await startSession(page, false);
+  try {
+    await session.openWorkspace(session.workspaceId);
+    await expect(healthSection(page).getByText('Manual backups only')).toBeVisible();
+    await healthSection(page).getByRole('button', { name: 'Backups' }).click();
+    await expect(page.getByRole('heading', { name: 'Your backups', exact: true })).toBeVisible();
+  } finally {
+    await session.cleanup();
+  }
+});
+
+test('health section shows an idle background queue and jumps to Jobs', async ({ page }) => {
+  test.setTimeout(300000);
+  const session = await startSession(page, false);
+  try {
+    await session.openWorkspace(session.workspaceId);
+    await expect(healthSection(page).getByText('Background queue idle')).toBeVisible();
+    await healthSection(page).getByRole('button', { name: 'Jobs' }).click();
+    await expect(page.getByRole('heading', { name: 'Your jobs and exports', exact: true })).toBeVisible();
+  } finally {
+    await session.cleanup();
+  }
+});

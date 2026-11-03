@@ -1,6 +1,6 @@
 export type View = 'workspace'|'dashboard'|'settings'|'connection'|'memory'|'notes'|'projects'|'tasks'|'people'|'records'|'jobs'|'backups'|'search'|'models'|'ask'|'providers';
 export const plannedGroups = [
-  {name:'HOME',items:['Dashboard']},
+  {name:'HOME',items:[]},
   {name:'KNOWLEDGE',items:['Files','Big Brain']},
   {name:'CREATE',items:['My Products']},
   {name:'VALIDATE',items:['SOMNIA','Experiments']},
