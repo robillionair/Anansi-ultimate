@@ -1,3 +1,34 @@
+## Resume point — 2026-11-03 LARP Mode Slice 4 delivered (Linux; Windows rerun pending)
+
+Owner-authorized LARP slice on branch
+`muse/larp-mode-slice4` from the
+Windows-verified Slice 3 review tip
+`6f3ce75231f28a6507a4da388f0af5e22b14368e`
+(the assignment's named tail `6f3ce75231c5ee…`
+does not exist; bundle head authoritative —
+fifth discrepancy in the series).
+View 5 attention tensor heatmap (one genuine
+word-presence alignment matrix, raw × compiled
+prompt, no attention heads faked; tokens are
+whitespace words, not provider tokens) and
+View 6 collider field (dual-beam particle
+collider through the shared `LarpComposer`
+pipeline; discharges from real collider
+generation events; beams stylized, labeled so).
+All six views live; no placeholders remain.
+Zero Rust files touched.
+Linux verification: `tsc --noEmit` 0 errors,
+contracts 0 drift, docs 258 PASS, UI suite
+270/270 PASS, production web build clean,
+Playwright `larp-mode-slice4.spec.ts` 4/4 PASS,
+full regression battery 40/40 PASS, Rust
+616 passed + 4 known live-Ollama env failures.
+Windows rerun of Slice 4 pending. LARP Mode
+feature-complete; no further LARP slice
+commissioned. M7 native acceptance, preview
+promotion, §32 sandbox, M5 gates, and M8
+Slice 4 Windows verification remain open.
+
 ## Resume point — 2026-11-03 LARP Mode Slice 3 verified on Windows
 
 Owner-authorized LARP slice on review branch
