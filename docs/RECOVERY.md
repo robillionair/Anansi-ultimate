@@ -1,10 +1,9 @@
-## Resume point — 2026-11-04 HOME Command Dashboard Slice 1 delivered (Linux; Windows rerun pending)
+## Resume point — 2026-11-04 HOME Command Dashboard Slice 1 verified on Windows
 
-Owner-authorized dashboard slice on branch
-`muse/dashboard-slice1` from the
+Owner-authorized dashboard slice on review branch
+`codex/review-dashboard-slice1` from the
 Windows-certified LARP Slice 4 review tip
-`ac2f05aba7647c48646ef2ae013a3be5a1084f72`
-(no baseline discrepancy this time).
+`ac2f05aba7647c48646ef2ae013a3be5a1084f72`.
 MASTER_SPEC §8: Dashboard as the calm default
 landing view (workspace overview with genuine
 readiness uptime, telemetry counts, project hub
@@ -12,13 +11,14 @@ with pipeline stage badges, four quick actions),
 HOME nav reduced to Dashboard + Ask ANANSI,
 direct jumps into a project's Guided Walk or
 collider section. Zero Rust files touched.
-Linux verification: `tsc --noEmit` 0 errors,
-contracts 0 drift, docs 261 PASS, UI suite
-277/277 PASS, production web build clean,
-Playwright `dashboard.spec.ts` 4/4 PASS,
-full regression battery 44/44 PASS, Rust
-616 passed + 4 known live-Ollama env failures.
-Windows rerun of Dashboard Slice 1 pending.
+Windows verification: `tsc --noEmit` 0 errors,
+contracts 0 drift, docs 262 PASS, UI suite
+277/277 PASS in 9.0s, production web build clean,
+Playwright `dashboard.spec.ts` 4/4 PASS in 28.7s,
+full regression battery 44/44 PASS in 9.0m,
+Rust workspace unit tests 215/215 PASS.
+HOME Command Dashboard Slice 1 is verified
+and closed on Windows.
 M7 native acceptance, preview promotion,
 §32 sandbox, M5 gates, and M8 Slice 4 Windows
 verification remain open.
