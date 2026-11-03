@@ -49,7 +49,7 @@ const blank = (): MemoryDraft => ({
   sourceReferences: [],
 });
 
-export function Projects({ client, workspaceId, onNavigateToAsk }: { client: Client; workspaceId: string; onNavigateToAsk?: () => void }) {
+export function Projects({ client, workspaceId, onNavigateToAsk, focusProjectId, focusSection, onFocusConsumed }: { client: Client; workspaceId: string; onNavigateToAsk?: () => void; focusProjectId?: string; focusSection?: 'walk' | 'collider'; onFocusConsumed?: () => void }) {
   const [projects, setProjects] = useState<MemoryMetadata[]>([]);
   const [current, setCurrent] = useState<MemoryDetails | null>(null);
   const [tasks, setTasks] = useState<MemoryMetadata[]>([]);
@@ -193,6 +193,24 @@ export function Projects({ client, workspaceId, onNavigateToAsk }: { client: Cli
     setSelectedArtifact('');
     setViewedArtifact(null);
   }
+
+  // Dashboard jump target (Slice 1): open the requested project on
+  // mount, then scroll its walk or collider section into view once it
+  // is current. Absent props preserve today's behavior exactly.
+  const [focusRequest, setFocusRequest] = useState<{ projectId: string; section: 'walk' | 'collider' } | null>(
+    focusProjectId ? { projectId: focusProjectId, section: focusSection ?? 'walk' } : null,
+  );
+  useEffect(() => {
+    if (focusRequest && !current) void run(() => open(focusRequest.projectId));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusRequest]);
+  useEffect(() => {
+    if (!focusRequest || !current || current.memory.id !== focusRequest.projectId) return;
+    const headingId = focusRequest.section === 'walk' ? 'project-walk-heading' : 'project-collider-heading';
+    document.getElementById(headingId)?.scrollIntoView();
+    setFocusRequest(null);
+    onFocusConsumed?.();
+  }, [focusRequest, current]);
 
   // Poll the active generation run; cancel it if the screen
   // unmounts (navigation), like the Providers screen.

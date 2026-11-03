@@ -118,9 +118,11 @@ test('all five intents have labeled native radio controls and one checked choice
 });
 
 test('navigation has a small active set, complete grouped unavailable tools and no ghost recording action', () => {
-  const html = renderToStaticMarkup(<Navigation view="workspace" hasWorkspace={false} onNavigate={() => {}} />);
+  const html = renderToStaticMarkup(<Navigation view="dashboard" hasWorkspace={false} onNavigate={() => {}} />);
   assert.ok(html.includes('aria-label="Main navigation"'));
   assert.ok(html.includes('aria-current="page"'));
+  assert.match(html, /aria-current="page"[^>]*>Dashboard<\/button>/);
+  assert.doesNotMatch(html, />Workspace<\/button>/);
   assert.ok(html.includes('disabled=""'));
   assert.equal((html.match(/<button/g) || []).length, 16);
   assert.ok(!plannedGroups.some(group=>group.items.includes('Search')));

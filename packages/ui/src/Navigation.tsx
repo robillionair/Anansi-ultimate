@@ -1,4 +1,4 @@
-export type View = 'workspace'|'settings'|'connection'|'memory'|'notes'|'projects'|'tasks'|'people'|'records'|'jobs'|'backups'|'search'|'models'|'ask'|'providers';
+export type View = 'workspace'|'dashboard'|'settings'|'connection'|'memory'|'notes'|'projects'|'tasks'|'people'|'records'|'jobs'|'backups'|'search'|'models'|'ask'|'providers';
 export const plannedGroups = [
   {name:'HOME',items:['Dashboard']},
   {name:'KNOWLEDGE',items:['Files','Big Brain']},
@@ -10,7 +10,7 @@ export const plannedGroups = [
 export function Navigation({view,hasWorkspace,onNavigate}:{view:View;hasWorkspace:boolean;onNavigate:(view:View)=>void}) {
   return <nav aria-label="Main navigation">
     <p className="nav-group">HOME</p>
-    <button aria-current={view==='workspace'?'page':undefined} onClick={()=>onNavigate('workspace')}>Workspace</button>
+    <button disabled={!hasWorkspace} aria-current={view==='dashboard'?'page':undefined} onClick={()=>onNavigate('dashboard')}>Dashboard</button>
     <button disabled={!hasWorkspace} aria-current={view==='ask'?'page':undefined} onClick={()=>onNavigate('ask')}>Ask ANANSI</button>
     <p className="nav-group">CREATE</p>
     <button disabled={!hasWorkspace} onClick={()=>onNavigate('projects')}>Ideas &amp; Product Forge</button>

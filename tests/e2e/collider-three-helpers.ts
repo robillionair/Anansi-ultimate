@@ -109,6 +109,7 @@ type Session = {
   projectId: string;
   call: (group: string, operation: string, input: Record<string, unknown>) => Promise<{ status: number; body: Record<string, any> }>;
   pairAndOpen: (ws: string) => Promise<void>;
+  openWorkspace: (ws: string) => Promise<void>;
 };
 
 export async function startSession(page: Page, reducedMotion: boolean): Promise<Session> {
@@ -201,7 +202,7 @@ export async function startSession(page: Page, reducedMotion: boolean): Promise<
   });
   const projectId = project.body.memory.id as string;
 
-  async function pairAndOpen(ws: string) {
+  async function openWorkspace(ws: string) {
     await page.goto('/');
     await page.getByLabel('Local API address').fill(pairing.endpoint);
     await page.getByLabel('Session token').fill(pairing.token);
@@ -209,6 +210,10 @@ export async function startSession(page: Page, reducedMotion: boolean): Promise<
     await expect(page.getByRole('button', { name: 'Refresh workspaces' })).toBeEnabled();
     await page.getByLabel('Existing workspace').selectOption(ws);
     await page.getByRole('button', { name: 'Open workspace', exact: true }).click();
+  }
+
+  async function pairAndOpen(ws: string) {
+    await openWorkspace(ws);
     await page.getByRole('button', { name: 'Projects', exact: true }).click();
     await page.getByRole('button', { name: 'Harbor App' }).click();
     await expect(page.getByRole('heading', { name: 'Artifacts', exact: true })).toBeVisible();
@@ -246,6 +251,7 @@ export async function startSession(page: Page, reducedMotion: boolean): Promise<
     projectId,
     call,
     pairAndOpen,
+    openWorkspace,
   };
 }
 
