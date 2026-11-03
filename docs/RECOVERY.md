@@ -1,28 +1,26 @@
-## Resume point — 2026-11-03 LARP Mode Slice 4 delivered (Linux; Windows rerun pending)
+## Resume point — 2026-11-03 LARP Mode Slice 4 verified on Windows (LARP Mode complete)
 
-Owner-authorized LARP slice on branch
-`muse/larp-mode-slice4` from the
+Owner-authorized LARP slice on review branch
+`codex/review-larp-mode-slice4` from the
 Windows-verified Slice 3 review tip
 `6f3ce75231f28a6507a4da388f0af5e22b14368e`
-(the assignment's named tail `6f3ce75231c5ee…`
-does not exist; bundle head authoritative —
-fifth discrepancy in the series).
-View 5 attention tensor heatmap (one genuine
-word-presence alignment matrix, raw × compiled
-prompt, no attention heads faked; tokens are
-whitespace words, not provider tokens) and
-View 6 collider field (dual-beam particle
-collider through the shared `LarpComposer`
-pipeline; discharges from real collider
-generation events; beams stylized, labeled so).
-All six views live; no placeholders remain.
+and delivery tip `8b4e37d1f56dab412b71e8a2521fddb1bdc5991f`.
+View 5 attention tensor heatmap (word-presence
+alignment matrix, raw × compiled prompt, honest
+refusal on faked attention heads) and View 6
+collider field (dual-beam particle accelerator
+through `LarpComposer`, Doppler shift, bloom
+discharge flashes on real collider generation).
+All six views live; zero placeholders remain.
 Zero Rust files touched.
-Linux verification: `tsc --noEmit` 0 errors,
+Windows verification: `tsc --noEmit` 0 errors,
 contracts 0 drift, docs 258 PASS, UI suite
-270/270 PASS, production web build clean,
+270/270 PASS in 5.25s, production web build clean,
 Playwright `larp-mode-slice4.spec.ts` 4/4 PASS,
-full regression battery 40/40 PASS, Rust
-616 passed + 4 known live-Ollama env failures.
+`larp-mode-slice1..3.spec.ts` 8/8 PASS, full
+regression battery 40/40 PASS in 8.6m.
+Package: `anansi-larp-mode-slice4-windows-verified-2026-11-03.zip`.
+LARP Mode Telemetry Engine is 100% complete.
 Windows rerun of Slice 4 pending. LARP Mode
 feature-complete; no further LARP slice
 commissioned. M7 native acceptance, preview
