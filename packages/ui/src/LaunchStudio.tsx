@@ -116,6 +116,14 @@ export function LaunchStudio({
         ? current.filter(id => id !== artifactId)
         : [...current, artifactId],
     );
+    // The generated copy and bundle describe the selection at generation
+    // time. Changing the selection invalidates them, so the user must
+    // regenerate rather than download a bundle that no longer matches
+    // the checked artifacts.
+    setCopy(null);
+    setProviderPrompt(null);
+    setProviderDraft(null);
+    setIncludeDraft(false);
   }
 
   async function generate() {
