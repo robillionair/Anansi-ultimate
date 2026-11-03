@@ -1,3 +1,29 @@
+## Resume point — 2026-11-03 LARP Mode Slice 1 (Linux; Windows rerun pending)
+
+Owner-authorized LARP slice on branch
+`muse/larp-mode-slice1` from the
+Windows-verified M12 Slice 3 review tip
+`640f7c24026500…` (assignment named
+`640f7c240974917…`, nonexistent; package
+MANIFEST and bundle head agree on the
+authoritative tip; first attempt HELD until
+the review ZIP arrived and hash-verified).
+RGB Chrome toggle in the Workspace header,
+store + disposal registry + frame scheduler,
+in-memory telemetry bus, perimeter HUD frame
+(matrix / delta stream / waveforms, view
+buttons 1–6 placeholder). No server op, no
+new artifact type, no schema change, no Rust
+change. Linux verification: Rust 616 passed
++ 4 known live-Ollama env failures, node
+241/241, tsc 0, contracts 0 drift, docs 249,
+e2e LARP spec 2/2, regression battery 30/30.
+No live telemetry producer yet (empty states
+honest); no WebGL in Slice 1; Slice 2 not
+commissioned. Windows rerun of this slice
+pending; do not claim Windows acceptance from
+Linux evidence.
+
 ## Resume point — 2026-11-03 M12 Product Lifecycle Slice 3 (Linux; Windows rerun pending)
 
 Owner-authorized M12 slice on branch
