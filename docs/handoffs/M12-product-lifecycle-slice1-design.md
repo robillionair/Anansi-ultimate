@@ -50,7 +50,7 @@ seven stage ids for Slice 1. Mapping:
 
 ## Stage engine (pure, model-free, idempotent)
 
-New Rust module `crates/core/src/lifecycle.rs`
+New Rust module `crates/core/src/pipeline.rs`
 (reference) and TS mirror
 `packages/ui/src/lifecycle.ts` (live). Both take
 only artifact type strings — the UI derives them
@@ -60,6 +60,14 @@ Inspecting stages performs zero server
 mutations. Unknown artifact types are ignored,
 never errors: the engine is a view over the
 registry, not a validator of it.
+
+Placement note: the assignment names
+`crates/core/src/lifecycle.rs`, but that file
+already owns the memory-state machine
+(`MemoryState`). The pipeline engine lives in
+`pipeline.rs` instead of colliding with it; the
+TS mirror keeps the assigned `lifecycle.ts`
+name (no conflict there).
 
 ### Evidence (what completes a stage)
 
@@ -239,7 +247,7 @@ any panel saves (collider/swarmtank/somnia
 
 ## Files
 
-Added: `crates/core/src/lifecycle.rs`,
+Added: `crates/core/src/pipeline.rs`,
 `packages/ui/src/lifecycle.ts`,
 `packages/ui/src/PipelineNavigator.tsx`,
 `packages/ui/tests/pipeline-navigator.test.tsx`,

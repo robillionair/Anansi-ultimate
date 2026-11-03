@@ -18,6 +18,7 @@ import { ColliderArtifactViewer } from './ColliderArtifactViewer';
 import { ColliderBuildProduct } from './ColliderBuildProduct';
 import { SwarmtankPanel } from './Swarmtank';
 import { SomniaPanel } from './Somnia';
+import { PipelineNavigator } from './PipelineNavigator';
 import { OpportunityRunController } from './opportunityRun';
 import {
   DeliverablePanel,
@@ -46,7 +47,7 @@ const blank = (): MemoryDraft => ({
   sourceReferences: [],
 });
 
-export function Projects({ client, workspaceId }: { client: Client; workspaceId: string }) {
+export function Projects({ client, workspaceId, onNavigateToAsk }: { client: Client; workspaceId: string; onNavigateToAsk?: () => void }) {
   const [projects, setProjects] = useState<MemoryMetadata[]>([]);
   const [current, setCurrent] = useState<MemoryDetails | null>(null);
   const [tasks, setTasks] = useState<MemoryMetadata[]>([]);
@@ -450,6 +451,12 @@ export function Projects({ client, workspaceId }: { client: Client; workspaceId:
       </form>
 
       {current && <EntityHistory key={current.memory.id} client={client} workspaceId={workspaceId} current={current} refresh={() => open(current.memory.id)} />}
+      {current && (
+        <PipelineNavigator
+          artifactTypes={artifacts.map(a => a.type)}
+          onNavigateToAsk={onNavigateToAsk}
+        />
+      )}
       {current && (
         <>
           <section aria-labelledby="project-tasks-heading">

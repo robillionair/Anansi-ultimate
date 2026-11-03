@@ -48,7 +48,7 @@ export function Workspace({client,native,connection,connected,busy:connecting}:{
        view==='backups'&&workspace&&ready?<Backups key={workspace.workspace.id} client={client} workspaceId={workspace.workspace.id}/>:view==='jobs'&&workspace&&ready?<Jobs key={workspace.workspace.id} client={client} workspaceId={workspace.workspace.id} native={native}/>:view==='notes'&&workspace&&ready?<Notes key={workspace.workspace.id} client={client} workspaceId={workspace.workspace.id}/>:
        view==='memory'&&workspace&&ready?<Memory key={workspace.workspace.id} client={client} workspaceId={workspace.workspace.id}/>:
        view==='search'&&workspace&&ready?<Search key={workspace.workspace.id} client={client} workspaceId={workspace.workspace.id}/>:
-       view==='projects'&&workspace&&ready?<Projects key={workspace.workspace.id} client={client} workspaceId={workspace.workspace.id}/>:
+       view==='projects'&&workspace&&ready?<Projects key={workspace.workspace.id} client={client} workspaceId={workspace.workspace.id} onNavigateToAsk={()=>navigate('ask')}/>:
        view==='tasks'&&workspace&&ready?<Tasks key={workspace.workspace.id} client={client} workspaceId={workspace.workspace.id}/>:
        view==='people'&&workspace&&ready?<People key={workspace.workspace.id} client={client} workspaceId={workspace.workspace.id}/>:
        view==='records'&&workspace&&ready?<KnowledgeRecords key={workspace.workspace.id} client={client} workspaceId={workspace.workspace.id}/>:
