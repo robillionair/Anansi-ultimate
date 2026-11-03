@@ -1,3 +1,27 @@
+## Resume point — 2026-11-03 LARP Mode Slice 2 (Linux; Windows rerun pending)
+
+Owner-authorized LARP slice on branch
+`muse/larp-mode-slice2` from the
+Windows-verified Slice 1 review tip
+`f9f8bc245340…` (assignment tail matched
+the bundle head exactly this time — no
+discrepancy; review ZIP hash-verified).
+Post-processing pipeline (bloom, aberration,
+grain, output; DPR ≤ 2), View 1 memory vault
+(50k particles, bokeh, projected tags) and
+View 2 neural funnel (bezier streams, pulses
+from real compilation events), key/button
+view switching, Ask + Memory producers.
+No server op, no new artifact type, no schema
+change, no Rust change. Linux verification:
+Rust 616 passed + 4 known live-Ollama env
+failures, node 253/253, tsc 0, contracts 0
+drift, docs 252, e2e Slice 2 spec 3/3,
+regression battery 33/33. Views 3–6 still
+placeholders; Slice 3 not commissioned.
+Windows rerun of this slice pending; do not
+claim Windows acceptance from Linux evidence.
+
 ## Resume point — 2026-11-03 LARP Mode Slice 1 (Linux; Windows rerun pending)
 
 Owner-authorized LARP slice on branch
