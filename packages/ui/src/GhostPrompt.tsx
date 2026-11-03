@@ -1,6 +1,11 @@
 import { useState } from 'react';
 import type { GhostSession, GhostDeletedFragment, GhostPauseEvent } from './ghostPrompt.ts';
+import { analyzeGhostDraft } from './ghostPrompt.ts';
 import { GhostPrompt3D } from './GhostPrompt3D.tsx';
+import {
+  GhostPromptCompare,
+  type GhostComparisonDispatch,
+} from './GhostPromptCompare.tsx';
 
 export const GHOST_CONSENT_TEXT =
   'When enabled, ANANSI can temporarily track revisions made in this editor. Deleted text remains available for your review until you discard it or explicitly save it.';
@@ -71,6 +76,8 @@ export function GhostPromptStrip({
   onResume,
   onClear,
   onStop,
+  onCombinePrompt,
+  dispatch,
 }: {
   engine: GhostSession;
   onEnable: () => void;
@@ -78,10 +85,14 @@ export function GhostPromptStrip({
   onResume: () => void;
   onClear: () => void;
   onStop: () => void;
+  onCombinePrompt?: (text: string) => void;
+  dispatch?: GhostComparisonDispatch;
 }) {
   const [showConsent, setShowConsent] = useState(false);
   const [showReview, setShowReview] = useState(false);
   const [show3D, setShow3D] = useState(false);
+  const [showCompare, setShowCompare] = useState(false);
+  const [selectedSeqs, setSelectedSeqs] = useState<number[]>([]);
   const [purged, setPurged] = useState(false);
   const isOn = engine.state === 'recording' || engine.state === 'paused';
   const fragments = engine.deletedFragments();
@@ -147,6 +158,8 @@ export function GhostPromptStrip({
           type="button"
           onClick={() => {
             onClear();
+            setSelectedSeqs([]);
+            setShowCompare(false);
             setPurged(true);
           }}
         >
@@ -157,6 +170,8 @@ export function GhostPromptStrip({
           onClick={() => {
             onStop();
             setShowReview(false);
+            setSelectedSeqs([]);
+            setShowCompare(false);
             setPurged(true);
           }}
         >
@@ -186,6 +201,74 @@ export function GhostPromptStrip({
               }}
             />
           )}
+          <section aria-label="Review My Draft">
+            <h3>Review My Draft</h3>
+            <p>
+              These are objective observations about text changes, not
+              interpretations of intent.
+            </p>
+            {(() => {
+              const findings = analyzeGhostDraft(
+                fragments,
+                engine.events,
+                engine.currentText,
+              );
+              return findings.length === 0 ? (
+                <p>No draft findings yet.</p>
+              ) : (
+                <ul>
+                  {findings.map((finding) => (
+                    <li key={finding.kind}>
+                      {finding.text} Evidence: {finding.evidence.join('; ')}
+                    </li>
+                  ))}
+                </ul>
+              );
+            })()}
+            <p>
+              Would you like ANANSI to consider any of these earlier
+              alternatives?
+            </p>
+            <div>
+              {fragments.map((fragment) => (
+                <label key={fragment.seq}>
+                  <input
+                    type="checkbox"
+                    checked={selectedSeqs.includes(fragment.seq)}
+                    onChange={(event) => {
+                      setSelectedSeqs((current) =>
+                        event.target.checked
+                          ? [...current, fragment.seq]
+                          : current.filter((seq) => seq !== fragment.seq),
+                      );
+                    }}
+                  />
+                  Include fragment: <s>{fragment.text}</s>
+                </label>
+              ))}
+            </div>
+            {fragments.length === 0 && <p>No fragments to select.</p>}
+            <button
+              type="button"
+              disabled={selectedSeqs.length === 0}
+              onClick={() => setShowCompare((value) => !value)}
+            >
+              {showCompare ? 'Hide comparison' : 'Compare responses'}
+            </button>
+            {selectedSeqs.length === 0 && (
+              <p>Select at least one fragment to compare.</p>
+            )}
+            {showCompare && selectedSeqs.length > 0 && (
+              <GhostPromptCompare
+                finalText={engine.currentText}
+                selectedFragments={fragments.filter((fragment) =>
+                  selectedSeqs.includes(fragment.seq),
+                )}
+                onCombinePrompt={onCombinePrompt}
+                dispatch={dispatch}
+              />
+            )}
+          </section>
         </div>
       )}
     </section>

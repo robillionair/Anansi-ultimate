@@ -3,6 +3,7 @@ import type { Client, AskResponse, GroundedCitation } from '@anansi/contracts';
 import { GhostSession } from './ghostPrompt.ts';
 import type { GhostEditKind } from './ghostPrompt.ts';
 import { GhostPromptStrip } from './GhostPrompt.tsx';
+import { runComparisonDispatch } from './GhostPromptCompare.tsx';
 
 function ghostKindFromInputType(inputType: string): GhostEditKind | null {
   switch (inputType) {
@@ -123,6 +124,33 @@ export function AskAnansi({ client, workspaceId }: { client: Client; workspaceId
             onStop={() => {
               ghostEngineRef.current?.stop();
               bumpGhost();
+            }}
+            onCombinePrompt={setPrompt}
+            dispatch={async (promptA, promptB) => {
+              const askOnce = async (prompt: string): Promise<string> => {
+                const opened = await client.startAsk(workspaceId, prompt, {
+                  runtimeEndpoint: endpoint.trim(),
+                  modelTag: model.trim(),
+                  ...(embeddingModel.trim()
+                    ? { embeddingModel: embeddingModel.trim() }
+                    : {}),
+                });
+                for (;;) {
+                  const run = await client.pollAsk(workspaceId, opened.id);
+                  if (run.state === 'completed') {
+                    if (run.error) throw Error(run.error.message);
+                    const id = opened.id;
+                    await client.forgetAsk(workspaceId, id).catch(() => {});
+                    return run.response?.answer ?? run.partialAnswer ?? '';
+                  }
+                  if (run.state === 'cancelled') {
+                    await client.forgetAsk(workspaceId, opened.id).catch(() => {});
+                    return '';
+                  }
+                  await new Promise((resolve) => setTimeout(resolve, 50));
+                }
+              };
+              return runComparisonDispatch(askOnce, promptA, promptB);
             }}
           />
         )}

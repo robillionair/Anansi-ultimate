@@ -45,6 +45,207 @@ export interface GhostTextDiff {
   inserted: string;
 }
 
+export interface GhostFinding {
+  kind: GhostFindingKind;
+  text: string;
+  evidence: string[];
+}
+
+export type GhostFindingKind =
+  | 'price-changed'
+  | 'privacy-removed'
+  | 'audience-shift'
+  | 'technical-term-substituted';
+
+const PRICE_QUALIFIERS = ['cheap', 'free', 'budget', 'expensive'];
+const PRIVACY_KEYWORDS = ['privacy', 'confidential', 'local', 'untracked', 'sealed'];
+const AUDIENCE_TERMS = [
+  'freelancers',
+  'enterprise',
+  'lawyers',
+  'startups',
+  'agencies',
+  'developers',
+];
+const TECHNICAL_TERMS = [
+  'api',
+  'embedding',
+  'vector',
+  'kubernetes',
+  'oauth',
+  'websocket',
+  'sql',
+  'llm',
+  'neural',
+  'algorithm',
+];
+const TRIM_CHARS = ',.;:!?()[]"\'';
+
+/** Tokenize exactly like the Rust mirror: lowercase, split on whitespace, trim surrounding punctuation, drop empties. */
+export function ghostTokens(text: string): string[] {
+  return text
+    .split(/\s+/)
+    .map((token) => {
+      let trimmed = token;
+      while (trimmed.length > 0 && TRIM_CHARS.includes(trimmed[0])) {
+        trimmed = trimmed.slice(1);
+      }
+      while (
+        trimmed.length > 0 &&
+        TRIM_CHARS.includes(trimmed[trimmed.length - 1])
+      ) {
+        trimmed = trimmed.slice(0, -1);
+      }
+      return trimmed.toLowerCase();
+    })
+    .filter((token) => token !== '');
+}
+
+/** A price signal: a `$`-prefixed number (`$50`) or a qualifier word. */
+function priceSignal(token: string): string | null {
+  if (token.startsWith('$')) {
+    const cleaned = token.slice(1).replaceAll(',', '');
+    if (cleaned !== '' && !Number.isNaN(Number(cleaned))) return `$${cleaned}`;
+    return null;
+  }
+  if (PRICE_QUALIFIERS.includes(token)) return token;
+  return null;
+}
+
+function termsPresent(tokens: string[], terms: string[]): string[] {
+  const found: string[] = [];
+  for (const token of tokens) {
+    if (terms.includes(token) && !found.includes(token)) found.push(token);
+  }
+  return found;
+}
+
+/**
+ * M11 GHOST-PROMPT Slice 3: deterministic draft analysis (§57), mirrored
+ * in crates/core/src/ghost_prompt.rs. Findings are objective observations
+ * about text changes only — never intent, emotion, or subconscious claims.
+ * Fixed order: price, privacy, audience, technical. At most one finding
+ * per kind; evidence collects up to 5 triggers.
+ */
+export function analyzeGhostDraft(
+  fragments: GhostDeletedFragment[],
+  events: GhostEditEvent[],
+  finalText: string,
+): GhostFinding[] {
+  const findings: GhostFinding[] = [];
+  const finalTokens = ghostTokens(finalText);
+  const sortedEvents = [...events].sort((a, b) => a.seq - b.seq);
+
+  const signals: string[] = [];
+  for (const event of sortedEvents) {
+    for (const side of [event.deleted, event.inserted]) {
+      for (const token of ghostTokens(side)) {
+        const signal = priceSignal(token);
+        if (signal !== null && !signals.includes(signal)) signals.push(signal);
+      }
+    }
+  }
+  if (signals.length >= 2) {
+    findings.push({
+      kind: 'price-changed',
+      text: 'You changed the requested price several times.',
+      evidence: [signals.join(' → ')],
+    });
+  }
+
+  let deletedText = '';
+  for (const fragment of fragments) deletedText += `${fragment.text} `;
+  for (const event of sortedEvents) deletedText += `${event.deleted} `;
+  const deletedTokens = ghostTokens(deletedText);
+  const removed: string[] = [];
+  for (const keyword of PRIVACY_KEYWORDS) {
+    if (
+      deletedTokens.includes(keyword) &&
+      !finalTokens.includes(keyword) &&
+      !removed.includes(keyword)
+    ) {
+      removed.push(keyword);
+    }
+  }
+  if (removed.length > 0) {
+    findings.push({
+      kind: 'privacy-removed',
+      text: 'You removed a requirement about privacy.',
+      evidence: removed,
+    });
+  }
+
+  const audienceEvidence: string[] = [];
+  for (const event of sortedEvents) {
+    const deletedTerms = termsPresent(ghostTokens(event.deleted), AUDIENCE_TERMS);
+    const insertedTerms = termsPresent(ghostTokens(event.inserted), AUDIENCE_TERMS);
+    for (const from of deletedTerms) {
+      for (const to of insertedTerms) {
+        if (from !== to) {
+          const item = `${from} → ${to}`;
+          if (audienceEvidence.length < 5 && !audienceEvidence.includes(item)) {
+            audienceEvidence.push(item);
+          }
+        }
+      }
+      if (event.inserted === '' && !finalTokens.includes(from)) {
+        const item = `${from} → (removed)`;
+        if (audienceEvidence.length < 5 && !audienceEvidence.includes(item)) {
+          audienceEvidence.push(item);
+        }
+      }
+    }
+  }
+  if (audienceEvidence.length > 0) {
+    findings.push({
+      kind: 'audience-shift',
+      text: 'You revised the target audience.',
+      evidence: audienceEvidence,
+    });
+  }
+
+  const technicalEvidence: string[] = [];
+  for (const event of sortedEvents) {
+    if (event.deleted === '' || event.inserted === '') continue;
+    const deletedTerms = termsPresent(ghostTokens(event.deleted), TECHNICAL_TERMS);
+    const insertedTerms = termsPresent(ghostTokens(event.inserted), TECHNICAL_TERMS);
+    if (deletedTerms.length > 0 && insertedTerms.length === 0) {
+      const item = `${deletedTerms[0]} → ${ghostTokens(event.inserted).join(' ')}`;
+      if (technicalEvidence.length < 5 && !technicalEvidence.includes(item)) {
+        technicalEvidence.push(item);
+      }
+    }
+  }
+  if (technicalEvidence.length > 0) {
+    findings.push({
+      kind: 'technical-term-substituted',
+      text: 'You replaced a technical term with a broader description.',
+      evidence: technicalEvidence,
+    });
+  }
+
+  return findings;
+}
+
+/**
+ * Compile the Panel B prompt: the final text plus exactly the selected
+ * fragments, in seq order, under an explicit header. An empty selection
+ * returns the final text unchanged — no header, no hidden context.
+ * Mirrored in crates/core/src/ghost_prompt.rs.
+ */
+export function compileApprovedContext(
+  finalText: string,
+  selected: GhostDeletedFragment[],
+): string {
+  if (selected.length === 0) return finalText;
+  const sorted = [...selected].sort((a, b) => a.seq - b.seq);
+  let out = `${finalText}\n\n--- Approved draft context (earlier alternatives you selected) ---\n`;
+  for (const fragment of sorted) {
+    out += `- ${fragment.text} (deleted at offset ${fragment.offset})\n`;
+  }
+  return out.replace(/\n+$/, '');
+}
+
 export interface GhostEditorScope {
   id: string;
   isPassword: boolean;

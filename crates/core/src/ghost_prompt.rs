@@ -363,6 +363,245 @@ fn zero_string(text: &mut String) {
     text.clear();
 }
 
+// ---------------------------------------------------------------------------
+// M11 GHOST-PROMPT Slice 3: deterministic draft analysis (§57).
+//
+// Pure functions over fragments, events, and the final text. The rules,
+// keyword lists, and finding sentences are mirrored byte-for-byte in
+// packages/ui/src/ghostPrompt.ts. Findings are objective observations
+// about text changes only; no intent, emotion, or subconscious claim is
+// ever produced here. Nothing is persisted, transmitted, or inferred
+// beyond the text given.
+
+/// A single draft-analysis finding: one of the four §57 sentences plus
+/// the evidence (terms/signals) that triggered it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GhostFinding {
+    pub kind: GhostFindingKind,
+    pub text: String,
+    pub evidence: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GhostFindingKind {
+    PriceChanged,
+    PrivacyRemoved,
+    AudienceShift,
+    TechnicalTermSubstituted,
+}
+
+impl GhostFindingKind {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            GhostFindingKind::PriceChanged => "price-changed",
+            GhostFindingKind::PrivacyRemoved => "privacy-removed",
+            GhostFindingKind::AudienceShift => "audience-shift",
+            GhostFindingKind::TechnicalTermSubstituted => "technical-term-substituted",
+        }
+    }
+}
+
+const PRICE_QUALIFIERS: [&str; 4] = ["cheap", "free", "budget", "expensive"];
+const PRIVACY_KEYWORDS: [&str; 5] = ["privacy", "confidential", "local", "untracked", "sealed"];
+const AUDIENCE_TERMS: [&str; 6] = [
+    "freelancers",
+    "enterprise",
+    "lawyers",
+    "startups",
+    "agencies",
+    "developers",
+];
+const TECHNICAL_TERMS: [&str; 10] = [
+    "api",
+    "embedding",
+    "vector",
+    "kubernetes",
+    "oauth",
+    "websocket",
+    "sql",
+    "llm",
+    "neural",
+    "algorithm",
+];
+const TRIM_CHARS: &[char] = &[',', '.', ';', ':', '!', '?', '(', ')', '[', ']', '"', '\''];
+
+/// Tokenize exactly like the TypeScript mirror: lowercase, split on
+/// whitespace, trim surrounding punctuation, drop empties.
+fn ghost_tokens(text: &str) -> Vec<String> {
+    text.split_whitespace()
+        .map(|token| token.trim_matches(TRIM_CHARS).to_lowercase())
+        .filter(|token| !token.is_empty())
+        .collect()
+}
+
+/// A price signal: a `$`-prefixed number (`$50`) or a qualifier word
+/// (`cheap`). Returns the canonical signal string (`$50`, `cheap`).
+fn price_signal(token: &str) -> Option<String> {
+    if let Some(rest) = token.strip_prefix('$') {
+        let cleaned: String = rest.chars().filter(|c| *c != ',').collect();
+        if !cleaned.is_empty() && cleaned.parse::<f64>().is_ok() {
+            return Some(format!("${cleaned}"));
+        }
+        return None;
+    }
+    if PRICE_QUALIFIERS.contains(&token) {
+        return Some(token.to_string());
+    }
+    None
+}
+
+fn terms_present(tokens: &[String], terms: &[&str]) -> Vec<String> {
+    let mut found: Vec<String> = Vec::new();
+    for token in tokens {
+        if terms.contains(&token.as_str()) && !found.contains(token) {
+            found.push(token.clone());
+        }
+    }
+    found
+}
+
+/// Analyze a draft: fragments + events (in seq order) + the final text.
+/// Findings come back in fixed order: price, privacy, audience, technical.
+/// At most one finding per kind; evidence collects up to 5 triggers.
+pub fn analyze_ghost_draft(
+    fragments: &[GhostDeletedFragment],
+    events: &[GhostEditEvent],
+    final_text: &str,
+) -> Vec<GhostFinding> {
+    let mut findings: Vec<GhostFinding> = Vec::new();
+    let final_tokens = ghost_tokens(final_text);
+
+    // Price: distinct signals across the event sequence (deleted then
+    // inserted per event). Two or more distinct signals = price changed.
+    let mut signals: Vec<String> = Vec::new();
+    let mut sorted_events = events.to_vec();
+    sorted_events.sort_by_key(|event| event.seq);
+    for event in &sorted_events {
+        for side in [&event.deleted, &event.inserted] {
+            for token in ghost_tokens(side) {
+                if let Some(signal) =
+                    price_signal(&token).filter(|signal| !signals.contains(signal))
+                {
+                    signals.push(signal);
+                }
+            }
+        }
+    }
+    if signals.len() >= 2 {
+        findings.push(GhostFinding {
+            kind: GhostFindingKind::PriceChanged,
+            text: "You changed the requested price several times.".to_string(),
+            evidence: vec![signals.join(" → ")],
+        });
+    }
+
+    // Privacy: keyword deleted and absent from the final text.
+    let mut deleted_text = String::new();
+    for fragment in fragments {
+        deleted_text.push_str(&fragment.text);
+        deleted_text.push(' ');
+    }
+    for event in &sorted_events {
+        deleted_text.push_str(&event.deleted);
+        deleted_text.push(' ');
+    }
+    let deleted_tokens = ghost_tokens(&deleted_text);
+    let mut removed: Vec<String> = Vec::new();
+    for keyword in PRIVACY_KEYWORDS {
+        if deleted_tokens.iter().any(|token| token == keyword)
+            && !final_tokens.iter().any(|token| token == keyword)
+            && !removed.contains(&keyword.to_string())
+        {
+            removed.push(keyword.to_string());
+        }
+    }
+    if !removed.is_empty() {
+        findings.push(GhostFinding {
+            kind: GhostFindingKind::PrivacyRemoved,
+            text: "You removed a requirement about privacy.".to_string(),
+            evidence: removed,
+        });
+    }
+
+    // Audience: replace events swapping terms, or pure deletion of a term
+    // that stays absent from the final text.
+    let mut audience_evidence: Vec<String> = Vec::new();
+    for event in &sorted_events {
+        let deleted_terms = terms_present(&ghost_tokens(&event.deleted), &AUDIENCE_TERMS);
+        let inserted_terms = terms_present(&ghost_tokens(&event.inserted), &AUDIENCE_TERMS);
+        for from in &deleted_terms {
+            for to in &inserted_terms {
+                if from != to {
+                    let item = format!("{from} → {to}");
+                    if audience_evidence.len() < 5 && !audience_evidence.contains(&item) {
+                        audience_evidence.push(item);
+                    }
+                }
+            }
+            if event.inserted.is_empty() && !final_tokens.iter().any(|token| token == from) {
+                let item = format!("{from} → (removed)");
+                if audience_evidence.len() < 5 && !audience_evidence.contains(&item) {
+                    audience_evidence.push(item);
+                }
+            }
+        }
+    }
+    if !audience_evidence.is_empty() {
+        findings.push(GhostFinding {
+            kind: GhostFindingKind::AudienceShift,
+            text: "You revised the target audience.".to_string(),
+            evidence: audience_evidence,
+        });
+    }
+
+    // Technical: replace events where a technical term leaves and no
+    // technical term arrives (broader description replaces it).
+    let mut technical_evidence: Vec<String> = Vec::new();
+    for event in &sorted_events {
+        if event.deleted.is_empty() || event.inserted.is_empty() {
+            continue;
+        }
+        let deleted_terms = terms_present(&ghost_tokens(&event.deleted), &TECHNICAL_TERMS);
+        let inserted_terms = terms_present(&ghost_tokens(&event.inserted), &TECHNICAL_TERMS);
+        if !deleted_terms.is_empty() && inserted_terms.is_empty() {
+            let inserted = ghost_tokens(&event.inserted).join(" ");
+            let item = format!("{} → {inserted}", deleted_terms[0]);
+            if technical_evidence.len() < 5 && !technical_evidence.contains(&item) {
+                technical_evidence.push(item);
+            }
+        }
+    }
+    if !technical_evidence.is_empty() {
+        findings.push(GhostFinding {
+            kind: GhostFindingKind::TechnicalTermSubstituted,
+            text: "You replaced a technical term with a broader description.".to_string(),
+            evidence: technical_evidence,
+        });
+    }
+
+    findings
+}
+
+/// Compile the Panel B prompt: the final text plus exactly the selected
+/// fragments, in seq order, under an explicit header. An empty selection
+/// returns the final text unchanged — no header, no hidden context.
+pub fn compile_approved_context(final_text: &str, selected: &[GhostDeletedFragment]) -> String {
+    if selected.is_empty() {
+        return final_text.to_string();
+    }
+    let mut sorted = selected.to_vec();
+    sorted.sort_by_key(|fragment| fragment.seq);
+    let mut out = String::from(final_text);
+    out.push_str("\n\n--- Approved draft context (earlier alternatives you selected) ---\n");
+    for fragment in &sorted {
+        out.push_str(&format!(
+            "- {} (deleted at offset {})\n",
+            fragment.text, fragment.offset
+        ));
+    }
+    out.trim_end_matches('\n').to_string()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -548,5 +787,198 @@ mod tests {
         s.record("", "hello", None, 0);
         assert_eq!(s.current_text_fnv, fnv1a_hex("hello"));
         assert_eq!(s.current_text_sha256, sha256_hex("hello"));
+    }
+
+    // Slice 3: draft analysis rules, mirrored in ghostPrompt.ts.
+    fn analysis_session() -> GhostSession {
+        let mut s = session();
+        s.record(
+            "",
+            "Build a cheap API tool for freelancers with privacy for $50",
+            None,
+            0,
+        );
+        // The full-text diff maximizes the shared prefix, so the `$`
+        // stays in the prefix and the spans here are `50` / `20` (not
+        // price signals). The price finding in this session comes from
+        // the qualifier `cheap` plus the `$50` token of the first insert;
+        // the canonical `$50` → `$20` span case is pinned separately
+        // below with hand-built events.
+        s.record(
+            "Build a cheap API tool for freelancers with privacy for $50",
+            "Build a cheap API tool for freelancers with privacy for $20",
+            Some(EditKind::Replace),
+            100,
+        );
+        s.record(
+            "Build a cheap API tool for freelancers with privacy for $20",
+            "Build a cheap API tool for freelancers for $20",
+            None,
+            200,
+        );
+        s.record(
+            "Build a cheap API tool for freelancers for $20",
+            "Build a cheap API tool for enterprise for $20",
+            None,
+            300,
+        );
+        s.record(
+            "Build a cheap API tool for enterprise for $20",
+            "Build a cheap simple tool for enterprise for $20",
+            None,
+            400,
+        );
+        s
+    }
+
+    #[test]
+    fn analysis_finds_all_four_kinds_in_order() {
+        let s = analysis_session();
+        let findings = analyze_ghost_draft(&s.deleted_fragments(), &s.events, &s.current_text);
+        let kinds: Vec<&str> = findings.iter().map(|f| f.kind.as_str()).collect();
+        assert_eq!(
+            kinds,
+            [
+                "price-changed",
+                "privacy-removed",
+                "audience-shift",
+                "technical-term-substituted"
+            ]
+        );
+        assert_eq!(
+            findings[0].text,
+            "You changed the requested price several times."
+        );
+        assert!(findings[0].evidence[0].contains("cheap"));
+        assert!(findings[0].evidence[0].contains("$50"));
+        assert_eq!(findings[1].text, "You removed a requirement about privacy.");
+        assert!(findings[1].evidence.contains(&"privacy".to_string()));
+        assert_eq!(findings[2].text, "You revised the target audience.");
+        assert!(
+            findings[2]
+                .evidence
+                .iter()
+                .any(|item| item.contains("freelancers") && item.contains("enterprise"))
+        );
+        assert_eq!(
+            findings[3].text,
+            "You replaced a technical term with a broader description."
+        );
+        assert!(findings[3].evidence[0].starts_with("api → "));
+    }
+
+    #[test]
+    fn analysis_price_spans_dollar_to_dollar() {
+        // Canonical `$50` → `$20` case, with the `$` inside the spans
+        // (as a selection replacement produces in the UI).
+        let events = vec![GhostEditEvent {
+            seq: 1,
+            kind: EditKind::Replace,
+            offset: 0,
+            deleted: "$50".to_string(),
+            inserted: "$20".to_string(),
+            text_len_after: 3,
+            deleted_hash: String::new(),
+            elapsed_ms: 0,
+        }];
+        let findings = analyze_ghost_draft(&[], &events, "$20");
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].kind, GhostFindingKind::PriceChanged);
+        assert_eq!(findings[0].evidence[0], "$50 → $20");
+    }
+
+    #[test]
+    fn analysis_stays_silent_on_negatives() {
+        // Single price signal, privacy keyword kept, no audience or
+        // technical swap: no findings at all.
+        let mut s = session();
+        s.record("", "Build a tool with privacy for $20", None, 0);
+        s.record(
+            "Build a tool with privacy for $20",
+            "Build a tool with privacy for $20!",
+            None,
+            100,
+        );
+        let findings = analyze_ghost_draft(&s.deleted_fragments(), &s.events, &s.current_text);
+        assert!(findings.is_empty());
+        // Privacy keyword deleted but present again in the final text.
+        let mut s2 = session();
+        s2.record("", "private notes with privacy", None, 0);
+        s2.record("private notes with privacy", "notes", None, 100);
+        s2.record("notes", "notes with privacy", None, 200);
+        let findings2 = analyze_ghost_draft(&s2.deleted_fragments(), &s2.events, &s2.current_text);
+        assert!(
+            findings2
+                .iter()
+                .all(|f| f.kind != GhostFindingKind::PrivacyRemoved)
+        );
+    }
+
+    #[test]
+    fn analysis_audience_removal_and_technical_kept() {
+        let mut s = session();
+        s.record("", "tool for freelancers with API", None, 0);
+        s.record("tool for freelancers with API", "tool with API", None, 100);
+        let findings = analyze_ghost_draft(&s.deleted_fragments(), &s.events, &s.current_text);
+        // Audience term deleted and absent from final text; the technical
+        // term stays, so no substitution finding.
+        assert!(
+            findings
+                .iter()
+                .any(|f| f.kind == GhostFindingKind::AudienceShift)
+        );
+        assert!(
+            findings
+                .iter()
+                .all(|f| f.kind != GhostFindingKind::TechnicalTermSubstituted)
+        );
+    }
+
+    #[test]
+    fn analysis_finding_texts_claim_no_intent() {
+        let s = analysis_session();
+        let findings = analyze_ghost_draft(&s.deleted_fragments(), &s.events, &s.current_text);
+        for finding in &findings {
+            let lower = finding.text.to_lowercase();
+            for word in [
+                "subconscious",
+                "intent",
+                "feel",
+                "want",
+                "think",
+                "believe",
+                "mind",
+            ] {
+                assert!(
+                    !lower.contains(word),
+                    "finding claims intent: {}",
+                    finding.text
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn compile_approved_context_format() {
+        let s = analysis_session();
+        let fragments = s.deleted_fragments();
+        let selected: Vec<GhostDeletedFragment> = fragments
+            .iter()
+            .filter(|fragment| {
+                fragment.text.contains("privacy") || fragment.text.contains("freelancers")
+            })
+            .cloned()
+            .collect();
+        assert_eq!(selected.len(), 2);
+        let compiled = compile_approved_context(&s.current_text, &selected);
+        assert!(compiled.starts_with(s.current_text.as_str()));
+        assert!(compiled.contains("--- Approved draft context"));
+        assert!(compiled.contains("with privacy"));
+        assert!(compiled.contains("freelancers"));
+        assert!(!compiled.contains("$50"));
+        assert_eq!(
+            compile_approved_context(&s.current_text, &[]),
+            s.current_text
+        );
     }
 }
