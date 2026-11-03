@@ -28,8 +28,33 @@ import {
 export interface AskRunResponseLike {
   status: string;
   answer: string;
-  manifest: { estimatedTokens: number };
+  manifest: { estimatedTokens: number; compiledPrompt?: string };
   citations?: { memoryId: string }[];
+}
+
+/** Whitespace words: this app has no tokenizer, so View 5's sequences
+ *  are words, lowercased with end punctuation stripped — never
+ *  presented as provider token ids. */
+export function tokenizeWords(text: string): string[] {
+  return text
+    .split(/\s+/)
+    .map((w) => w.toLowerCase().replace(/^[.,;:!?()"'[\]]+|[.,;:!?()"'[\]]+$/g, ''))
+    .filter((w) => w.length > 0);
+}
+
+/** A completed collider generation (beam input labels, truncated by
+ *  the sanitize step). Never throws: telemetry must not break the
+ *  collider. */
+export function reportCollision(
+  beamA: string,
+  beamB: string,
+  stream: AnansiTelemetryStream = telemetryStream,
+): void {
+  try {
+    stream.push({ kind: 'collision', at: Date.now(), beamA, beamB });
+  } catch {
+    // Telemetry is best-effort; the collider result already rendered.
+  }
 }
 
 export function estimateTokens(chars: number): number {
@@ -53,6 +78,15 @@ export function reportAskRun(
     label: 'ask-run-completed',
     ...(citedIds.length > 0 ? { citedIds } : {}),
   });
+  const compiledPrompt = response.manifest.compiledPrompt ?? '';
+  if (compiledPrompt.length > 0) {
+    stream.push({
+      kind: 'ask-tokens',
+      at,
+      rawTokens: tokenizeWords(prompt).slice(0, 32),
+      compiledTokens: tokenizeWords(compiledPrompt).slice(0, 64),
+    });
+  }
   if (response.status !== 'answered') return;
   const compiled = response.manifest.estimatedTokens;
   if (!(compiled > 0)) return;

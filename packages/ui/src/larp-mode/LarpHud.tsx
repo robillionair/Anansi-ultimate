@@ -19,6 +19,8 @@ import { View1MemoryVault } from './views/View1MemoryVault.tsx';
 import { View2NeuralFunnel } from './views/View2NeuralFunnel.tsx';
 import { View3AttentionSpider } from './views/View3AttentionSpider.tsx';
 import { View4QuantDrift } from './views/View4QuantDrift.tsx';
+import { View5AttentionHeatmap } from './views/View5AttentionHeatmap.tsx';
+import { View6ColliderField } from './views/View6ColliderField.tsx';
 
 const VIEW_BUTTONS = [1, 2, 3, 4, 5, 6];
 
@@ -98,7 +100,7 @@ export function LarpHud({
       </div>
       <div className="larp-center">
         <section
-          className={'larp-centerpiece' + (view <= 4 ? ' larp-centerpiece-view' : '')}
+          className={'larp-centerpiece larp-centerpiece-view'}
           aria-labelledby="larp-center-heading"
         >
           <h3 id="larp-center-heading">Centerpiece</h3>
@@ -124,9 +126,11 @@ export function LarpHud({
             <View3AttentionSpider stream={stream} />
           ) : view === 4 ? (
             <View4QuantDrift stream={stream} />
-          ) : (
-            <p className="larp-empty">View {view} — arrives in a later slice.</p>
-          )}
+          ) : view === 5 ? (
+            <View5AttentionHeatmap stream={stream} />
+          ) : view === 6 ? (
+            <View6ColliderField stream={stream} />
+          ) : null}
         </section>
       </div>
       <div className="larp-rail larp-rail-right">

@@ -251,7 +251,7 @@ test('HUD renders frame regions, widgets, view buttons 1-6, and empty states', (
   assert.ok(html.includes('No telemetry events yet.'));
   assert.ok(html.includes('No memory snapshot yet.'));
   for (let n = 1; n <= 6; n++) assert.ok(html.includes(`aria-label="LARP view ${n}"`));
-  assert.ok(html.includes('arrives in a later slice.'));
+  assert.ok(html.includes('No compiled prompt yet'));
 });
 
 test('HUD renders pushed events instead of empty states', () => {

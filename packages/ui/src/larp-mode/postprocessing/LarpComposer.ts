@@ -39,6 +39,8 @@ export function buildLarpPasses<T>(create: (kind: LarpPassKind) => T): T[] {
 export interface LarpComposerHandle {
   composer: EffectComposer;
   grainPass: ShaderPass;
+  /** Exposed so a view can animate a discharge flash (Slice 4). */
+  bloomPass: UnrealBloomPass;
   render: () => void;
   setSize: (width: number, height: number) => void;
   dispose: () => void;
@@ -71,6 +73,7 @@ export function createLarpComposer(
   return {
     composer,
     grainPass,
+    bloomPass: bloom,
     render: () => composer.render(),
     setSize: (w: number, h: number) => composer.setSize(w, h),
     dispose: () => {

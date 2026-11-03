@@ -39,6 +39,22 @@ export type TelemetryEvent =
       /** Memory ids cited by the Ask answer that produced this event.
        *  The spider highlights these as cited entities. */
       citedIds?: string[];
+    }
+  | {
+      kind: 'ask-tokens';
+      at: number;
+      /** Whitespace words of the raw prompt, not provider token ids
+       *  (this app has no tokenizer). Capped at 32. */
+      rawTokens: string[];
+      /** Whitespace words of the compiled prompt, capped at 64. */
+      compiledTokens: string[];
+    }
+  | {
+      kind: 'collision';
+      at: number;
+      /** Truncated beam input labels from a completed collider run. */
+      beamA: string;
+      beamB: string;
     };
 
 export const TELEMETRY_RING_LIMIT = 500;
@@ -97,6 +113,26 @@ export function sanitizeTelemetryEvent(event: TelemetryEvent): TelemetryEvent {
         ...(event.citedIds !== undefined
           ? { citedIds: event.citedIds.filter((id) => typeof id === 'string').slice(0, 50) }
           : {}),
+      };
+    case 'ask-tokens': {
+      const cleanTokens = (tokens: string[], cap: number) =>
+        tokens
+          .filter((t) => typeof t === 'string')
+          .map((t) => t.slice(0, 64))
+          .slice(0, cap);
+      return {
+        kind: 'ask-tokens',
+        at: event.at,
+        rawTokens: cleanTokens(event.rawTokens, 32),
+        compiledTokens: cleanTokens(event.compiledTokens, 64),
+      };
+    }
+    case 'collision':
+      return {
+        kind: 'collision',
+        at: event.at,
+        beamA: typeof event.beamA === 'string' ? event.beamA.slice(0, 80) : '',
+        beamB: typeof event.beamB === 'string' ? event.beamB.slice(0, 80) : '',
       };
   }
 }

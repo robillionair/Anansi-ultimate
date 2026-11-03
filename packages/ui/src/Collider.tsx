@@ -13,6 +13,7 @@ import type {
 } from '@anansi/contracts';
 import { DisclosurePanel } from './Providers';
 import { ColliderRunController } from './colliderRun';
+import { reportCollision } from './larp-mode/telemetryProducers.ts';
 import {
   DocumentLoadSession,
   MAX_DOCUMENT_BYTES,
@@ -1606,6 +1607,11 @@ export function ColliderPanel({
             setValidating(false);
             if (parsed) {
               setResult(parsed);
+              try {
+                reportCollision(beamA, beamB);
+              } catch {
+                // Telemetry is best-effort; the result already rendered.
+              }
             } else {
               setRun(r =>
                 r
