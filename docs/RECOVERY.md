@@ -1,3 +1,33 @@
+## Resume point — 2026-11-03 M12 Product Lifecycle Slice 3 (Linux; Windows rerun pending)
+
+Owner-authorized M12 slice on branch
+`muse/m12-product-lifecycle-slice3` from the
+Windows-verified Slice 2 review tip
+`30f1ee91d` (docs-only review commit over
+delivery tip `77583b7c0`; the first upload
+for this assignment held only the review ZIP's
+`.sha256` sidecar, so work was HELD until the
+actual review package arrived and was
+hash-verified — see the Slice 3 addendum, the
+§88 milestone report). Guided Walk panel over
+the pipeline engine (six steps; Define spans
+Invent + Build; Refine never Complete), complete
+§85 walk end to end in the browser with a
+mid-walk client restart, backup/restore integrity
+with project-binding checks, prompt-routed
+shared-harness fake. No server op, no new
+artifact type, no schema change, no Rust change.
+Linux verification: Rust 616 passed + 4 known
+live-Ollama env failures, Clippy/fmt clean, node
+228/228, e2e lifecycle slice3 spec 2/2,
+regression battery 28/28. AN-012 `verified`,
+"Milestone 12 complete" in its text (validator
+has no `complete` status); M7 native acceptance
++ preview promotion, §32 sandbox, M5 production
+gates, Windows verification of M8 Slice 4, and
+the Windows rerun of this slice stay open; do
+not claim Windows acceptance from Linux evidence.
+
 ## Resume point — 2026-11-03 M12 Product Lifecycle Slice 2 (Linux; Windows rerun pending)
 
 Owner-authorized M12 slice on branch
