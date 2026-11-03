@@ -1,26 +1,29 @@
-## Resume point — 2026-11-03 M11 GHOST-PROMPT Slice 3 (Milestone 11 complete on Linux; Windows rerun pending)
+## Resume point — 2026-11-03 M12 Product Lifecycle Slice 1 (Linux; Windows rerun pending)
 
-Owner-authorized M11 slice on branch
-`muse/m11-ghost-prompt-slice3` from verified
-Windows review head `3698833646bd92353791a5948d823e05e73c1144`
-(Slices 1–2 Windows-verified; the assignment's
-stated full SHA `3698833634e0…` does not exist —
-see the Slice 3 addendum for the recorded
-discrepancy). §57–59, §86.5–7, §88: deterministic
-draft analysis (Rust + TS mirror, four §57
-sentences, no intent claims), explicit fragment
-selection, dual-panel comparison (offline
-reference responses by default, provider dispatch
-only on explicit click), §86 walk verified end
-to end. No server op, no new artifact type, no
-schema change. Linux verification: Rust 609
-passed + 4 known live-Ollama environment
-failures, node 192/192, e2e ghost Slice 3 spec
-2/2, regression battery 22/22. AN-016 is
-`verified`, Milestone 11 complete; Slice 3
-Windows rerun pending; do not claim Windows
-acceptance from Linux evidence. No next
-milestone commissioned.
+Owner-authorized M12 slice on branch
+`muse/m12-product-lifecycle-slice1` from verified
+Windows review head `9222e9698a7f…`
+(M11 CLOSED on Windows; the review MANIFEST's
+stated tail `9222e969a5316…` does not exist —
+see the Slice 1 addendum for the recorded
+discrepancy). §60/§62 foundational navigator:
+pure 7-stage engine (Rust `pipeline.rs` + TS
+`lifecycle.ts` mirror) deriving stage status
+from project artifact types, `PipelineNavigator`
+stepper in the project view, stage → tool
+navigation (anchors + Ask-view plumbing for
+Refine), Launch honestly disabled until Slice
+2, "Jump to tool" override on Awaiting rows.
+No server op, no new artifact type, no schema
+change. Linux verification: Rust 616 passed
++ 4 known live-Ollama environment failures
+(609 + 7 new pipeline tests),
+node 198/198, e2e lifecycle spec 2/2,
+regression battery per MANIFEST. AN-012 stays
+`in progress`; Slice 1 Windows rerun pending;
+do not claim Windows acceptance from Linux
+evidence. Slices 2 (§61) and 3 (§85) are not
+commissioned.
 
 ## Resume point — 2026-11-02 M10 SOMNIA Slice 3 (Milestone 10 closed)
 

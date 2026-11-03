@@ -1,5 +1,11 @@
 # M12 — Integrated product lifecycle and Launch Studio
 
+Status: Slice 1 delivered 2026-11-03 (Linux; Windows rerun pending); Slices 2–3 not commissioned.
+
+## Slice 1 delivered (2026-11-03, Linux; Windows rerun pending)
+
+Branch `muse/m12-product-lifecycle-slice1` from verified Windows review head `9222e9698a7f…` (M11 CLOSED on Windows; the review MANIFEST's stated tail `9222e969a5316…` does not exist — discrepancy recorded in the Slice 1 addendum). Foundational pipeline navigator (§60, §62): pure 7-stage engine (Rust `pipeline.rs` + TS `lifecycle.ts` mirror; `lifecycle.rs` already owns the memory-state machine), `PipelineNavigator` stepper in the project view, stage → tool navigation (anchors + Ask-view plumbing for Refine), Launch honestly disabled until Slice 2, "Jump to tool" override on Awaiting rows. Design before code: `docs/handoffs/M12-product-lifecycle-slice1-design.md`; record: `docs/handoffs/M12-product-lifecycle-slice1-addendum.md`. No server op, no new artifact type, no schema change. Linux verification: Rust 616 passed + 4 known Ollama env failures (609 + 7 new pipeline tests), node 198/198, e2e lifecycle spec 2/2, regression battery per MANIFEST. AN-012 stays `in progress`.
+
 Status: tracked planning task; detailed implementation design and acceptance approval required before coding. This is not an implemented feature or a complete technical design.
 
 Authority: [master specification](../docs/MASTER_SPEC.md), sections 20, 41, 51, 59–62, 79–80, 85; [canonical roadmap](../docs/ROADMAP.md).
