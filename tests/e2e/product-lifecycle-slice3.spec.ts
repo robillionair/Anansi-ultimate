@@ -43,6 +43,19 @@ async function walkStepText(
   throw new Error(`Walk step ${label} not found`);
 }
 
+/**
+ * Poll a walk step's status. Panel notices fire before the parent's
+ * artifact reload lands, so a single read after a save can catch the
+ * stale list; polling retries until the reload is reflected.
+ */
+async function expectWalkStep(
+  walk: import('@playwright/test').Locator,
+  label: string,
+  status: string,
+): Promise<void> {
+  await expect.poll(() => walkStepText(walk, label)).toContain(status);
+}
+
 test('product lifecycle slice 3: complete guided walk with a mid-walk restart', async ({ page }) => {
   test.setTimeout(300000);
   page.setDefaultTimeout(8000);
@@ -55,9 +68,9 @@ test('product lifecycle slice 3: complete guided walk with a mid-walk restart', 
   try {
     // Fresh project: Discover Current, the rest Awaiting.
     await expect(walk).toBeVisible();
-    expect(await walkStepText(walk, 'Discover')).toContain('Current / In Progress');
-    expect(await walkStepText(walk, 'Define')).toContain('Awaiting Preceding Stage');
-    expect(await walkStepText(walk, 'Launch')).toContain('Awaiting Preceding Stage');
+    await expectWalkStep(walk, 'Discover', 'Current / In Progress');
+    await expectWalkStep(walk, 'Define', 'Awaiting Preceding Stage');
+    await expectWalkStep(walk, 'Launch', 'Awaiting Preceding Stage');
 
     // 1. Discover: opportunity set from a problem source, saved as artifact.
     await walk.getByRole('link', { name: 'Continue walk' }).click();
@@ -67,8 +80,8 @@ test('product lifecycle slice 3: complete guided walk with a mid-walk restart', 
     await expect(page.getByText('1. Dock quote inbox')).toBeVisible();
     await opp.getByRole('button', { name: 'Save opportunity set as artifact' }).click();
     await expect(opp.getByText(/Saved as artifact/)).toBeVisible();
-    expect(await walkStepText(walk, 'Discover')).toContain('Complete');
-    expect(await walkStepText(walk, 'Define')).toContain('Current / In Progress');
+    await expectWalkStep(walk, 'Discover', 'Complete');
+    await expectWalkStep(walk, 'Define', 'Current / In Progress');
 
     // 2. Define: collider concept, then a Forge specification draft.
     await walk.getByRole('link', { name: 'Continue walk' }).click();
@@ -100,21 +113,25 @@ test('product lifecycle slice 3: complete guided walk with a mid-walk restart', 
     await page.getByRole('button', { name: 'Save specification draft' }).click();
     await expect(page.getByText('Specification draft saved as artifact')).toBeVisible();
     await session.openProject();
-    expect(await walkStepText(walk, 'Define')).toContain('Complete');
-    expect(await walkStepText(walk, 'Simulate')).toContain('Current / In Progress');
+    await expectWalkStep(walk, 'Define', 'Complete');
+    await expectWalkStep(walk, 'Simulate', 'Current / In Progress');
 
     // 3. Restart checkpoint: full client reload + re-pair rebuilds the
     // pipeline from the server's persisted registry, not client memory.
+    // The Artifacts heading renders before the list reloads, so wait
+    // for a known artifact row before asserting walk statuses.
     await page.reload();
     await session.pairAndOpen(session.workspaceId);
-    expect(await walkStepText(walk, 'Discover')).toContain('Complete');
-    expect(await walkStepText(walk, 'Define')).toContain('Complete');
-    expect(await walkStepText(walk, 'Simulate')).toContain('Current / In Progress');
+    await expect(session.artifacts.getByRole('button', { name: 'Opportunity set: Dock offices lose supplier quotes in shared inboxes.' })).toBeVisible();
+    await expectWalkStep(walk, 'Discover', 'Complete');
+    await expectWalkStep(walk, 'Define', 'Complete');
+    await expectWalkStep(walk, 'Simulate', 'Current / In Progress');
 
     // 4. Simulate: SwarmTank across 20 personas, run saved.
     await swarmtank
       .getByLabel('Import from saved experiment')
       .selectOption({ label: 'Collider experiment: First beam about kitchens.' });
+    await swarmtank.getByRole('button', { name: 'Import experiment' }).click();
     await swarmtank.getByLabel('SwarmTank pricing').fill('$49 per month');
     await swarmtank.getByLabel('SwarmTank monthly price amount').fill('49');
     await swarmtank.getByLabel('SwarmTank segment').fill('small agencies');
@@ -130,17 +147,20 @@ test('product lifecycle slice 3: complete guided walk with a mid-walk restart', 
     ).toBeVisible();
     await swarmtank.getByRole('button', { name: 'Evaluate decisions' }).click();
     await expect(page.getByText('Evaluated and saved the SwarmTank run.')).toBeVisible();
-    expect(await walkStepText(walk, 'Simulate')).toContain('Complete');
-    expect(await walkStepText(walk, 'Pressure-Test')).toContain('Current / In Progress');
+    await expectWalkStep(walk, 'Simulate', 'Complete');
+    await expectWalkStep(walk, 'Pressure-Test', 'Current / In Progress');
 
     // 5. Pressure-Test: SOMNIA nightmares evaluated and saved.
     await somnia.getByLabel('SOMNIA nightmare seed').fill('walk-nightmare-seed');
     await somnia.getByLabel('SOMNIA nightmare count').selectOption('10');
     await somnia.getByRole('button', { name: 'Generate SOMNIA nightmares' }).click();
+    // Run stays disabled until the replay input is previewed.
+    await somnia.getByRole('button', { name: 'Preview replay input' }).click();
+    await expect(somnia.getByRole('button', { name: 'Run evaluation' })).toBeEnabled();
     await somnia.getByRole('button', { name: 'Run evaluation' }).click();
     await somnia.getByRole('button', { name: 'Save SOMNIA evaluation' }).click();
     await expect(page.getByText(/SOMNIA evaluation saved/)).toBeVisible();
-    expect(await walkStepText(walk, 'Pressure-Test')).toContain('Complete');
+    await expectWalkStep(walk, 'Pressure-Test', 'Complete');
 
     // 6. Refine: GHOST-PROMPT session in Ask ANANSI, revised, then wiped.
     // Refine never reads Complete — asserted explicitly, not assumed.
@@ -160,6 +180,7 @@ test('product lifecycle slice 3: complete guided walk with a mid-walk restart', 
     await strip.getByRole('button', { name: 'Stop & discard session' }).click();
     await expect(strip.getByText('Draft history purged.')).toBeVisible();
     await session.openProject();
+    await expectWalkStep(walk, 'Launch', 'Current / In Progress');
     expect(await walkStepText(walk, 'Refine')).toContain('Available');
     expect(await walkStepText(walk, 'Refine')).not.toContain('Complete');
 
@@ -188,7 +209,7 @@ test('product lifecycle slice 3: complete guided walk with a mid-walk restart', 
     await session.artifacts.getByLabel('Artifact text').fill('Launch bundle for the Harbor Walk walkthrough.');
     await session.artifacts.getByRole('button', { name: 'Register artifact' }).click();
     await expect(page.getByText('Artifact registered.')).toBeVisible();
-    expect(await walkStepText(walk, 'Launch')).toContain('Complete');
+    await expectWalkStep(walk, 'Launch', 'Complete');
     await expect(walk.getByText('Walk complete')).toBeVisible();
     await expect(nav.locator('li').nth(6)).toContainText('Complete');
   } finally {
@@ -222,6 +243,7 @@ test('product lifecycle slice 3: backup and restore preserve pipeline state and 
     await swarmtank
       .getByLabel('Import from saved experiment')
       .selectOption({ label: 'Collider experiment: First beam about kitchens.' });
+    await swarmtank.getByRole('button', { name: 'Import experiment' }).click();
     await swarmtank.getByLabel('SwarmTank pricing').fill('$49 per month');
     await swarmtank.getByLabel('SwarmTank monthly price amount').fill('49');
     await swarmtank.getByLabel('SwarmTank segment').fill('small agencies');
@@ -236,6 +258,9 @@ test('product lifecycle slice 3: backup and restore preserve pipeline state and 
     await expect(page.getByText('Evaluated and saved the SwarmTank run.')).toBeVisible();
 
     // Record pre-backup state: walk statuses + artifact type/title list.
+    // Wait for the simulation row first: the panel notice races the
+    // parent's artifact reload, same as the walk assertions above.
+    await expect(session.artifacts.getByRole('button', { name: /SwarmTank run:/ })).toBeVisible();
     const beforeSteps = [
       await walkStepText(walk, 'Discover'),
       await walkStepText(walk, 'Define'),
@@ -323,6 +348,9 @@ test('product lifecycle slice 3: backup and restore preserve pipeline state and 
     expect(restoredWs).not.toBe(workspaceId);
 
     await session.pairAndOpen(restoredWs);
+    // Same reload race as the restart checkpoint: wait for a known
+    // restored artifact row before reading walk statuses.
+    await expect(session.artifacts.getByRole('button', { name: 'Concept: Mycelial order router' })).toBeVisible();
     const afterSteps = [
       await walkStepText(walk, 'Discover'),
       await walkStepText(walk, 'Define'),
@@ -347,7 +375,7 @@ test('product lifecycle slice 3: backup and restore preserve pipeline state and 
     await page.getByLabel('Description & objectives').fill('A fresh project in the restored workspace.');
     await page.getByRole('button', { name: 'Save project' }).click();
     await expect(page.getByRole('heading', { name: 'Opportunity discovery' })).toBeVisible();
-    expect(await walkStepText(walk, 'Discover')).toContain('Current / In Progress');
+    await expectWalkStep(walk, 'Discover', 'Current / In Progress');
     await expect(page.getByText('No artifacts registered for this project yet.')).toBeVisible();
   } finally {
     await session.cleanup();
