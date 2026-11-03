@@ -1,4 +1,35 @@
-## Resume point — 2026-11-03 M12 Product Lifecycle Slice 1 (Linux; Windows rerun pending)
+## Resume point — 2026-11-03 M12 Product Lifecycle Slice 2 (Linux; Windows rerun pending)
+
+Owner-authorized M12 slice on branch
+`muse/m12-product-lifecycle-slice2` from the
+Windows-verified Slice 1 review tip
+`27c5754ac` (which carries the user's README
+update, the reviewer's NTFS import fix, and
+the Slice 1 review record; the first upload
+for this assignment was byte-identical to the
+Slice 1 delivery, so work was HELD until the
+actual review package arrived — see the Slice
+2 addendum). §61 Launch Studio: deterministic
+4-channel marketing copy from parsed concept /
+spec / simulation / SOMNIA evidence, provider
+generation only on explicit approval after
+prompt preview + cost estimate, deterministic
+client-side stored-ZIP bundle with manifest,
+`LaunchStudio.tsx` mounted when Launch is
+selected, navigator Launch row now working.
+No server op, no new artifact type, no schema
+change; bundle is download-only (Launch
+Complete still needs manual launch-material
+registration). Linux verification: Rust 616
+passed + 4 known live-Ollama env failures (no
+Rust files touched), Clippy/fmt clean, node
+220/220, e2e lifecycle slice2 spec 2/2,
+regression battery 26/26. AN-012 stays
+`in progress`; Slice 2 Windows rerun pending;
+Slice 3 (§85) not commissioned; do not claim
+Windows acceptance from Linux evidence.
+
+## Resume point — 2026-11-03 M12 Product Lifecycle Slice 1 (Linux; Windows-verified 2026-11-03)
 
 Owner-authorized M12 slice on branch
 `muse/m12-product-lifecycle-slice1` from verified
@@ -20,10 +51,8 @@ change. Linux verification: Rust 616 passed
 (609 + 7 new pipeline tests),
 node 198/198, e2e lifecycle spec 2/2,
 regression battery per MANIFEST. AN-012 stays
-`in progress`; Slice 1 Windows rerun pending;
-do not claim Windows acceptance from Linux
-evidence. Slices 2 (§61) and 3 (§85) are not
-commissioned.
+`in progress`; Slice 1 Windows-verified 2026-11-03 (review tip `27c5754ac`);
+Slice 2 in progress (see below); Slice 3 not commissioned.
 
 ## Resume point — 2026-11-02 M10 SOMNIA Slice 3 (Milestone 10 closed)
 
