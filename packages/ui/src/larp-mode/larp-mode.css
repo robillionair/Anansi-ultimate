@@ -307,3 +307,27 @@
   padding: 16px;
   color: #a1a1aa;
 }
+
+/* LARP Mode Slice 3: spectrum readout + legend. */
+
+.larp-spectrum-readout {
+  padding: 6px 8px;
+  font-size: 10px;
+  letter-spacing: 1px;
+  color: #e8e8ec;
+  border-top: 0.5px solid #16161a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.larp-spectrum-legend {
+  padding: 6px 8px;
+  font-size: 10px;
+  letter-spacing: 1px;
+  color: #a1a1aa;
+  border-top: 0.5px solid #16161a;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}

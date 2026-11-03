@@ -29,6 +29,7 @@ export interface AskRunResponseLike {
   status: string;
   answer: string;
   manifest: { estimatedTokens: number };
+  citations?: { memoryId: string }[];
 }
 
 export function estimateTokens(chars: number): number {
@@ -43,7 +44,15 @@ export function reportAskRun(
 ): void {
   if (!response) return;
   const at = Date.now();
-  stream.push({ kind: 'compilation', at, label: 'ask-run-completed' });
+  const citedIds = (response.citations ?? [])
+    .map((c) => c.memoryId)
+    .filter((id) => typeof id === 'string' && id.length > 0);
+  stream.push({
+    kind: 'compilation',
+    at,
+    label: 'ask-run-completed',
+    ...(citedIds.length > 0 ? { citedIds } : {}),
+  });
   if (response.status !== 'answered') return;
   const compiled = response.manifest.estimatedTokens;
   if (!(compiled > 0)) return;
@@ -68,6 +77,8 @@ export function reportMemorySnapshot(
     id: m.id,
     kind: m.kind === 'note' ? 'note' : 'memory',
     title: m.title,
+    relationships: m.relationships ?? [],
+    confidence: typeof m.confidence === 'number' ? m.confidence : null,
   }));
   if (nodes.length === 0) return;
   stream.push({ kind: 'memory', at: Date.now(), nodes });

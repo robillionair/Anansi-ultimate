@@ -17,6 +17,8 @@ import { TokenDeltaStream } from './TokenDeltaStream.tsx';
 import { CoherenceWaveform } from './CoherenceWaveform.tsx';
 import { View1MemoryVault } from './views/View1MemoryVault.tsx';
 import { View2NeuralFunnel } from './views/View2NeuralFunnel.tsx';
+import { View3AttentionSpider } from './views/View3AttentionSpider.tsx';
+import { View4QuantDrift } from './views/View4QuantDrift.tsx';
 
 const VIEW_BUTTONS = [1, 2, 3, 4, 5, 6];
 
@@ -96,7 +98,7 @@ export function LarpHud({
       </div>
       <div className="larp-center">
         <section
-          className={'larp-centerpiece' + (view === 1 || view === 2 ? ' larp-centerpiece-view' : '')}
+          className={'larp-centerpiece' + (view <= 4 ? ' larp-centerpiece-view' : '')}
           aria-labelledby="larp-center-heading"
         >
           <h3 id="larp-center-heading">Centerpiece</h3>
@@ -118,6 +120,10 @@ export function LarpHud({
             <View1MemoryVault stream={stream} />
           ) : view === 2 ? (
             <View2NeuralFunnel stream={stream} />
+          ) : view === 3 ? (
+            <View3AttentionSpider stream={stream} />
+          ) : view === 4 ? (
+            <View4QuantDrift stream={stream} />
           ) : (
             <p className="larp-empty">View {view} — arrives in a later slice.</p>
           )}

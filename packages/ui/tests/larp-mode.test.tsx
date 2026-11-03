@@ -243,7 +243,7 @@ test('compression delta and velocity series handle edges', () => {
 
 test('HUD renders frame regions, widgets, view buttons 1-6, and empty states', () => {
   const stream = new AnansiTelemetryStream();
-  const html = renderToStaticMarkup(<LarpHud stream={stream} initialView={3} />);
+  const html = renderToStaticMarkup(<LarpHud stream={stream} initialView={5} />);
   assert.ok(html.includes('aria-label="LARP telemetry frame"'));
   assert.ok(html.includes('L1 / L2 / L3 Memory Allocation'));
   assert.ok(html.includes('Token Compression Delta Stream'));
