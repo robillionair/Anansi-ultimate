@@ -3,6 +3,12 @@
    bubbly cards, no drop-shadows anywhere in the HUD. The toggle pill is
    the single exception: the assignment explicitly specifies a pill. */
 
+.larp-header-group {
+  display: inline-flex;
+  gap: 12px;
+  align-items: center;
+}
+
 .larp-toggle-frame {
   display: inline-flex;
   padding: 1.5px;
