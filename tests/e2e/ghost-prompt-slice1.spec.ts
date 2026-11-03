@@ -8,7 +8,7 @@ test('ghost-prompt slice 1: consent, revision capture, review, purge', async ({ 
   try {
     await expect(session.fakeHits()).toBe(0);
     // Ask ANANSI lives in the workspace nav, not the project view.
-    await page.getByRole('button', { name: 'Ask ANANSI' }).click();
+    await page.getByRole('button', { name: 'Ask ANANSI', exact: true }).click();
     await expect(page.locator('section[aria-label="GHOST-PROMPT controls"]')).toBeVisible();
     const strip = page.locator('section[aria-label="GHOST-PROMPT controls"]');
 
@@ -77,7 +77,7 @@ test('ghost-prompt slice 1: pause and clear keep the session recording', async (
   page.setDefaultTimeout(8000);
   const session = await startSession(page, false);
   try {
-    await page.getByRole('button', { name: 'Ask ANANSI' }).click();
+    await page.getByRole('button', { name: 'Ask ANANSI', exact: true }).click();
     await expect(page.locator('section[aria-label="GHOST-PROMPT controls"]')).toBeVisible();
     const strip = page.locator('section[aria-label="GHOST-PROMPT controls"]');
     await strip.getByRole('button', { name: 'Enable Draft Exploration' }).click();

@@ -126,7 +126,27 @@ no new server op.
   SOMNIA Slices 1–3, evaluations, integrated
   workflow, opportunities, SwarmTank
   scenario/arena/slice1, plus the new
-  lifecycle spec — totals in the MANIFEST.
+  lifecycle spec — 24/24 in a single run
+  (see the regression note below).
+
+## Regression caused by this slice (fixed)
+
+The navigator's Refine button ("Open Ask
+ANANSI (GHOST-PROMPT)") contains "Ask ANANSI"
+as a substring, so the ghost specs' nav clicks
+(`getByRole('button', { name: 'Ask ANANSI' })`,
+substring-matched by default) newly resolved
+to two elements and all six ghost e2e tests
+failed in the first battery run. The fix is
+`exact: true` on those four nav clicks
+(ghost-prompt-slice1 ×2, slice2 ×1, slice3
+×1) — the specs' intent is the navigation
+button, and the lesson (use `exact: true`
+when a label contains another control's name)
+is already established in this repo. No app
+code changed for the fix; the button name
+stays, since it correctly names its
+destination.
 
 ## Tests failed
 

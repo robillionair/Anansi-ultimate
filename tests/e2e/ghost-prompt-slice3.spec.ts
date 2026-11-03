@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { startSession } from './collider-three-helpers';
 
 async function enableDraftExploration(page: import('@playwright/test').Page) {
-  await page.getByRole('button', { name: 'Ask ANANSI' }).click();
+  await page.getByRole('button', { name: 'Ask ANANSI', exact: true }).click();
   await expect(
     page.locator('section[aria-label="GHOST-PROMPT controls"]'),
   ).toBeVisible();
