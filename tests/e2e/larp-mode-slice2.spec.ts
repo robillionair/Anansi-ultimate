@@ -86,17 +86,13 @@ test('a live ask run fires a compilation pulse in view 2', async ({ page }) => {
 
 test('webgl failure falls back to an explicit vault panel', async ({ page }) => {
   test.setTimeout(300000);
-  await page.addInitScript(() => {
+  await page.addInitScript(`
     const orig = HTMLCanvasElement.prototype.getContext;
-    HTMLCanvasElement.prototype.getContext = function (
-      this: HTMLCanvasElement,
-      type: string,
-      ...args: unknown[]
-    ) {
+    HTMLCanvasElement.prototype.getContext = function (type, ...args) {
       if (type === 'webgl' || type === 'webgl2' || type === 'experimental-webgl') return null;
-      return (orig as (...a: unknown[]) => unknown).call(this, type, ...args);
+      return orig.call(this, type, ...args);
     };
-  });
+  `);
   const session = await startSession(page, false);
   try {
     await session.pairAndOpen(session.workspaceId);

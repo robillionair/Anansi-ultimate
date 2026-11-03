@@ -134,9 +134,12 @@ Slice 3 owns them.
   effects' nested closures (TS resets narrowing there). Fixed by
   wrapping the guarded elements in a single non-null `els` object after
   the guard, in both views — no `!` assertions.
-- The design doc's battery total said 32; the correct total is 33
-  (prior 30 + 3 new). The design doc is left as committed; this
-  addendum corrects the number.
+- The evidence tsc run caught a type error the test runs had missed:
+  the WebGL-failure leg's `addInitScript` callback was typed with an
+  `unknown` return, which is not assignable to `getContext`'s overloads.
+  Fixed by passing the stub as a plain-JS string (which is also the
+  established `addInitScript` rule: no TS annotations inside). Runtime
+  behavior is identical; the Slice 2 spec was re-run after the fix.
 
 ## Known limitations
 
