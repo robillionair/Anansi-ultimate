@@ -6,8 +6,8 @@
 // whenever the project view reloads artifacts after a panel save.
 // Navigation targets are the project view's anchored sections, except
 // Refine, which lives in the Ask ANANSI view and needs the
-// `onNavigateToAsk` callback, and Launch, which has no tool until
-// Slice 2 and is honestly shown disabled.
+// `onNavigateToAsk` callback, and Launch, which opens the Launch Studio
+// section via the `onSelectLaunch` callback (M12 Slice 2).
 import React from 'react';
 import { derivePipeline, type PipelineStageId } from './lifecycle.ts';
 
@@ -24,9 +24,11 @@ const TOOL: Record<PipelineStageId, { name: string; anchor: string | null }> = {
 export function PipelineNavigator({
   artifactTypes,
   onNavigateToAsk,
+  onSelectLaunch,
 }: {
   artifactTypes: string[];
   onNavigateToAsk?: () => void;
+  onSelectLaunch?: () => void;
 }) {
   const { stages, current } = derivePipeline(artifactTypes);
   const allCompletableComplete = stages
@@ -56,12 +58,15 @@ export function PipelineNavigator({
               {stage.missing && <span> · {stage.missing}</span>}
               {' '}
               {stage.id === 'launch' ? (
-                <>
-                  <button type="button" disabled>
-                    Launch Studio (Slice 2)
-                  </button>
-                  <span> · Launch Studio arrives in Slice 2.</span>
-                </>
+                <button
+                  type="button"
+                  disabled={!onSelectLaunch}
+                  onClick={onSelectLaunch}
+                >
+                  {stage.status === 'Awaiting Preceding Stage'
+                    ? 'Jump to Launch Studio'
+                    : 'Open Launch Studio'}
+                </button>
               ) : stage.id === 'refine' ? (
                 <button
                   type="button"

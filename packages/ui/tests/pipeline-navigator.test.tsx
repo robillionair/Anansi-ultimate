@@ -2,8 +2,10 @@
 // (packages/ui/src/lifecycle.ts vs crates/core/src/pipeline.rs):
 // same stage derivation across artifact sets, same Current rule
 // (refine never Current, launch reachable), same navigation targets,
-// and Launch honestly disabled until Slice 2. Click navigation is
-// covered by e2e; static markup cannot run effects.
+// (refine never Current, launch reachable), same navigation targets.
+// Click navigation is covered by e2e; static markup cannot run effects.
+// M12 Slice 2: the Launch row opens the Launch Studio via onSelectLaunch;
+// Awaiting rows keep the "Jump to" override label.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -14,7 +16,11 @@ import { derivePipeline } from '../src/lifecycle.ts';
 
 function markup(types: string[]): string {
   return renderToStaticMarkup(
-    <PipelineNavigator artifactTypes={types} onNavigateToAsk={() => {}} />,
+    <PipelineNavigator
+      artifactTypes={types}
+      onNavigateToAsk={() => {}}
+      onSelectLaunch={() => {}}
+    />,
   );
 }
 
@@ -41,8 +47,8 @@ test('fresh project: Discover Current, later stages Awaiting with requirements',
   const launch = liFor(html, 'Launch');
   assert.ok(launch.includes('Awaiting Preceding Stage'));
   assert.ok(launch.includes('Needs a completed simulation or evaluation artifact.'));
-  assert.ok(launch.includes('disabled'));
-  assert.ok(launch.includes('Launch Studio arrives in Slice 2.'));
+  assert.ok(launch.includes('Jump to Launch Studio'));
+  assert.ok(!launch.includes('disabled'));
 });
 
 test('concept plus simulation: Invent and Simulate Complete, Pressure test Current', () => {
@@ -93,4 +99,18 @@ test('evidence counts list only present types with duplicates counted', () => {
 test('refine button is disabled without an Ask navigation callback', () => {
   const html = renderToStaticMarkup(<PipelineNavigator artifactTypes={[]} />);
   assert.ok(liFor(html, 'Refine').includes('disabled'));
+});
+
+test('launch button is disabled without a Launch selection callback', () => {
+  const html = renderToStaticMarkup(
+    <PipelineNavigator artifactTypes={[]} onNavigateToAsk={() => {}} />,
+  );
+  const launch = liFor(html, 'Launch');
+  assert.ok(launch.includes('disabled'));
+  assert.ok(launch.includes('Jump to Launch Studio'));
+});
+
+test('available launch row offers Open Launch Studio', () => {
+  const html = markup(['concept', 'simulation']);
+  assert.ok(liFor(html, 'Launch').includes('Open Launch Studio'));
 });

@@ -19,6 +19,7 @@ import { ColliderBuildProduct } from './ColliderBuildProduct';
 import { SwarmtankPanel } from './Swarmtank';
 import { SomniaPanel } from './Somnia';
 import { PipelineNavigator } from './PipelineNavigator.tsx';
+import { LaunchStudio } from './LaunchStudio.tsx';
 import { OpportunityRunController } from './opportunityRun';
 import {
   DeliverablePanel,
@@ -59,6 +60,7 @@ export function Projects({ client, workspaceId, onNavigateToAsk }: { client: Cli
 
   // Artifact registry state (M6 Slice 1)
   const [artifacts, setArtifacts] = useState<ArtifactRecord[]>([]);
+  const [launchStudioOpen, setLaunchStudioOpen] = useState(false);
   const [artifactVersions, setArtifactVersions] = useState<ArtifactRecord[]>([]);
   const [selectedArtifact, setSelectedArtifact] = useState<string>('');
   const [viewedArtifact, setViewedArtifact] = useState<ArtifactDetails | null>(null);
@@ -366,6 +368,12 @@ export function Projects({ client, workspaceId, onNavigateToAsk }: { client: Cli
     return () => { artifactViewEpoch.current += 1; };
   }, [client, workspaceId]);
 
+  useEffect(() => {
+    if (launchStudioOpen) {
+      document.getElementById('project-launch-heading')?.scrollIntoView();
+    }
+  }, [launchStudioOpen]);
+
   return (
     <section className="card memory" aria-labelledby="projects-title" aria-busy={busy}>
       <h2 id="projects-title">Projects</h2>
@@ -455,6 +463,7 @@ export function Projects({ client, workspaceId, onNavigateToAsk }: { client: Cli
         <PipelineNavigator
           artifactTypes={artifacts.map(a => a.type)}
           onNavigateToAsk={onNavigateToAsk}
+          onSelectLaunch={() => setLaunchStudioOpen(true)}
         />
       )}
       {current && (
@@ -1258,6 +1267,37 @@ export function Projects({ client, workspaceId, onNavigateToAsk }: { client: Cli
               </div>
             </form>
           </section>
+          {current && launchStudioOpen && (
+            <section aria-labelledby="project-launch-heading">
+              <h3 id="project-launch-heading">Launch Studio</h3>
+              <LaunchStudio
+                key={`${current.memory.id}:${artifacts.map(a => a.artifactId).join(',')}`}
+                artifacts={artifacts}
+                readArtifact={async (artifactId, version) => {
+                  const details = await client.readProjectArtifact(workspaceId, artifactId, version);
+                  return details.body;
+                }}
+                dispatch={async (prompt: string) => {
+                  const opened = await client.startAsk(workspaceId, prompt);
+                  for (;;) {
+                    const run = await client.pollAsk(workspaceId, opened.id);
+                    if (run.state === 'completed') {
+                      if (run.error) throw Error(run.error.message);
+                      const id = opened.id;
+                      await client.forgetAsk(workspaceId, id).catch(() => {});
+                      return run.response?.answer ?? run.partialAnswer ?? '';
+                    }
+                    if (run.state === 'cancelled') {
+                      await client.forgetAsk(workspaceId, opened.id).catch(() => {});
+                      return '';
+                    }
+                    await new Promise(resolve => setTimeout(resolve, 50));
+                  }
+                }}
+                notify={(message, isError) => { if (isError) setError(message); else setNotice(message); }}
+              />
+            </section>
+          )}
         </>
       )}
     </section>
