@@ -4,6 +4,7 @@ import { GhostSession } from './ghostPrompt.ts';
 import type { GhostEditKind } from './ghostPrompt.ts';
 import { GhostPromptStrip } from './GhostPrompt.tsx';
 import { runComparisonDispatch } from './GhostPromptCompare.tsx';
+import { reportAskRun } from './larp-mode/telemetryProducers.ts';
 
 function ghostKindFromInputType(inputType: string): GhostEditKind | null {
   switch (inputType) {
@@ -65,6 +66,7 @@ export function AskAnansi({ client, workspaceId }: { client: Client; workspaceId
     setShowManifest(false);
     setPartial('');cancelled.current=false;
 
+    const askedAt = performance.now();
     try {
       const opened=await client.startAsk(workspaceId,trimmed,{
         runtimeEndpoint:endpoint.trim(),
@@ -79,7 +81,13 @@ export function AskAnansi({ client, workspaceId }: { client: Client; workspaceId
         setPartial(run.partialAnswer);
         if(run.state==='completed'){
           if(run.error)throw Error(run.error.message);
-          setResult(run.response??null);break;
+          setResult(run.response??null);
+          try {
+            reportAskRun(trimmed, run.response ?? null, performance.now() - askedAt);
+          } catch {
+            // Telemetry must never break an Ask run.
+          }
+          break;
         }
         await new Promise(resolve=>setTimeout(resolve,50));
       }

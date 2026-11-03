@@ -35,6 +35,7 @@ export function TokenDeltaStream({ events }: { events: TelemetryEvent[] }) {
               </span>{' '}
               <span>{compressionDelta(event)}</span>{' '}
               <span>{event.latencyMs} ms</span>
+              {event.estimated ? <span>est.</span> : null}
             </li>
           ))}
         </ol>

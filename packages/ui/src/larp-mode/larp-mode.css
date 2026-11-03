@@ -252,3 +252,58 @@
   border-color: #00f0ff;
   color: #00f0ff;
 }
+
+/* LARP Mode Slice 2: centerpiece views. */
+
+.larp-centerpiece-view {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  display: flex;
+  flex-direction: column;
+}
+
+.larp-centerpiece-view .larp-view-buttons {
+  margin-top: 0;
+  margin-bottom: 8px;
+}
+
+.larp-view-container {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  overflow: hidden;
+  background: #030305;
+  border: 0.5px solid #16161a;
+}
+
+.larp-view-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.larp-tag-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.larp-tag {
+  position: absolute;
+  transform: translate(6px, -50%);
+  white-space: nowrap;
+  font-size: 10px;
+  letter-spacing: 1px;
+  color: #e8e8ec;
+  border-left: 0.5px solid #00f0ff;
+  padding-left: 6px;
+  pointer-events: none;
+}
+
+.larp-view-fallback {
+  padding: 16px;
+  color: #a1a1aa;
+}

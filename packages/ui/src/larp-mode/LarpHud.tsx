@@ -15,14 +15,45 @@ import { telemetryStream, type TelemetryEvent } from './telemetry.ts';
 import { MemoryMatrix, latestMemoryNodes } from './MemoryMatrix.tsx';
 import { TokenDeltaStream } from './TokenDeltaStream.tsx';
 import { CoherenceWaveform } from './CoherenceWaveform.tsx';
+import { View1MemoryVault } from './views/View1MemoryVault.tsx';
+import { View2NeuralFunnel } from './views/View2NeuralFunnel.tsx';
 
 const VIEW_BUTTONS = [1, 2, 3, 4, 5, 6];
 
-export function LarpHud({ stream = telemetryStream }: { stream?: typeof telemetryStream }) {
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  return (
+    target.tagName === 'INPUT' ||
+    target.tagName === 'TEXTAREA' ||
+    target.tagName === 'SELECT' ||
+    target.isContentEditable
+  );
+}
+
+export function LarpHud({
+  stream = telemetryStream,
+  initialView = 1,
+}: {
+  stream?: typeof telemetryStream;
+  initialView?: number;
+}) {
   const [events, setEvents] = useState<TelemetryEvent[]>(() => stream.snapshot());
-  const [view, setView] = useState(1);
+  const [view, setView] = useState(initialView);
 
   useEffect(() => stream.subscribe(() => setEvents(stream.snapshot())), [stream]);
+
+  // Bare 1-6 hot-switches views. Typing in an input must never switch
+  // views, so editable targets are ignored. Modifier keys are ignored
+  // too (Ctrl+Shift+L belongs to the toggle, not the switcher).
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (isEditableTarget(event.target)) return;
+      if (['1', '2', '3', '4', '5', '6'].includes(event.key)) setView(Number(event.key));
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
 
   useEffect(() => {
     const scheduler = createFrameScheduler(
@@ -64,9 +95,11 @@ export function LarpHud({ stream = telemetryStream }: { stream?: typeof telemetr
         <MemoryMatrix nodes={latestMemoryNodes(events)} />
       </div>
       <div className="larp-center">
-        <section className="larp-centerpiece" aria-labelledby="larp-center-heading">
+        <section
+          className={'larp-centerpiece' + (view === 1 || view === 2 ? ' larp-centerpiece-view' : '')}
+          aria-labelledby="larp-center-heading"
+        >
           <h3 id="larp-center-heading">Centerpiece</h3>
-          <p className="larp-empty">View {view} — arrives in Slice 2.</p>
           <div className="larp-view-buttons" role="group" aria-label="LARP centerpiece view">
             {VIEW_BUTTONS.map((n) => (
               <button
@@ -81,6 +114,13 @@ export function LarpHud({ stream = telemetryStream }: { stream?: typeof telemetr
               </button>
             ))}
           </div>
+          {view === 1 ? (
+            <View1MemoryVault stream={stream} />
+          ) : view === 2 ? (
+            <View2NeuralFunnel stream={stream} />
+          ) : (
+            <p className="larp-empty">View {view} — arrives in a later slice.</p>
+          )}
         </section>
       </div>
       <div className="larp-rail larp-rail-right">

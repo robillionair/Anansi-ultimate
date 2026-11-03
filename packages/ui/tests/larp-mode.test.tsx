@@ -243,7 +243,7 @@ test('compression delta and velocity series handle edges', () => {
 
 test('HUD renders frame regions, widgets, view buttons 1-6, and empty states', () => {
   const stream = new AnansiTelemetryStream();
-  const html = renderToStaticMarkup(<LarpHud stream={stream} />);
+  const html = renderToStaticMarkup(<LarpHud stream={stream} initialView={3} />);
   assert.ok(html.includes('aria-label="LARP telemetry frame"'));
   assert.ok(html.includes('L1 / L2 / L3 Memory Allocation'));
   assert.ok(html.includes('Token Compression Delta Stream'));
@@ -251,7 +251,7 @@ test('HUD renders frame regions, widgets, view buttons 1-6, and empty states', (
   assert.ok(html.includes('No telemetry events yet.'));
   assert.ok(html.includes('No memory snapshot yet.'));
   for (let n = 1; n <= 6; n++) assert.ok(html.includes(`aria-label="LARP view ${n}"`));
-  assert.ok(html.includes('arrives in Slice 2.'));
+  assert.ok(html.includes('arrives in a later slice.'));
 });
 
 test('HUD renders pushed events instead of empty states', () => {

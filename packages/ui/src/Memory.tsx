@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { Client, MemoryDetails, MemoryDraft, MemoryMetadata, Privacy, LifecycleChange } from '@anansi/contracts';
+import { reportMemorySnapshot } from './larp-mode/telemetryProducers.ts';
 const blank=():MemoryDraft=>({title:'',body:'',privacy:'private',confidence:null,eventDate:null,validFrom:null,validUntil:null,sourceReferences:[]});
 export function Memory({client,workspaceId,kind="memory"}:{client:Client;workspaceId:string;kind?:"memory"|"note"}) {
   const [memories,setMemories]=useState<MemoryMetadata[]>([]),[history,setHistory]=useState<MemoryMetadata[]>([]);
@@ -10,7 +11,7 @@ export function Memory({client,workspaceId,kind="memory"}:{client:Client;workspa
   const actionLabels:Record<string,string>={confirmed:'Confirm information',temporary:'Keep temporarily',durable:'Retain durably',superseded:'Mark superseded',archived:'Archive record',proposed:'Return to Proposed',restore_archive:'Restore archived record'};
   const [busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState(''),[confirm,setConfirm]=useState(false);
   async function run(action:()=>Promise<void>){setBusy(true);setError('');setNotice('');try{await action();}catch(e){setError(e instanceof Error?e.message:'Memory unavailable. Your draft was kept.');}finally{setBusy(false);}}
-  async function refresh(at=offset){const result=await client.listMemories(workspaceId,{offset:at,kind,includeArchived,includeExpired});setMemories(result.memories);setOffset(at);setNext(result.nextOffset??null);}
+  async function refresh(at=offset){const result=await client.listMemories(workspaceId,{offset:at,kind,includeArchived,includeExpired});setMemories(result.memories);setOffset(at);setNext(result.nextOffset??null);try{reportMemorySnapshot(result.memories);}catch{/* Telemetry must never break a Memory load. */}}
   async function revisions(id:string,at=0){const list=await client.listMemories(workspaceId,{id,offset:at});setHistory(list.memories);setHistoryOffset(at);setHistoryNext(list.nextOffset??null);}
   async function open(id:string,revisionId?:string){const result=await client.readMemory(workspaceId,id,revisionId);setCurrent(result);setDraft({title:result.memory.title,body:result.body,privacy:result.memory.privacy,eventDate:result.memory.eventDate,validFrom:result.memory.validFrom,validUntil:result.memory.validUntil,confidence:result.memory.confidence,sourceReferences:result.memory.sourceReferences,projectId:result.memory.projectId,dueDate:result.memory.dueDate,completed:result.memory.completed});setHistorical(!!revisionId);setComparison(null);setAction('');setActionConsent(false);setConfirm(false);await revisions(id);}
   useEffect(()=>{void run(()=>refresh(0));},[client,workspaceId,includeArchived,includeExpired,kind]);

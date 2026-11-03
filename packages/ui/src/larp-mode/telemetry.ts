@@ -21,6 +21,9 @@ export type TelemetryEvent =
       rawOutputTokens: number;
       compiledOutputTokens: number;
       latencyMs: number;
+      /** True when the figures are estimates (chars/4), never measured
+       *  provider tokens. The delta stream renders an `est.` badge. */
+      estimated?: boolean;
     }
   | { kind: 'drift'; at: number; score: number }
   | { kind: 'memory'; at: number; nodes: MemoryNode[] }
@@ -51,6 +54,7 @@ export function sanitizeTelemetryEvent(event: TelemetryEvent): TelemetryEvent {
         rawOutputTokens: cleanCount(event.rawOutputTokens),
         compiledOutputTokens: cleanCount(event.compiledOutputTokens),
         latencyMs: cleanCount(event.latencyMs),
+        ...(event.estimated !== undefined ? { estimated: event.estimated } : {}),
       };
     case 'drift':
       return { kind: 'drift', at: event.at, score: cleanDrift(event.score) };
