@@ -28,8 +28,7 @@ test('product lifecycle slice 1: fresh project starts at Discover', async ({ pag
     await expect(refine).toContainText('Available');
     const launch = nav.locator('li').nth(6);
     await expect(launch).toContainText('Awaiting Preceding Stage');
-    await expect(launch.getByRole('button', { name: 'Launch Studio (Slice 2)' })).toBeDisabled();
-    await expect(launch).toContainText('Launch Studio arrives in Slice 2.');
+    await expect(launch.getByRole('button', { name: 'Jump to Launch Studio' })).toBeEnabled();
     expect(session.fakeHits()).toBe(0);
   } finally {
     await session.cleanup();
