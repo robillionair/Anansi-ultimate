@@ -10,6 +10,13 @@ import path from 'node:path';
  * a synthetic local provider, a temp API, and the
  * collide-and-save flow. No real provider, no network
  * beyond loopback.
+ *
+ * M12 Slice 3: the fake routes on the server-side instruction strings
+ * (verified in Rust source, all distinct) so the lifecycle walk can
+ * drive provider-backed panels through the same harness: opportunity
+ * discovery and Forge spec drafting alongside the collider. The
+ * collider instruction ("You are ANANSI's LEXI-COLLIDER engine.")
+ * contains neither marker, so existing collider specs are unaffected.
  */
 function collisionJson(): string {
   return JSON.stringify({
@@ -34,6 +41,59 @@ function collisionJson(): string {
       testPlan: 'Unit-test the scorer on synthetic gradients; replay-test the router.',
       prototypeProposal: 'A paper prototype plus a simulator notebook, reviewed by a human before any live use.',
     },
+  });
+}
+
+// M12 Slice 3: opportunity-set fixture for the lifecycle walk, in the
+// opportunities.spec.ts shape. Each concept cites 'supplied-1', the
+// single problem source the walk supplies (no memory source).
+function opportunityJson(): string {
+  const concept = (name: string) => ({
+    name,
+    problem: 'Dock offices lose supplier quotes in shared inboxes.',
+    targetCustomer: 'Small marina operators',
+    solution: 'A quote inbox with deadlines.',
+    whyUseful: 'It stops missed renewals.',
+    differentiationHypothesis: 'Hypothesis: built for shared dock-office inboxes.',
+    revenueModel: 'Subscription.',
+    engineeringComplexity: 'medium',
+    implementationCost: 'about 3-5 weeks for one developer',
+    keyRisks: ['Adoption may be slow'],
+    requiredValidation: 'Interview five marina operators.',
+    minimumViableVersion: 'One inbox end to end.',
+    sourceReferences: ['supplied-1'],
+    assumptions: ['Quotes arrive mostly by email.'],
+  });
+  return JSON.stringify({
+    concepts: [
+      concept('Dock quote inbox'),
+      ...Array.from({ length: 5 }, (_, i) => concept(`Filler opportunity ${i}`)),
+    ],
+  });
+}
+
+// M12 Slice 3: Forge spec fixture for the lifecycle walk, in the
+// forge.spec.ts shape, titled after the walk's collider concept.
+function walkSpecJson(): string {
+  return JSON.stringify({
+    title: 'Mycelial order router',
+    summary: 'A routing layer that scores venues by local congestion signals.',
+    purpose: 'Route orders to the best venue from local signals.',
+    intendedUsers: 'Small agencies routing orders across venues',
+    features: [
+      'Score venues by local congestion signals',
+      'Propose a ranked venue list for each order',
+      'Record the signals behind each proposal',
+      'Replay past signals through the scorer',
+    ],
+    pages: ['index.html'],
+    nonGoals: ['No accounts', 'No server', 'No live execution'],
+    dataAndState: 'Proposals and signals live in localStorage.',
+    acceptanceCriteria: [
+      'Open index.html and see a ranked venue list',
+      'Reload keeps the recorded signals',
+    ],
+    openQuestions: ['Which venue feeds are available?'],
   });
 }
 
@@ -62,7 +122,15 @@ export async function startSession(page: Page, reducedMotion: boolean): Promise<
     req.on('data', c => { body += c; });
     req.on('end', () => {
       fakeHits += 1;
-      const text = collisionJson();
+      // Route on the server-side instruction strings: opportunity
+      // discovery and Forge spec drafting share this fake with the
+      // collider in the lifecycle walk (M12 Slice 3). Anything else
+      // keeps the collider fixture.
+      const text = body.includes('opportunity discovery engine')
+        ? opportunityJson()
+        : body.includes('product architect')
+          ? walkSpecJson()
+          : collisionJson();
       const third = Math.ceil(text.length / 3);
       const chunks = [text.slice(0, third), text.slice(third, third * 2), text.slice(third * 2)];
       res.writeHead(200, { 'content-type': 'application/x-ndjson' });
