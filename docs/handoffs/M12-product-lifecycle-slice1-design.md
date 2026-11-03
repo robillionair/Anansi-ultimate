@@ -97,8 +97,18 @@ registry, not a validator of it.
 
 Let `furthest` be the highest stage index with
 completing evidence, or −1 for a fresh project.
-`current` is `furthest + 1`, or none when
-`furthest` is `launch`.
+`current` is the first stage after `furthest`
+that is advanceable and whose gate is met, or
+none when there is no such stage. `refine` is
+never advanceable: it holds no evidence and
+cannot complete, so it can never be Current —
+it is always Available (its gate is always
+met), a tool to jump to, never a blocker. This
+is what lets `launch` become Current: after
+pressure-test evidence exists, the next
+advanceable stage is `launch` (its gate is met
+by the evaluation), with `refine` offered
+alongside it as Available.
 
 - `Complete`: the stage has completing evidence
   (`refine` never).
@@ -124,6 +134,10 @@ Worked examples (pinned by unit tests):
 - Concept + simulation: `invent`/`simulate`
   Complete, `pressure_test` Current, `launch`
   Available (gate met via simulation).
+- Concept + simulation + somnia-evaluation:
+  `pressure_test` Complete, `launch` Current,
+  `refine` Available (never Current, never a
+  blocker — see the rule above).
 - All types incl. `launch-material`: every
   completable stage Complete, no Current stage,
   navigator shows a pipeline-complete note.
