@@ -13,7 +13,7 @@ test('toggle click enters LARP mode and hotkey exits cleanly', async ({ page }) 
   test.setTimeout(300000);
   const session = await startSession(page, false);
   try {
-    await session.pairAndOpen();
+    await session.pairAndOpen(session.workspaceId);
     const toggle = page.getByLabel('Toggle LARP mode');
     await expect(toggle).toBeVisible();
     await expect(page.getByText('[ LARP: OFF ]', { exact: true })).toBeVisible();
@@ -52,7 +52,7 @@ test('cold unmount removes all HUD canvases and listeners leave no frame behind'
   test.setTimeout(300000);
   const session = await startSession(page, false);
   try {
-    await session.pairAndOpen();
+    await session.pairAndOpen(session.workspaceId);
     const toggle = page.getByLabel('Toggle LARP mode');
     await toggle.click();
     await expect(page.getByLabel('LARP telemetry frame')).toBeVisible();
