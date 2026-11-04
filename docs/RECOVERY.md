@@ -1,3 +1,28 @@
+## Resume point — 2026-11-04 MCP Client Integration Slice 1 delivered (Linux; Windows rerun pending)
+
+Owner-authorized Milestone 13 slice on branch
+`muse/mcp-slice1` from the
+Windows-certified Dashboard Slice 2 review tip
+`34f39bb7da54e70c3fc25ed9dbf0791cf4bab197`
+(verified from origin by hash; only the
+review ZIP's sidecar was uploaded, so the ZIP
+itself was not re-hashed).
+MCP client registry + live one-shot stdio
+probing + tool/prompt listing; SSE probes
+explicitly refused; no tool invocation,
+no MCP server side, no persistent connections.
+Linux verification: `tsc --noEmit` 0 errors,
+contracts 0 drift, docs 268 PASS, UI suite
+289/289 PASS, production web build clean,
+API build clean, cargo `--lib` 220 passed,
+Playwright `mcp.spec.ts` 4/4 PASS, full
+regression battery 50/50 PASS.
+AN-017 is `in progress`.
+Windows rerun of MCP Slice 1 pending.
+M7 native acceptance, preview promotion,
+§32 sandbox, M5 gates, and M8 Slice 4 Windows
+verification remain open.
+
 ## Resume point — 2026-11-04 HOME Command Dashboard Slice 2 verified on Windows (Dashboard complete)
 
 Owner-authorized dashboard slice on review branch
