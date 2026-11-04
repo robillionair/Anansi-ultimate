@@ -82,6 +82,7 @@ export interface SchemaField {
   type: string;
   description: string;
   required: boolean;
+  options: unknown[];
 }
 
 export interface ParsedToolSchema {
@@ -107,7 +108,7 @@ export function parseToolSchema(schema: unknown): ParsedToolSchema {
   const fields: SchemaField[] = [];
   for (const [name, prop] of Object.entries(properties as Record<string, unknown>)) {
     if (!prop || typeof prop !== 'object' || Array.isArray(prop)) {
-      fields.push({ name, type: 'any', description: '', required: required.includes(name) });
+      fields.push({ name, type: 'any', description: '', required: required.includes(name), options: [] });
       continue;
     }
     const p = prop as Record<string, unknown>;
@@ -122,6 +123,7 @@ export function parseToolSchema(schema: unknown): ParsedToolSchema {
       type,
       description: typeof p.description === 'string' ? p.description : '',
       required: required.includes(name),
+      options: Array.isArray(p.enum) ? p.enum : [],
     });
   }
   return { valid: true, fields };
@@ -137,4 +139,111 @@ export function annotationLabels(tool: McpTool): string[] {
   if (a.openWorldHint === true) labels.push('Open world');
   if (a.openWorldHint === false) labels.push('Closed world');
   return labels;
+}
+
+// TS mirror of the Rust `validate_tool_arguments` subset: required
+// presence, per-property types, enum membership. The backend
+// remains authoritative; this gives the form immediate feedback.
+export function validateToolArguments(schema: unknown, args: Record<string, unknown>): string[] {
+  const errors: string[] = [];
+  if (!schema || typeof schema !== 'object' || Array.isArray(schema)) return errors;
+  const record = schema as Record<string, unknown>;
+  const required = Array.isArray(record.required)
+    ? record.required.filter((r): r is string => typeof r === 'string')
+    : [];
+  for (const name of required) {
+    if (!(name in args)) errors.push(`Missing required parameter: ${name}`);
+  }
+  const properties = record.properties;
+  if (!properties || typeof properties !== 'object' || Array.isArray(properties)) return errors;
+  for (const [name, value] of Object.entries(args)) {
+    const prop = (properties as Record<string, unknown>)[name];
+    if (!prop || typeof prop !== 'object' || Array.isArray(prop)) continue;
+    const p = prop as Record<string, unknown>;
+    if (Array.isArray(p.enum)) {
+      const allowed = p.enum.some((v) => JSON.stringify(v) === JSON.stringify(value));
+      if (!allowed) {
+        errors.push(`Parameter '${name}' must be one of the allowed values.`);
+        continue;
+      }
+    }
+    if (typeof p.type !== 'string') continue;
+    const ok =
+      p.type === 'string'
+        ? typeof value === 'string'
+        : p.type === 'integer'
+          ? typeof value === 'number' && Number.isInteger(value)
+          : p.type === 'number'
+            ? typeof value === 'number'
+            : p.type === 'boolean'
+              ? typeof value === 'boolean'
+              : p.type === 'array'
+                ? Array.isArray(value)
+                : p.type === 'object'
+                  ? value !== null && typeof value === 'object' && !Array.isArray(value)
+                  : true;
+    if (!ok) errors.push(`Parameter '${name}' must be of type ${p.type}.`);
+  }
+  return errors;
+}
+
+// Build the exact arguments object from raw form strings. Empty
+// fields are omitted, so a required field left empty fails
+// validation as missing rather than sending an empty value; an
+// optional field left empty simply stays out of the call.
+export function assembleToolArguments(
+  fields: SchemaField[],
+  values: Record<string, string>,
+): { args: Record<string, unknown>; errors: string[] } {
+  const args: Record<string, unknown> = {};
+  const errors: string[] = [];
+  for (const field of fields) {
+    const raw = values[field.name] ?? '';
+    if (field.type === 'boolean') {
+      args[field.name] = raw === 'true';
+      continue;
+    }
+    if (raw === '') continue;
+    if (field.type === 'number' || field.type === 'integer') {
+      const parsed = Number(raw);
+      if (Number.isNaN(parsed)) {
+        errors.push(`Parameter '${field.name}' must be of type ${field.type}.`);
+        continue;
+      }
+      args[field.name] = parsed;
+      continue;
+    }
+    if (field.type === 'enum') {
+      const match = field.options.find((o) => String(o) === raw);
+      args[field.name] = match !== undefined ? match : raw;
+      continue;
+    }
+    if (field.type === 'any') {
+      try {
+        args[field.name] = JSON.parse(raw);
+      } catch {
+        errors.push(`Parameter '${field.name}' must be valid JSON.`);
+      }
+      continue;
+    }
+    args[field.name] = raw;
+  }
+  return { args, errors };
+}
+
+export interface ToolCallHistoryEntry {
+  serverName: string;
+  toolName: string;
+  status: 'Success' | 'Error';
+  calledAt: number;
+}
+
+// Session-local audit trail: timestamp, server, tool, status —
+// never parameters, results, environment values, or keys.
+// Newest first, capped at 50 entries.
+export function recordToolCall(
+  history: ToolCallHistoryEntry[],
+  entry: ToolCallHistoryEntry,
+): ToolCallHistoryEntry[] {
+  return [entry, ...history].slice(0, 50);
 }

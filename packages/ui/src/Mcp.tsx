@@ -1,6 +1,192 @@
 import { useEffect, useState } from 'react';
-import type { Client, McpProbeResult, McpServer } from '@anansi/contracts';
-import { annotationLabels, parseArgsLines, parseEnvLines, parseToolSchema, validateMcpDraftForm } from './mcp.ts';
+import type { Client, McpProbeResult, McpServer, McpTool, McpToolCallResult } from '@anansi/contracts';
+import {
+  annotationLabels,
+  assembleToolArguments,
+  parseArgsLines,
+  parseEnvLines,
+  parseToolSchema,
+  recordToolCall,
+  validateMcpDraftForm,
+  validateToolArguments,
+  type ToolCallHistoryEntry,
+} from './mcp.ts';
+
+// One tool's call form, authorization dialog, and result. Nothing
+// here dispatches a call on its own: the only dispatch path is the
+// "Authorize and Call Tool" button inside the dialog, for the exact
+// parameters shown there. Cancel dispatches nothing.
+function ToolCaller({
+  server,
+  tool,
+  result,
+  calling,
+  onCallTool,
+}: {
+  server: McpServer;
+  tool: McpTool;
+  result: McpToolCallResult | undefined;
+  calling: boolean;
+  onCallTool: (
+    serverId: string,
+    toolName: string,
+    args: Record<string, unknown>,
+  ) => Promise<McpToolCallResult>;
+}) {
+  const schema = parseToolSchema(tool.inputSchema);
+  const labels = annotationLabels(tool);
+  const destructive = tool.annotations?.destructiveHint === true;
+  const keyPrefix = `mcp-call-${server.id}-${tool.name}`;
+  const [open, setOpen] = useState(false);
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [formError, setFormError] = useState('');
+  const [dialogArgs, setDialogArgs] = useState<Record<string, unknown> | null>(null);
+  const [callError, setCallError] = useState('');
+
+  function review() {
+    const { args, errors: assembleErrors } = assembleToolArguments(schema.fields, values);
+    const errors = [...assembleErrors, ...validateToolArguments(tool.inputSchema, args)];
+    if (errors.length) {
+      setFormError(errors.join(' '));
+      return;
+    }
+    setFormError('');
+    setDialogArgs(args);
+  }
+
+  async function authorize() {
+    if (!dialogArgs) return;
+    setCallError('');
+    try {
+      await onCallTool(server.id, tool.name, dialogArgs);
+      setDialogArgs(null);
+      setOpen(false);
+    } catch (e) {
+      setCallError(e instanceof Error ? e.message : 'Tool call unavailable. Retry.');
+    }
+  }
+
+  return (
+    <div>
+      <div className="actions">
+        <button onClick={() => setOpen((was) => !was)}>{open ? 'Hide call form' : 'Call tool'}</button>
+      </div>
+      {open ? (
+        <div>
+          {schema.valid ? (
+            schema.fields.map((field) => (
+              <div key={field.name}>
+                <label htmlFor={`${keyPrefix}-${field.name}`}>
+                  {field.name} ({field.type}
+                  {field.required ? ', required' : ''})
+                </label>
+                {field.type === 'boolean' ? (
+                  <input
+                    id={`${keyPrefix}-${field.name}`}
+                    type="checkbox"
+                    checked={values[field.name] === 'true'}
+                    onChange={(e) =>
+                      setValues((prev) => ({ ...prev, [field.name]: e.target.checked ? 'true' : 'false' }))
+                    }
+                  />
+                ) : field.type === 'enum' ? (
+                  <select
+                    id={`${keyPrefix}-${field.name}`}
+                    value={values[field.name] ?? ''}
+                    onChange={(e) => setValues((prev) => ({ ...prev, [field.name]: e.target.value }))}
+                  >
+                    <option value="">—</option>
+                    {field.options.map((option) => (
+                      <option key={String(option)} value={String(option)}>
+                        {String(option)}
+                      </option>
+                    ))}
+                  </select>
+                ) : field.type === 'number' || field.type === 'integer' ? (
+                  <input
+                    id={`${keyPrefix}-${field.name}`}
+                    type="number"
+                    value={values[field.name] ?? ''}
+                    onChange={(e) => setValues((prev) => ({ ...prev, [field.name]: e.target.value }))}
+                  />
+                ) : field.type === 'any' ? (
+                  <textarea
+                    id={`${keyPrefix}-${field.name}`}
+                    value={values[field.name] ?? ''}
+                    onChange={(e) => setValues((prev) => ({ ...prev, [field.name]: e.target.value }))}
+                  />
+                ) : (
+                  <input
+                    id={`${keyPrefix}-${field.name}`}
+                    type="text"
+                    value={values[field.name] ?? ''}
+                    onChange={(e) => setValues((prev) => ({ ...prev, [field.name]: e.target.value }))}
+                  />
+                )}
+              </div>
+            ))
+          ) : (
+            <p>No usable input schema: this tool is called with no parameters.</p>
+          )}
+          {formError ? <p>{formError}</p> : null}
+          <div className="actions">
+            <button onClick={review}>Review and authorize</button>
+          </div>
+        </div>
+      ) : null}
+      {dialogArgs ? (
+        <div role="dialog" aria-label={`Authorize ${tool.name}`}>
+          <h4>Authorize tool call</h4>
+          <p>Server: {server.name}</p>
+          <p>Tool: {tool.name}</p>
+          {labels.length ? (
+            <p>
+              {labels.map((label) => (
+                <span key={label} className="badge">
+                  {label}
+                </span>
+              ))}
+            </p>
+          ) : null}
+          {destructive ? (
+            <p>Warning: this tool is marked destructive. It may change data outside ANANSI.</p>
+          ) : null}
+          <p>Exact parameters:</p>
+          <pre>{JSON.stringify(dialogArgs, null, 2)}</pre>
+          <div className="actions">
+            <button disabled={calling} onClick={() => void authorize()}>
+              Authorize and Call Tool
+            </button>
+            <button className="secondary" onClick={() => setDialogArgs(null)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : null}
+      {callError ? <p>{callError}</p> : null}
+      {result ? (
+        <div>
+          <p>
+            Tool call {result.isError ? 'Error' : 'Success'}: {tool.name}
+          </p>
+          {result.text ? <p>{result.text}</p> : null}
+          {(result.content ?? []).some((part) => part.type !== 'text') ? (
+            <p>
+              Non-text content parts:{' '}
+              {(result.content ?? [])
+                .filter((part) => part.type !== 'text')
+                .map((part) => part.type)
+                .join(', ')}
+            </p>
+          ) : null}
+          {result.structuredContent !== undefined && result.structuredContent !== null ? (
+            <pre>{JSON.stringify(result.structuredContent, null, 2)}</pre>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 export function McpView({
   servers,
@@ -8,20 +194,34 @@ export function McpView({
   busyId,
   onProbe,
   onRemove,
+  callResults = {},
+  callHistory = [],
+  callingKey = null,
+  onCallTool = async () => {
+    throw new Error('Tool calls are unavailable in this view.');
+  },
 }: {
   servers: McpServer[];
   probes: Record<string, McpProbeResult>;
   busyId: string | null;
   onProbe: (id: string) => void;
   onRemove: (id: string) => void;
+  callResults?: Record<string, McpToolCallResult>;
+  callHistory?: ToolCallHistoryEntry[];
+  callingKey?: string | null;
+  onCallTool?: (
+    serverId: string,
+    toolName: string,
+    args: Record<string, unknown>,
+  ) => Promise<McpToolCallResult>;
 }) {
   return (
     <section className="card" aria-labelledby="mcp-title">
       <h2 id="mcp-title">MCP servers</h2>
       <p>
-        Tools are listed, never run, in this slice. Connecting a server runs only its configured
-        local command; remote servers are refused. Calling a tool will require explicit approval in
-        a later slice.
+        A tool runs only after you approve that exact call: open a tool, fill its parameters,
+        review them in the authorization dialog, and click Authorize and Call Tool. Nothing is
+        invoked automatically, and remote servers are never called.
       </p>
       {servers.length === 0 ? (
         <p>No MCP servers configured yet.</p>
@@ -101,6 +301,13 @@ export function McpView({
                               ) : (
                                 <p>No usable input schema.</p>
                               )}
+                              <ToolCaller
+                                server={server}
+                                tool={tool}
+                                result={callResults[`${server.id}:${tool.name}`]}
+                                calling={callingKey === `${server.id}:${tool.name}`}
+                                onCallTool={onCallTool}
+                              />
                             </li>
                           );
                         })}
@@ -137,6 +344,23 @@ export function McpView({
           })}
         </ul>
       )}
+      {callHistory.length ? (
+        <div>
+          <h3>Recent tool calls</h3>
+          <p>
+            Session history only: timestamp, server, tool, and status. Parameters, results, and
+            environment values are never logged here.
+          </p>
+          <ul aria-label="Recent tool calls">
+            {callHistory.map((entry, index) => (
+              <li key={`${entry.calledAt}-${entry.toolName}-${index}`}>
+                {new Date(entry.calledAt).toLocaleString()} — {entry.serverName} — {entry.toolName} —{' '}
+                {entry.status}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -154,6 +378,9 @@ export function Mcp({ client, workspaceId }: { client: Client; workspaceId: stri
   const [argsText, setArgsText] = useState('');
   const [envText, setEnvText] = useState('');
   const [url, setUrl] = useState('');
+  const [callResults, setCallResults] = useState<Record<string, McpToolCallResult>>({});
+  const [callHistory, setCallHistory] = useState<ToolCallHistoryEntry[]>([]);
+  const [callingKey, setCallingKey] = useState<string | null>(null);
 
   async function refresh() {
     try {
@@ -239,14 +466,39 @@ export function Mcp({ client, workspaceId }: { client: Client; workspaceId: stri
     }
   }
 
+  async function callTool(
+    serverId: string,
+    toolName: string,
+    args: Record<string, unknown>,
+  ): Promise<McpToolCallResult> {
+    const key = `${serverId}:${toolName}`;
+    setCallingKey(key);
+    try {
+      const result = await client.callMcpTool(workspaceId, serverId, toolName, args);
+      setCallResults((previous) => ({ ...previous, [key]: result }));
+      const server = servers.find((s) => s.id === serverId);
+      setCallHistory((previous) =>
+        recordToolCall(previous, {
+          serverName: server?.name ?? serverId,
+          toolName,
+          status: result.isError ? 'Error' : 'Success',
+          calledAt: Date.now(),
+        }),
+      );
+      return result;
+    } finally {
+      setCallingKey(null);
+    }
+  }
+
   return (
     <div>
       <section className="card" aria-labelledby="mcp-register-title">
         <h2 id="mcp-register-title">Register an MCP server</h2>
         <p>
           A server is local-first: a stdio server runs only when you connect it, with only the
-          environment variables you list here. Remote (SSE) servers can be registered but cannot be
-          probed in this slice — external network access is disabled by default.
+          environment variables you list here. Remote (SSE) servers can be registered but cannot
+          be probed or called — external network access is disabled by default.
         </p>
         <form onSubmit={register}>
           <label htmlFor="mcp-name">Server name</label>
@@ -298,7 +550,17 @@ export function Mcp({ client, workspaceId }: { client: Client; workspaceId: stri
         {error ? <p>{error}</p> : null}
         {notice ? <p>{notice}</p> : null}
       </section>
-      <McpView servers={servers} probes={probes} busyId={busyId} onProbe={probe} onRemove={remove} />
+      <McpView
+        servers={servers}
+        probes={probes}
+        busyId={busyId}
+        onProbe={probe}
+        onRemove={remove}
+        callResults={callResults}
+        callHistory={callHistory}
+        callingKey={callingKey}
+        onCallTool={callTool}
+      />
     </div>
   );
 }

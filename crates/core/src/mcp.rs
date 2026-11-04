@@ -254,6 +254,45 @@ pub struct McpProbeRequest {
     pub id: String,
 }
 
+/// One content part of a tool result. Server text is data for
+/// display, never executed and never forwarded to a provider.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct McpToolCallContent {
+    #[serde(rename = "type")]
+    pub content_type: String,
+    #[serde(default)]
+    pub text: Option<String>,
+}
+
+/// Structured result of one completed tool dispatch. A tool-level
+/// `isError` is a completed invocation with status Error, not a
+/// transport failure; transport failures return `CommandError`
+/// instead and never produce this value.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct McpToolCallResult {
+    pub contract_version: u8,
+    pub server_id: String,
+    pub tool_name: String,
+    pub is_error: bool,
+    pub text: String,
+    #[serde(default)]
+    pub content: Vec<McpToolCallContent>,
+    #[serde(default)]
+    pub structured_content: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct McpToolCallRequest {
+    pub contract_version: u8,
+    pub workspace_id: String,
+    pub id: String,
+    pub tool_name: String,
+    pub arguments: serde_json::Value,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct McpFile {
     version: u8,
@@ -769,6 +808,90 @@ fn client_info() -> serde_json::Value {
     })
 }
 
+/// Negotiated handshake, shared by probing and tool calls so both
+/// speak exactly the same protocol selection. Legacy `initialize`
+/// first; `server/discover` only on method-not-found; any other
+/// initialize failure is the verdict. Error strings are the ones
+/// probing has always reported.
+struct Handshake {
+    stateless: bool,
+    protocol_version: Option<String>,
+    server_name: Option<String>,
+}
+
+fn handshake<C: McpChannel>(channel: &mut C) -> Result<Handshake, String> {
+    // Legacy path first: what deployed servers speak.
+    match channel.request(
+        "initialize",
+        serde_json::json!({
+            "protocolVersion": LEGACY_PROTOCOL_VERSION,
+            "capabilities": {},
+            "clientInfo": client_info(),
+        }),
+    ) {
+        Ok(init) => {
+            channel.notify("notifications/initialized");
+            Ok(Handshake {
+                stateless: false,
+                protocol_version: init
+                    .get("protocolVersion")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string())
+                    .or_else(|| Some(LEGACY_PROTOCOL_VERSION.to_string())),
+                server_name: init
+                    .get("serverInfo")
+                    .and_then(|i| i.get("name"))
+                    .and_then(|n| n.as_str())
+                    .map(|s| s.to_string()),
+            })
+        }
+        Err(message) => {
+            // Only a method-not-found error justifies the stateless
+            // fallback; any other initialize failure is the verdict.
+            if !message.contains("Server error -32601") {
+                return Err(format!("Handshake failed: {message}"));
+            }
+            match channel.request(
+                "server/discover",
+                serde_json::json!({
+                    "_meta": {
+                        "io.modelcontextprotocol/protocolVersion": STATELESS_PROTOCOL_VERSION,
+                        "io.modelcontextprotocol/clientCapabilities": {},
+                        "io.modelcontextprotocol/clientInfo": client_info(),
+                    },
+                }),
+            ) {
+                Ok(discover) => Ok(Handshake {
+                    stateless: true,
+                    protocol_version: Some(STATELESS_PROTOCOL_VERSION.to_string()),
+                    server_name: discover
+                        .get("serverInfo")
+                        .and_then(|i| i.get("name"))
+                        .and_then(|n| n.as_str())
+                        .or_else(|| discover.get("serverName").and_then(|n| n.as_str()))
+                        .map(|s| s.to_string()),
+                }),
+                Err(message) => Err(format!("Discovery failed: {message}")),
+            }
+        }
+    }
+}
+
+/// Params for list calls: stateless servers require the protocol
+/// version in `_meta` on every request; legacy servers take {}.
+fn stateless_meta(stateless: bool) -> serde_json::Value {
+    if stateless {
+        serde_json::json!({
+            "_meta": {
+                "io.modelcontextprotocol/protocolVersion": STATELESS_PROTOCOL_VERSION,
+                "io.modelcontextprotocol/clientCapabilities": {},
+            },
+        })
+    } else {
+        serde_json::json!({})
+    }
+}
+
 /// Probe one server over an already-open channel. Returns the probe
 /// result; transport failures surface as `healthy: false` with the
 /// real error, never as a fabricated healthy status.
@@ -785,78 +908,17 @@ fn probe_channel<C: McpChannel>(channel: &mut C, server_id: &str) -> McpProbeRes
         truncated: false,
         error: None,
     };
-    // Legacy path first: what deployed servers speak.
-    let mut stateless = false;
-    match channel.request(
-        "initialize",
-        serde_json::json!({
-            "protocolVersion": LEGACY_PROTOCOL_VERSION,
-            "capabilities": {},
-            "clientInfo": client_info(),
-        }),
-    ) {
-        Ok(init) => {
-            result.protocol_version = init
-                .get("protocolVersion")
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string())
-                .or_else(|| Some(LEGACY_PROTOCOL_VERSION.to_string()));
-            result.server_name = init
-                .get("serverInfo")
-                .and_then(|i| i.get("name"))
-                .and_then(|n| n.as_str())
-                .map(|s| s.to_string());
-            channel.notify("notifications/initialized");
-        }
+    let handshake = match handshake(channel) {
+        Ok(handshake) => handshake,
         Err(message) => {
-            // Only a method-not-found error justifies the stateless
-            // fallback; any other initialize failure is the verdict.
-            if !message.contains("Server error -32601") {
-                result.error = Some(format!("Handshake failed: {message}"));
-                return result;
-            }
-            stateless = true;
-            match channel.request(
-                "server/discover",
-                serde_json::json!({
-                    "_meta": {
-                        "io.modelcontextprotocol/protocolVersion": STATELESS_PROTOCOL_VERSION,
-                        "io.modelcontextprotocol/clientCapabilities": {},
-                        "io.modelcontextprotocol/clientInfo": client_info(),
-                    },
-                }),
-            ) {
-                Ok(discover) => {
-                    result.protocol_version = Some(STATELESS_PROTOCOL_VERSION.to_string());
-                    result.server_name = discover
-                        .get("serverInfo")
-                        .and_then(|i| i.get("name"))
-                        .and_then(|n| n.as_str())
-                        .or_else(|| {
-                            discover.get("serverName").and_then(|n| n.as_str())
-                        })
-                        .map(|s| s.to_string());
-                }
-                Err(message) => {
-                    result.error = Some(format!("Discovery failed: {message}"));
-                    return result;
-                }
-            }
-        }
-    }
-    let meta = |stateless: bool| {
-        if stateless {
-            serde_json::json!({
-                "_meta": {
-                    "io.modelcontextprotocol/protocolVersion": STATELESS_PROTOCOL_VERSION,
-                    "io.modelcontextprotocol/clientCapabilities": {},
-                },
-            })
-        } else {
-            serde_json::json!({})
+            result.error = Some(message);
+            return result;
         }
     };
-    match channel.request("tools/list", meta(stateless)) {
+    let stateless = handshake.stateless;
+    result.protocol_version = handshake.protocol_version;
+    result.server_name = handshake.server_name;
+    match channel.request("tools/list", stateless_meta(stateless)) {
         Ok(list) => {
             let (tools, truncated) = parse_list(&list, "tools", parse_tool);
             result.tools = tools;
@@ -867,7 +929,7 @@ fn probe_channel<C: McpChannel>(channel: &mut C, server_id: &str) -> McpProbeRes
             return result;
         }
     }
-    match channel.request("prompts/list", meta(stateless)) {
+    match channel.request("prompts/list", stateless_meta(stateless)) {
         Ok(list) => {
             let (prompts, truncated) = parse_list(&list, "prompts", parse_prompt);
             result.prompts = prompts;
@@ -933,6 +995,153 @@ fn probe_server(server: &McpServerConfig) -> McpProbeResult {
         }
     };
     probe_channel(&mut channel, &server.id)
+}
+
+// ------------------------------------------------------- tool invocation
+
+/// Conservative JSON Schema subset for tool arguments. Enforced,
+/// and only this: arguments must be an object; every `required`
+/// property must be present (presence, exactly JSON Schema
+/// semantics); present properties are type-checked; `enum`
+/// membership is checked. Not enforced, by design:
+/// `additionalProperties`, string/number bounds, nested schemas,
+/// `format`. A tool with no usable schema is called unvalidated
+/// rather than refused — the UI says so instead of pretending.
+fn validate_tool_arguments(
+    schema: Option<&serde_json::Value>,
+    arguments: &serde_json::Value,
+) -> Result<(), String> {
+    let args = arguments
+        .as_object()
+        .ok_or_else(|| "Tool arguments must be a JSON object.".to_string())?;
+    let Some(schema) = schema.and_then(|s| s.as_object()) else {
+        return Ok(());
+    };
+    if let Some(required) = schema.get("required").and_then(|r| r.as_array()) {
+        for name in required.iter().filter_map(|r| r.as_str()) {
+            if !args.contains_key(name) {
+                return Err(format!("Missing required parameter: {name}"));
+            }
+        }
+    }
+    if let Some(properties) = schema.get("properties").and_then(|p| p.as_object()) {
+        for (name, value) in args {
+            let Some(property) = properties.get(name) else {
+                continue;
+            };
+            if let Some(allowed) = property.get("enum").and_then(|e| e.as_array()) {
+                if !allowed.contains(value) {
+                    return Err(format!(
+                        "Parameter '{name}' must be one of the allowed values."
+                    ));
+                }
+            }
+            let Some(kind) = property.get("type").and_then(|t| t.as_str()) else {
+                continue;
+            };
+            let ok = match kind {
+                "string" => value.is_string(),
+                "integer" => value.as_i64().is_some() || value.as_u64().is_some(),
+                "number" => value.is_number(),
+                "boolean" => value.is_boolean(),
+                "array" => value.is_array(),
+                "object" => value.is_object(),
+                _ => true,
+            };
+            if !ok {
+                return Err(format!("Parameter '{name}' must be of type {kind}."));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// One tool dispatch over an already-open channel: handshake,
+/// fresh `tools/list`, schema validation against the schema the
+/// server just offered (never a client-supplied one), then
+/// `tools/call`. The channel — and its 30s budget and child
+/// teardown — is the caller's.
+fn call_tool_channel<C: McpChannel>(
+    channel: &mut C,
+    server_id: &str,
+    tool_name: &str,
+    arguments: &serde_json::Value,
+) -> Result<McpToolCallResult, String> {
+    let handshake = handshake(channel)?;
+    let list = channel
+        .request("tools/list", stateless_meta(handshake.stateless))
+        .map_err(|message| format!("tools/list failed: {message}"))?;
+    let (tools, _) = parse_list(&list, "tools", parse_tool);
+    let tool = tools
+        .iter()
+        .find(|t| t.name == tool_name)
+        .ok_or_else(|| format!("Tool '{tool_name}' was not offered by this server."))?;
+    validate_tool_arguments(tool.input_schema.as_ref(), arguments)?;
+    let mut params = serde_json::json!({
+        "name": tool_name,
+        "arguments": arguments,
+    });
+    if handshake.stateless {
+        params["_meta"] = serde_json::json!({
+            "io.modelcontextprotocol/protocolVersion": STATELESS_PROTOCOL_VERSION,
+            "io.modelcontextprotocol/clientCapabilities": {},
+        });
+    }
+    let outcome = channel.request("tools/call", params)?;
+    let mut content = Vec::new();
+    let mut texts = Vec::new();
+    if let Some(parts) = outcome.get("content").and_then(|c| c.as_array()) {
+        for part in parts {
+            let kind = part
+                .get("type")
+                .and_then(|t| t.as_str())
+                .unwrap_or("text")
+                .to_string();
+            let text = part.get("text").and_then(|t| t.as_str()).map(|s| s.to_string());
+            if let Some(text) = &text {
+                texts.push(text.clone());
+            }
+            content.push(McpToolCallContent {
+                content_type: kind,
+                text,
+            });
+        }
+    }
+    Ok(McpToolCallResult {
+        contract_version: 1,
+        server_id: server_id.to_string(),
+        tool_name: tool_name.to_string(),
+        is_error: outcome
+            .get("isError")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false),
+        text: texts.join("\n"),
+        content,
+        structured_content: outcome.get("structuredContent").cloned(),
+    })
+}
+
+fn call_tool_server(
+    server: &McpServerConfig,
+    tool_name: &str,
+    arguments: &serde_json::Value,
+) -> Result<McpToolCallResult, CommandError> {
+    if server.transport == "sse" {
+        return Err(invalid(
+            "Remote MCP servers cannot be called: external network access is disabled by default (MASTER_SPEC §68). Only local stdio servers can be called.",
+        ));
+    }
+    if tool_name.is_empty() || tool_name.chars().count() > 256 || has_control(tool_name) {
+        return Err(invalid(
+            "Tool name must be 1 to 256 characters without control characters.",
+        ));
+    }
+    let mut channel = StdioChannel::spawn(server)
+        .map_err(|message| CommandError::new(ErrorCode::InvalidRequest, &message))?;
+    // The error enum has no execution-failure code, so every call
+    // failure surfaces as InvalidRequest carrying the real message.
+    call_tool_channel(&mut channel, &server.id, tool_name, arguments)
+        .map_err(|message| CommandError::new(ErrorCode::InvalidRequest, &message))
 }
 
 // ------------------------------------------------------------ core command
@@ -1030,6 +1239,20 @@ impl crate::readiness::Core {
                         CommandError::new(ErrorCode::NotFound, "MCP server not found.")
                     })?;
                 let result = probe_server(server);
+                serde_json::to_value(result).map_err(|_| unavailable())
+            }
+            "tools-call" => {
+                let request: McpToolCallRequest = serde_json::from_value(input)
+                    .map_err(|_| invalid("Use a supported MCP tool call request."))?;
+                let file = load_mcp_file(&root, &workspace_id)?;
+                let server = file
+                    .servers
+                    .iter()
+                    .find(|s| s.id == request.id)
+                    .ok_or_else(|| {
+                        CommandError::new(ErrorCode::NotFound, "MCP server not found.")
+                    })?;
+                let result = call_tool_server(server, &request.tool_name, &request.arguments)?;
                 serde_json::to_value(result).map_err(|_| unavailable())
             }
             _ => Err(invalid("Use a supported MCP operation.")),
@@ -1162,6 +1385,172 @@ mod tests {
         assert!(parse_response("not json", 1).is_err());
         assert!(parse_response(r#"{"jsonrpc":"2.0","id":2,"result":{}}"#, 1).is_err());
         assert!(parse_response(r#"{"jsonrpc":"1.0","id":1,"result":{}}"#, 1).is_err());
+    }
+
+    #[test]
+    fn tool_call_decodes_text_and_structured_content() {
+        let mut channel = CannedChannel::new(vec![
+            CannedChannel::result(serde_json::json!({
+                "protocolVersion": "2025-11-25",
+                "capabilities": {},
+                "serverInfo": {"name": "Fake MCP", "version": "1.0"},
+            })),
+            CannedChannel::result(serde_json::json!({
+                "tools": [
+                    {"name": "search", "description": "Search memory.",
+                     "inputSchema": {"type": "object", "properties": {"q": {"type": "string"}}, "required": ["q"]},
+                     "annotations": {"readOnlyHint": true}},
+                ],
+            })),
+            CannedChannel::result(serde_json::json!({
+                "content": [{"type": "text", "text": "Search results for \"cats\"."}],
+                "structuredContent": {"count": 1},
+            })),
+        ]);
+        let result = call_tool_channel(
+            &mut channel,
+            "mcp-1",
+            "search",
+            &serde_json::json!({"q": "cats"}),
+        )
+        .expect("call succeeds");
+        assert_eq!(result.server_id, "mcp-1");
+        assert_eq!(result.tool_name, "search");
+        assert!(!result.is_error);
+        assert_eq!(result.text, "Search results for \"cats\".");
+        assert_eq!(result.content.len(), 1);
+        assert_eq!(result.content[0].content_type, "text");
+        assert_eq!(
+            result.structured_content,
+            Some(serde_json::json!({"count": 1}))
+        );
+        assert_eq!(
+            channel.methods,
+            vec!["initialize", "tools/list", "tools/call"]
+        );
+    }
+
+    #[test]
+    fn tool_call_stateless_fallback_uses_discover() {
+        let mut channel = CannedChannel::new(vec![
+            CannedChannel::error(-32601, "Method not found"),
+            CannedChannel::result(serde_json::json!({
+                "serverInfo": {"name": "Stateless Fake", "version": "1.0"},
+            })),
+            CannedChannel::result(serde_json::json!({
+                "tools": [
+                    {"name": "search",
+                     "inputSchema": {"type": "object", "properties": {"q": {"type": "string"}}, "required": ["q"]}},
+                ],
+            })),
+            CannedChannel::result(serde_json::json!({
+                "content": [{"type": "text", "text": "ok"}],
+            })),
+        ]);
+        let result = call_tool_channel(
+            &mut channel,
+            "mcp-1",
+            "search",
+            &serde_json::json!({"q": "x"}),
+        )
+        .expect("stateless call succeeds");
+        assert_eq!(result.text, "ok");
+        assert_eq!(
+            channel.methods,
+            vec!["initialize", "server/discover", "tools/list", "tools/call"]
+        );
+    }
+
+    #[test]
+    fn tool_call_unknown_tool_is_refused_before_dispatch() {
+        let mut channel = CannedChannel::new(vec![
+            CannedChannel::result(serde_json::json!({
+                "protocolVersion": "2025-11-25",
+                "capabilities": {},
+                "serverInfo": {"name": "Fake MCP", "version": "1.0"},
+            })),
+            CannedChannel::result(serde_json::json!({
+                "tools": [{"name": "search"}],
+            })),
+        ]);
+        let err = call_tool_channel(
+            &mut channel,
+            "mcp-1",
+            "nope",
+            &serde_json::json!({}),
+        )
+        .expect_err("unknown tool must be refused");
+        assert!(err.contains("was not offered"), "{err}");
+        assert_eq!(channel.methods, vec!["initialize", "tools/list"]);
+    }
+
+    #[test]
+    fn tool_call_is_error_is_a_completed_result() {
+        let mut channel = CannedChannel::new(vec![
+            CannedChannel::result(serde_json::json!({
+                "protocolVersion": "2025-11-25",
+                "capabilities": {},
+                "serverInfo": {"name": "Fake MCP", "version": "1.0"},
+            })),
+            CannedChannel::result(serde_json::json!({
+                "tools": [{"name": "search"}],
+            })),
+            CannedChannel::result(serde_json::json!({
+                "content": [{"type": "text", "text": "boom"}],
+                "isError": true,
+            })),
+        ]);
+        let result = call_tool_channel(
+            &mut channel,
+            "mcp-1",
+            "search",
+            &serde_json::json!({}),
+        )
+        .expect("tool-level error is still a result");
+        assert!(result.is_error);
+        assert_eq!(result.text, "boom");
+    }
+
+    #[test]
+    fn tool_argument_validation_covers_required_types_and_enum() {
+        let schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "q": {"type": "string"},
+                "n": {"type": "integer"},
+                "mode": {"type": "string", "enum": ["fast", "deep"]},
+            },
+            "required": ["q"],
+        });
+        assert!(validate_tool_arguments(Some(&schema), &serde_json::json!({"q": "x"})).is_ok());
+        assert!(validate_tool_arguments(Some(&schema), &serde_json::json!({})).is_err());
+        assert!(validate_tool_arguments(
+            Some(&schema),
+            &serde_json::json!({"q": 3})
+        )
+        .is_err());
+        assert!(validate_tool_arguments(
+            Some(&schema),
+            &serde_json::json!({"q": "x", "n": 1.5})
+        )
+        .is_err());
+        assert!(validate_tool_arguments(
+            Some(&schema),
+            &serde_json::json!({"q": "x", "n": 2})
+        )
+        .is_ok());
+        assert!(validate_tool_arguments(
+            Some(&schema),
+            &serde_json::json!({"q": "x", "mode": "slow"})
+        )
+        .is_err());
+        assert!(validate_tool_arguments(
+            Some(&schema),
+            &serde_json::json!({"q": "x", "mode": "deep"})
+        )
+        .is_ok());
+        assert!(validate_tool_arguments(Some(&schema), &serde_json::json!("nope")).is_err());
+        assert!(validate_tool_arguments(None, &serde_json::json!({"anything": true})).is_ok());
     }
 
     #[test]

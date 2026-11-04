@@ -2264,6 +2264,46 @@ export interface McpToolAnnotations {
   readOnlyHint?: boolean | null;
   title?: string | null;
 }
+/**
+ * One content part of a tool result. Server text is data for
+ * display, never executed and never forwarded to a provider.
+ */
+export interface McpToolCallContent {
+  text?: string | null;
+  type: string;
+}
+export interface McpToolCallRequest {
+  arguments: unknown;
+  contractVersion: number;
+  id: string;
+  toolName: string;
+  workspaceId: string;
+}
+/**
+ * Structured result of one completed tool dispatch. A tool-level
+ * `isError` is a completed invocation with status Error, not a
+ * transport failure; transport failures return `CommandError`
+ * instead and never produce this value.
+ */
+export interface McpToolCallResult {
+  content?: McpToolCallContent[];
+  contractVersion: number;
+  isError: boolean;
+  serverId: string;
+  structuredContent?: {
+    [k: string]: unknown;
+  };
+  text: string;
+  toolName: string;
+}
+/**
+ * One content part of a tool result. Server text is data for
+ * display, never executed and never forwarded to a provider.
+ */
+export interface McpToolCallContent {
+  text?: string | null;
+  type: string;
+}
 export type MemoryState = "proposed" | "confirmed" | "temporary" | "durable" | "superseded" | "archived";
 export type Privacy = "sealed" | "private" | "standard" | "public";
 

@@ -47,6 +47,26 @@ rl.on('line', (line) => {
         },
       ],
     });
+  } else if (message.method === 'tools/call') {
+    const name = message.params?.name;
+    const args = message.params?.arguments ?? {};
+    if (name === 'search') {
+      reply(message.id, {
+        content: [{ type: 'text', text: `Search results for "${args.q}".` }],
+      });
+    } else if (name === 'write') {
+      reply(message.id, {
+        content: [{ type: 'text', text: `Wrote "${args.text}".` }],
+      });
+    } else {
+      process.stdout.write(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          id: message.id,
+          error: { code: -32602, message: 'Unknown tool' },
+        }) + '\n',
+      );
+    }
   } else if (message.method === 'prompts/list') {
     reply(message.id, {
       prompts: [

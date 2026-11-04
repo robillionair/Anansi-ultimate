@@ -82,6 +82,7 @@ pub fn command_path(path: &str) -> bool {
             | "/v1/mcp/servers-register"
             | "/v1/mcp/servers-remove"
             | "/v1/mcp/servers-probe"
+            | "/v1/mcp/tools-call"
             | "/v1/jobs/upload-begin"
             | "/v1/jobs/upload-part"
             | "/v1/memories/read"

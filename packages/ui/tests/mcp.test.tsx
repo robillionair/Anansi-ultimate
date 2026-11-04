@@ -5,10 +5,13 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { McpView } from '../src/Mcp.tsx';
 import {
   annotationLabels,
+  assembleToolArguments,
   parseArgsLines,
   parseEnvLines,
   parseToolSchema,
+  recordToolCall,
   validateMcpDraftForm,
+  validateToolArguments,
 } from '../src/mcp.ts';
 import type { McpProbeResult, McpServer, McpTool } from '@anansi/contracts';
 
@@ -115,6 +118,103 @@ const probe: McpProbeResult = {
   truncated: false,
 };
 
+test('validateToolArguments mirrors the backend subset', () => {
+  const schema = {
+    type: 'object',
+    properties: {
+      q: { type: 'string' },
+      n: { type: 'integer' },
+      mode: { type: 'string', enum: ['fast', 'deep'] },
+    },
+    required: ['q'],
+  };
+  assert.deepEqual(validateToolArguments(schema, { q: 'x' }), []);
+  assert.ok(validateToolArguments(schema, {}).some((e) => e.includes('Missing required parameter: q')));
+  assert.ok(validateToolArguments(schema, { q: 3 }).some((e) => e.includes("must be of type string")));
+  assert.ok(validateToolArguments(schema, { q: 'x', n: 1.5 }).some((e) => e.includes('integer')));
+  assert.deepEqual(validateToolArguments(schema, { q: 'x', n: 2 }), []);
+  assert.ok(validateToolArguments(schema, { q: 'x', mode: 'slow' }).some((e) => e.includes('allowed values')));
+  assert.deepEqual(validateToolArguments(schema, { q: 'x', mode: 'deep' }), []);
+  assert.deepEqual(validateToolArguments(null, { anything: true }), []);
+});
+
+test('assembleToolArguments omits empties and parses typed fields', () => {
+  const fields = parseToolSchema({
+    type: 'object',
+    properties: {
+      q: { type: 'string' },
+      n: { type: 'integer' },
+      flag: { type: 'boolean' },
+      mode: { enum: ['fast', 'deep'] },
+      extra: {},
+    },
+    required: ['q'],
+  }).fields;
+  const { args, errors } = assembleToolArguments(fields, {
+    q: 'cats',
+    n: '3',
+    flag: 'true',
+    mode: 'deep',
+    extra: '{"a":1}',
+  });
+  assert.deepEqual(errors, []);
+  assert.deepEqual(args, { q: 'cats', n: 3, flag: true, mode: 'deep', extra: { a: 1 } });
+  const omitted = assembleToolArguments(fields, { q: '', n: '', flag: 'false', mode: '', extra: '' });
+  assert.deepEqual(omitted.args, { flag: false });
+  const bad = assembleToolArguments(fields, { q: 'x', n: 'nope', extra: '{bad' });
+  assert.equal(bad.errors.length, 2);
+});
+
+test('recordToolCall is newest-first, capped, and carries no parameters', () => {
+  const first = { serverName: 'Fake MCP', toolName: 'search', status: 'Success' as const, calledAt: 1 };
+  const second = { serverName: 'Fake MCP', toolName: 'write', status: 'Error' as const, calledAt: 2 };
+  const history = recordToolCall(recordToolCall([], first), second);
+  assert.deepEqual(
+    history.map((h) => h.toolName),
+    ['write', 'search'],
+  );
+  assert.ok(!('args' in history[0]) && !('text' in history[0]));
+  let capped = history;
+  for (let i = 0; i < 60; i++) {
+    capped = recordToolCall(capped, { ...first, calledAt: 10 + i });
+  }
+  assert.equal(capped.length, 50);
+});
+
+test('McpView renders call buttons, results, and history', () => {
+  const html = renderToStaticMarkup(
+    React.createElement(McpView, {
+      servers: [server],
+      probes: { 'mcp-1': probe },
+      busyId: null,
+      onProbe: () => {},
+      onRemove: () => {},
+      callResults: {
+        'mcp-1:search': {
+          contractVersion: 1,
+          serverId: 'mcp-1',
+          toolName: 'search',
+          isError: false,
+          text: 'Search results for "cats".',
+          content: [{ type: 'text', text: 'Search results for "cats".' }],
+        },
+      },
+      callHistory: [
+        { serverName: 'Fake MCP', toolName: 'search', status: 'Success', calledAt: 1700000000000 },
+      ],
+      onCallTool: async () => {
+        throw new Error('unused in static markup');
+      },
+    }),
+  );
+  assert.ok(html.includes('Call tool'));
+  assert.ok(html.includes('Tool call Success: search'));
+  assert.ok(html.includes('Search results for &quot;cats&quot;.'));
+  assert.ok(html.includes('Recent tool calls'));
+  assert.ok(html.includes('Fake MCP — search — Success'));
+  assert.ok(html.includes('never logged here'));
+});
+
 test('McpView renders empty state, server rows, and probe results', () => {
   const empty = renderToStaticMarkup(
     React.createElement(McpView, {
@@ -126,7 +226,7 @@ test('McpView renders empty state, server rows, and probe results', () => {
     }),
   );
   assert.ok(empty.includes('No MCP servers configured yet.'));
-  assert.ok(empty.includes('Tools are listed, never run'));
+  assert.ok(empty.includes('A tool runs only after you approve that exact call'));
 
   const html = renderToStaticMarkup(
     React.createElement(McpView, {

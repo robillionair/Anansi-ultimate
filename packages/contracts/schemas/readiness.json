@@ -8673,6 +8673,121 @@
     "title": "McpToolAnnotations",
     "type": "object"
   },
+  "McpToolCallContent": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "description": "One content part of a tool result. Server text is data for\ndisplay, never executed and never forwarded to a provider.",
+    "properties": {
+      "text": {
+        "default": null,
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "type": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "type"
+    ],
+    "title": "McpToolCallContent",
+    "type": "object"
+  },
+  "McpToolCallRequest": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "arguments": true,
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "id": {
+        "type": "string"
+      },
+      "toolName": {
+        "type": "string"
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "workspaceId",
+      "id",
+      "toolName",
+      "arguments"
+    ],
+    "title": "McpToolCallRequest",
+    "type": "object"
+  },
+  "McpToolCallResult": {
+    "$defs": {
+      "McpToolCallContent": {
+        "description": "One content part of a tool result. Server text is data for\ndisplay, never executed and never forwarded to a provider.",
+        "properties": {
+          "text": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "description": "Structured result of one completed tool dispatch. A tool-level\n`isError` is a completed invocation with status Error, not a\ntransport failure; transport failures return `CommandError`\ninstead and never produce this value.",
+    "properties": {
+      "content": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/McpToolCallContent"
+        },
+        "type": "array"
+      },
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "isError": {
+        "type": "boolean"
+      },
+      "serverId": {
+        "type": "string"
+      },
+      "structuredContent": {
+        "default": null
+      },
+      "text": {
+        "type": "string"
+      },
+      "toolName": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "serverId",
+      "toolName",
+      "isError",
+      "text"
+    ],
+    "title": "McpToolCallResult",
+    "type": "object"
+  },
   "MemoryDetails": {
     "$defs": {
       "MemoryMetadata": {
