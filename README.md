@@ -1,4 +1,4 @@
-# ANANSI Ultimate
+﻿# ANANSI Ultimate
 
 ANANSI Ultimate is a local-first product creation and intelligence workspace delivered as a Tauri 2 Windows desktop application and paired browser application. Both editions share domain models, business rules, visual design language, and API contracts.
 
@@ -32,7 +32,7 @@ ANANSI Ultimate is a local-first product creation and intelligence workspace del
 | **M12** | Product Lifecycle | Verified | 7-stage pipeline engine & navigator, Launch Studio with deterministic ZIP bundling, Guided Lifecycle Walk with recovery |
 | **LARP** | LARP Mode Telemetry Engine | Verified | Real-time telemetry bus & HUD, 6 visual views (Memory Vault 3D, Context Funnel, Kinetic Spider, Quant Drift Spectrum, Attention Matrix, Collider Field) |
 | **HOME** | Command Dashboard | Verified | Landing hub with genuine uptime telemetry, recency-ordered projects hub with Guided Walk jump, system backup and queue health |
-| **M13** | MCP Integration | In Progress | Stdio MCP client discovery, capability probing, schema-driven tool invocation forms with mandatory authorization dialog |
+| **M13** | MCP Integration | In Progress | Stdio MCP client discovery & authorized tool invocation; MCP server core exposing memory/projects tools with pairing auth |
 
 See [docs/BUILD_STATUS.md](docs/BUILD_STATUS.md) and [docs/REQUIREMENTS_MATRIX.md](docs/REQUIREMENTS_MATRIX.md) for detailed verification evidence.
 
@@ -82,7 +82,7 @@ cargo test --workspace --locked --lib
 # Build production web bundle
 pnpm --filter @anansi/web build
 
-# Run Playwright browser test battery (52 tests across M0–M13)
+# Run Playwright browser test battery (54 tests across M0–M13)
 pnpm exec playwright test
 ```
 

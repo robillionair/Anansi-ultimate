@@ -1,56 +1,26 @@
-## Resume point — 2026-11-04 MCP Server Core Slice 3 REVISED to the fuller spec (Linux; Windows rerun pending; supersedes the earlier Slice 3 package)
+﻿## Resume point — 2026-11-04 MCP Integration Slice 3 verified on Windows
 
-Owner-authorized revision on branch `muse/mcp-slice3-repair` from the
-Slice 3 delivery tip `98ac536fc`. The revised package reuses the
-filename `anansi-mcp-slice3-2026-11-04.zip` and supersedes the earlier
-file of that name (ZIP `d7c71f32…`). Five deltas, full detail in
-`docs/handoffs/mcp-slice3-repair-addendum.md`: server name
-`anansi-server`; `memory.search` kind filter; `projects.search` stage
-metadata via `derive_pipeline`; strict sealed-AND-private exposure
-boundary (only standard/public records served); pairing-token auth
-replacing the bespoke env token (shared `--pairing-root` flag; server
-refuses to start with no live session). In-repair incident: a duplicate
-unreachable `--pairing-root` parser arm silently discarded the flag and
-the server validated against orphaned October sessions in the host
-pairing root; caught by the e2e, arm removed, orphans deleted. Resume
-from the repair tip, not from the earlier Slice 3 tip, for any
-follow-up: the old env-token mechanism no longer exists.
-
-## Resume point — 2026-11-04 MCP Server Core Slice 3 delivered (Linux; Windows rerun pending)
-
-Owner-authorized Milestone 13 slice on branch
-`muse/mcp-slice3` from the Windows-certified
-Slice 2 review tip
-`a3c517267d58761a63e9d50795a406f0d02b5810`
-(verified from origin by hash; only the
-certified Windows package hash was supplied,
-so the ZIP itself was not re-hashed). Slice 2
-is CLOSED on Windows per that review. Slice 3
-adds the MCP server core: NDJSON stdio loop
-in `crates/core/src/mcp_server.rs`, backend
-trait, production backend on the validated
-`Core::memory_command` path, and a
-`--mcp-server` mode on `anansi-api`,
-exposing exactly three approved read-only
-tools (`memory.search`, `memory.get`,
-`projects.search`). Disabled by default
-(flag + `ANANSI_MCP_SERVER_TOKEN` both
-required); token gate on `initialize`
-`_meta.anansiMcpToken`; allowlist before any
-backend call; sealed boundary in three
-layers with missing and sealed `get`
-identical; read-only by construction (no
-export worker or backup scheduler).
-Linux verification: `npm run typecheck` 0
-errors, contracts 0 drift, docs 273 PASS, UI
-suite 293/293 PASS, production web build
-clean, API build clean, `mcp_server::tests`
-12/12 PASS, cargo `--lib` 240 passed,
+Owner-authorized Milestone 13 slice on review branch
+`codex/review-mcp-slice3` from the delivery tip
+`1e82892bee7f1cfdcc71ffd4edac158db5ed46c0`
+over baseline `a3c517267d58761a63e9d50795a406f0d02b5810`.
+Slice 3 implements the ANANSI MCP server core:
+stdio JSON-RPC 2.0 loop, `serverInfo.name: "anansi-server"`,
+multi-protocol negotiation, and three knowledge tools
+(`memory.search` with kind filter, `memory.get`,
+and `projects.search` with stage metadata).
+Strict fail-closed privacy: sealed and private memories
+are never exposed. Pairing-token authentication
+validated against live pairing files.
+Windows verification: `tsc --noEmit` 0 errors,
+contracts 0 drift, docs 276 PASS, UI suite 293/293 PASS,
+production web build clean, API build clean,
+`mcp_server::tests` 12/12 PASS, cargo `--lib` 239 passed,
 Playwright `mcp-server.spec.ts` 2/2 PASS,
-`mcp.spec.ts` 6/6 PASS, full regression
-battery 54/54 PASS.
+`mcp.spec.ts` 6/6 PASS, full regression battery 54/54 PASS.
+[Evidence](reviews/windows-mcp-slice3-verified.md).
+MCP Integration Slice 3 is verified and closed on Windows.
 AN-017 stays `in progress`.
-Windows rerun of MCP Slice 3 pending.
 M7 native acceptance, preview promotion,
 §32 sandbox, M5 gates, and M8 Slice 4 Windows
 verification remain open.
