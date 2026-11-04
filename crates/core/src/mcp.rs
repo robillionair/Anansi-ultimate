@@ -29,7 +29,13 @@
 //! Safety: the spawned child never runs through a shell, and its
 //! environment is cleared and rebuilt from the configured env vars
 //! only — the API server process environment (which may hold proxy
-//! credentials) is never inherited. Server descriptions and schemas
+//! credentials) is never inherited. One Windows exception, added by
+//! the Slice 1 repair: on Windows the CRT and runtimes such as
+//! Node.js need `SystemRoot`/`WINDIR` (and `PATH` when not
+//! configured) to boot at all — wiping them aborts a Node MCP
+//! server before it runs any script. Those are system paths, not
+//! credentials, and a configured value always wins over a preserved
+//! one. Server descriptions and schemas
 //! are untrusted text: they are validated, capped, and returned for
 //! display, never executed and never forwarded to a provider.
 
@@ -515,6 +521,19 @@ fn parse_response(line: &str, expected_id: u64) -> Result<serde_json::Value, Str
         .ok_or_else(|| "Server response has neither result nor error.".to_string())
 }
 
+/// Distinguish a dead channel from a slow server: when the reader
+/// thread ends (child exited, stdout EOF) the receiver disconnects,
+/// and that is a crash report, not a timeout. Previously both cases
+/// reported a timeout, masking a startup crash as slowness.
+fn channel_recv_error(err: mpsc::RecvTimeoutError) -> String {
+    match err {
+        mpsc::RecvTimeoutError::Timeout => "Probe timed out waiting for the server.".to_string(),
+        mpsc::RecvTimeoutError::Disconnected => {
+            "Server exited or closed connection before replying.".to_string()
+        }
+    }
+}
+
 /// Real stdio transport: a reader thread forwards NDJSON lines to a
 /// channel; requests wait on it with the probe's remaining budget.
 struct StdioChannel {
@@ -526,11 +545,53 @@ struct StdioChannel {
 }
 
 impl StdioChannel {
+    /// Parent-environment entries a cleared child still needs on
+    /// Windows: the CRT and runtimes such as Node.js locate the
+    /// system directory through `SystemRoot`/`WINDIR` and resolve
+    /// helpers through `PATH`. Without them a Node MCP server on
+    /// Windows aborts on startup (exit code 134,
+    /// `ncrypto::CSPRNG` assertion) before running any script.
+    /// Pure over its inputs so it is unit-testable on any
+    /// platform; only called from `spawn` on Windows. A key the
+    /// server configuration already supplies is never overridden:
+    /// configured values always win (comparison is
+    /// case-insensitive because Windows env names are).
+    fn preserved_env_entries(
+        wanted: &[&str],
+        parent: &[(String, String)],
+        configured: &BTreeMap<String, String>,
+    ) -> Vec<(String, String)> {
+        let configured_lower: Vec<String> = configured.keys().map(|k| k.to_lowercase()).collect();
+        wanted
+            .iter()
+            .filter_map(|name| {
+                if configured_lower.iter().any(|k| k == &name.to_lowercase()) {
+                    return None;
+                }
+                parent
+                    .iter()
+                    .find(|(k, _)| k.to_lowercase() == name.to_lowercase())
+                    .cloned()
+            })
+            .collect()
+    }
+
     fn spawn(server: &McpServerConfig) -> Result<Self, String> {
         let command = server.command.clone().unwrap_or_default();
-        let mut child = Command::new(&command)
-            .args(&server.args)
-            .env_clear()
+        let mut cmd = Command::new(&command);
+        cmd.args(&server.args).env_clear();
+        // Windows only: restore the system paths a child runtime
+        // needs to boot, then apply the configured env on top so
+        // explicit configuration always wins. On other platforms
+        // the child keeps exactly the configured environment.
+        #[cfg(windows)]
+        {
+            let parent: Vec<(String, String)> = std::env::vars().collect();
+            let preserved =
+                Self::preserved_env_entries(&["SystemRoot", "WINDIR", "PATH"], &parent, &server.env);
+            cmd.envs(preserved);
+        }
+        let mut child = cmd
             .envs(&server.env)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -600,7 +661,7 @@ impl McpChannel for StdioChannel {
         let line = self
             .lines
             .recv_timeout(remaining)
-            .map_err(|_| "Probe timed out waiting for the server.".to_string())??;
+            .map_err(channel_recv_error)??;
         parse_response(&line, id)
     }
 
@@ -1141,5 +1202,63 @@ mod tests {
         let mut bad_env = base.clone();
         bad_env.env.insert("BAD-KEY".to_string(), "v".to_string());
         assert!(validate_draft(&bad_env).is_err());
+    }
+
+    #[test]
+    fn preserved_env_keeps_system_vars_and_config_wins() {
+        let parent = vec![
+            ("SystemRoot".to_string(), "C:\\Windows".to_string()),
+            ("WINDIR".to_string(), "C:\\Windows".to_string()),
+            ("PATH".to_string(), "C:\\Windows\\System32".to_string()),
+            ("FAKE_TOKEN".to_string(), "must-not-leak".to_string()),
+        ];
+        // Configured `Path` (different case) suppresses the parent's
+        // PATH: explicit configuration always wins on Windows.
+        let mut configured = BTreeMap::new();
+        configured.insert("Path".to_string(), "C:\\custom\\bin".to_string());
+        let kept = StdioChannel::preserved_env_entries(
+            &["SystemRoot", "WINDIR", "PATH"],
+            &parent,
+            &configured,
+        );
+        assert_eq!(kept.len(), 2);
+        assert!(kept.contains(&("SystemRoot".to_string(), "C:\\Windows".to_string())));
+        assert!(kept.contains(&("WINDIR".to_string(), "C:\\Windows".to_string())));
+        assert!(!kept.iter().any(|(k, _)| k == "PATH"));
+        assert!(!kept.iter().any(|(k, _)| k == "FAKE_TOKEN"));
+    }
+
+    #[test]
+    fn channel_recv_error_distinguishes_disconnect_from_timeout() {
+        assert_eq!(
+            channel_recv_error(mpsc::RecvTimeoutError::Timeout),
+            "Probe timed out waiting for the server."
+        );
+        assert_eq!(
+            channel_recv_error(mpsc::RecvTimeoutError::Disconnected),
+            "Server exited or closed connection before replying."
+        );
+    }
+
+    // A child that reads one stdin line and exits without replying
+    // must surface the disconnect message, not a timeout. Unix-only:
+    // it relies on `sh`, which Windows test runs do not have.
+    #[test]
+    #[cfg(unix)]
+    fn stdio_channel_reports_disconnect_when_child_exits_silently() {
+        let server = McpServerConfig {
+            id: "mcp-test".to_string(),
+            name: "Silent".to_string(),
+            transport: "stdio".to_string(),
+            command: Some("sh".to_string()),
+            args: vec!["-c".to_string(), "read x".to_string()],
+            env: BTreeMap::new(),
+            url: None,
+        };
+        let mut channel = StdioChannel::spawn(&server).expect("spawn silent child");
+        let err = channel
+            .request("initialize", serde_json::json!({}))
+            .expect_err("silent child must not answer");
+        assert_eq!(err, "Server exited or closed connection before replying.");
     }
 }
