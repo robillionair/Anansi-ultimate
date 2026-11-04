@@ -1,30 +1,27 @@
-## Resume point — 2026-11-04 MCP Client Integration Slice 2 delivered (Linux; Windows rerun pending)
+## Resume point — 2026-11-04 MCP Client Integration Slice 2 verified on Windows
 
-Owner-authorized Milestone 13 slice on branch
-`muse/mcp-slice2` from the Windows-certified
-Slice 1 repair review tip
-`84dc00b95e28e5c6b9e694c16c07eeae5a89fd81`
-(verified from origin by hash; only the
-review ZIP's sidecar was uploaded, so the ZIP
-itself was not re-hashed). Slice 1 is CLOSED
-on Windows per that review. Slice 2 adds
-explicitly approved local tool invocation:
-`/v1/mcp/tools-call` over the Slice 1 stdio
-channel, server-offered schema validation,
-authorization dialog with exact JSON params
+Owner-authorized Milestone 13 slice on review branch
+`codex/review-mcp-slice2` from the delivery tip
+`22cef49672bb0b9bd81580534b73103b35f552d1`
+over baseline `84dc00b955799988e0b6dbe45e8557bfa3e87fb4`.
+Slice 2 adds explicitly approved local tool invocation:
+`/v1/mcp/tools-call` over the hardened Slice 1 stdio
+channel (Windows boot environment, 30s budget, child
+teardown), server-offered schema validation,
+mandatory authorization dialog with exact JSON params
 and destructive warning, result display, and
-session-local history (no params or secrets
+session-local ephemeral history (no params or secrets
 logged). SSE invocation refused; no resources,
 no MCP server side, no auto-invocation.
-Linux verification: `tsc --noEmit` 0 errors,
-contracts 0 drift, docs 271 PASS, UI suite
-293/293 PASS, production web build clean,
+Windows verification: `tsc --noEmit` 0 errors,
+contracts 0 drift, docs 272 PASS, UI suite
+293/293 PASS in 9.67s, production web build clean,
 API build clean, `mcp::tests` 13/13 PASS,
-cargo `--lib` 228 passed, Playwright
-`mcp.spec.ts` 6/6 PASS, full regression
-battery 52/52 PASS.
+cargo `--lib` 227 passed, Playwright
+`mcp.spec.ts` 6/6 PASS in 34.5s, full regression
+battery 52/52 PASS. [Evidence](reviews/windows-mcp-slice2-verified.md).
+MCP Client Integration Slice 2 is verified and closed on Windows.
 AN-017 stays `in progress`.
-Windows rerun of MCP Slice 2 pending.
 M7 native acceptance, preview promotion,
 §32 sandbox, M5 gates, and M8 Slice 4 Windows
 verification remain open.
