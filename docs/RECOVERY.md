@@ -1,4 +1,17 @@
-﻿## Resume point — 2026-11-04 MCP Integration Slice 3 verified on Windows
+﻿## Resume point — 2026-11-05 MCP Integration Slice 4 delivered (Linux; Windows rerun pending)
+
+Owner-authorized Milestone 13 slice on branch `muse/mcp-slice4` from the
+Windows-certified Slice 3 review tip `1b5582097` (verified from origin
+by hash; review head, docs-only diff over the Slice 3 repair tip, report
+confirms revised Slice 3 hashes; origin master also points at this tip
+per the assignment's fast-forward). Slice 3 is CLOSED on Windows per
+that review. Slice 4 adds client resources/prompts (explicit opt-in,
+review-only) and extended server tools (`notes.search`,
+`experiments.list`, `products.get`; `tools/list` now six). Resume from
+the Slice 4 tip for any follow-up; the outstanding item is the Windows
+rerun of Slice 4.
+
+## Resume point — 2026-11-04 MCP Integration Slice 3 verified on Windows
 
 Owner-authorized Milestone 13 slice on review branch
 `codex/review-mcp-slice3` from the delivery tip
