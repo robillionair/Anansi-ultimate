@@ -322,7 +322,7 @@ export function httpClient(endpoint:string,token:string):Client {
   if(!/^[a-f0-9]{64}$/.test(token))throw new Error('Enter the 64-character token from the current private pairing file.');
   return client(async(operation,request)=>{
     let response:Response;
-    const path = operation.startsWith('jobs/') || operation.startsWith('memories/') || operation.startsWith('relationships/') || operation.startsWith('ai/') || operation.startsWith('vault/') || operation.startsWith('artifacts/')
+    const path = operation.startsWith('jobs/') || operation.startsWith('memories/') || operation.startsWith('relationships/') || operation.startsWith('ai/') || operation.startsWith('vault/') || operation.startsWith('artifacts/') || operation.startsWith('mcp/')
       ? operation
       : operation === 'readiness'
       ? 'readiness'
