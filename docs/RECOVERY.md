@@ -1,3 +1,35 @@
+## Resume point — 2026-11-04 MCP Client Integration Slice 1 repair delivered (Linux; Windows rerun pending)
+
+Owner-authorized repair on branch
+`muse/mcp-slice1-repair` from the
+Slice 1 delivery tip
+`4b0b42e0077802490ee468b2c7304e28fd0f9de7`
+(no `codex/review-mcp-slice1` branch exists
+on origin; the Windows finding arrived as a
+review receipt in chat).
+Windows-only fix in `crates/core/src/mcp.rs`:
+`StdioChannel::spawn` restores `SystemRoot`,
+`WINDIR`, and `PATH` when not configured,
+so Node MCP servers boot on Windows instead
+of aborting (exit 134); a dead channel now
+reports "Server exited or closed connection
+before replying." instead of a timeout.
+Linux verification: `tsc --noEmit` 0 errors,
+contracts 0 drift, docs 268 PASS, UI suite
+289/289 PASS, production web build clean,
+API build clean, `mcp::tests` 8/8 PASS,
+cargo `--lib` 223 passed, Playwright
+`mcp.spec.ts` 4/4 PASS, full regression
+battery 50/50 PASS.
+AN-017 stays `in progress`.
+Decisive check outstanding: Windows rerun
+of `mcp.spec.ts` test 2 against a real Node
+MCP server — do NOT present this repair as
+Windows-verified until it passes there.
+M7 native acceptance, preview promotion,
+§32 sandbox, M5 gates, and M8 Slice 4 Windows
+verification remain open.
+
 ## Resume point — 2026-11-04 MCP Client Integration Slice 1 delivered (Linux; Windows rerun pending)
 
 Owner-authorized Milestone 13 slice on branch
