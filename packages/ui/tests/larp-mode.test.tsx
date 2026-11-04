@@ -335,3 +335,19 @@ test('renderer clock suspends on blur, draws static reduced-motion telemetry, an
     }
   }
 });
+
+import {instrumentBounds,matrixLayout,matrixCellAt} from '../src/larp-mode/views/instrumentScene.ts';
+test('cinematic instrument cell picking matches the drawn grid after resize',()=>{
+  for(const [w,h] of [[1064,866],[730,587],[280,650]]){
+    const layout=matrixLayout(w,h,32,64);
+    assert.ok(layout.width>0&&layout.height>0);
+    for(const [row,col] of [[0,0],[15,31],[31,63]]){
+      assert.deepEqual(matrixCellAt(layout.left+(col+.5)*layout.cellW,layout.top+(row+.5)*layout.cellH,layout,32,64),{row,col});
+    }
+    assert.equal(matrixCellAt(layout.left-1,layout.top,layout,32,64),null);
+    assert.equal(matrixCellAt(layout.left,layout.top-1,layout,32,64),null);
+    assert.equal(matrixCellAt(layout.left+layout.width,layout.top,layout,32,64),null);
+    assert.equal(matrixCellAt(layout.left,layout.top+layout.height,layout,32,64),null);
+    const plot=instrumentBounds(w,h);assert.ok(plot.left+plot.width<=w&&plot.top+plot.height<=h);
+  }
+});

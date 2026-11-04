@@ -7,6 +7,7 @@ import { CoherenceWaveform } from './CoherenceWaveform.tsx';
 import { TelemetryReadout } from './TelemetryReadout.tsx';
 import { View1MemoryVault } from './views/View1MemoryVault.tsx';
 import { View2NeuralFunnel } from './views/View2NeuralFunnel.tsx';
+import {latestCitedIds} from './views/forceLayout.ts';
 import { View3AttentionSpider } from './views/View3AttentionSpider.tsx';
 import { View4QuantDrift } from './views/View4QuantDrift.tsx';
 import { View5AttentionHeatmap } from './views/View5AttentionHeatmap.tsx';
@@ -37,6 +38,8 @@ export function LarpHud({ stream = telemetryStream, initialView = 1 }: { stream?
   }, []);
   const active = MODES[view-1] ?? MODES[0];
   const nodes = latestMemoryNodes(events);
+  const memoryIdentity=JSON.stringify(nodes);
+  const graphIdentity=memoryIdentity+JSON.stringify([...latestCitedIds(events)]);
   return <div className="larp-hud" role="complementary" aria-label="LARP telemetry frame" data-view={view}>
     <div className="larp-rail larp-rail-top">
       <span className="larp-brand"><b>ANANSI</b><i/> SECOND BRAIN <span className="larp-version">/ LOCAL INTELLIGENCE SYSTEM</span></span>
@@ -53,8 +56,8 @@ export function LarpHud({ stream = telemetryStream, initialView = 1 }: { stream?
     <div className="larp-center"><section className="larp-centerpiece larp-centerpiece-view" aria-labelledby="larp-center-heading">
       <div className="larp-scene-caption"><span>{active[2]}</span><span>REALTIME RENDER / OBSERVATORY</span></div>
       <div className="larp-scene-title"><div><span>ANANSI OBSERVATORY</span><h3 id="larp-center-heading">{active[0]}</h3></div><span className="larp-scene-coordinate">{active[1]}<br/>LOCAL / IN-MEMORY</span></div>
-      {view===1 ? <View1MemoryVault stream={stream}/> : view===2 ? <View2NeuralFunnel stream={stream}/> : view===3 ? <View3AttentionSpider stream={stream}/> : view===4 ? <View4QuantDrift stream={stream}/> : view===5 ? <View5AttentionHeatmap stream={stream}/> : <View6ColliderField stream={stream}/>}
-      <div className="larp-scene-footnote"><span>SPATIAL LAYOUT IS A VISUALIZATION · VALUES COME FROM TELEMETRY</span><span>SCENE {String(view).padStart(2,'0')} / 06</span></div>
+      {view===1 ? <View1MemoryVault key={memoryIdentity} stream={stream}/> : view===2 ? <View2NeuralFunnel stream={stream}/> : view===3 ? <View3AttentionSpider key={graphIdentity} stream={stream}/> : view===4 ? <View4QuantDrift stream={stream}/> : view===5 ? <View5AttentionHeatmap stream={stream}/> : <View6ColliderField stream={stream}/>}
+      <div className="larp-scene-footnote"><span>PARTICLES / LAYOUT ARE ORNAMENTAL · VALUES COME FROM TELEMETRY</span><span>SCENE {String(view).padStart(2,'0')} / 06</span></div>
     </section></div>
     <div className="larp-rail larp-rail-right">
       <div className="larp-rail-caption">02 / CONTEXT ALLOCATION</div>

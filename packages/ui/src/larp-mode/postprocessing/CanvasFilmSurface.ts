@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { createLarpComposer, clampPixelRatio } from './LarpComposer.ts';
 
 /** Crisp canvas typography/curves enter the same optical pipeline as the particle scenes. */
-export function createCanvasFilmSurface(output: HTMLCanvasElement) {
+export function createCanvasFilmSurface(output: HTMLCanvasElement, optics: {textSafe?:boolean} = {}) {
   const source = document.createElement('canvas');
   const ctx = source.getContext('2d');
   if (!ctx) return null;
@@ -11,7 +11,7 @@ export function createCanvasFilmSurface(output: HTMLCanvasElement) {
   catch {
     // A failed WebGL acquisition does not claim a GPU presentation.
     const direct = output.getContext('2d');
-    return direct ? {ctx:direct, resize(w:number,h:number,dpr:number){output.width=Math.round(w*dpr);output.height=Math.round(h*dpr);}, present(){},dispose(){}} : null;
+    return direct ? {mode:'2d' as const,ctx:direct, resize(w:number,h:number,dpr:number){output.width=Math.round(w*dpr);output.height=Math.round(h*dpr);}, present(){},dispose(){}} : null;
   }
   renderer.setPixelRatio(clampPixelRatio(window.devicePixelRatio || 1));
   const scene=new THREE.Scene();
@@ -24,8 +24,11 @@ export function createCanvasFilmSurface(output: HTMLCanvasElement) {
   const material=new THREE.MeshBasicMaterial({map:texture,depthTest:false,depthWrite:false});
   scene.add(new THREE.Mesh(geometry,material));
   const film=createLarpComposer(renderer,scene,camera,1,1);
+  // Instrument typography needs a lower exposure than particle filaments.
+  if(optics.textSafe){film.bloomPass.strength=.35;film.bloomPass.threshold=.65;film.bloomPass.radius=.4;}
   let width=0,height=0,disposed=false;
   return {
+    mode:'webgl' as const,
     ctx,
     resize(w:number,h:number,dpr:number){
       const pw=Math.round(w*dpr),ph=Math.round(h*dpr);

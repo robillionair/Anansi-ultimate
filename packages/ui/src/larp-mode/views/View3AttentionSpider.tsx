@@ -20,6 +20,9 @@ import { latestMemoryNodes } from '../MemoryMatrix.tsx';
 import { telemetryStream } from '../telemetry.ts';
 import { registerDisposer } from '../store.ts';
 import { createLarpRenderLoop } from '../renderLoop.ts';
+import {generateParticles} from './particleLayout.ts';
+import {BOKEH_VERTEX,BOKEH_FRAGMENT} from './vaultShaders.ts';
+import {createOrbitalAtmosphere} from './orbitalAtmosphere.ts';
 
 const NODE_COLORS: Record<string, string> = {
   memory: '#ff8a3d',
@@ -70,6 +73,14 @@ export function View3AttentionSpider({ stream = telemetryStream }: { stream?: ty
     camera.lookAt(0, 0, 0);
     const group = new THREE.Group();
     scene.add(group);
+    const atmosphere=createOrbitalAtmosphere(scene,8000);
+    const cloud=generateParticles(61347,[...positions.values()],Math.min(22000,graph.nodes.length*1800));
+    const cloudGeometry=new THREE.BufferGeometry();
+    cloudGeometry.setAttribute('position',new THREE.BufferAttribute(cloud.positions,3));
+    cloudGeometry.setAttribute('aScale',new THREE.BufferAttribute(cloud.scales,1));
+    cloudGeometry.setAttribute('aSeed',new THREE.BufferAttribute(cloud.seeds,1));
+    const cloudMaterial=new THREE.ShaderMaterial({vertexShader:BOKEH_VERTEX,fragmentShader:BOKEH_FRAGMENT,uniforms:{uFocalDepth:{value:190},uTime:{value:0}},transparent:true,depthWrite:false,blending:THREE.AdditiveBlending});
+    group.add(new THREE.Points(cloudGeometry,cloudMaterial));
 
     const nodePositions = new Float32Array(graph.nodes.length * 3);
     const nodeColors = new Float32Array(graph.nodes.length * 3);
@@ -83,17 +94,27 @@ export function View3AttentionSpider({ stream = telemetryStream }: { stream?: ty
     const nodeGeometry = new THREE.BufferGeometry();
     nodeGeometry.setAttribute('position', new THREE.BufferAttribute(nodePositions, 3));
     nodeGeometry.setAttribute('color', new THREE.BufferAttribute(nodeColors, 3));
-    const nodeMaterial = new THREE.PointsMaterial({ size: 3, vertexColors: true, transparent: true, opacity: 0.95 });
+    const nodeMaterial = new THREE.ShaderMaterial({vertexColors:true,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,
+      vertexShader:`varying vec3 vColor;void main(){vColor=color;vec4 mv=modelViewMatrix*vec4(position,1.);gl_PointSize=clamp(1500./max(-mv.z,1.),5.,14.);gl_Position=projectionMatrix*mv;}`,
+      fragmentShader:`varying vec3 vColor;void main(){float d=length(gl_PointCoord-.5);float a=exp(-d*d*35.);gl_FragColor=vec4(vColor*2.,a*.9);}`});
     group.add(new THREE.Points(nodeGeometry, nodeMaterial));
 
-    const edgePositions = new Float32Array(graph.edges.length * 6);
-    const edgeColors = new Float32Array(graph.edges.length * 6);
+    const edgePositions = new Float32Array(graph.edges.length * 24 * 6);
+    const edgeColors = new Float32Array(graph.edges.length * 24 * 6);
     graph.edges.forEach((edge, i) => {
       const a = positions.get(edge.source)!;
       const b = positions.get(edge.target)!;
-      edgePositions.set([a.x, a.y, a.z, b.x, b.y, b.z], i * 6);
-      color.set(edge.kind === 'relationship' ? RELATIONSHIP_COLOR : LAYOUT_COLOR);
-      edgeColors.set([color.r, color.g, color.b, color.r, color.g, color.b], i * 6);
+      const start=new THREE.Vector3(a.x,a.y,a.z),end=new THREE.Vector3(b.x,b.y,b.z);
+      const bend=Math.min(30,start.distanceTo(end)*.25)*(i%2?1:-1);
+      const c1=start.clone().lerp(end,.33).add(new THREE.Vector3(0,bend,12));
+      const c2=start.clone().lerp(end,.67).add(new THREE.Vector3(0,bend,-12));
+      const curve=new THREE.CubicBezierCurve3(start,c1,c2,end);
+      color.set(edge.kind === 'relationship' ? RELATIONSHIP_COLOR : '#6b4e3b');
+      for(let step=0;step<24;step++){
+        const p=curve.getPoint(step/24),q=curve.getPoint((step+1)/24),offset=(i*24+step)*6;
+        edgePositions.set([p.x,p.y,p.z,q.x,q.y,q.z],offset);
+        edgeColors.set([color.r,color.g,color.b,color.r,color.g,color.b],offset);
+      }
     });
     const edgeGeometry = new THREE.BufferGeometry();
     edgeGeometry.setAttribute('position', new THREE.BufferAttribute(edgePositions, 3));
@@ -140,6 +161,8 @@ export function View3AttentionSpider({ stream = telemetryStream }: { stream?: ty
       if (cleaned) return;
       if (!isReduced()) group.rotation.y += 0.0012;
       composerHandle.grainPass.uniforms.uTime.value = isReduced() ? 0 : time / 1000;
+      atmosphere.update(isReduced()?0:time/1000);
+      cloudMaterial.uniforms.uTime.value=isReduced()?0:time/1000;
       composerHandle.render();
       frames += 1;
       els.container.dataset.frames = String(frames);
@@ -167,6 +190,7 @@ export function View3AttentionSpider({ stream = telemetryStream }: { stream?: ty
       loop.dispose();
       observer.disconnect();
       composerHandle.dispose();
+      atmosphere.dispose();cloudGeometry.dispose();cloudMaterial.dispose();
       nodeGeometry.dispose();
       edgeGeometry.dispose();
       nodeMaterial.dispose();
@@ -207,6 +231,7 @@ export function View3AttentionSpider({ stream = telemetryStream }: { stream?: ty
     <div ref={containerRef} className="larp-view-container" aria-label="ATTENTION SPIDER // GRAPH DRIFT ENGINE">
       <canvas ref={canvasRef} className="larp-view-canvas" aria-label="Attention spider graph" />
       <div ref={tagLayerRef} className="larp-tag-layer" aria-hidden="true" />
+      <div className="larp-spectrum-legend"><span>Bright links: recorded relationships.</span><span>Faint links: layout only.</span><span>Dust: ornamental, not additional records.</span></div>
     </div>
   );
 }
