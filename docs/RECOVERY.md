@@ -1,3 +1,34 @@
+## Resume point — 2026-11-04 MCP Client Integration Slice 2 delivered (Linux; Windows rerun pending)
+
+Owner-authorized Milestone 13 slice on branch
+`muse/mcp-slice2` from the Windows-certified
+Slice 1 repair review tip
+`84dc00b95e28e5c6b9e694c16c07eeae5a89fd81`
+(verified from origin by hash; only the
+review ZIP's sidecar was uploaded, so the ZIP
+itself was not re-hashed). Slice 1 is CLOSED
+on Windows per that review. Slice 2 adds
+explicitly approved local tool invocation:
+`/v1/mcp/tools-call` over the Slice 1 stdio
+channel, server-offered schema validation,
+authorization dialog with exact JSON params
+and destructive warning, result display, and
+session-local history (no params or secrets
+logged). SSE invocation refused; no resources,
+no MCP server side, no auto-invocation.
+Linux verification: `tsc --noEmit` 0 errors,
+contracts 0 drift, docs 271 PASS, UI suite
+293/293 PASS, production web build clean,
+API build clean, `mcp::tests` 13/13 PASS,
+cargo `--lib` 228 passed, Playwright
+`mcp.spec.ts` 6/6 PASS, full regression
+battery 52/52 PASS.
+AN-017 stays `in progress`.
+Windows rerun of MCP Slice 2 pending.
+M7 native acceptance, preview promotion,
+§32 sandbox, M5 gates, and M8 Slice 4 Windows
+verification remain open.
+
 ## Resume point — 2026-11-04 MCP Client Integration Slice 1 repair verified on Windows
 
 Owner-authorized repair on review branch
