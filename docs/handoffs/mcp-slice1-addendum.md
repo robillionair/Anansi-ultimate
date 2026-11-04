@@ -117,7 +117,7 @@ stateless server.
 
 - `tsc --noEmit`: 0 errors.
 - `node scripts/contracts.mjs --check`: 0 drift.
-- `node scripts/validate-docs.mjs`: PASS (268 files).
+- `node scripts/validate-docs.mjs`: PASS (267 files).
 - `npm run test:ui`: 289/289 (284 + 5 new).
 - Production web build clean.
 - `node scripts/cargo.mjs build --locked -p anansi-api`: clean.

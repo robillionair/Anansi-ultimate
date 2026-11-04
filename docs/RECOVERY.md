@@ -12,7 +12,7 @@ probing + tool/prompt listing; SSE probes
 explicitly refused; no tool invocation,
 no MCP server side, no persistent connections.
 Linux verification: `tsc --noEmit` 0 errors,
-contracts 0 drift, docs 268 PASS, UI suite
+contracts 0 drift, docs 267 PASS, UI suite
 289/289 PASS, production web build clean,
 API build clean, cargo `--lib` 220 passed,
 Playwright `mcp.spec.ts` 4/4 PASS, full
