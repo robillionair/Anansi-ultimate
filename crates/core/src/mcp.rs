@@ -528,9 +528,23 @@ struct StdioChannel {
 impl StdioChannel {
     fn spawn(server: &McpServerConfig) -> Result<Self, String> {
         let command = server.command.clone().unwrap_or_default();
-        let mut child = Command::new(&command)
-            .args(&server.args)
-            .env_clear()
+        let mut cmd = Command::new(&command);
+        cmd.args(&server.args).env_clear();
+        #[cfg(windows)]
+        {
+            if let Ok(val) = std::env::var("SystemRoot") {
+                cmd.env("SystemRoot", val);
+            }
+            if let Ok(val) = std::env::var("WINDIR") {
+                cmd.env("WINDIR", val);
+            }
+            if !server.env.contains_key("PATH") {
+                if let Ok(val) = std::env::var("PATH") {
+                    cmd.env("PATH", val);
+                }
+            }
+        }
+        let mut child = cmd
             .envs(&server.env)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -597,10 +611,15 @@ impl McpChannel for StdioChannel {
             .and_then(|_| self.stdin.flush())
             .map_err(|e| format!("Could not write to server: {e}"))?;
         let remaining = self.remaining()?;
-        let line = self
-            .lines
-            .recv_timeout(remaining)
-            .map_err(|_| "Probe timed out waiting for the server.".to_string())??;
+        let line = match self.lines.recv_timeout(remaining) {
+            Ok(res) => res?,
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                return Err("Probe timed out waiting for the server.".to_string())
+            }
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                return Err("Server exited or closed connection before replying.".to_string())
+            }
+        };
         parse_response(&line, id)
     }
 
