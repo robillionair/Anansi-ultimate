@@ -22,3 +22,12 @@ Owner authorized extending the cinematic treatment to every LARP view while reta
 - Empty, reduced-motion, unavailable-WebGL and OFF states remain truthful and operable. Dispose GPU surfaces, subscriptions and observers; no new provider/network operations.
 - Add pure layout/hit-test checks and browser regressions for populated graph/spectrum/matrix, live updates, hover after resize, six-view switching and teardown. Inspect populated screenshots of every view, not only empty-state screens. Run UI/type/docs/build and all relevant LARP browser specs.
 - Evidence distinguishes browser acceptance from native desktop build/promotion and target frame cadence from measured GPU throughput.
+
+## Interactive desktop demo — acceptance before implementation
+
+Owner requested a desktop entry for the latest demo and usable scene navigation. Continue from `f7d8d9163`.
+
+- Add actual orbit/zoom/pan controls to memory vault, topology and collider only. Mouse/touch/keyboard controls, bounded zoom and an operable reset; readouts/labels stay tied to the camera. Camera gestures must not click through to the hidden application.
+- Preserve low-power/reduced-motion rendering and teardown; camera change redraws static scenes without a second animation loop.
+- Provide an explicit demo build profile opening only the known sample workspace, loading its actual memory snapshot and entering LARP automatically. Normal builds keep ordinary startup; demo labels distinguish sample data and never invent inference metrics or contact providers.
+- Build and publish the current native executable into the isolated E: demo directory, preserve prior preview binaries/data, create a desktop shortcut and verify startup/controls. Add browser interaction and demo-start regressions, run UI/type/docs/build checks and record native launch scope.
