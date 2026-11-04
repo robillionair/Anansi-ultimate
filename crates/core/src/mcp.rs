@@ -293,6 +293,123 @@ pub struct McpToolCallRequest {
     pub arguments: serde_json::Value,
 }
 
+/// One resource offered by an external server. Content is never fetched
+/// by listing: only explicit `resources-read` calls retrieve it.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct McpResource {
+    pub uri: String,
+    pub name: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub mime_type: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct McpResourceList {
+    pub contract_version: u8,
+    pub server_id: String,
+    pub resources: Vec<McpResource>,
+    pub truncated: bool,
+}
+
+/// One content item of a read resource. Blob (binary) content maps to
+/// `text: None`: binary content is never decoded or displayed.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct McpResourceContent {
+    pub uri: String,
+    #[serde(default)]
+    pub mime_type: Option<String>,
+    #[serde(default)]
+    pub text: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct McpResourceReadResult {
+    pub contract_version: u8,
+    pub server_id: String,
+    pub uri: String,
+    pub contents: Vec<McpResourceContent>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct McpPromptList {
+    pub contract_version: u8,
+    pub server_id: String,
+    pub prompts: Vec<McpPrompt>,
+    pub truncated: bool,
+}
+
+/// One content part of a prompt message. Non-text parts (image,
+/// resource) map to `text: None` and render as a placeholder.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct McpPromptMessageContent {
+    #[serde(rename = "type")]
+    pub content_type: String,
+    #[serde(default)]
+    pub text: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct McpPromptMessage {
+    pub role: String,
+    #[serde(default)]
+    pub content: Vec<McpPromptMessageContent>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct McpPromptGetResult {
+    pub contract_version: u8,
+    pub server_id: String,
+    pub name: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    pub messages: Vec<McpPromptMessage>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct McpResourcesListRequest {
+    pub contract_version: u8,
+    pub workspace_id: String,
+    pub id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct McpResourceReadRequest {
+    pub contract_version: u8,
+    pub workspace_id: String,
+    pub id: String,
+    pub uri: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct McpPromptsListRequest {
+    pub contract_version: u8,
+    pub workspace_id: String,
+    pub id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct McpPromptGetRequest {
+    pub contract_version: u8,
+    pub workspace_id: String,
+    pub id: String,
+    pub name: String,
+    pub arguments: BTreeMap<String, String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct McpFile {
     version: u8,
@@ -782,6 +899,82 @@ fn parse_prompt(value: &serde_json::Value) -> Option<McpPrompt> {
     })
 }
 
+fn parse_resource(value: &serde_json::Value) -> Option<McpResource> {
+    let uri = value.get("uri")?.as_str()?;
+    let name = value.get("name")?.as_str()?;
+    if uri.is_empty() || uri.chars().count() > 2048 || has_control(uri) {
+        return None;
+    }
+    if name.is_empty() || name.chars().count() > 256 || has_control(name) {
+        return None;
+    }
+    Some(McpResource {
+        uri: uri.to_string(),
+        name: name.to_string(),
+        description: value
+            .get("description")
+            .and_then(|d| d.as_str())
+            .map(|d| d.chars().take(2000).collect()),
+        mime_type: value
+            .get("mimeType")
+            .and_then(|m| m.as_str())
+            .map(|m| m.chars().take(256).collect()),
+    })
+}
+
+fn parse_resource_content(value: &serde_json::Value) -> Option<McpResourceContent> {
+    let uri = value.get("uri")?.as_str()?;
+    if uri.is_empty() || uri.chars().count() > 2048 {
+        return None;
+    }
+    // Blob parts are binary: never decoded, mapped to no text.
+    let text = if value.get("blob").is_some() {
+        None
+    } else {
+        value.get("text").and_then(|t| t.as_str()).map(|t| t.to_string())
+    };
+    Some(McpResourceContent {
+        uri: uri.to_string(),
+        mime_type: value
+            .get("mimeType")
+            .and_then(|m| m.as_str())
+            .map(|m| m.chars().take(256).collect()),
+        text,
+    })
+}
+
+fn parse_prompt_message(value: &serde_json::Value) -> Option<McpPromptMessage> {
+    let role = value.get("role")?.as_str()?;
+    if role.is_empty() || role.chars().count() > 64 {
+        return None;
+    }
+    let mut content = Vec::new();
+    if let Some(parts) = value.get("content").and_then(|c| c.as_array()) {
+        for part in parts {
+            let kind = part
+                .get("type")
+                .and_then(|t| t.as_str())
+                .unwrap_or("text")
+                .to_string();
+            // Only text parts carry text; image/resource parts keep
+            // their kind with no text, so the UI can say so.
+            let text = if kind == "text" {
+                part.get("text").and_then(|t| t.as_str()).map(|t| t.to_string())
+            } else {
+                None
+            };
+            content.push(McpPromptMessageContent {
+                content_type: kind,
+                text,
+            });
+        }
+    }
+    Some(McpPromptMessage {
+        role: role.to_string(),
+        content,
+    })
+}
+
 fn parse_list<T>(
     result: &serde_json::Value,
     key: &str,
@@ -1121,6 +1314,127 @@ fn call_tool_channel<C: McpChannel>(
     })
 }
 
+fn resources_list_channel<C: McpChannel>(
+    channel: &mut C,
+    server_id: &str,
+) -> Result<McpResourceList, String> {
+    let handshake = handshake(channel)?;
+    let list = channel
+        .request("resources/list", stateless_meta(handshake.stateless))
+        .map_err(|message| format!("resources/list failed: {message}"))?;
+    let (resources, truncated) = parse_list(&list, "resources", parse_resource);
+    Ok(McpResourceList {
+        contract_version: 1,
+        server_id: server_id.to_string(),
+        resources,
+        truncated,
+    })
+}
+
+fn resources_read_channel<C: McpChannel>(
+    channel: &mut C,
+    server_id: &str,
+    uri: &str,
+) -> Result<McpResourceReadResult, String> {
+    let handshake = handshake(channel)?;
+    let mut params = serde_json::json!({"uri": uri});
+    if handshake.stateless {
+        params["_meta"] = serde_json::json!({
+            "io.modelcontextprotocol/protocolVersion": STATELESS_PROTOCOL_VERSION,
+            "io.modelcontextprotocol/clientCapabilities": {},
+        });
+    }
+    let outcome = channel
+        .request("resources/read", params)
+        .map_err(|message| format!("resources/read failed: {message}"))?;
+    let contents = outcome
+        .get("contents")
+        .and_then(|c| c.as_array())
+        .cloned()
+        .unwrap_or_default()
+        .iter()
+        .filter_map(parse_resource_content)
+        .collect();
+    Ok(McpResourceReadResult {
+        contract_version: 1,
+        server_id: server_id.to_string(),
+        uri: uri.to_string(),
+        contents,
+    })
+}
+
+fn prompts_list_channel<C: McpChannel>(
+    channel: &mut C,
+    server_id: &str,
+) -> Result<McpPromptList, String> {
+    let handshake = handshake(channel)?;
+    let list = channel
+        .request("prompts/list", stateless_meta(handshake.stateless))
+        .map_err(|message| format!("prompts/list failed: {message}"))?;
+    let (prompts, truncated) = parse_list(&list, "prompts", parse_prompt);
+    Ok(McpPromptList {
+        contract_version: 1,
+        server_id: server_id.to_string(),
+        prompts,
+        truncated,
+    })
+}
+
+fn prompts_get_channel<C: McpChannel>(
+    channel: &mut C,
+    server_id: &str,
+    name: &str,
+    arguments: &BTreeMap<String, String>,
+) -> Result<McpPromptGetResult, String> {
+    let handshake = handshake(channel)?;
+    // Fresh prompts/list first, mirroring tools-call: never send to an
+    // unoffered prompt, and validate against the offered definition.
+    let list = channel
+        .request("prompts/list", stateless_meta(handshake.stateless))
+        .map_err(|message| format!("prompts/list failed: {message}"))?;
+    let (prompts, _) = parse_list(&list, "prompts", parse_prompt);
+    let prompt = prompts
+        .iter()
+        .find(|p| p.name == name)
+        .ok_or_else(|| format!("Prompt '{name}' was not offered by this server."))?;
+    for arg in &prompt.arguments {
+        if arg.required == Some(true) && !arguments.contains_key(&arg.name) {
+            return Err(format!("Prompt argument '{}' is required.", arg.name));
+        }
+    }
+    let mut params = serde_json::json!({
+        "name": name,
+        "arguments": arguments,
+    });
+    if handshake.stateless {
+        params["_meta"] = serde_json::json!({
+            "io.modelcontextprotocol/protocolVersion": STATELESS_PROTOCOL_VERSION,
+            "io.modelcontextprotocol/clientCapabilities": {},
+        });
+    }
+    let outcome = channel
+        .request("prompts/get", params)
+        .map_err(|message| format!("prompts/get failed: {message}"))?;
+    let messages = outcome
+        .get("messages")
+        .and_then(|m| m.as_array())
+        .cloned()
+        .unwrap_or_default()
+        .iter()
+        .filter_map(parse_prompt_message)
+        .collect();
+    Ok(McpPromptGetResult {
+        contract_version: 1,
+        server_id: server_id.to_string(),
+        name: name.to_string(),
+        description: outcome
+            .get("description")
+            .and_then(|d| d.as_str())
+            .map(|d| d.chars().take(2000).collect()),
+        messages,
+    })
+}
+
 fn call_tool_server(
     server: &McpServerConfig,
     tool_name: &str,
@@ -1141,6 +1455,65 @@ fn call_tool_server(
     // The error enum has no execution-failure code, so every call
     // failure surfaces as InvalidRequest carrying the real message.
     call_tool_channel(&mut channel, &server.id, tool_name, arguments)
+        .map_err(|message| CommandError::new(ErrorCode::InvalidRequest, &message))
+}
+
+fn spawn_stdio_or_refuse(server: &McpServerConfig, refused: &str) -> Result<StdioChannel, CommandError> {
+    if server.transport == "sse" {
+        return Err(invalid(refused));
+    }
+    StdioChannel::spawn(server)
+        .map_err(|message| CommandError::new(ErrorCode::InvalidRequest, &message))
+}
+
+fn resources_list_server(server: &McpServerConfig) -> Result<McpResourceList, CommandError> {
+    let mut channel = spawn_stdio_or_refuse(
+        server,
+        "Remote MCP servers cannot list resources: external network access is disabled by default (MASTER_SPEC §68). Only local stdio servers can be listed.",
+    )?;
+    resources_list_channel(&mut channel, &server.id)
+        .map_err(|message| CommandError::new(ErrorCode::InvalidRequest, &message))
+}
+
+fn resources_read_server(
+    server: &McpServerConfig,
+    uri: &str,
+) -> Result<McpResourceReadResult, CommandError> {
+    if uri.is_empty() || uri.chars().count() > 2048 || has_control(uri) {
+        return Err(invalid("uri must be 1 to 2048 characters without control characters."));
+    }
+    let mut channel = spawn_stdio_or_refuse(
+        server,
+        "Remote MCP servers cannot read resources: external network access is disabled by default (MASTER_SPEC §68). Only local stdio servers can be read.",
+    )?;
+    resources_read_channel(&mut channel, &server.id, uri)
+        .map_err(|message| CommandError::new(ErrorCode::InvalidRequest, &message))
+}
+
+fn prompts_list_server(server: &McpServerConfig) -> Result<McpPromptList, CommandError> {
+    let mut channel = spawn_stdio_or_refuse(
+        server,
+        "Remote MCP servers cannot list prompts: external network access is disabled by default (MASTER_SPEC §68). Only local stdio servers can be listed.",
+    )?;
+    prompts_list_channel(&mut channel, &server.id)
+        .map_err(|message| CommandError::new(ErrorCode::InvalidRequest, &message))
+}
+
+fn prompts_get_server(
+    server: &McpServerConfig,
+    name: &str,
+    arguments: &BTreeMap<String, String>,
+) -> Result<McpPromptGetResult, CommandError> {
+    if name.is_empty() || name.chars().count() > 256 || has_control(name) {
+        return Err(invalid(
+            "Prompt name must be 1 to 256 characters without control characters.",
+        ));
+    }
+    let mut channel = spawn_stdio_or_refuse(
+        server,
+        "Remote MCP servers cannot get prompts: external network access is disabled by default (MASTER_SPEC §68). Only local stdio servers can be read.",
+    )?;
+    prompts_get_channel(&mut channel, &server.id, name, arguments)
         .map_err(|message| CommandError::new(ErrorCode::InvalidRequest, &message))
 }
 
@@ -1253,6 +1626,62 @@ impl crate::readiness::Core {
                         CommandError::new(ErrorCode::NotFound, "MCP server not found.")
                     })?;
                 let result = call_tool_server(server, &request.tool_name, &request.arguments)?;
+                serde_json::to_value(result).map_err(|_| unavailable())
+            }
+            "resources-list" => {
+                let request: McpResourcesListRequest = serde_json::from_value(input)
+                    .map_err(|_| invalid("Use a supported MCP resources list request."))?;
+                let file = load_mcp_file(&root, &workspace_id)?;
+                let server = file
+                    .servers
+                    .iter()
+                    .find(|s| s.id == request.id)
+                    .ok_or_else(|| {
+                        CommandError::new(ErrorCode::NotFound, "MCP server not found.")
+                    })?;
+                let result = resources_list_server(server)?;
+                serde_json::to_value(result).map_err(|_| unavailable())
+            }
+            "resources-read" => {
+                let request: McpResourceReadRequest = serde_json::from_value(input)
+                    .map_err(|_| invalid("Use a supported MCP resource read request."))?;
+                let file = load_mcp_file(&root, &workspace_id)?;
+                let server = file
+                    .servers
+                    .iter()
+                    .find(|s| s.id == request.id)
+                    .ok_or_else(|| {
+                        CommandError::new(ErrorCode::NotFound, "MCP server not found.")
+                    })?;
+                let result = resources_read_server(server, &request.uri)?;
+                serde_json::to_value(result).map_err(|_| unavailable())
+            }
+            "prompts-list" => {
+                let request: McpPromptsListRequest = serde_json::from_value(input)
+                    .map_err(|_| invalid("Use a supported MCP prompts list request."))?;
+                let file = load_mcp_file(&root, &workspace_id)?;
+                let server = file
+                    .servers
+                    .iter()
+                    .find(|s| s.id == request.id)
+                    .ok_or_else(|| {
+                        CommandError::new(ErrorCode::NotFound, "MCP server not found.")
+                    })?;
+                let result = prompts_list_server(server)?;
+                serde_json::to_value(result).map_err(|_| unavailable())
+            }
+            "prompts-get" => {
+                let request: McpPromptGetRequest = serde_json::from_value(input)
+                    .map_err(|_| invalid("Use a supported MCP prompt get request."))?;
+                let file = load_mcp_file(&root, &workspace_id)?;
+                let server = file
+                    .servers
+                    .iter()
+                    .find(|s| s.id == request.id)
+                    .ok_or_else(|| {
+                        CommandError::new(ErrorCode::NotFound, "MCP server not found.")
+                    })?;
+                let result = prompts_get_server(server, &request.name, &request.arguments)?;
                 serde_json::to_value(result).map_err(|_| unavailable())
             }
             _ => Err(invalid("Use a supported MCP operation.")),
@@ -1649,5 +2078,157 @@ mod tests {
             .request("initialize", serde_json::json!({}))
             .expect_err("silent child must not answer");
         assert_eq!(err, "Server exited or closed connection before replying.");
+    }
+
+    fn legacy_init() -> serde_json::Value {
+        CannedChannel::result(serde_json::json!({
+            "protocolVersion": "2025-11-25",
+            "capabilities": {},
+            "serverInfo": {"name": "Fake MCP", "version": "1.0"},
+        }))
+    }
+
+    #[test]
+    fn resources_list_read_and_truncation() {
+        let mut channel = CannedChannel::new(vec![
+            legacy_init(),
+            CannedChannel::result(serde_json::json!({
+                "resources": [
+                    {"uri": "file:///guide.md", "name": "Guide", "mimeType": "text/markdown"},
+                    {"uri": "", "name": "Nameless"},
+                    {"uri": "file:///notes.txt", "name": "Notes"},
+                ],
+            })),
+        ]);
+        let list = resources_list_channel(&mut channel, "mcp-1").expect("list succeeds");
+        // The empty-uri resource is dropped by the parser.
+        assert_eq!(list.resources.len(), 2);
+        assert_eq!(list.resources[0].uri, "file:///guide.md");
+        assert_eq!(list.resources[0].mime_type.as_deref(), Some("text/markdown"));
+        assert!(!list.truncated);
+        assert_eq!(channel.methods, vec!["initialize", "resources/list"]);
+
+        let mut channel = CannedChannel::new(vec![
+            legacy_init(),
+            CannedChannel::result(serde_json::json!({
+                "contents": [
+                    {"uri": "file:///guide.md", "mimeType": "text/markdown", "text": "# Guide"},
+                    {"uri": "file:///blob.bin", "mimeType": "application/octet-stream", "blob": "aGVsbG8="},
+                ],
+            })),
+        ]);
+        let read = resources_read_channel(&mut channel, "mcp-1", "file:///guide.md")
+            .expect("read succeeds");
+        assert_eq!(read.contents.len(), 2);
+        assert_eq!(read.contents[0].text.as_deref(), Some("# Guide"));
+        // Blob content is never decoded: no text, mime preserved.
+        assert_eq!(read.contents[1].text, None);
+        assert_eq!(
+            read.contents[1].mime_type.as_deref(),
+            Some("application/octet-stream")
+        );
+        assert_eq!(channel.methods, vec!["initialize", "resources/read"]);
+    }
+
+    #[test]
+    fn prompts_list_get_validates_required_args_and_non_text() {
+        let mut channel = CannedChannel::new(vec![
+            legacy_init(),
+            CannedChannel::result(serde_json::json!({
+                "prompts": [
+                    {"name": "summarize", "description": "Summarize.",
+                     "arguments": [{"name": "text", "required": true}]},
+                    {"name": "greet", "arguments": [{"name": "name"}]},
+                ],
+            })),
+        ]);
+        let list = prompts_list_channel(&mut channel, "mcp-1").expect("list succeeds");
+        assert_eq!(list.prompts.len(), 2);
+        assert_eq!(list.prompts[0].arguments[0].required, Some(true));
+
+        let mut channel = CannedChannel::new(vec![
+            legacy_init(),
+            CannedChannel::result(serde_json::json!({
+                "prompts": [
+                    {"name": "summarize", "description": "Summarize.",
+                     "arguments": [{"name": "text", "required": true}]},
+                ],
+            })),
+            CannedChannel::result(serde_json::json!({
+                "description": "Summarized.",
+                "messages": [
+                    {"role": "user", "content": [
+                        {"type": "text", "text": "Summarize this."},
+                        {"type": "image", "data": "not-decoded"},
+                    ]},
+                ],
+            })),
+        ]);
+        let mut args = BTreeMap::new();
+        args.insert("text".to_string(), "hello".to_string());
+        let got = prompts_get_channel(&mut channel, "mcp-1", "summarize", &args)
+            .expect("get succeeds");
+        assert_eq!(got.messages.len(), 1);
+        assert_eq!(got.messages[0].content.len(), 2);
+        assert_eq!(got.messages[0].content[0].text.as_deref(), Some("Summarize this."));
+        // Non-text parts keep their kind with no text.
+        assert_eq!(got.messages[0].content[1].content_type, "image");
+        assert_eq!(got.messages[0].content[1].text, None);
+        assert_eq!(
+            channel.methods,
+            vec!["initialize", "prompts/list", "prompts/get"]
+        );
+
+        // Missing required argument is refused before any prompts/get.
+        let mut channel = CannedChannel::new(vec![
+            legacy_init(),
+            CannedChannel::result(serde_json::json!({
+                "prompts": [{"name": "summarize", "arguments": [{"name": "text", "required": true}]}],
+            })),
+        ]);
+        let err = prompts_get_channel(&mut channel, "mcp-1", "summarize", &BTreeMap::new())
+            .expect_err("missing required argument refused");
+        assert!(err.contains("required"));
+        assert!(!channel.methods.contains(&"prompts/get".to_string()));
+
+        // Unoffered prompts are refused before dispatch.
+        let mut channel = CannedChannel::new(vec![
+            legacy_init(),
+            CannedChannel::result(serde_json::json!({
+                "prompts": [{"name": "greet", "arguments": []}],
+            })),
+        ]);
+        let err = prompts_get_channel(&mut channel, "mcp-1", "nope", &BTreeMap::new())
+            .expect_err("unknown prompt refused");
+        assert!(err.contains("not offered"));
+    }
+
+    #[test]
+    fn resource_prompt_servers_refuse_sse_and_bad_inputs() {
+        let sse = McpServerConfig {
+            id: "mcp-sse".to_string(),
+            name: "Remote".to_string(),
+            transport: "sse".to_string(),
+            command: None,
+            args: vec![],
+            env: BTreeMap::new(),
+            url: Some("https://example.invalid/mcp".to_string()),
+        };
+        assert!(resources_list_server(&sse).is_err());
+        assert!(resources_read_server(&sse, "file:///x").is_err());
+        assert!(prompts_list_server(&sse).is_err());
+        assert!(prompts_get_server(&sse, "greet", &BTreeMap::new()).is_err());
+        let stdio = McpServerConfig {
+            id: "mcp-stdio".to_string(),
+            name: "Local".to_string(),
+            transport: "stdio".to_string(),
+            command: Some("false".to_string()),
+            args: vec![],
+            env: BTreeMap::new(),
+            url: None,
+        };
+        // Validation happens before any spawn attempt.
+        assert!(resources_read_server(&stdio, "").is_err());
+        assert!(prompts_get_server(&stdio, "", &BTreeMap::new()).is_err());
     }
 }

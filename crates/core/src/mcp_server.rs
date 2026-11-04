@@ -1,9 +1,9 @@
-//! MCP *server* side (MASTER_SPEC §68, Milestone 13, Slice 3, as revised).
+//! MCP *server* side (MASTER_SPEC §68, Milestone 13, Slice 4).
 //!
 //! ANANSI itself answers MCP requests over NDJSON stdio, exposing exactly
-//! three approved read-only knowledge tools — `memory.search`, `memory.get`,
-//! `projects.search`. Everything else §68 lists as possible
-//! (`notes.search`, `products.get`, `experiments.list`, and the write tool
+//! six approved read-only knowledge tools — `memory.search`, `memory.get`,
+//! `notes.search`, `projects.search`, `experiments.list`, `products.get`.
+//! Everything else §68 lists as possible (notably the write tool
 //! `ideas.create`) is out of this slice; the allowlist below is the whole
 //! permission set, enforced in dispatch before any backend call.
 //!
@@ -162,6 +162,23 @@ pub trait McpServerBackend {
         workspace_id: &str,
         project_id: &str,
     ) -> Result<Vec<String>, CommandError>;
+    fn project_artifacts(
+        &self,
+        workspace_id: &str,
+        project_id: &str,
+    ) -> Result<Vec<ArtifactSummary>, CommandError>;
+}
+
+/// One artifact's summary metadata for the project tools. Bodies are
+/// never carried here: summaries only, by construction.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ArtifactSummary {
+    pub artifact_id: String,
+    pub artifact_type: String,
+    pub version: u32,
+    pub title: String,
+    pub timestamp: String,
+    pub privacy: String,
 }
 
 /// Production backend: the same validated `Core::memory_command` /
@@ -248,6 +265,37 @@ impl McpServerBackend for CoreMcpServerBackend<'_> {
             })
             .collect())
     }
+
+    fn project_artifacts(
+        &self,
+        workspace_id: &str,
+        project_id: &str,
+    ) -> Result<Vec<ArtifactSummary>, CommandError> {
+        let value = self.core.artifacts_command(
+            "list",
+            json!({"contractVersion": 1, "workspaceId": workspace_id, "projectId": project_id}),
+        )?;
+        let failed = || CommandError::new(ErrorCode::StorageUnavailable, "Search failed.");
+        let artifacts = value
+            .get("artifacts")
+            .and_then(|a| a.as_array())
+            .ok_or_else(failed)?;
+        // Malformed rows are skipped, never fatal: one corrupt artifact
+        // must not hide every well-formed summary.
+        Ok(artifacts
+            .iter()
+            .filter_map(|a| {
+                Some(ArtifactSummary {
+                    artifact_id: a.get("artifactId")?.as_str()?.to_string(),
+                    artifact_type: a.get("type")?.as_str()?.to_string(),
+                    version: a.get("version")?.as_u64()? as u32,
+                    title: a.get("title")?.as_str()?.to_string(),
+                    timestamp: a.get("timestamp")?.as_str()?.to_string(),
+                    privacy: a.get("privacy").and_then(|p| p.as_str()).unwrap_or("").to_string(),
+                })
+            })
+            .collect())
+    }
 }
 
 /// The three approved tools, in `tools/list` order.
@@ -255,9 +303,29 @@ pub fn tool_names() -> Vec<String> {
     vec![
         "memory.search".to_string(),
         "memory.get".to_string(),
+        "notes.search".to_string(),
         "projects.search".to_string(),
+        "experiments.list".to_string(),
+        "products.get".to_string(),
     ]
 }
+
+/// Artifact types Product Forge registers for a project. `products.get`
+/// summarizes exactly these: the product's definition, package,
+/// deliverable, and review — not every artifact a project happens to
+/// hold. There is no product entity in ANANSI; this set is the
+/// documented derivation.
+pub const PRODUCT_ARTIFACT_TYPES: [&str; 4] = [
+    "specification",
+    "source-package",
+    "deliverable",
+    "source-review",
+];
+
+/// The one artifact type LEXI-COLLIDER saves: `ai/collider-save`
+/// registers `artifact_type: "experiment"` (crates/core/src/collider.rs).
+/// SwarmTank `scenario` artifacts are not collider experiments.
+pub const EXPERIMENT_ARTIFACT_TYPE: &str = "experiment";
 
 pub fn server_info() -> McpServerInfo {
     McpServerInfo {
@@ -319,6 +387,25 @@ pub fn tool_definitions() -> Vec<McpServerToolDef> {
             maximum: None,
         },
     );
+    let mut project_id_properties = BTreeMap::new();
+    project_id_properties.insert(
+        "projectId".to_string(),
+        McpSchemaProperty {
+            property_type: "string".to_string(),
+            description: Some("32-character lowercase hex project memory ID.".to_string()),
+            minimum: None,
+            maximum: None,
+        },
+    );
+    project_id_properties.insert(
+        "limit".to_string(),
+        McpSchemaProperty {
+            property_type: "integer".to_string(),
+            description: Some("Maximum results (default 10).".to_string()),
+            minimum: Some(1),
+            maximum: Some(MAX_LIMIT),
+        },
+    );
     vec![
         McpServerToolDef {
             name: "memory.search".to_string(),
@@ -339,12 +426,39 @@ pub fn tool_definitions() -> Vec<McpServerToolDef> {
             },
         },
         McpServerToolDef {
+            name: "notes.search".to_string(),
+            description: "Search shareable (standard or public) note titles and snippets. Same as memory.search with kind fixed to note.".to_string(),
+            input_schema: McpToolInputSchema {
+                schema_type: "object".to_string(),
+                properties: search_schema(false).0,
+                required: search_schema(false).1,
+            },
+        },
+        McpServerToolDef {
             name: "projects.search".to_string(),
             description: "Search active shareable project titles, summaries, and stage metadata.".to_string(),
             input_schema: McpToolInputSchema {
                 schema_type: "object".to_string(),
                 properties: project_properties,
                 required: project_required,
+            },
+        },
+        McpServerToolDef {
+            name: "experiments.list".to_string(),
+            description: "List LEXI-COLLIDER collision experiment summaries (artifact type experiment) for an active shareable project. Sealed and private artifacts are excluded; bodies are never returned.".to_string(),
+            input_schema: McpToolInputSchema {
+                schema_type: "object".to_string(),
+                properties: project_id_properties.clone(),
+                required: vec!["projectId".to_string()],
+            },
+        },
+        McpServerToolDef {
+            name: "products.get".to_string(),
+            description: "Retrieve Product Forge summary metadata (specification, source-package, deliverable, source-review artifacts) for an active shareable project. Sealed and private artifacts are excluded; bodies are never returned.".to_string(),
+            input_schema: McpToolInputSchema {
+                schema_type: "object".to_string(),
+                properties: project_id_properties,
+                required: vec!["projectId".to_string()],
             },
         },
     ]
@@ -419,6 +533,19 @@ fn invalid(message: &str) -> (i64, String) {
     (-32602, message.to_string())
 }
 
+fn parse_limit(arguments: &Value) -> Result<u32, (i64, String)> {
+    match arguments.get("limit") {
+        None => Ok(DEFAULT_LIMIT),
+        Some(value) => {
+            let n = value.as_u64().filter(|n| *n >= 1 && *n <= u64::from(MAX_LIMIT));
+            match n {
+                Some(n) => Ok(n as u32),
+                None => Err(invalid("limit must be an integer between 1 and 50.")),
+            }
+        }
+    }
+}
+
 fn parse_query(arguments: &Value) -> Result<(String, u32), (i64, String)> {
     let query = arguments
         .get("query")
@@ -429,16 +556,7 @@ fn parse_query(arguments: &Value) -> Result<(String, u32), (i64, String)> {
     if query.chars().count() > MAX_QUERY_CHARS {
         return Err(invalid("query must be at most 500 characters."));
     }
-    let limit = match arguments.get("limit") {
-        None => DEFAULT_LIMIT,
-        Some(value) => {
-            let n = value.as_u64().filter(|n| *n >= 1 && *n <= u64::from(MAX_LIMIT));
-            match n {
-                Some(n) => n as u32,
-                None => return Err(invalid("limit must be an integer between 1 and 50.")),
-            }
-        }
-    };
+    let limit = parse_limit(arguments)?;
     Ok((query.to_string(), limit))
 }
 
@@ -454,13 +572,36 @@ fn parse_kind(arguments: &Value) -> Result<Option<String>, (i64, String)> {
 }
 
 fn parse_id(arguments: &Value) -> Result<String, (i64, String)> {
+    parse_id_field(arguments, "id")
+}
+
+fn parse_id_field(arguments: &Value, field: &str) -> Result<String, (i64, String)> {
     let id = arguments
-        .get("id")
+        .get(field)
         .and_then(|v| v.as_str())
-        .ok_or_else(|| invalid("id is required and must be a string."))?;
+        .ok_or_else(|| invalid(&format!("{field} is required and must be a string.")))?;
     crate::workspace::validate_id(id)
-        .map_err(|_| invalid("id must be a 32-character lowercase hex string."))?;
+        .map_err(|_| invalid(&format!("{field} must be a 32-character lowercase hex string.")))?;
     Ok(id.to_string())
+}
+
+/// Artifact privacy arrives as a storage string, not the enum: only
+/// the two shareable spellings pass.
+fn is_shareable_str(privacy: &str) -> bool {
+    matches!(privacy, "standard" | "public")
+}
+
+/// A project whose validity window has closed is not active. An
+/// unparseable expiry is treated as expired: fail closed on corrupt
+/// data rather than serving a record whose lifetime is unknown.
+fn is_expired(valid_until: &Option<String>) -> bool {
+    let Some(until) = valid_until else {
+        return false;
+    };
+    match chrono::DateTime::parse_from_rfc3339(until) {
+        Ok(end) => end < chrono::Utc::now(),
+        Err(_) => true,
+    }
 }
 
 fn search_hit(meta: &MemoryMetadata) -> Value {
@@ -683,8 +824,15 @@ fn handle_tool_call<B: McpServerBackend>(
         None => return error_response(id, -32602, "arguments must be an object."),
     };
     let result = match name {
-        "memory.search" => call_search(&arguments, backend, options, false),
-        "projects.search" => call_search(&arguments, backend, options, true),
+        "memory.search" => call_search(&arguments, backend, options, SearchMode::Memories),
+        "notes.search" => call_search(&arguments, backend, options, SearchMode::Notes),
+        "projects.search" => call_search(&arguments, backend, options, SearchMode::Projects),
+        "experiments.list" => {
+            call_project_tool(&arguments, backend, options, ProjectToolKind::Experiments)
+        }
+        "products.get" => {
+            call_project_tool(&arguments, backend, options, ProjectToolKind::Products)
+        }
         "memory.get" => call_get(&arguments, backend, options),
         _ => unreachable!("allowlist checked above"),
     };
@@ -694,19 +842,36 @@ fn handle_tool_call<B: McpServerBackend>(
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SearchMode {
+    Memories,
+    Notes,
+    Projects,
+}
+
 fn call_search<B: McpServerBackend>(
     arguments: &Value,
     backend: &B,
     options: &McpServerOptions,
-    projects_only: bool,
+    mode: SearchMode,
 ) -> Result<Value, (i64, String)> {
     let (query, limit) = parse_query(arguments)?;
-    let kind = if projects_only {
-        None
-    } else {
-        parse_kind(arguments)?
+    let kind = match mode {
+        SearchMode::Projects => None,
+        SearchMode::Memories => parse_kind(arguments)?,
+        // notes.search fixes kind to note. A contradictory kind
+        // argument is a caller error, not something to ignore.
+        SearchMode::Notes => match parse_kind(arguments)? {
+            None => Some("note".to_string()),
+            Some(kind) if kind == "note" => Some(kind),
+            Some(_) => {
+                return Err(invalid(
+                    "notes.search searches notes only; kind must be \"note\" or absent.",
+                ));
+            }
+        },
     };
-    let hits = if projects_only {
+    let hits = if mode == SearchMode::Projects {
         backend.search_projects(&options.workspace_id, &query, limit)
     } else {
         backend.search_memories(&options.workspace_id, &query, limit, kind.as_deref())
@@ -719,7 +884,7 @@ fn call_search<B: McpServerBackend>(
         if !is_shareable(meta.privacy) {
             continue;
         }
-        if projects_only {
+        if mode == SearchMode::Projects {
             if !is_active_project(meta.status) {
                 continue;
             }
@@ -747,6 +912,90 @@ fn call_search<B: McpServerBackend>(
     Ok(tool_result(
         &serde_json::to_string(&array).unwrap_or_else(|_| "[]".to_string()),
         array,
+        false,
+    ))
+}
+
+const PROJECT_NOT_FOUND_TEXT: &str = "Project not found.";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ProjectToolKind {
+    Experiments,
+    Products,
+}
+
+fn call_project_tool<B: McpServerBackend>(
+    arguments: &Value,
+    backend: &B,
+    options: &McpServerOptions,
+    kind: ProjectToolKind,
+) -> Result<Value, (i64, String)> {
+    let project_id = parse_id_field(arguments, "projectId")?;
+    let limit = parse_limit(arguments)?;
+    let not_found = || {
+        tool_result(
+            PROJECT_NOT_FOUND_TEXT,
+            json!({"error": PROJECT_NOT_FOUND_TEXT}),
+            true,
+        )
+    };
+    // Any read failure maps to the same not-found result: no oracle
+    // distinguishing unknown, sealed, private, inactive, and expired
+    // projects. This mirrors memory.get's treatment of protected rows.
+    let meta = match backend.read_memory(&options.workspace_id, &project_id) {
+        Ok(details) => details.memory,
+        Err(_) => return Ok(not_found()),
+    };
+    if meta.kind != "project"
+        || !is_active_project(meta.status)
+        || !is_shareable(meta.privacy)
+        || is_expired(&meta.valid_until)
+    {
+        return Ok(not_found());
+    }
+    let wanted: &[&str] = match kind {
+        ProjectToolKind::Experiments => &[EXPERIMENT_ARTIFACT_TYPE],
+        ProjectToolKind::Products => &PRODUCT_ARTIFACT_TYPES,
+    };
+    let artifacts = backend
+        .project_artifacts(&options.workspace_id, &project_id)
+        .map_err(|_| (-32603, "Tool execution failed.".to_string()))?;
+    let mut rendered = Vec::new();
+    for artifact in &artifacts {
+        if !wanted.contains(&artifact.artifact_type.as_str()) {
+            continue;
+        }
+        // Sealed AND private artifacts never leave the process, even
+        // if a backend returned them.
+        if !is_shareable_str(&artifact.privacy) {
+            continue;
+        }
+        rendered.push(json!({
+            "artifactId": artifact.artifact_id,
+            "type": artifact.artifact_type,
+            "title": artifact.title,
+            "version": artifact.version,
+            "timestamp": artifact.timestamp,
+        }));
+        if rendered.len() >= limit as usize {
+            break;
+        }
+    }
+    let value = match kind {
+        ProjectToolKind::Experiments => json!({
+            "projectId": project_id,
+            "projectTitle": meta.title,
+            "experiments": rendered,
+        }),
+        ProjectToolKind::Products => json!({
+            "projectId": project_id,
+            "projectTitle": meta.title,
+            "products": rendered,
+        }),
+    };
+    Ok(tool_result(
+        &serde_json::to_string(&value).unwrap_or_else(|_| "{}".to_string()),
+        value,
         false,
     ))
 }
@@ -917,15 +1166,19 @@ mod tests {
             id: &str,
         ) -> Result<MemoryDetails, CommandError> {
             self.calls.borrow_mut().push("get".to_string());
-            let (title, privacy, body) = match id {
-                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" => ("Sealed note", Privacy::Sealed, "secret body"),
-                "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" => ("Visible note", Privacy::Standard, "visible body"),
-                "cccccccccccccccccccccccccccccccc" => ("Private note", Privacy::Private, "private body"),
+            let (title, kind, status, privacy, body) = match id {
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" => ("Sealed note", "note", MemoryState::Durable, Privacy::Sealed, "secret body"),
+                "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" => ("Visible note", "note", MemoryState::Durable, Privacy::Standard, "visible body"),
+                "cccccccccccccccccccccccccccccccc" => ("Private note", "note", MemoryState::Durable, Privacy::Private, "private body"),
+                "33333333333333333333333333333333" => ("Active project", "project", MemoryState::Durable, Privacy::Standard, "project body"),
+                "44444444444444444444444444444444" => ("Private project", "project", MemoryState::Durable, Privacy::Private, "project body"),
+                "55555555555555555555555555555555" => ("Old project", "project", MemoryState::Superseded, Privacy::Standard, "project body"),
+                "66666666666666666666666666666666" => ("Some note", "note", MemoryState::Durable, Privacy::Standard, "note body"),
                 _ => return Err(CommandError::new(ErrorCode::NotFound, "missing")),
             };
             Ok(MemoryDetails {
                 contract_version: 1,
-                memory: meta(id, title, "note", MemoryState::Durable, privacy),
+                memory: meta(id, title, kind, status, privacy),
                 body: body.to_string(),
             })
         }
@@ -984,6 +1237,37 @@ mod tests {
             } else {
                 Ok(vec![])
             }
+        }
+
+        fn project_artifacts(
+            &self,
+            _workspace_id: &str,
+            project_id: &str,
+        ) -> Result<Vec<ArtifactSummary>, CommandError> {
+            self.calls
+                .borrow_mut()
+                .push(format!("artifacts:{project_id}"));
+            if project_id != "33333333333333333333333333333333" {
+                return Ok(vec![]);
+            }
+            let summary = |id: &str, artifact_type: &str, title: &str, privacy: &str| {
+                ArtifactSummary {
+                    artifact_id: id.to_string(),
+                    artifact_type: artifact_type.to_string(),
+                    version: 1,
+                    title: title.to_string(),
+                    timestamp: "2026-11-04T00:00:00Z".to_string(),
+                    privacy: privacy.to_string(),
+                }
+            };
+            Ok(vec![
+                summary("art-experiment", "experiment", "Collision run", "standard"),
+                summary("art-private-experiment", "experiment", "Hidden run", "private"),
+                summary("art-sealed-experiment", "experiment", "Sealed run", "sealed"),
+                summary("art-deliverable", "deliverable", "Shipped build", "standard"),
+                summary("art-spec", "specification", "Product spec", "standard"),
+                summary("art-scenario", "scenario", "Swarm branch", "standard"),
+            ])
         }
     }
 
@@ -1066,7 +1350,7 @@ mod tests {
     }
 
     #[test]
-    fn tools_list_returns_exactly_three_tools() {
+    fn tools_list_returns_exactly_six_tools() {
         let (_temp, options) = paired_root();
         let backend = FakeBackend::new();
         let out = run(
@@ -1082,7 +1366,101 @@ mod tests {
             .iter()
             .map(|t| t["name"].as_str().unwrap())
             .collect();
-        assert_eq!(names, vec!["memory.search", "memory.get", "projects.search"]);
+        assert_eq!(
+            names,
+            vec![
+                "memory.search",
+                "memory.get",
+                "notes.search",
+                "projects.search",
+                "experiments.list",
+                "products.get",
+            ]
+        );
+    }
+
+    #[test]
+    fn slice4_tools_cover_notes_experiments_products_and_gating() {
+        let (_temp, options) = paired_root();
+        let backend = FakeBackend::new();
+        let script = authed_script(&format!(
+            "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n",
+            json!({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "notes.search", "arguments": {"query": "visible"}}}),
+            json!({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "notes.search", "arguments": {"query": "visible", "kind": "task"}}}),
+            json!({"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {"name": "experiments.list", "arguments": {"projectId": "33333333333333333333333333333333"}}}),
+            json!({"jsonrpc": "2.0", "id": 5, "method": "tools/call", "params": {"name": "products.get", "arguments": {"projectId": "33333333333333333333333333333333"}}}),
+            json!({"jsonrpc": "2.0", "id": 6, "method": "tools/call", "params": {"name": "experiments.list", "arguments": {"projectId": "44444444444444444444444444444444"}}}),
+            json!({"jsonrpc": "2.0", "id": 7, "method": "tools/call", "params": {"name": "experiments.list", "arguments": {"projectId": "55555555555555555555555555555555"}}}),
+            json!({"jsonrpc": "2.0", "id": 8, "method": "tools/call", "params": {"name": "experiments.list", "arguments": {"projectId": "66666666666666666666666666666666"}}}),
+            json!({"jsonrpc": "2.0", "id": 9, "method": "tools/call", "params": {"name": "experiments.list", "arguments": {"projectId": "77777777777777777777777777777777"}}}),
+            json!({"jsonrpc": "2.0", "id": 10, "method": "tools/call", "params": {"name": "experiments.list", "arguments": {"projectId": "not-hex"}}}),
+        ));
+        let out = run(&script, &backend, &options);
+        assert_eq!(out.len(), 10);
+        // notes.search: kind enforced server-side (fake ignores it) and
+        // the private note dropped: only the standard note remains.
+        let notes = &out[1]["result"]["structuredContent"];
+        let titles: Vec<&str> = notes
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|h| h["title"].as_str().unwrap())
+            .collect();
+        assert_eq!(titles, vec!["Visible note"]);
+        // A contradictory kind is a caller error, not an ignored field.
+        assert_eq!(out[2]["error"]["code"], -32602);
+        // experiments.list: only the standard experiment survives —
+        // private and sealed experiments dropped, and deliverable,
+        // specification, and scenario rows are not experiments.
+        let experiments = &out[3]["result"];
+        assert_eq!(experiments["isError"], false);
+        assert_eq!(experiments["structuredContent"]["projectTitle"], "Active project");
+        let titles: Vec<&str> = experiments["structuredContent"]["experiments"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|h| h["title"].as_str().unwrap())
+            .collect();
+        assert_eq!(titles, vec!["Collision run"]);
+        // products.get: the Forge set only (deliverable + specification),
+        // scenario excluded, bodies never carried.
+        let products = &out[4]["result"];
+        assert_eq!(products["isError"], false);
+        let titles: Vec<&str> = products["structuredContent"]["products"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|h| h["title"].as_str().unwrap())
+            .collect();
+        assert_eq!(titles, vec!["Shipped build", "Product spec"]);
+        assert!(products["structuredContent"]["products"][0].get("body").is_none());
+        // Private, superseded, wrong-kind, and unknown projects all
+        // produce the identical not-found result: no oracle.
+        for response in &out[5..9] {
+            assert_eq!(response["result"]["isError"], true);
+            assert_eq!(response["result"]["content"][0]["text"], PROJECT_NOT_FOUND_TEXT);
+        }
+        assert_eq!(out[5]["result"], out[6]["result"]);
+        assert_eq!(out[5]["result"], out[7]["result"]);
+        assert_eq!(out[5]["result"], out[8]["result"]);
+        // A malformed project id is a parameter error, not not-found.
+        assert_eq!(out[9]["error"]["code"], -32602);
+        // Artifact listing ran only for the surviving active project
+        // (once per project tool call: experiments.list and products.get).
+        let artifact_calls: Vec<String> = backend
+            .calls
+            .borrow()
+            .iter()
+            .filter(|c| c.starts_with("artifacts:"))
+            .cloned()
+            .collect();
+        assert_eq!(
+            artifact_calls,
+            vec![
+                "artifacts:33333333333333333333333333333333",
+                "artifacts:33333333333333333333333333333333",
+            ]
+        );
     }
 
     #[test]
@@ -1342,5 +1720,104 @@ mod tests {
             .unwrap();
         assert_eq!(project["stage"], "discover");
         assert_eq!(project["stages"].as_array().unwrap().len(), 7);
+    }
+
+    #[test]
+    fn component_project_tools_with_real_artifacts_and_privacy() {
+        let temp = tempfile::tempdir().unwrap();
+        let core = crate::Core::with_storage_root(temp.path().join("storage"));
+        let workspace = core
+            .workspace_command("create", json!({"contractVersion": 1, "name": "Project tools fixture"}))
+            .unwrap()["workspace"]["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let project = core
+            .memory_command(
+                "create",
+                json!({"contractVersion": 1, "workspaceId": workspace, "kind": "project", "draft": {"title": "Fixture project", "body": "Project body.", "privacy": "standard"}}),
+            )
+            .unwrap();
+        let project_id = project["memory"]["id"].as_str().unwrap().to_string();
+        let private_project = core
+            .memory_command(
+                "create",
+                json!({"contractVersion": 1, "workspaceId": workspace, "kind": "project", "draft": {"title": "Hidden project", "body": "Project body.", "privacy": "private"}}),
+            )
+            .unwrap();
+        let private_project_id = private_project["memory"]["id"].as_str().unwrap().to_string();
+        let note = core
+            .memory_command(
+                "create",
+                json!({"contractVersion": 1, "workspaceId": workspace, "kind": "note", "draft": {"title": "Fixture note", "body": "Note body.", "privacy": "standard"}}),
+            )
+            .unwrap();
+        let _note_id = note["memory"]["id"].as_str().unwrap().to_string();
+        for (artifact_type, title, privacy) in [
+            ("experiment", "Real collision", "standard"),
+            ("experiment", "Hidden collision", "private"),
+            ("deliverable", "Real build", "standard"),
+            ("scenario", "Swarm branch", "standard"),
+        ] {
+            core.artifacts_command(
+                "register",
+                json!({"contractVersion": 1, "workspaceId": workspace, "projectId": project_id, "type": artifact_type, "title": title, "body": "Artifact body.", "privacy": privacy}),
+            )
+            .unwrap();
+        }
+        let backend = CoreMcpServerBackend::new(&core);
+        let (_pairing_temp, mut options) = paired_root();
+        options.workspace_id = workspace.clone();
+        let script = format!(
+            "{}\n{}\n{}\n{}\n{}\n",
+            initialize("2025-11-25", Some(TOKEN)),
+            json!({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "notes.search", "arguments": {"query": "Fixture"}}}),
+            json!({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "experiments.list", "arguments": {"projectId": project_id}}}),
+            json!({"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {"name": "products.get", "arguments": {"projectId": project_id}}}),
+            json!({"jsonrpc": "2.0", "id": 5, "method": "tools/call", "params": {"name": "experiments.list", "arguments": {"projectId": private_project_id}}}),
+        );
+        let mut reader = Cursor::new(script.into_bytes());
+        let mut out: Vec<u8> = vec![];
+        serve(&mut reader, &mut out, &backend, &options).unwrap();
+        let lines: Vec<Value> = String::from_utf8(out)
+            .unwrap()
+            .lines()
+            .map(|l| serde_json::from_str(l).unwrap())
+            .collect();
+        assert_eq!(lines.len(), 5);
+        // notes.search finds the standard note (kind fixed to note).
+        let notes = &lines[1]["result"]["structuredContent"];
+        let titles: Vec<&str> = notes
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|h| h["title"].as_str().unwrap())
+            .collect();
+        assert_eq!(titles, vec!["Fixture note"]);
+        // experiments.list: only the standard experiment; the private
+        // experiment, the deliverable, and the scenario are excluded.
+        let experiments = &lines[2]["result"];
+        assert_eq!(experiments["isError"], false);
+        let titles: Vec<&str> = experiments["structuredContent"]["experiments"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|h| h["title"].as_str().unwrap())
+            .collect();
+        assert_eq!(titles, vec!["Real collision"]);
+        // products.get: only the deliverable; scenario is not a Forge
+        // product artifact, and no body is carried.
+        let products = &lines[3]["result"];
+        let titles: Vec<&str> = products["structuredContent"]["products"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|h| h["title"].as_str().unwrap())
+            .collect();
+        assert_eq!(titles, vec!["Real build"]);
+        assert!(products["structuredContent"]["products"][0].get("body").is_none());
+        // The private project is not-found, identically to unknown.
+        assert_eq!(lines[4]["result"]["isError"], true);
+        assert_eq!(lines[4]["result"]["content"][0]["text"], PROJECT_NOT_FOUND_TEXT);
     }
 }

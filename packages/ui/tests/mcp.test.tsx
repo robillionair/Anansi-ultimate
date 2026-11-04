@@ -2,15 +2,17 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { McpView } from '../src/Mcp.tsx';
+import { McpView, PromptViewer, ResourceViewer } from '../src/Mcp.tsx';
 import {
   annotationLabels,
+  assemblePromptArguments,
   assembleToolArguments,
   parseArgsLines,
   parseEnvLines,
   parseToolSchema,
   recordToolCall,
   validateMcpDraftForm,
+  validatePromptArguments,
   validateToolArguments,
 } from '../src/mcp.ts';
 import type { McpProbeResult, McpServer, McpTool } from '@anansi/contracts';
@@ -265,4 +267,132 @@ test('McpView renders empty state, server rows, and probe results', () => {
   );
   assert.ok(refusedHtml.includes('Not healthy: Remote MCP servers cannot be probed in this slice.'));
   assert.ok(refusedHtml.includes('No tools discovered.'));
+});
+
+test('validatePromptArguments and assemblePromptArguments handle required and empty values', () => {
+  const prompt = {
+    name: 'summarize',
+    arguments: [
+      { name: 'text', required: true },
+      { name: 'style', required: false },
+    ],
+  };
+  assert.deepEqual(validatePromptArguments(prompt, { text: 'hello' }), []);
+  assert.deepEqual(validatePromptArguments(prompt, {}), ['Missing required argument: text']);
+  assert.deepEqual(validatePromptArguments(prompt, { text: 'x', style: 'brief' }), []);
+  assert.deepEqual(assemblePromptArguments({ text: 'hello', style: '' }), { text: 'hello' });
+  // Assembled empties are dropped, so a required argument left empty
+  // is reported missing by validation on the assembled map.
+  const assembled = assemblePromptArguments({ text: '', style: 'brief' });
+  assert.deepEqual(validatePromptArguments(prompt, assembled), ['Missing required argument: text']);
+});
+
+test('ResourceViewer renders text and the binary placeholder', () => {
+  const text = renderToStaticMarkup(
+    React.createElement(ResourceViewer, {
+      read: {
+        contractVersion: 1,
+        serverId: 'mcp-1',
+        uri: 'file:///guide.md',
+        contents: [{ uri: 'file:///guide.md', mimeType: 'text/markdown', text: '# Guide' }],
+      },
+    }),
+  );
+  assert.ok(text.includes('Resource: file:///guide.md'));
+  assert.ok(text.includes('Type: text/markdown'));
+  assert.ok(text.includes('# Guide'));
+  const blob = renderToStaticMarkup(
+    React.createElement(ResourceViewer, {
+      read: {
+        contractVersion: 1,
+        serverId: 'mcp-1',
+        uri: 'file:///blob.bin',
+        contents: [{ uri: 'file:///blob.bin', mimeType: 'application/octet-stream', text: null }],
+      },
+    }),
+  );
+  assert.ok(blob.includes('Binary content is not shown.'));
+});
+
+test('PromptViewer renders messages and the non-text placeholder', () => {
+  const html = renderToStaticMarkup(
+    React.createElement(PromptViewer, {
+      result: {
+        contractVersion: 1,
+        serverId: 'mcp-1',
+        name: 'summarize',
+        description: 'Summarized.',
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: 'Summarize this.' },
+              { type: 'image', text: null },
+            ],
+          },
+        ],
+      },
+    }),
+  );
+  assert.ok(html.includes('Prompt: summarize'));
+  assert.ok(html.includes('user'));
+  assert.ok(html.includes('Summarize this.'));
+  assert.ok(html.includes('(non-text content not shown.)'));
+});
+
+test('McpView renders Resources and Prompt templates sections for review', () => {
+  const html = renderToStaticMarkup(
+    React.createElement(McpView, {
+      servers: [server],
+      probes: { 'mcp-1': probe },
+      busyId: null,
+      onProbe: () => {},
+      onRemove: () => {},
+      resourceLists: {
+        'mcp-1': {
+          contractVersion: 1,
+          serverId: 'mcp-1',
+          resources: [{ uri: 'file:///guide.md', name: 'Guide', mimeType: 'text/markdown' }],
+          truncated: false,
+        },
+      },
+      resourceReads: {
+        'mcp-1:file:///guide.md': {
+          contractVersion: 1,
+          serverId: 'mcp-1',
+          uri: 'file:///guide.md',
+          contents: [{ uri: 'file:///guide.md', mimeType: 'text/markdown', text: '# Guide' }],
+        },
+      },
+      promptLists: {
+        'mcp-1': {
+          contractVersion: 1,
+          serverId: 'mcp-1',
+          prompts: [{ name: 'summarize', description: 'Summarize.', arguments: [{ name: 'text', required: true }] }],
+          truncated: false,
+        },
+      },
+      promptResults: {
+        'mcp-1:summarize': {
+          contractVersion: 1,
+          serverId: 'mcp-1',
+          name: 'summarize',
+          messages: [{ role: 'user', content: [{ type: 'text', text: 'Summarized text.' }] }],
+        },
+      },
+      onListResources: () => {},
+      onReadResource: () => {},
+      onListPrompts: () => {},
+      onGetPrompt: async () => {
+        throw new Error('unused in static markup');
+      },
+    }),
+  );
+  assert.ok(html.includes('shown here for your review only'));
+  assert.ok(html.includes('Resources'));
+  assert.ok(html.includes('Guide'));
+  assert.ok(html.includes('# Guide'));
+  assert.ok(html.includes('Prompt templates'));
+  assert.ok(html.includes('Get prompt'));
+  assert.ok(html.includes('Summarized text.'));
 });

@@ -2178,6 +2178,75 @@ export interface McpPromptArgument {
   name: string;
   required?: boolean | null;
 }
+export interface McpPromptGetRequest {
+  arguments: {
+    [k: string]: string;
+  };
+  contractVersion: number;
+  id: string;
+  name: string;
+  workspaceId: string;
+}
+export interface McpPromptGetResult {
+  contractVersion: number;
+  description?: string | null;
+  messages: McpPromptMessage[];
+  name: string;
+  serverId: string;
+}
+export interface McpPromptMessage {
+  content?: McpPromptMessageContent[];
+  role: string;
+}
+/**
+ * One content part of a prompt message. Non-text parts (image,
+ * resource) map to `text: None` and render as a placeholder.
+ */
+export interface McpPromptMessageContent {
+  text?: string | null;
+  type: string;
+}
+export interface McpPromptList {
+  contractVersion: number;
+  prompts: McpPrompt[];
+  serverId: string;
+  truncated: boolean;
+}
+export interface McpPrompt {
+  arguments?: McpPromptArgument[];
+  description?: string | null;
+  name: string;
+}
+export interface McpPromptArgument {
+  description?: string | null;
+  name: string;
+  required?: boolean | null;
+}
+export interface McpPromptMessage {
+  content?: McpPromptMessageContent[];
+  role: string;
+}
+/**
+ * One content part of a prompt message. Non-text parts (image,
+ * resource) map to `text: None` and render as a placeholder.
+ */
+export interface McpPromptMessageContent {
+  text?: string | null;
+  type: string;
+}
+/**
+ * One content part of a prompt message. Non-text parts (image,
+ * resource) map to `text: None` and render as a placeholder.
+ */
+export interface McpPromptMessageContent {
+  text?: string | null;
+  type: string;
+}
+export interface McpPromptsListRequest {
+  contractVersion: number;
+  id: string;
+  workspaceId: string;
+}
 export interface McpRegisterRequest {
   contractVersion: number;
   draft: McpServerDraft;
@@ -2201,6 +2270,67 @@ export interface McpRemoveRequest {
 export interface McpRemoveResult {
   contractVersion: number;
   removed: boolean;
+}
+/**
+ * One resource offered by an external server. Content is never fetched
+ * by listing: only explicit `resources-read` calls retrieve it.
+ */
+export interface McpResource {
+  description?: string | null;
+  mimeType?: string | null;
+  name: string;
+  uri: string;
+}
+/**
+ * One content item of a read resource. Blob (binary) content maps to
+ * `text: None`: binary content is never decoded or displayed.
+ */
+export interface McpResourceContent {
+  mimeType?: string | null;
+  text?: string | null;
+  uri: string;
+}
+export interface McpResourceList {
+  contractVersion: number;
+  resources: McpResource[];
+  serverId: string;
+  truncated: boolean;
+}
+/**
+ * One resource offered by an external server. Content is never fetched
+ * by listing: only explicit `resources-read` calls retrieve it.
+ */
+export interface McpResource {
+  description?: string | null;
+  mimeType?: string | null;
+  name: string;
+  uri: string;
+}
+export interface McpResourceReadRequest {
+  contractVersion: number;
+  id: string;
+  uri: string;
+  workspaceId: string;
+}
+export interface McpResourceReadResult {
+  contents: McpResourceContent[];
+  contractVersion: number;
+  serverId: string;
+  uri: string;
+}
+/**
+ * One content item of a read resource. Blob (binary) content maps to
+ * `text: None`: binary content is never decoded or displayed.
+ */
+export interface McpResourceContent {
+  mimeType?: string | null;
+  text?: string | null;
+  uri: string;
+}
+export interface McpResourcesListRequest {
+  contractVersion: number;
+  id: string;
+  workspaceId: string;
 }
 /**
  * Public server view: env values redacted to their keys.

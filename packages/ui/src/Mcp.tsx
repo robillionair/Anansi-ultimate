@@ -1,13 +1,26 @@
 import { useEffect, useState } from 'react';
-import type { Client, McpProbeResult, McpServer, McpTool, McpToolCallResult } from '@anansi/contracts';
+import type {
+  Client,
+  McpProbeResult,
+  McpPrompt,
+  McpPromptGetResult,
+  McpPromptList,
+  McpResourceList,
+  McpResourceReadResult,
+  McpServer,
+  McpTool,
+  McpToolCallResult,
+} from '@anansi/contracts';
 import {
   annotationLabels,
+  assemblePromptArguments,
   assembleToolArguments,
   parseArgsLines,
   parseEnvLines,
   parseToolSchema,
   recordToolCall,
   validateMcpDraftForm,
+  validatePromptArguments,
   validateToolArguments,
   type ToolCallHistoryEntry,
 } from './mcp.ts';
@@ -188,6 +201,126 @@ function ToolCaller({
   );
 }
 
+export function ResourceViewer({ read }: { read: McpResourceReadResult }) {
+  return (
+    <div>
+      <p>Resource: {read.uri}</p>
+      {read.contents.length === 0 ? (
+        <p>No content returned.</p>
+      ) : (
+        <ul aria-label={`Content of ${read.uri}`}>
+          {read.contents.map((content, index) => (
+            <li key={`${content.uri}-${index}`}>
+              {content.mimeType ? <p>Type: {content.mimeType}</p> : null}
+              {content.text !== undefined && content.text !== null ? (
+                <p>{content.text}</p>
+              ) : (
+                <p>Binary content is not shown.</p>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+export function PromptViewer({ result }: { result: McpPromptGetResult }) {
+  return (
+    <div>
+      <p>Prompt: {result.name}</p>
+      {result.description ? <p>{result.description}</p> : null}
+      {result.messages.length === 0 ? (
+        <p>No messages returned.</p>
+      ) : (
+        <ul aria-label={`Messages of ${result.name}`}>
+          {result.messages.map((message, index) => (
+            <li key={index}>
+              <p>{message.role}</p>
+              {(message.content ?? []).map((part, partIndex) => (
+                <p key={partIndex}>
+                  {part.text !== undefined && part.text !== null
+                    ? part.text
+                    : '(non-text content not shown.)'}
+                </p>
+              ))}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+// One prompt's argument form and Get button. A click is the explicit
+// opt-in: nothing here fetches on mount or on probe, and the rendered
+// result is for review only — it is never forwarded anywhere.
+function PromptGetter({
+  server,
+  prompt,
+  getting,
+  result,
+  onGetPrompt,
+}: {
+  server: McpServer;
+  prompt: McpPrompt;
+  getting: boolean;
+  result: McpPromptGetResult | undefined;
+  onGetPrompt: (
+    serverId: string,
+    name: string,
+    args: Record<string, string>,
+  ) => Promise<McpPromptGetResult>;
+}) {
+  const keyPrefix = `mcp-prompt-${server.id}-${prompt.name}`;
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [formError, setFormError] = useState('');
+  const [getError, setGetError] = useState('');
+
+  async function get() {
+    const args = assemblePromptArguments(values);
+    const errors = validatePromptArguments(prompt, args);
+    if (errors.length) {
+      setFormError(errors.join(' '));
+      return;
+    }
+    setFormError('');
+    setGetError('');
+    try {
+      await onGetPrompt(server.id, prompt.name, args);
+    } catch (e) {
+      setGetError(e instanceof Error ? e.message : 'Prompt unavailable. Retry.');
+    }
+  }
+
+  return (
+    <div>
+      {(prompt.arguments ?? []).map((arg) => (
+        <div key={arg.name}>
+          <label htmlFor={`${keyPrefix}-${arg.name}`}>
+            {arg.name}
+            {arg.required ? ' (required)' : ''}
+          </label>
+          <input
+            id={`${keyPrefix}-${arg.name}`}
+            type="text"
+            value={values[arg.name] ?? ''}
+            onChange={(e) => setValues((prev) => ({ ...prev, [arg.name]: e.target.value }))}
+          />
+        </div>
+      ))}
+      {formError ? <p>{formError}</p> : null}
+      <div className="actions">
+        <button disabled={getting} onClick={() => void get()}>
+          Get prompt
+        </button>
+      </div>
+      {getError ? <p>{getError}</p> : null}
+      {result ? <PromptViewer result={result} /> : null}
+    </div>
+  );
+}
+
 export function McpView({
   servers,
   probes,
@@ -199,6 +332,19 @@ export function McpView({
   callingKey = null,
   onCallTool = async () => {
     throw new Error('Tool calls are unavailable in this view.');
+  },
+  resourceLists = {},
+  resourceReads = {},
+  resourceErrors = {},
+  promptLists = {},
+  promptResults = {},
+  promptErrors = {},
+  busyAction = null,
+  onListResources = () => {},
+  onReadResource = () => {},
+  onListPrompts = () => {},
+  onGetPrompt = async () => {
+    throw new Error('Prompt retrieval is unavailable in this view.');
   },
 }: {
   servers: McpServer[];
@@ -214,6 +360,21 @@ export function McpView({
     toolName: string,
     args: Record<string, unknown>,
   ) => Promise<McpToolCallResult>;
+  resourceLists?: Record<string, McpResourceList>;
+  resourceReads?: Record<string, McpResourceReadResult>;
+  resourceErrors?: Record<string, string>;
+  promptLists?: Record<string, McpPromptList>;
+  promptResults?: Record<string, McpPromptGetResult>;
+  promptErrors?: Record<string, string>;
+  busyAction?: string | null;
+  onListResources?: (serverId: string) => void;
+  onReadResource?: (serverId: string, uri: string) => void;
+  onListPrompts?: (serverId: string) => void;
+  onGetPrompt?: (
+    serverId: string,
+    name: string,
+    args: Record<string, string>,
+  ) => Promise<McpPromptGetResult>;
 }) {
   return (
     <section className="card" aria-labelledby="mcp-title">
@@ -337,6 +498,92 @@ export function McpView({
                     {probe.truncated ? (
                       <p>Tool or prompt list truncated at 100 entries.</p>
                     ) : null}
+                    <p>
+                      Resource and prompt content comes from the external server. It is shown
+                      here for your review only and is never sent anywhere automatically. Nothing
+                      is fetched until you click List, Read, or Get below.
+                    </p>
+                    <h3>Resources</h3>
+                    {resourceErrors[server.id] ? <p>{resourceErrors[server.id]}</p> : null}
+                    {resourceLists[server.id] ? (
+                      <div>
+                        {(resourceLists[server.id].resources ?? []).length === 0 ? (
+                          <p>No resources listed.</p>
+                        ) : (
+                          <ul aria-label={`Resources from ${server.name}`}>
+                            {(resourceLists[server.id].resources ?? []).map((resource) => (
+                              <li key={resource.uri}>
+                                <strong>{resource.name}</strong>
+                                <p>{resource.uri}</p>
+                                {resource.description ? <p>{resource.description}</p> : null}
+                                <div className="actions">
+                                  <button
+                                    disabled={busyAction === `read:${server.id}:${resource.uri}`}
+                                    onClick={() => onReadResource(server.id, resource.uri)}
+                                  >
+                                    Read
+                                  </button>
+                                </div>
+                                {resourceReads[`${server.id}:${resource.uri}`] ? (
+                                  <ResourceViewer
+                                    read={resourceReads[`${server.id}:${resource.uri}`]}
+                                  />
+                                ) : null}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                        {resourceLists[server.id].truncated ? (
+                          <p>Resource list truncated at 100 entries.</p>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <div className="actions">
+                        <button
+                          disabled={busyAction === `resources:${server.id}`}
+                          onClick={() => onListResources(server.id)}
+                        >
+                          List resources
+                        </button>
+                      </div>
+                    )}
+                    <h3>Prompt templates</h3>
+                    {promptErrors[server.id] ? <p>{promptErrors[server.id]}</p> : null}
+                    {promptLists[server.id] ? (
+                      <div>
+                        {(promptLists[server.id].prompts ?? []).length === 0 ? (
+                          <p>No prompts listed.</p>
+                        ) : (
+                          <ul aria-label={`Prompt templates from ${server.name}`}>
+                            {(promptLists[server.id].prompts ?? []).map((prompt) => (
+                              <li key={prompt.name}>
+                                <strong>{prompt.name}</strong>
+                                {prompt.description ? <p>{prompt.description}</p> : null}
+                                <PromptGetter
+                                  server={server}
+                                  prompt={prompt}
+                                  getting={busyAction === `get:${server.id}:${prompt.name}`}
+                                  result={promptResults[`${server.id}:${prompt.name}`]}
+                                  onGetPrompt={onGetPrompt}
+                                />
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                        {promptLists[server.id].truncated ? (
+                          <p>Prompt list truncated at 100 entries.</p>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <div className="actions">
+                        <button
+                          disabled={busyAction === `prompts:${server.id}`}
+                          onClick={() => onListPrompts(server.id)}
+                        >
+                          List prompts
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </li>
@@ -381,6 +628,13 @@ export function Mcp({ client, workspaceId }: { client: Client; workspaceId: stri
   const [callResults, setCallResults] = useState<Record<string, McpToolCallResult>>({});
   const [callHistory, setCallHistory] = useState<ToolCallHistoryEntry[]>([]);
   const [callingKey, setCallingKey] = useState<string | null>(null);
+  const [resourceLists, setResourceLists] = useState<Record<string, McpResourceList>>({});
+  const [resourceReads, setResourceReads] = useState<Record<string, McpResourceReadResult>>({});
+  const [resourceErrors, setResourceErrors] = useState<Record<string, string>>({});
+  const [promptLists, setPromptLists] = useState<Record<string, McpPromptList>>({});
+  const [promptResults, setPromptResults] = useState<Record<string, McpPromptGetResult>>({});
+  const [promptErrors, setPromptErrors] = useState<Record<string, string>>({});
+  const [busyAction, setBusyAction] = useState<string | null>(null);
 
   async function refresh() {
     try {
@@ -491,6 +745,84 @@ export function Mcp({ client, workspaceId }: { client: Client; workspaceId: stri
     }
   }
 
+  async function listResources(serverId: string) {
+    const key = `resources:${serverId}`;
+    setBusyAction(key);
+    setResourceErrors((previous) => {
+      const next = { ...previous };
+      delete next[serverId];
+      return next;
+    });
+    try {
+      const list = await client.listMcpResources(workspaceId, serverId);
+      setResourceLists((previous) => ({ ...previous, [serverId]: list }));
+    } catch (e) {
+      setResourceErrors((previous) => ({
+        ...previous,
+        [serverId]: e instanceof Error ? e.message : 'Resources unavailable. Retry.',
+      }));
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function readResource(serverId: string, uri: string) {
+    const action = `read:${serverId}:${uri}`;
+    setBusyAction(action);
+    setResourceErrors((previous) => {
+      const next = { ...previous };
+      delete next[serverId];
+      return next;
+    });
+    try {
+      const read = await client.readMcpResource(workspaceId, serverId, uri);
+      setResourceReads((previous) => ({ ...previous, [`${serverId}:${uri}`]: read }));
+    } catch (e) {
+      setResourceErrors((previous) => ({
+        ...previous,
+        [serverId]: e instanceof Error ? e.message : 'Resource unavailable. Retry.',
+      }));
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function listPrompts(serverId: string) {
+    const key = `prompts:${serverId}`;
+    setBusyAction(key);
+    setPromptErrors((previous) => {
+      const next = { ...previous };
+      delete next[serverId];
+      return next;
+    });
+    try {
+      const list = await client.listMcpPrompts(workspaceId, serverId);
+      setPromptLists((previous) => ({ ...previous, [serverId]: list }));
+    } catch (e) {
+      setPromptErrors((previous) => ({
+        ...previous,
+        [serverId]: e instanceof Error ? e.message : 'Prompts unavailable. Retry.',
+      }));
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function getPrompt(
+    serverId: string,
+    name: string,
+    args: Record<string, string>,
+  ): Promise<McpPromptGetResult> {
+    setBusyAction(`get:${serverId}:${name}`);
+    try {
+      const result = await client.getMcpPrompt(workspaceId, serverId, name, args);
+      setPromptResults((previous) => ({ ...previous, [`${serverId}:${name}`]: result }));
+      return result;
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
   return (
     <div>
       <section className="card" aria-labelledby="mcp-register-title">
@@ -498,7 +830,7 @@ export function Mcp({ client, workspaceId }: { client: Client; workspaceId: stri
         <p>
           A server is local-first: a stdio server runs only when you connect it, with only the
           environment variables you list here. Remote (SSE) servers can be registered but cannot
-          be probed or called — external network access is disabled by default.
+          be probed, called, or read — external network access is disabled by default.
         </p>
         <form onSubmit={register}>
           <label htmlFor="mcp-name">Server name</label>
@@ -560,6 +892,17 @@ export function Mcp({ client, workspaceId }: { client: Client; workspaceId: stri
         callHistory={callHistory}
         callingKey={callingKey}
         onCallTool={callTool}
+        resourceLists={resourceLists}
+        resourceReads={resourceReads}
+        resourceErrors={resourceErrors}
+        promptLists={promptLists}
+        promptResults={promptResults}
+        promptErrors={promptErrors}
+        busyAction={busyAction}
+        onListResources={listResources}
+        onReadResource={readResource}
+        onListPrompts={listPrompts}
+        onGetPrompt={getPrompt}
       />
     </div>
   );

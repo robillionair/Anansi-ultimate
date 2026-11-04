@@ -247,3 +247,37 @@ export function recordToolCall(
 ): ToolCallHistoryEntry[] {
   return [entry, ...history].slice(0, 50);
 }
+
+// Prompt arguments are strings, unlike tool arguments which parse
+// typed fields. Missing required arguments and non-string values are
+// caller errors; empty strings are dropped by assembly, so a required
+// argument left empty is reported as missing by validation on the
+// assembled map.
+export function validatePromptArguments(
+  prompt: { arguments?: { name: string; required?: boolean | null }[] | null },
+  args: Record<string, string>,
+): string[] {
+  const errors: string[] = [];
+  for (const arg of prompt.arguments ?? []) {
+    const value = args[arg.name];
+    if (value === undefined) {
+      if (arg.required === true) errors.push(`Missing required argument: ${arg.name}`);
+      continue;
+    }
+    if (typeof value !== 'string') errors.push(`Argument '${arg.name}' must be a string.`);
+  }
+  for (const [name, value] of Object.entries(args)) {
+    if (typeof value !== 'string') errors.push(`Argument '${name}' must be a string.`);
+  }
+  return errors;
+}
+
+export function assemblePromptArguments(
+  values: Record<string, string>,
+): Record<string, string> {
+  const args: Record<string, string> = {};
+  for (const [name, value] of Object.entries(values)) {
+    if (value !== '') args[name] = value;
+  }
+  return args;
+}

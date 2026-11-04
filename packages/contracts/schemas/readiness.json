@@ -8260,6 +8260,287 @@
     "title": "McpPromptArgument",
     "type": "object"
   },
+  "McpPromptGetRequest": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "arguments": {
+        "additionalProperties": {
+          "type": "string"
+        },
+        "type": "object"
+      },
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "id": {
+        "type": "string"
+      },
+      "name": {
+        "type": "string"
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "workspaceId",
+      "id",
+      "name",
+      "arguments"
+    ],
+    "title": "McpPromptGetRequest",
+    "type": "object"
+  },
+  "McpPromptGetResult": {
+    "$defs": {
+      "McpPromptMessage": {
+        "properties": {
+          "content": {
+            "default": [],
+            "items": {
+              "$ref": "#/$defs/McpPromptMessageContent"
+            },
+            "type": "array"
+          },
+          "role": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "role"
+        ],
+        "type": "object"
+      },
+      "McpPromptMessageContent": {
+        "description": "One content part of a prompt message. Non-text parts (image,\nresource) map to `text: None` and render as a placeholder.",
+        "properties": {
+          "text": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "description": {
+        "default": null,
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "messages": {
+        "items": {
+          "$ref": "#/$defs/McpPromptMessage"
+        },
+        "type": "array"
+      },
+      "name": {
+        "type": "string"
+      },
+      "serverId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "serverId",
+      "name",
+      "messages"
+    ],
+    "title": "McpPromptGetResult",
+    "type": "object"
+  },
+  "McpPromptList": {
+    "$defs": {
+      "McpPrompt": {
+        "properties": {
+          "arguments": {
+            "default": [],
+            "items": {
+              "$ref": "#/$defs/McpPromptArgument"
+            },
+            "type": "array"
+          },
+          "description": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "McpPromptArgument": {
+        "properties": {
+          "description": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "required": {
+            "default": null,
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "prompts": {
+        "items": {
+          "$ref": "#/$defs/McpPrompt"
+        },
+        "type": "array"
+      },
+      "serverId": {
+        "type": "string"
+      },
+      "truncated": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "serverId",
+      "prompts",
+      "truncated"
+    ],
+    "title": "McpPromptList",
+    "type": "object"
+  },
+  "McpPromptMessage": {
+    "$defs": {
+      "McpPromptMessageContent": {
+        "description": "One content part of a prompt message. Non-text parts (image,\nresource) map to `text: None` and render as a placeholder.",
+        "properties": {
+          "text": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "content": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/McpPromptMessageContent"
+        },
+        "type": "array"
+      },
+      "role": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "role"
+    ],
+    "title": "McpPromptMessage",
+    "type": "object"
+  },
+  "McpPromptMessageContent": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "description": "One content part of a prompt message. Non-text parts (image,\nresource) map to `text: None` and render as a placeholder.",
+    "properties": {
+      "text": {
+        "default": null,
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "type": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "type"
+    ],
+    "title": "McpPromptMessageContent",
+    "type": "object"
+  },
+  "McpPromptsListRequest": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "id": {
+        "type": "string"
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "workspaceId",
+      "id"
+    ],
+    "title": "McpPromptsListRequest",
+    "type": "object"
+  },
   "McpRegisterRequest": {
     "$defs": {
       "McpServerDraft": {
@@ -8371,6 +8652,240 @@
       "removed"
     ],
     "title": "McpRemoveResult",
+    "type": "object"
+  },
+  "McpResource": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "description": "One resource offered by an external server. Content is never fetched\nby listing: only explicit `resources-read` calls retrieve it.",
+    "properties": {
+      "description": {
+        "default": null,
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "mimeType": {
+        "default": null,
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "name": {
+        "type": "string"
+      },
+      "uri": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "uri",
+      "name"
+    ],
+    "title": "McpResource",
+    "type": "object"
+  },
+  "McpResourceContent": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "description": "One content item of a read resource. Blob (binary) content maps to\n`text: None`: binary content is never decoded or displayed.",
+    "properties": {
+      "mimeType": {
+        "default": null,
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "text": {
+        "default": null,
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "uri": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "uri"
+    ],
+    "title": "McpResourceContent",
+    "type": "object"
+  },
+  "McpResourceList": {
+    "$defs": {
+      "McpResource": {
+        "description": "One resource offered by an external server. Content is never fetched\nby listing: only explicit `resources-read` calls retrieve it.",
+        "properties": {
+          "description": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "mimeType": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "uri": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "uri",
+          "name"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "resources": {
+        "items": {
+          "$ref": "#/$defs/McpResource"
+        },
+        "type": "array"
+      },
+      "serverId": {
+        "type": "string"
+      },
+      "truncated": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "serverId",
+      "resources",
+      "truncated"
+    ],
+    "title": "McpResourceList",
+    "type": "object"
+  },
+  "McpResourceReadRequest": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "id": {
+        "type": "string"
+      },
+      "uri": {
+        "type": "string"
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "workspaceId",
+      "id",
+      "uri"
+    ],
+    "title": "McpResourceReadRequest",
+    "type": "object"
+  },
+  "McpResourceReadResult": {
+    "$defs": {
+      "McpResourceContent": {
+        "description": "One content item of a read resource. Blob (binary) content maps to\n`text: None`: binary content is never decoded or displayed.",
+        "properties": {
+          "mimeType": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "text": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "uri": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "uri"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "contents": {
+        "items": {
+          "$ref": "#/$defs/McpResourceContent"
+        },
+        "type": "array"
+      },
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "serverId": {
+        "type": "string"
+      },
+      "uri": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "serverId",
+      "uri",
+      "contents"
+    ],
+    "title": "McpResourceReadResult",
+    "type": "object"
+  },
+  "McpResourcesListRequest": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "id": {
+        "type": "string"
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "workspaceId",
+      "id"
+    ],
+    "title": "McpResourcesListRequest",
     "type": "object"
   },
   "McpServer": {
