@@ -2219,6 +2219,7 @@ export interface McpServer {
  * Launch-time server configuration (a contract DTO; never carries a token).
  */
 export interface McpServerConfig {
+  authMethod: string;
   contractVersion: number;
   enabled: boolean;
   tools: string[];

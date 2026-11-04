@@ -64,13 +64,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     if mcp_server {
         // MCP server mode: read-only NDJSON stdio server, disabled by
-        // default. The token comes only from the environment (never a CLI
-        // argument, never logged); stdout carries protocol traffic only.
+        // default. Authentication is by live pairing token: the client
+        // must present the token of a currently running API pairing
+        // session (pairing files vanish when their session ends, so a
+        // token stops working when its session does). Stdout carries
+        // protocol traffic only; diagnostics go to stderr.
         let workspace_id = mcp_workspace_id.ok_or("Missing workspace id")?;
-        let token = std::env::var("ANANSI_MCP_SERVER_TOKEN")
-            .ok()
-            .filter(|t| !t.is_empty())
-            .ok_or("ANANSI_MCP_SERVER_TOKEN must be set to a non-empty value")?;
+        // The shared --pairing-root flag (or the host default when it is
+        // absent) is the pairing root the server validates against. An
+        // earlier revision of this branch added a second, unreachable
+        // --pairing-root arm that shadowed the flag; the server then
+        // silently fell back to the host default and validated against
+        // unrelated sessions. The flag is now the single source.
+        let pairing_root = root;
         let storage_root = std::env::var_os("ANANSI_STORAGE_ROOT")
             .map(PathBuf::from)
             .or_else(|| {
@@ -89,7 +95,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let backend = anansi_core::mcp_server::CoreMcpServerBackend::new(&core);
         let options = anansi_core::mcp_server::McpServerOptions {
             workspace_id,
-            token,
+            pairing_root,
         };
         eprintln!("ANANSI MCP server ready.");
         let mut stdin = std::io::stdin().lock();

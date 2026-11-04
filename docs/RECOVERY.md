@@ -1,3 +1,21 @@
+## Resume point — 2026-11-04 MCP Server Core Slice 3 REVISED to the fuller spec (Linux; Windows rerun pending; supersedes the earlier Slice 3 package)
+
+Owner-authorized revision on branch `muse/mcp-slice3-repair` from the
+Slice 3 delivery tip `98ac536fc`. The revised package reuses the
+filename `anansi-mcp-slice3-2026-11-04.zip` and supersedes the earlier
+file of that name (ZIP `d7c71f32…`). Five deltas, full detail in
+`docs/handoffs/mcp-slice3-repair-addendum.md`: server name
+`anansi-server`; `memory.search` kind filter; `projects.search` stage
+metadata via `derive_pipeline`; strict sealed-AND-private exposure
+boundary (only standard/public records served); pairing-token auth
+replacing the bespoke env token (shared `--pairing-root` flag; server
+refuses to start with no live session). In-repair incident: a duplicate
+unreachable `--pairing-root` parser arm silently discarded the flag and
+the server validated against orphaned October sessions in the host
+pairing root; caught by the e2e, arm removed, orphans deleted. Resume
+from the repair tip, not from the earlier Slice 3 tip, for any
+follow-up: the old env-token mechanism no longer exists.
+
 ## Resume point — 2026-11-04 MCP Server Core Slice 3 delivered (Linux; Windows rerun pending)
 
 Owner-authorized Milestone 13 slice on branch

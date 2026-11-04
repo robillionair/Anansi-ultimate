@@ -8434,6 +8434,9 @@
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "description": "Launch-time server configuration (a contract DTO; never carries a token).",
     "properties": {
+      "authMethod": {
+        "type": "string"
+      },
       "contractVersion": {
         "format": "uint8",
         "maximum": 255,
@@ -8457,7 +8460,8 @@
       "contractVersion",
       "enabled",
       "workspaceId",
-      "tools"
+      "tools",
+      "authMethod"
     ],
     "title": "McpServerConfig",
     "type": "object"

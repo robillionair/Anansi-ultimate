@@ -1,30 +1,39 @@
-//! MCP *server* side (MASTER_SPEC §68, Milestone 13, Slice 3).
+//! MCP *server* side (MASTER_SPEC §68, Milestone 13, Slice 3, as revised).
 //!
-//! The mirror image of the Slice 1/2 client: ANANSI itself answers MCP
-//! requests over NDJSON stdio, exposing exactly three approved read-only
-//! knowledge tools — `memory.search`, `memory.get`, `projects.search`.
-//! Everything else §68 lists as possible (`notes.search`, `products.get`,
-//! `experiments.list`, and the write tool `ideas.create`) is out of this
-//! slice; the allowlist below is the whole permission set, enforced in
-//! dispatch before any backend call.
+//! ANANSI itself answers MCP requests over NDJSON stdio, exposing exactly
+//! three approved read-only knowledge tools — `memory.search`, `memory.get`,
+//! `projects.search`. Everything else §68 lists as possible
+//! (`notes.search`, `products.get`, `experiments.list`, and the write tool
+//! `ideas.create`) is out of this slice; the allowlist below is the whole
+//! permission set, enforced in dispatch before any backend call.
 //!
 //! Security boundary, in three layers:
 //! 1. Disabled by default: the server runs only when the operator launches
-//!    `anansi-api --mcp-server` with a workspace id AND sets
-//!    `ANANSI_MCP_SERVER_TOKEN`. No flag, no server; flag without a token,
-//!    the process refuses to start.
-//! 2. Token gate: until a valid `initialize` presents the token (in
-//!    `params._meta.anansiMcpToken`, an ANANSI extension on MCP's sanctioned
-//!    `_meta` point — not part of the MCP spec), every request except
-//!    `initialize` is refused with `-32001`. The token is accepted only
-//!    from the environment, never from a CLI argument, and is never logged
-//!    or echoed.
-//! 3. Sealed boundary: the storage layer already excludes sealed rows from
-//!    lists and refuses sealed reads; this module additionally drops any
-//!    sealed hit from search results and refuses any sealed `get` result,
-//!    even if a backend ever returned one. A `get` on a missing id and on
-//!    a sealed id produce the identical `Memory not found.` result, so the
-//!    server is never an existence oracle for sealed records.
+//!    `anansi-api --mcp-server` with a workspace id and a pairing root.
+//!    No flag, no server.
+//! 2. Pairing-token gate: the client must present a bearer token in
+//!    `initialize` params (`_meta.anansiMcpToken`, an ANANSI extension on
+//!    MCP's sanctioned `_meta` point — not part of the MCP spec) that
+//!    matches a token in a LIVE pairing session file
+//!    (`<pairing-root>/session-*/pairing.json`, the same files the HTTP
+//!    API's session pairing writes). Pairing sessions delete their files
+//!    on shutdown, so a token stops working when its session ends, and a
+//!    session started after the server also works, because tokens are
+//!    re-read on every `initialize`. Until a valid `initialize` succeeds,
+//!    every request except `initialize` is refused with `-32001`. The
+//!    token is never logged or echoed. There is no separate server token:
+//!    the pairing token is the bearer token, so no second credential
+//!    inventory exists.
+//! 3. Strict exposure boundary: sealed AND private memories are never
+//!    exposed. The storage layer already excludes sealed rows from lists
+//!    and refuses sealed reads; this module additionally drops any search
+//!    hit whose privacy is sealed or private, and refuses any `get` result
+//!    whose privacy is sealed or private, even if a backend ever returned
+//!    one. Only memories explicitly marked standard or public leave the
+//!    process. A `get` on a missing, sealed, or private id produces the
+//!    identical `Memory not found.` result, so the server is never an
+//!    existence oracle for protected records. Stage derivation likewise
+//!    ignores sealed artifacts.
 //!
 //! The engine is transport-agnostic (`serve` over `BufRead`/`Write`) so unit
 //! tests drive it over in-memory buffers and the binary wires it to stdin /
@@ -32,10 +41,13 @@
 //! no sessions, no polling, no persistent connections. Search discovers
 //! titles and snippets only (the core's validated title-search path);
 //! `memory.get` is the only path that returns a body, and only for
-//! non-sealed plaintext records.
+//! standard/public records. `projects.search` additionally reports stage
+//! metadata derived with the same `derive_pipeline` the Dashboard mirrors.
 
 use std::collections::BTreeMap;
+use std::fs;
 use std::io::{BufRead, Write};
+use std::path::PathBuf;
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -43,11 +55,12 @@ use serde_json::{json, Value};
 
 use crate::lifecycle::MemoryState;
 use crate::memory::{MemoryDetails, MemoryList, MemoryMetadata};
+use crate::pipeline::{PipelineStatus, derive_pipeline};
 use crate::privacy::Privacy;
 use crate::readiness::{CommandError, ErrorCode};
 
-/// Server name reported in `initialize` responses.
-pub const SERVER_NAME: &str = "ANANSI";
+/// Server name reported in `initialize` responses, per the revised spec.
+pub const SERVER_NAME: &str = "anansi-server";
 /// Protocol revisions this server negotiates (the same two the Slice 1
 /// client negotiates). Anything else is a `-32602`.
 pub const SUPPORTED_PROTOCOL_VERSIONS: [&str; 2] = ["2025-11-25", "2026-07-28"];
@@ -58,7 +71,7 @@ pub const MAX_QUERY_CHARS: usize = 500;
 /// Default and maximum result limits.
 pub const DEFAULT_LIMIT: u32 = 10;
 pub const MAX_LIMIT: u32 = 50;
-/// Tool-level "not found" text, identical for missing and sealed ids.
+/// Tool-level "not found" text, identical for missing, sealed, and private ids.
 pub const NOT_FOUND_TEXT: &str = "Memory not found.";
 
 /// Capability surface exposed through the contracts (never carries a token).
@@ -112,23 +125,26 @@ pub struct McpServerConfig {
     pub enabled: bool,
     pub workspace_id: String,
     pub tools: Vec<String>,
+    pub auth_method: String,
 }
 
 /// Runtime options for `serve`. Distinct from the contract DTO above.
 #[derive(Debug, Clone)]
 pub struct McpServerOptions {
     pub workspace_id: String,
-    pub token: String,
+    pub pairing_root: PathBuf,
 }
 
 /// Data access behind the protocol engine. The server layer owns policy
-/// (sealed drops, active-project filtering, allowlist); backends own reads.
+/// (privacy drops, kind filter, active-project filtering, allowlist,
+/// stage derivation); backends own reads.
 pub trait McpServerBackend {
     fn search_memories(
         &self,
         workspace_id: &str,
         query: &str,
         limit: u32,
+        kind: Option<&str>,
     ) -> Result<Vec<MemoryMetadata>, CommandError>;
     fn read_memory(
         &self,
@@ -141,11 +157,17 @@ pub trait McpServerBackend {
         query: &str,
         limit: u32,
     ) -> Result<Vec<MemoryMetadata>, CommandError>;
+    fn project_artifact_types(
+        &self,
+        workspace_id: &str,
+        project_id: &str,
+    ) -> Result<Vec<String>, CommandError>;
 }
 
-/// Production backend: the same validated `Core::memory_command` entry the
-/// HTTP API uses, so the server inherits id/query validation and the
-/// storage layer's sealed handling instead of reimplementing them.
+/// Production backend: the same validated `Core::memory_command` /
+/// `Core::artifacts_command` entries the HTTP API uses, so the server
+/// inherits id/query validation and the storage layer's sealed handling
+/// instead of reimplementing them.
 pub struct CoreMcpServerBackend<'a> {
     core: &'a crate::Core,
 }
@@ -162,10 +184,11 @@ impl McpServerBackend for CoreMcpServerBackend<'_> {
         workspace_id: &str,
         query: &str,
         limit: u32,
+        kind: Option<&str>,
     ) -> Result<Vec<MemoryMetadata>, CommandError> {
         let value = self.core.memory_command(
             "list",
-            json!({"contractVersion": 1, "workspaceId": workspace_id, "query": query, "limit": limit}),
+            json!({"contractVersion": 1, "workspaceId": workspace_id, "query": query, "limit": limit, "kind": kind}),
         )?;
         let list: MemoryList = serde_json::from_value(value)
             .map_err(|_| CommandError::new(ErrorCode::StorageUnavailable, "Search failed."))?;
@@ -199,6 +222,32 @@ impl McpServerBackend for CoreMcpServerBackend<'_> {
             .map_err(|_| CommandError::new(ErrorCode::StorageUnavailable, "Search failed."))?;
         Ok(list.memories)
     }
+
+    fn project_artifact_types(
+        &self,
+        workspace_id: &str,
+        project_id: &str,
+    ) -> Result<Vec<String>, CommandError> {
+        let value = self.core.artifacts_command(
+            "list",
+            json!({"contractVersion": 1, "workspaceId": workspace_id, "projectId": project_id}),
+        )?;
+        let failed = || CommandError::new(ErrorCode::StorageUnavailable, "Search failed.");
+        let artifacts = value
+            .get("artifacts")
+            .and_then(|a| a.as_array())
+            .ok_or_else(failed)?;
+        Ok(artifacts
+            .iter()
+            .filter_map(|a| {
+                // Sealed artifacts never contribute to stage metadata.
+                if a.get("privacy").and_then(|p| p.as_str()) == Some("sealed") {
+                    return None;
+                }
+                a.get("type").and_then(|t| t.as_str()).map(|t| t.to_string())
+            })
+            .collect())
+    }
 }
 
 /// The three approved tools, in `tools/list` order.
@@ -223,7 +272,7 @@ pub fn server_info() -> McpServerInfo {
     }
 }
 
-fn query_limit_schema() -> (BTreeMap<String, McpSchemaProperty>, Vec<String>) {
+fn search_schema(with_kind: bool) -> (BTreeMap<String, McpSchemaProperty>, Vec<String>) {
     let mut properties = BTreeMap::new();
     properties.insert(
         "query".to_string(),
@@ -243,12 +292,23 @@ fn query_limit_schema() -> (BTreeMap<String, McpSchemaProperty>, Vec<String>) {
             maximum: Some(MAX_LIMIT),
         },
     );
+    if with_kind {
+        properties.insert(
+            "kind".to_string(),
+            McpSchemaProperty {
+                property_type: "string".to_string(),
+                description: Some("Only memories of this kind.".to_string()),
+                minimum: None,
+                maximum: None,
+            },
+        );
+    }
     (properties, vec!["query".to_string()])
 }
 
 pub fn tool_definitions() -> Vec<McpServerToolDef> {
-    let (search_properties, search_required) = query_limit_schema();
-    let (project_properties, project_required) = query_limit_schema();
+    let (search_properties, search_required) = search_schema(true);
+    let (project_properties, project_required) = search_schema(false);
     let mut id_properties = BTreeMap::new();
     id_properties.insert(
         "id".to_string(),
@@ -262,7 +322,7 @@ pub fn tool_definitions() -> Vec<McpServerToolDef> {
     vec![
         McpServerToolDef {
             name: "memory.search".to_string(),
-            description: "Search workspace memory titles and snippets.".to_string(),
+            description: "Search shareable (standard or public) workspace memory titles and snippets, optionally filtered by kind.".to_string(),
             input_schema: McpToolInputSchema {
                 schema_type: "object".to_string(),
                 properties: search_properties,
@@ -271,7 +331,7 @@ pub fn tool_definitions() -> Vec<McpServerToolDef> {
         },
         McpServerToolDef {
             name: "memory.get".to_string(),
-            description: "Retrieve one non-sealed memory by ID, including its body.".to_string(),
+            description: "Retrieve one shareable (standard or public) memory by ID, including its body.".to_string(),
             input_schema: McpToolInputSchema {
                 schema_type: "object".to_string(),
                 properties: id_properties,
@@ -280,7 +340,7 @@ pub fn tool_definitions() -> Vec<McpServerToolDef> {
         },
         McpServerToolDef {
             name: "projects.search".to_string(),
-            description: "Search active project titles and summaries.".to_string(),
+            description: "Search active shareable project titles, summaries, and stage metadata.".to_string(),
             input_schema: McpToolInputSchema {
                 schema_type: "object".to_string(),
                 properties: project_properties,
@@ -302,6 +362,41 @@ fn tokens_equal(a: &str, b: &str) -> bool {
         diff |= a[i] ^ b[i];
     }
     diff == 0
+}
+
+/// Tokens of currently live pairing sessions: every
+/// `<pairing-root>/session-*/pairing.json` token. Unreadable or malformed
+/// files are skipped, never fatal — a session that cannot be read cannot
+/// authenticate, and an empty result means no live session at all.
+pub fn live_pairing_tokens(pairing_root: &std::path::Path) -> Vec<String> {
+    let mut tokens = Vec::new();
+    let Ok(entries) = fs::read_dir(pairing_root) else {
+        return tokens;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let Some(name) = name.to_str() else {
+            continue;
+        };
+        if !name.starts_with("session-") {
+            continue;
+        }
+        let Ok(text) = fs::read_to_string(entry.path().join("pairing.json")) else {
+            continue;
+        };
+        if let Ok(value) = serde_json::from_str::<Value>(&text) {
+            if let Some(token) = value.get("token").and_then(|t| t.as_str()) {
+                tokens.push(token.to_string());
+            }
+        }
+    }
+    tokens
+}
+
+/// A memory is shareable through the server only when explicitly marked
+/// standard or public. Sealed and private records never leave the process.
+fn is_shareable(privacy: Privacy) -> bool {
+    matches!(privacy, Privacy::Standard | Privacy::Public)
 }
 
 fn error_response(id: &Value, code: i64, message: &str) -> Value {
@@ -347,6 +442,17 @@ fn parse_query(arguments: &Value) -> Result<(String, u32), (i64, String)> {
     Ok((query.to_string(), limit))
 }
 
+fn parse_kind(arguments: &Value) -> Result<Option<String>, (i64, String)> {
+    let Some(kind) = arguments.get("kind") else {
+        return Ok(None);
+    };
+    let kind = kind
+        .as_str()
+        .filter(|k| crate::entities::is_valid_kind(k))
+        .ok_or_else(|| invalid("kind must be a supported memory kind."))?;
+    Ok(Some(kind.to_string()))
+}
+
 fn parse_id(arguments: &Value) -> Result<String, (i64, String)> {
     let id = arguments
         .get("id")
@@ -371,8 +477,32 @@ fn is_active_project(status: MemoryState) -> bool {
     !matches!(status, MemoryState::Superseded | MemoryState::Archived)
 }
 
+fn stage_metadata(artifact_types: &[String]) -> Value {
+    let refs: Vec<&str> = artifact_types.iter().map(|t| t.as_str()).collect();
+    let derivation = derive_pipeline(&refs);
+    let stages: Vec<Value> = derivation
+        .stages
+        .iter()
+        .map(|s| {
+            let status = match s.status {
+                PipelineStatus::Complete => "complete",
+                PipelineStatus::Current => "current",
+                PipelineStatus::Available => "available",
+                PipelineStatus::Awaiting => "awaiting",
+            };
+            json!({"id": s.stage.id(), "label": s.stage.label(), "status": status})
+        })
+        .collect();
+    json!({
+        "stage": derivation.current.map(|s| s.id()),
+        "stageLabel": derivation.current.map(|s| s.label()),
+        "stages": stages,
+    })
+}
+
 /// Run the server loop until stdin closes. Returns Ok on clean EOF; a
-/// malformed workspace id or empty token fails before reading anything.
+/// malformed workspace id or a pairing root with no live session fails
+/// before reading anything.
 pub fn serve<B: McpServerBackend>(
     reader: &mut impl BufRead,
     writer: &mut impl Write,
@@ -382,10 +512,10 @@ pub fn serve<B: McpServerBackend>(
     crate::workspace::validate_id(&options.workspace_id).map_err(|_| {
         CommandError::new(ErrorCode::InvalidWorkspace, "Invalid workspace id.")
     })?;
-    if options.token.is_empty() {
+    if live_pairing_tokens(&options.pairing_root).is_empty() {
         return Err(CommandError::new(
             ErrorCode::InvalidRequest,
-            "MCP server token must not be empty.",
+            "MCP server requires a live pairing session.",
         ));
     }
     let mut authenticated = false;
@@ -466,7 +596,6 @@ fn write_value(writer: &mut impl Write, value: &Value) -> Result<(), CommandErro
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
 fn handle_request<B: McpServerBackend>(
     method: &str,
     params: &Value,
@@ -483,16 +612,19 @@ fn handle_request<B: McpServerBackend>(
         if !SUPPORTED_PROTOCOL_VERSIONS.contains(&version) {
             return error_response(id, -32602, "Unsupported protocol version.");
         }
-        let token = params
+        let presented = params
             .get("_meta")
             .and_then(|m| m.get("anansiMcpToken"))
             .and_then(|v| v.as_str())
             .unwrap_or("");
-        if !tokens_equal(token, &options.token) {
+        // Tokens are re-read on every initialize: a session started after
+        // the server works, and an ended session's token stops working.
+        let live = live_pairing_tokens(&options.pairing_root);
+        if !live.iter().any(|t| tokens_equal(presented, t)) {
             return error_response(
                 id,
                 -32001,
-                "Unauthorized: invalid or missing MCP server token.",
+                "Unauthorized: invalid or missing pairing token.",
             );
         }
         *authenticated = true;
@@ -510,7 +642,7 @@ fn handle_request<B: McpServerBackend>(
         return error_response(
             id,
             -32001,
-            "Unauthorized: initialize with a valid token first.",
+            "Unauthorized: initialize with a valid pairing token first.",
         );
     }
     match method {
@@ -569,23 +701,47 @@ fn call_search<B: McpServerBackend>(
     projects_only: bool,
 ) -> Result<Value, (i64, String)> {
     let (query, limit) = parse_query(arguments)?;
+    let kind = if projects_only {
+        None
+    } else {
+        parse_kind(arguments)?
+    };
     let hits = if projects_only {
         backend.search_projects(&options.workspace_id, &query, limit)
     } else {
-        backend.search_memories(&options.workspace_id, &query, limit)
+        backend.search_memories(&options.workspace_id, &query, limit, kind.as_deref())
     }
     .map_err(|_| (-32603, "Tool execution failed.".to_string()))?;
     let mut rendered = Vec::new();
     for meta in &hits {
-        // Layer 3 of the sealed boundary: never emit a sealed row, even if
-        // a backend returned one.
-        if meta.privacy == Privacy::Sealed {
+        // Strict exposure boundary: sealed AND private rows never leave
+        // the process, even if a backend returned them.
+        if !is_shareable(meta.privacy) {
             continue;
         }
-        if projects_only && !is_active_project(meta.status) {
-            continue;
+        if projects_only {
+            if !is_active_project(meta.status) {
+                continue;
+            }
+            let types = backend
+                .project_artifact_types(&options.workspace_id, &meta.id)
+                .map_err(|_| (-32603, "Tool execution failed.".to_string()))?;
+            let mut hit = search_hit(meta);
+            let stage = stage_metadata(&types);
+            hit["stage"] = stage["stage"].clone();
+            hit["stageLabel"] = stage["stageLabel"].clone();
+            hit["stages"] = stage["stages"].clone();
+            rendered.push(hit);
+        } else {
+            // Kind is enforced here as well as in the backend, so the
+            // filter holds even if a backend ignores it.
+            if let Some(kind) = &kind {
+                if meta.kind != *kind {
+                    continue;
+                }
+            }
+            rendered.push(search_hit(meta));
         }
-        rendered.push(search_hit(meta));
     }
     let array = Value::Array(rendered);
     Ok(tool_result(
@@ -602,9 +758,10 @@ fn call_get<B: McpServerBackend>(
 ) -> Result<Value, (i64, String)> {
     let id = parse_id(arguments)?;
     let found = backend.read_memory(&options.workspace_id, &id);
-    // Missing and sealed produce the identical result: no existence oracle.
+    // Missing, sealed, and private produce the identical result: no
+    // existence oracle for protected records.
     let details = match found {
-        Ok(details) if details.memory.privacy != Privacy::Sealed => details,
+        Ok(details) if is_shareable(details.memory.privacy) => details,
         _ => {
             let text = NOT_FOUND_TEXT;
             return Ok(tool_result(
@@ -637,14 +794,28 @@ mod tests {
     use std::cell::RefCell;
     use std::io::Cursor;
 
-    const TOKEN: &str = "slice3-test-token";
+    const TOKEN: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
     const WORKSPACE: &str = "0123456789abcdef0123456789abcdef";
 
-    fn options() -> McpServerOptions {
-        McpServerOptions {
-            workspace_id: WORKSPACE.to_string(),
-            token: TOKEN.to_string(),
-        }
+    /// A pairing root containing one live session with TOKEN. The caller
+    /// keeps the tempdir alive for the duration of the test.
+    fn paired_root() -> (tempfile::TempDir, McpServerOptions) {
+        let temp = tempfile::tempdir().unwrap();
+        let dir = temp.path().join("session-test");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(
+            dir.join("pairing.json"),
+            json!({"endpoint": "http://127.0.0.1:1451", "token": TOKEN, "contractVersion": 1}).to_string(),
+        )
+        .unwrap();
+        let root = temp.path().to_path_buf();
+        (
+            temp,
+            McpServerOptions {
+                workspace_id: WORKSPACE.to_string(),
+                pairing_root: root,
+            },
+        )
     }
 
     fn meta(id: &str, title: &str, kind: &str, status: MemoryState, privacy: Privacy) -> MemoryMetadata {
@@ -701,7 +872,10 @@ mod tests {
             _workspace_id: &str,
             query: &str,
             _limit: u32,
+            _kind: Option<&str>,
         ) -> Result<Vec<MemoryMetadata>, CommandError> {
+            // Deliberately ignores `kind`: the server-side filter is what
+            // the tests assert.
             self.calls.borrow_mut().push("search".to_string());
             if query == "sealed-only" {
                 return Ok(vec![meta(
@@ -712,13 +886,29 @@ mod tests {
                     Privacy::Sealed,
                 )]);
             }
-            Ok(vec![meta(
-                "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-                "Visible note",
-                "note",
-                MemoryState::Durable,
-                Privacy::Private,
-            )])
+            Ok(vec![
+                meta(
+                    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "Visible note",
+                    "note",
+                    MemoryState::Durable,
+                    Privacy::Standard,
+                ),
+                meta(
+                    "cccccccccccccccccccccccccccccccc",
+                    "Private note",
+                    "note",
+                    MemoryState::Durable,
+                    Privacy::Private,
+                ),
+                meta(
+                    "dddddddddddddddddddddddddddddddd",
+                    "Task record",
+                    "task",
+                    MemoryState::Durable,
+                    Privacy::Standard,
+                ),
+            ])
         }
 
         fn read_memory(
@@ -727,33 +917,17 @@ mod tests {
             id: &str,
         ) -> Result<MemoryDetails, CommandError> {
             self.calls.borrow_mut().push("get".to_string());
-            if id == "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" {
-                return Ok(MemoryDetails {
-                    contract_version: 1,
-                    memory: meta(
-                        id,
-                        "Sealed note",
-                        "note",
-                        MemoryState::Durable,
-                        Privacy::Sealed,
-                    ),
-                    body: "secret body".to_string(),
-                });
-            }
-            if id == "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" {
-                return Ok(MemoryDetails {
-                    contract_version: 1,
-                    memory: meta(
-                        id,
-                        "Visible note",
-                        "note",
-                        MemoryState::Durable,
-                        Privacy::Private,
-                    ),
-                    body: "visible body".to_string(),
-                });
-            }
-            Err(CommandError::new(ErrorCode::NotFound, "missing"))
+            let (title, privacy, body) = match id {
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" => ("Sealed note", Privacy::Sealed, "secret body"),
+                "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" => ("Visible note", Privacy::Standard, "visible body"),
+                "cccccccccccccccccccccccccccccccc" => ("Private note", Privacy::Private, "private body"),
+                _ => return Err(CommandError::new(ErrorCode::NotFound, "missing")),
+            };
+            Ok(MemoryDetails {
+                contract_version: 1,
+                memory: meta(id, title, "note", MemoryState::Durable, privacy),
+                body: body.to_string(),
+            })
         }
 
         fn search_projects(
@@ -765,35 +939,59 @@ mod tests {
             self.calls.borrow_mut().push("projects".to_string());
             Ok(vec![
                 meta(
-                    "cccccccccccccccccccccccccccccccc",
+                    "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
                     "Active project",
+                    "project",
+                    MemoryState::Durable,
+                    Privacy::Standard,
+                ),
+                meta(
+                    "ffffffffffffffffffffffffffffffff",
+                    "Private project",
                     "project",
                     MemoryState::Durable,
                     Privacy::Private,
                 ),
                 meta(
-                    "dddddddddddddddddddddddddddddddd",
+                    "11111111111111111111111111111111",
                     "Old project",
                     "project",
                     MemoryState::Superseded,
-                    Privacy::Private,
+                    Privacy::Standard,
                 ),
                 meta(
-                    "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                    "22222222222222222222222222222222",
                     "Archived project",
                     "project",
                     MemoryState::Archived,
-                    Privacy::Private,
+                    Privacy::Standard,
                 ),
             ])
+        }
+
+        fn project_artifact_types(
+            &self,
+            _workspace_id: &str,
+            project_id: &str,
+        ) -> Result<Vec<String>, CommandError> {
+            self.calls
+                .borrow_mut()
+                .push(format!("artifact_types:{project_id}"));
+            // Only the active project carries a concept: its pipeline
+            // current stage is Build.
+            if project_id == "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee" {
+                Ok(vec!["concept".to_string()])
+            } else {
+                Ok(vec![])
+            }
         }
     }
 
     /// Drive `serve` over one scripted input and return parsed output lines.
-    fn run(input: &str, backend: &FakeBackend) -> Vec<Value> {
+    fn run(input: &str, backend: &FakeBackend, options: &McpServerOptions) -> Vec<Value> {
         let mut reader = Cursor::new(input.as_bytes().to_vec());
         let mut out: Vec<u8> = vec![];
-        serve(&mut reader, &mut out, backend, &options()).unwrap();
+        serve(&mut reader, &mut out, backend, options).unwrap();
         String::from_utf8(out)
             .unwrap()
             .lines()
@@ -815,19 +1013,21 @@ mod tests {
     }
 
     #[test]
-    fn handshake_accepts_both_protocol_versions() {
+    fn handshake_accepts_both_protocol_versions_and_reports_revised_name() {
         for version in SUPPORTED_PROTOCOL_VERSIONS {
+            let (_temp, options) = paired_root();
             let backend = FakeBackend::new();
-            let out = run(&format!("{}\n", initialize(version, Some(TOKEN))), &backend);
+            let out = run(&format!("{}\n", initialize(version, Some(TOKEN))), &backend, &options);
             assert_eq!(out.len(), 1);
             assert_eq!(out[0]["result"]["protocolVersion"], version);
-            assert_eq!(out[0]["result"]["serverInfo"]["name"], "ANANSI");
+            assert_eq!(out[0]["result"]["serverInfo"]["name"], "anansi-server");
             assert!(out[0]["result"]["capabilities"]["tools"].is_object());
         }
     }
 
     #[test]
     fn handshake_rejects_unsupported_and_missing_versions() {
+        let (_temp, options) = paired_root();
         let backend = FakeBackend::new();
         let out = run(
             &format!(
@@ -836,6 +1036,7 @@ mod tests {
                 json!({"jsonrpc": "2.0", "id": 2, "method": "initialize", "params": {"capabilities": {}, "clientInfo": {}}}),
             ),
             &backend,
+            &options,
         );
         assert_eq!(out.len(), 2);
         assert_eq!(out[0]["error"]["code"], -32602);
@@ -843,17 +1044,19 @@ mod tests {
     }
 
     #[test]
-    fn auth_gate_refuses_then_accepts() {
+    fn pairing_gate_refuses_then_accepts() {
+        let (_temp, options) = paired_root();
         let backend = FakeBackend::new();
         let out = run(
             &format!(
                 "{}\n{}\n{}\n{}\n",
                 json!({"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}}),
-                initialize("2025-11-25", Some("wrong-token")),
+                initialize("2025-11-25", Some("0000000000000000000000000000000000000000000000000000000000000000")),
                 initialize("2025-11-25", None),
                 initialize("2025-11-25", Some(TOKEN)),
             ),
             &backend,
+            &options,
         );
         assert_eq!(out.len(), 4);
         assert_eq!(out[0]["error"]["code"], -32001);
@@ -864,12 +1067,14 @@ mod tests {
 
     #[test]
     fn tools_list_returns_exactly_three_tools() {
+        let (_temp, options) = paired_root();
         let backend = FakeBackend::new();
         let out = run(
             &authed_script(
                 &json!({"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}}).to_string(),
             ),
             &backend,
+            &options,
         );
         let names: Vec<&str> = out[1]["result"]["tools"]
             .as_array()
@@ -881,42 +1086,72 @@ mod tests {
     }
 
     #[test]
-    fn tool_calls_cover_all_three_tools() {
+    fn tool_calls_cover_all_three_tools_with_kind_and_stage() {
+        let (_temp, options) = paired_root();
         let backend = FakeBackend::new();
         let script = authed_script(&format!(
-            "{}\n{}\n{}",
+            "{}\n{}\n{}\n{}\n",
             json!({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "memory.search", "arguments": {"query": "visible"}}}),
-            json!({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "memory.get", "arguments": {"id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}}}),
-            json!({"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {"name": "projects.search", "arguments": {"query": "project"}}}),
+            json!({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "memory.search", "arguments": {"query": "visible", "kind": "task"}}}),
+            json!({"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {"name": "memory.get", "arguments": {"id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}}}),
+            json!({"jsonrpc": "2.0", "id": 5, "method": "tools/call", "params": {"name": "projects.search", "arguments": {"query": "project"}}}),
         ));
-        let out = run(&script, &backend);
-        assert_eq!(out.len(), 4);
+        let out = run(&script, &backend, &options);
+        assert_eq!(out.len(), 5);
+        // Unfiltered search: the private note is dropped, the standard
+        // note and task remain.
         let search = &out[1]["result"];
         assert_eq!(search["isError"], false);
-        assert!(search["content"][0]["text"]
-            .as_str()
-            .unwrap()
-            .contains("Visible note"));
-        let get = &out[2]["result"];
-        assert_eq!(get["structuredContent"]["body"], "visible body");
-        let projects = &out[3]["result"];
-        let titles: Vec<&str> = projects["structuredContent"]
+        let titles: Vec<&str> = search["structuredContent"]
             .as_array()
             .unwrap()
             .iter()
-            .map(|p| p["title"].as_str().unwrap())
+            .map(|h| h["title"].as_str().unwrap())
             .collect();
-        assert_eq!(titles, vec!["Active project"]);
+        assert_eq!(titles, vec!["Visible note", "Task record"]);
+        // Kind filter is enforced server-side even though the fake
+        // backend ignores it.
+        let filtered = &out[2]["result"]["structuredContent"];
+        let titles: Vec<&str> = filtered
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|h| h["title"].as_str().unwrap())
+            .collect();
+        assert_eq!(titles, vec!["Task record"]);
+        let get = &out[3]["result"];
+        assert_eq!(get["structuredContent"]["body"], "visible body");
+        let projects = &out[4]["result"];
+        let hits = projects["structuredContent"].as_array().unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0]["title"], "Active project");
+        assert_eq!(hits[0]["stage"], "build");
+        assert_eq!(hits[0]["stageLabel"], "Build");
+        assert_eq!(hits[0]["stages"].as_array().unwrap().len(), 7);
+        // Stage lookup ran only for the surviving active project.
+        let artifact_calls: Vec<String> = backend
+            .calls
+            .borrow()
+            .iter()
+            .filter(|c| c.starts_with("artifact_types:"))
+            .cloned()
+            .collect();
+        assert_eq!(
+            artifact_calls,
+            vec!["artifact_types:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"]
+        );
     }
 
     #[test]
     fn unknown_tool_refused_without_backend_call() {
+        let (_temp, options) = paired_root();
         let backend = FakeBackend::new();
         let out = run(
             &authed_script(
                 &json!({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "ideas.create", "arguments": {}}}).to_string(),
             ),
             &backend,
+            &options,
         );
         assert_eq!(out[1]["error"]["code"], -32602);
         assert!(backend.calls.borrow().is_empty());
@@ -924,6 +1159,7 @@ mod tests {
 
     #[test]
     fn malformed_unknown_and_notification_handling() {
+        let (_temp, options) = paired_root();
         let backend = FakeBackend::new();
         let out = run(
             &format!(
@@ -933,10 +1169,11 @@ mod tests {
                 json!({"jsonrpc": "2.0", "id": 2, "method": "ping", "params": {}}),
             ),
             &backend,
+            &options,
         );
-        // Malformed line -> -32700; unknown method -> -32601 even before
-        // auth (method dispatch happens after the auth check, so the
-        // unknown method here is refused as unauthorized first).
+        // Malformed line -> -32700; anything before auth -> -32001
+        // (auth is checked before method dispatch, so no method
+        // inventory leaks to unauthenticated clients).
         assert_eq!(out.len(), 3);
         assert_eq!(out[0]["error"]["code"], -32700);
         assert_eq!(out[0]["id"], Value::Null);
@@ -946,18 +1183,21 @@ mod tests {
 
     #[test]
     fn ping_after_auth_returns_empty_result() {
+        let (_temp, options) = paired_root();
         let backend = FakeBackend::new();
         let out = run(
             &authed_script(
                 &json!({"jsonrpc": "2.0", "id": 2, "method": "ping", "params": {}}).to_string(),
             ),
             &backend,
+            &options,
         );
         assert_eq!(out[1]["result"], json!({}));
     }
 
     #[test]
     fn invalid_tool_arguments_rejected() {
+        let (_temp, options) = paired_root();
         let backend = FakeBackend::new();
         let cases = [
             json!({"name": "memory.search", "arguments": {}}),
@@ -966,6 +1206,7 @@ mod tests {
             json!({"name": "memory.search", "arguments": {"query": "x", "limit": 0}}),
             json!({"name": "memory.search", "arguments": {"query": "x", "limit": 51}}),
             json!({"name": "memory.search", "arguments": {"query": "x", "limit": 1.5}}),
+            json!({"name": "memory.search", "arguments": {"query": "x", "kind": "bogus"}}),
             json!({"name": "memory.search", "arguments": "not-an-object"}),
             json!({"name": "memory.get", "arguments": {"id": "not-hex"}}),
             json!({"name": "memory.get", "arguments": {}}),
@@ -978,7 +1219,7 @@ mod tests {
             );
         }
         script.push('\n');
-        let out = run(&script, &backend);
+        let out = run(&script, &backend, &options);
         assert_eq!(out.len(), 1 + cases.len());
         for response in &out[1..] {
             assert_eq!(response["error"]["code"], -32602);
@@ -987,40 +1228,50 @@ mod tests {
     }
 
     #[test]
-    fn sealed_rows_never_leak_and_get_matches_missing() {
+    fn sealed_and_private_rows_never_leak_and_get_matches_missing() {
+        let (_temp, options) = paired_root();
         let backend = FakeBackend::new();
         let script = authed_script(&format!(
-            "{}\n{}\n{}\n",
+            "{}\n{}\n{}\n{}\n",
             json!({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "memory.search", "arguments": {"query": "sealed-only"}}}),
             json!({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "memory.get", "arguments": {"id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}}),
-            json!({"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {"name": "memory.get", "arguments": {"id": "ffffffffffffffffffffffffffffffff"}}}),
+            json!({"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {"name": "memory.get", "arguments": {"id": "cccccccccccccccccccccccccccccccc"}}}),
+            json!({"jsonrpc": "2.0", "id": 5, "method": "tools/call", "params": {"name": "memory.get", "arguments": {"id": "ffffffffffffffffffffffffffffffff"}}}),
         ));
-        let out = run(&script, &backend);
+        let out = run(&script, &backend, &options);
         assert_eq!(out[1]["result"]["structuredContent"], json!([]));
         assert_eq!(out[2]["result"]["isError"], true);
         assert_eq!(out[2]["result"]["content"][0]["text"], NOT_FOUND_TEXT);
         assert_eq!(out[3]["result"], out[2]["result"]);
+        assert_eq!(out[4]["result"], out[2]["result"]);
     }
 
     #[test]
-    fn serve_rejects_bad_workspace_and_empty_token_before_reading() {
+    fn serve_rejects_bad_workspace_and_pairing_without_live_session() {
         let backend = FakeBackend::new();
         let mut reader = Cursor::new(b"{}\n".to_vec());
         let mut out: Vec<u8> = vec![];
+        let (_temp, good) = paired_root();
         let bad = McpServerOptions {
             workspace_id: "not-a-workspace".to_string(),
-            token: TOKEN.to_string(),
+            pairing_root: good.pairing_root.clone(),
         };
         assert!(serve(&mut reader, &mut out, &backend, &bad).is_err());
+        let empty_temp = tempfile::tempdir().unwrap();
         let empty = McpServerOptions {
             workspace_id: WORKSPACE.to_string(),
-            token: String::new(),
+            pairing_root: empty_temp.path().to_path_buf(),
         };
         assert!(serve(&mut reader, &mut out, &backend, &empty).is_err());
+        let missing = McpServerOptions {
+            workspace_id: WORKSPACE.to_string(),
+            pairing_root: empty_temp.path().join("does-not-exist"),
+        };
+        assert!(serve(&mut reader, &mut out, &backend, &missing).is_err());
     }
 
     #[test]
-    fn component_real_backend_round_trip() {
+    fn component_real_backend_round_trip_with_strict_privacy() {
         let temp = tempfile::tempdir().unwrap();
         let core = crate::Core::with_storage_root(temp.path().join("storage"));
         let workspace = core
@@ -1032,26 +1283,32 @@ mod tests {
         let created = core
             .memory_command(
                 "create",
-                json!({"contractVersion": 1, "workspaceId": workspace, "kind": "note", "draft": {"title": "Component note", "body": "Component body."}}),
+                json!({"contractVersion": 1, "workspaceId": workspace, "kind": "note", "draft": {"title": "Component note", "body": "Component body.", "privacy": "standard"}}),
             )
             .unwrap();
         let note_id = created["memory"]["id"].as_str().unwrap().to_string();
+        let private = core
+            .memory_command(
+                "create",
+                json!({"contractVersion": 1, "workspaceId": workspace, "kind": "note", "draft": {"title": "Component private note", "body": "Private body.", "privacy": "private"}}),
+            )
+            .unwrap();
+        let private_id = private["memory"]["id"].as_str().unwrap().to_string();
         core.memory_command(
             "create",
-            json!({"contractVersion": 1, "workspaceId": workspace, "kind": "project", "draft": {"title": "Component project", "body": "Project body."}}),
+            json!({"contractVersion": 1, "workspaceId": workspace, "kind": "project", "draft": {"title": "Component project", "body": "Project body.", "privacy": "standard"}}),
         )
         .unwrap();
         let backend = CoreMcpServerBackend::new(&core);
-        let options = McpServerOptions {
-            workspace_id: workspace.clone(),
-            token: TOKEN.to_string(),
-        };
+        let (_pairing_temp, mut options) = paired_root();
+        options.workspace_id = workspace.clone();
         let script = format!(
-            "{}\n{}\n{}\n{}\n",
+            "{}\n{}\n{}\n{}\n{}\n",
             initialize("2026-07-28", Some(TOKEN)),
             json!({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "memory.search", "arguments": {"query": "Component"}}}),
             json!({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "memory.get", "arguments": {"id": note_id}}}),
-            json!({"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {"name": "projects.search", "arguments": {"query": "Component"}}}),
+            json!({"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {"name": "memory.get", "arguments": {"id": private_id}}}),
+            json!({"jsonrpc": "2.0", "id": 5, "method": "tools/call", "params": {"name": "projects.search", "arguments": {"query": "Component"}}}),
         );
         let mut reader = Cursor::new(script.into_bytes());
         let mut out: Vec<u8> = vec![];
@@ -1061,20 +1318,29 @@ mod tests {
             .lines()
             .map(|l| serde_json::from_str(l).unwrap())
             .collect();
-        assert_eq!(lines.len(), 4);
+        assert_eq!(lines.len(), 5);
         assert_eq!(lines[0]["result"]["protocolVersion"], "2026-07-28");
         let search = &lines[1]["result"]["structuredContent"];
-        assert!(search
+        let titles: Vec<&str> = search
             .as_array()
             .unwrap()
             .iter()
-            .any(|h| h["title"] == "Component note"));
+            .map(|h| h["title"].as_str().unwrap())
+            .collect();
+        assert!(titles.contains(&"Component note"));
+        assert!(titles.contains(&"Component project"));
+        assert!(!titles.contains(&"Component private note"));
         assert_eq!(lines[2]["result"]["structuredContent"]["body"], "Component body.");
-        let projects = &lines[3]["result"]["structuredContent"];
-        assert!(projects
+        assert_eq!(lines[3]["result"]["isError"], true);
+        assert_eq!(lines[3]["result"]["content"][0]["text"], NOT_FOUND_TEXT);
+        let projects = &lines[4]["result"]["structuredContent"];
+        let project = projects
             .as_array()
             .unwrap()
             .iter()
-            .any(|p| p["title"] == "Component project"));
+            .find(|p| p["title"] == "Component project")
+            .unwrap();
+        assert_eq!(project["stage"], "discover");
+        assert_eq!(project["stages"].as_array().unwrap().len(), 7);
     }
 }
