@@ -21,6 +21,7 @@ import {
   registerDisposer,
   disposerCount,
 } from '../src/larp-mode/store.ts';
+import { summarizeTelemetry, TelemetryReadout } from '../src/larp-mode/TelemetryReadout.tsx';
 import { createFrameScheduler } from '../src/larp-mode/frameScheduler.ts';
 import {
   AnansiTelemetryStream,
@@ -124,7 +125,7 @@ class FakeRaf {
   }
 }
 
-test('scheduler ticks every frame while active, throttles when idle, halts when hidden or stopped', () => {
+test('scheduler caps high-refresh displays at 60, idles at 24, and halts hidden or stopped', () => {
   const raf = new FakeRaf();
   let ticks = 0;
   const scheduler = createFrameScheduler(
@@ -135,8 +136,8 @@ test('scheduler ticks every frame while active, throttles when idle, halts when 
   );
   scheduler.start();
   assert.equal(scheduler.fps(), 60);
-  for (let t = 0; t < 160; t += 16) raf.flush(t);
-  assert.equal(ticks, 10);
+  for (let t = 0; t < 1000; t += 1) raf.flush(t);
+  assert.ok(ticks >= 58 && ticks <= 60, `expected capped 60 active ticks, got ${ticks}`);
   // Idle: jump past the 5 s threshold, then step 1 ms at a time.
   raf.nowMs = 6000;
   assert.equal(scheduler.fps(), 24);
@@ -271,4 +272,66 @@ test('matrix and delta widgets render their shells', () => {
   assert.ok(matrix.includes('Pinned Rules'));
   const delta = renderToStaticMarkup(<TokenDeltaStream events={[]} />);
   assert.ok(delta.includes('Token Compression Delta Stream'));
+});
+
+
+test('cinematic readout reports unknown, estimated and negative savings honestly', () => {
+  const empty=summarizeTelemetry([]);
+  assert.equal(empty.input,null);
+  assert.equal(empty.latency,null);
+  assert.equal(empty.drift,null);
+  assert.equal(empty.nodes.length,0);
+  const html=renderToStaticMarkup(<TelemetryReadout events={[]}/>);
+  assert.ok(html.includes('WAITING'));
+  assert.ok(html.includes('NOT REPORTED'));
+  const observed=summarizeTelemetry([tokenEvent(1,100,25)]);
+  assert.equal(observed.input,75);
+  assert.equal(observed.output,null);
+  const grown=summarizeTelemetry([{...tokenEvent(2,100,150),estimated:true}]);
+  assert.equal(grown.input,-50);
+  assert.equal(grown.estimated,true);
+  assert.equal(summarizeTelemetry([tokenEvent(3,0,10)]).input,null);
+});
+import { createLarpRenderLoop } from '../src/larp-mode/renderLoop.ts';
+
+test('renderer clock suspends on blur, draws static reduced-motion telemetry, and disposes', () => {
+  const saved = ['window','document','MutationObserver'].map(key=>[key,Object.getOwnPropertyDescriptor(globalThis,key)] as const);
+  const raf=new FakeRaf();
+  let focus=true,hidden=false,disconnected=false;
+  const media=Object.assign(new EventTarget(),{matches:false});
+  const win=Object.assign(new EventTarget(),{
+    requestAnimationFrame:raf.request,cancelAnimationFrame:raf.cancel,matchMedia:()=>media,
+  });
+  const doc=Object.assign(new EventTarget(),{
+    get hidden(){return hidden;},hasFocus:()=>focus,documentElement:{dataset:{}},
+  });
+  Object.defineProperty(doc,'hidden',{get:()=>hidden});
+  const observer=class {observe(){} disconnect(){disconnected=true;}};
+  Object.defineProperty(globalThis,'window',{value:win,configurable:true});
+  Object.defineProperty(globalThis,'document',{value:doc,configurable:true});
+  Object.defineProperty(globalThis,'MutationObserver',{value:observer,configurable:true});
+  try {
+    const stream=new AnansiTelemetryStream();let draws=0;
+    const loop=createLarpRenderLoop(()=>draws++,stream);
+    const time=performance.now();raf.flush(time+20);
+    assert.equal(draws,1);
+    focus=false;win.dispatchEvent(new Event('blur'));raf.flush(time+40);
+    assert.equal(draws,1);assert.equal(loop.fps(),0);
+    focus=true;win.dispatchEvent(new Event('focus'));raf.flush(time+60);
+    assert.equal(draws,2);
+    hidden=true;doc.dispatchEvent(new Event('visibilitychange'));raf.flush(time+80);
+    assert.equal(draws,2);
+    hidden=false;media.matches=true;media.dispatchEvent(new Event('change'));
+    assert.equal(draws,3);assert.equal(loop.fps(),0);raf.flush(time+100);
+    assert.equal(draws,3);
+    stream.push(tokenEvent(1,100,40));assert.equal(draws,4);
+    loop.dispose();loop.dispose();
+    stream.push(tokenEvent(2,100,30));win.dispatchEvent(new Event('focus'));raf.flush(time+200);
+    assert.equal(draws,4);assert.ok(disconnected);
+  } finally {
+    for(const [key,descriptor] of saved) {
+      if(descriptor)Object.defineProperty(globalThis,key,descriptor);
+      else Reflect.deleteProperty(globalThis,key);
+    }
+  }
 });

@@ -1,20 +1,10 @@
-// LARP Mode Slice 1: perimeter HUD shell. Fixed 100vw x 100vh grid
-// frame; the frame itself is pointer-events: none so the underlying app
-// stays usable — only the view selector buttons take pointer events.
-// Mounting the HUD starts the frame scheduler and registers its RAF
-// handle, visibility listener, and activity listeners as store disposers;
-// unmounting (toggle OFF) runs the React cleanups and the store already
-// ran disposeAll() before notifying, so no RAF handle or listener can
-// survive OFF. The centerpiece is an explicit placeholder: selector state
-// works, view content arrives in Slice 2.
-
 import { useEffect, useState } from 'react';
-import { createFrameScheduler } from './frameScheduler.ts';
-import { registerDisposer } from './store.ts';
+import { toggleLarpMode } from './store.ts';
 import { telemetryStream, type TelemetryEvent } from './telemetry.ts';
 import { MemoryMatrix, latestMemoryNodes } from './MemoryMatrix.tsx';
 import { TokenDeltaStream } from './TokenDeltaStream.tsx';
 import { CoherenceWaveform } from './CoherenceWaveform.tsx';
+import { TelemetryReadout } from './TelemetryReadout.tsx';
 import { View1MemoryVault } from './views/View1MemoryVault.tsx';
 import { View2NeuralFunnel } from './views/View2NeuralFunnel.tsx';
 import { View3AttentionSpider } from './views/View3AttentionSpider.tsx';
@@ -22,124 +12,56 @@ import { View4QuantDrift } from './views/View4QuantDrift.tsx';
 import { View5AttentionHeatmap } from './views/View5AttentionHeatmap.tsx';
 import { View6ColliderField } from './views/View6ColliderField.tsx';
 
-const VIEW_BUTTONS = [1, 2, 3, 4, 5, 6];
+const MODES = [
+  ['SECOND BRAIN', 'Memory constellation', '01 / SPATIAL MEMORY'],
+  ['NEURAL FUNNEL', 'Context compaction', '02 / SIGNAL COMPRESSION'],
+  ['ATTENTION SPIDER', 'Memory topology', '03 / RELATIONSHIP GRAPH'],
+  ['QUANT DRIFT', 'Signal observatory', '04 / COHERENCE ANALYSIS'],
+  ['TOKEN ALIGNMENT', 'Context correspondence', '05 / WORD ALIGNMENT'],
+  ['ORBITAL COLLIDER', 'Concept resonance field', '06 / COLLISION OBSERVATORY'],
+];
 
-function isEditableTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  return (
-    target.tagName === 'INPUT' ||
-    target.tagName === 'TEXTAREA' ||
-    target.tagName === 'SELECT' ||
-    target.isContentEditable
-  );
-}
-
-export function LarpHud({
-  stream = telemetryStream,
-  initialView = 1,
-}: {
-  stream?: typeof telemetryStream;
-  initialView?: number;
-}) {
+export function LarpHud({ stream = telemetryStream, initialView = 1 }: { stream?: typeof telemetryStream; initialView?: number }) {
   const [events, setEvents] = useState<TelemetryEvent[]>(() => stream.snapshot());
   const [view, setView] = useState(initialView);
-
   useEffect(() => stream.subscribe(() => setEvents(stream.snapshot())), [stream]);
-
-  // Bare 1-6 hot-switches views. Typing in an input must never switch
-  // views, so editable targets are ignored. Modifier keys are ignored
-  // too (Ctrl+Shift+L belongs to the toggle, not the switcher).
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       if (event.metaKey || event.ctrlKey || event.altKey) return;
-      if (isEditableTarget(event.target)) return;
-      if (['1', '2', '3', '4', '5', '6'].includes(event.key)) setView(Number(event.key));
+      const target = event.target;
+      if (target instanceof HTMLElement && (['INPUT','TEXTAREA','SELECT'].includes(target.tagName) || target.isContentEditable)) return;
+      if (['1','2','3','4','5','6'].includes(event.key)) setView(Number(event.key));
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, []);
-
-  useEffect(() => {
-    const scheduler = createFrameScheduler(
-      {
-        requestFrame: (callback) => window.requestAnimationFrame(callback),
-        cancelFrame: (handle) => window.cancelAnimationFrame(handle),
-        now: () => performance.now(),
-      },
-      () => {},
-    );
-    scheduler.start();
-    const onVisibility = () => scheduler.setHidden(document.hidden);
-    const onActivity = () => scheduler.notifyInteraction();
-    document.addEventListener('visibilitychange', onVisibility);
-    window.addEventListener('pointerdown', onActivity);
-    window.addEventListener('keydown', onActivity);
-    const unregister = [
-      registerDisposer(() => scheduler.stop()),
-      registerDisposer(() => document.removeEventListener('visibilitychange', onVisibility)),
-      registerDisposer(() => window.removeEventListener('pointerdown', onActivity)),
-      registerDisposer(() => window.removeEventListener('keydown', onActivity)),
-    ];
-    return () => {
-      scheduler.stop();
-      document.removeEventListener('visibilitychange', onVisibility);
-      window.removeEventListener('pointerdown', onActivity);
-      window.removeEventListener('keydown', onActivity);
-      unregister.forEach((off) => off());
-    };
-  }, []);
-
-  return (
-    <div className="larp-hud" role="complementary" aria-label="LARP telemetry frame">
-      <div className="larp-rail larp-rail-top">
-        <span className="larp-hud-title">ANANSI // LARP TELEMETRY</span>
-        <span className="larp-hud-status">[ LARP: ACTIVE ]</span>
-      </div>
-      <div className="larp-rail larp-rail-left">
-        <MemoryMatrix nodes={latestMemoryNodes(events)} />
-      </div>
-      <div className="larp-center">
-        <section
-          className={'larp-centerpiece larp-centerpiece-view'}
-          aria-labelledby="larp-center-heading"
-        >
-          <h3 id="larp-center-heading">Centerpiece</h3>
-          <div className="larp-view-buttons" role="group" aria-label="LARP centerpiece view">
-            {VIEW_BUTTONS.map((n) => (
-              <button
-                key={n}
-                type="button"
-                className={view === n ? 'larp-view-button larp-view-button-on' : 'larp-view-button'}
-                aria-pressed={view === n}
-                aria-label={`LARP view ${n}`}
-                onClick={() => setView(n)}
-              >
-                {n}
-              </button>
-            ))}
-          </div>
-          {view === 1 ? (
-            <View1MemoryVault stream={stream} />
-          ) : view === 2 ? (
-            <View2NeuralFunnel stream={stream} />
-          ) : view === 3 ? (
-            <View3AttentionSpider stream={stream} />
-          ) : view === 4 ? (
-            <View4QuantDrift stream={stream} />
-          ) : view === 5 ? (
-            <View5AttentionHeatmap stream={stream} />
-          ) : view === 6 ? (
-            <View6ColliderField stream={stream} />
-          ) : null}
-        </section>
-      </div>
-      <div className="larp-rail larp-rail-right">
-        <TokenDeltaStream events={events} />
-        <CoherenceWaveform events={events} />
-      </div>
-      <div className="larp-rail larp-rail-bottom">
-        <span>TELEMETRY BUS · IN-MEMORY ONLY · NO PROVIDER TRAFFIC</span>
-      </div>
+  const active = MODES[view-1] ?? MODES[0];
+  const nodes = latestMemoryNodes(events);
+  return <div className="larp-hud" role="complementary" aria-label="LARP telemetry frame" data-view={view}>
+    <div className="larp-rail larp-rail-top">
+      <span className="larp-brand"><b>ANANSI</b><i/> SECOND BRAIN <span className="larp-version">/ LOCAL INTELLIGENCE SYSTEM</span></span>
+      <div className="larp-top-actions"><span className="larp-hud-status"><i/> [ LARP: ACTIVE ]</span><button type="button" aria-label="Exit LARP mode" onClick={toggleLarpMode}>EXIT <span>↗</span></button></div>
     </div>
-  );
+    <div className="larp-rail larp-rail-left">
+      <div className="larp-rail-caption">01 / SIGNAL INTELLIGENCE</div>
+      <TelemetryReadout events={events}/>
+      <div className="larp-archive-heading">MEMORY INDEX <span>{nodes.length} RECORDS</span></div>
+      <ul className="larp-record-list">{nodes.slice(0,12).map((node,i)=><li key={node.id}><span>{String(i+1).padStart(2,'0')}</span><b>{node.title}</b><small>{node.kind}</small></li>)}</ul>
+      {nodes.length===0 && <p className="larp-empty">Open a workspace memory to observe its snapshot. No records are synthesized.</p>}
+      <div className="larp-local-seal">◈ <span>PRIVATE BY ARCHITECTURE<br/><b>LOCAL TELEMETRY ONLY</b></span></div>
+    </div>
+    <div className="larp-center"><section className="larp-centerpiece larp-centerpiece-view" aria-labelledby="larp-center-heading">
+      <div className="larp-scene-caption"><span>{active[2]}</span><span>REALTIME RENDER / OBSERVATORY</span></div>
+      <div className="larp-scene-title"><div><span>ANANSI OBSERVATORY</span><h3 id="larp-center-heading">{active[0]}</h3></div><span className="larp-scene-coordinate">{active[1]}<br/>LOCAL / IN-MEMORY</span></div>
+      {view===1 ? <View1MemoryVault stream={stream}/> : view===2 ? <View2NeuralFunnel stream={stream}/> : view===3 ? <View3AttentionSpider stream={stream}/> : view===4 ? <View4QuantDrift stream={stream}/> : view===5 ? <View5AttentionHeatmap stream={stream}/> : <View6ColliderField stream={stream}/>}
+      <div className="larp-scene-footnote"><span>SPATIAL LAYOUT IS A VISUALIZATION · VALUES COME FROM TELEMETRY</span><span>SCENE {String(view).padStart(2,'0')} / 06</span></div>
+    </section></div>
+    <div className="larp-rail larp-rail-right">
+      <div className="larp-rail-caption">02 / CONTEXT ALLOCATION</div>
+      <MemoryMatrix nodes={nodes}/><CoherenceWaveform events={events}/><TokenDeltaStream events={events}/>
+      <div className="larp-terminal-note"><span>BOUNDARY STATUS</span><p>Events stay in this process.<br/>No provider traffic from this view.<br/>Unavailable metrics remain unreported.</p></div>
+    </div>
+    <nav className="larp-mode-dock" aria-label="LARP centerpiece view">{MODES.map((mode,i)=><button key={i} type="button" className={view===i+1?'larp-view-button larp-view-button-on':'larp-view-button'} aria-pressed={view===i+1} aria-label={`LARP view ${i+1}`} onClick={()=>setView(i+1)}><span className="larp-mode-index">0{i+1}</span><span><b>{mode[0]}</b><small>{mode[1]}</small></span><i/></button>)}</nav>
+    <div className="larp-rail larp-rail-bottom"><span>ANANSI // OBSERVATORY</span><span>IN-MEMORY ONLY · NO PROVIDER TRAFFIC</span><span>CTRL + SHIFT + L <b>EXIT</b></span></div>
+  </div>;
 }

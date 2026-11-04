@@ -1,8 +1,7 @@
 // LARP Mode Slice 2: View 2 — NEURAL FUNNEL // CONTEXT COMPILER.
-// High-DPI 2D canvas (the assignment allows 2D/WebGL; 2D is the honest
-// choice for ultra-thin glowing filaments, since WebGL lines cannot
-// exceed 1 px or glow without quad extrusion). Four amber/gold input
-// filaments converge on the singularity node
+// High-DPI canvas curves are composited through the shared WebGL optics,
+// with direct Canvas 2D fallback. Four semantic inputs, each with braided
+// ornamental sub-filaments, converge on the singularity node
 // (ANANSI.COMPILER // COMPRESSED) and fan out as three cyan outputs to
 // the L1/L2/L3 blocks. Photon pulses spawn from real compilation events:
 // live via subscription, plus a mount-time seed from compilation events
@@ -15,6 +14,8 @@ import { useEffect, useRef } from 'react';
 import { filamentLayout, cubicBezierPoint, spawnPulse, advancePulses, type Pulse } from './bezier.ts';
 import { telemetryStream, type TelemetryEvent } from '../telemetry.ts';
 import { registerDisposer } from '../store.ts';
+import { createLarpRenderLoop } from '../renderLoop.ts';
+import { createCanvasFilmSurface } from '../postprocessing/CanvasFilmSurface.ts';
 
 const MONO_FONT = '"Berkeley Mono", "JetBrains Mono", ui-monospace, Menlo, monospace';
 
@@ -26,16 +27,18 @@ export function View2NeuralFunnel({ stream = telemetryStream }: { stream?: typeo
     const container = containerRef.current;
     const canvas = canvasRef.current;
     if (!container || !canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    const surface = createCanvasFilmSurface(canvas);
+    if (!surface) return;
+    const ctx = surface.ctx;
     const els = { container, canvas, ctx };
 
     let pulses: Pulse[] = [];
     let nextId = 1;
     let fired = 0;
     let cleaned = false;
-    let raf = 0;
     let last = performance.now();
+    const motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const isReduced = () => document.documentElement.dataset.reducedMotion === 'true' || motionPreference.matches;
 
     function spawn(): void {
       const layout = filamentLayout(els.canvas.clientWidth || 640, els.canvas.clientHeight || 480);
@@ -55,32 +58,39 @@ export function View2NeuralFunnel({ stream = telemetryStream }: { stream?: typeo
       const w = els.canvas.clientWidth || 640;
       const h = els.canvas.clientHeight || 480;
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      if (els.canvas.width !== Math.round(w * dpr) || els.canvas.height !== Math.round(h * dpr)) {
-        els.canvas.width = Math.round(w * dpr);
-        els.canvas.height = Math.round(h * dpr);
-      }
+      surface!.resize(w,h,dpr);
       els.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       els.ctx.clearRect(0, 0, w, h);
       els.ctx.fillStyle = '#030305';
       els.ctx.fillRect(0, 0, w, h);
       const layout = filamentLayout(w, h);
       els.ctx.lineCap = 'round';
-      for (const filament of [...layout.inputs, ...layout.outputs]) {
+      // Braided sub-filaments are scenic geometry, not fabricated compilation events.
+      const time = performance.now() / 1000;
+      const reduced = isReduced();
+      for (const [index, filament] of [...layout.inputs, ...layout.outputs].entries()) {
         const [p0, p1, p2, p3] = filament.points;
-        els.ctx.strokeStyle = filament.color;
-        els.ctx.globalAlpha = 0.15;
-        els.ctx.lineWidth = 3;
-        els.ctx.beginPath();
-        els.ctx.moveTo(p0.x, p0.y);
-        els.ctx.bezierCurveTo(p1.x, p1.y, p2.x, p2.y, p3.x, p3.y);
-        els.ctx.stroke();
-        els.ctx.globalAlpha = 0.9;
-        els.ctx.lineWidth = 1;
-        els.ctx.beginPath();
-        els.ctx.moveTo(p0.x, p0.y);
-        els.ctx.bezierCurveTo(p1.x, p1.y, p2.x, p2.y, p3.x, p3.y);
-        els.ctx.stroke();
+        const input = index < layout.inputs.length;
+        for (let strand = 0; strand < 28; strand++) {
+          const spread = (strand - 13.5) / 13.5;
+          const wave = reduced ? 0 : Math.sin(time * .18 + strand * .35 + index) * 5;
+          const fan = spread * h * .16;
+          els.ctx.strokeStyle = strand % 7 === 0 ? '#f0caca' : input ? '#d4b988' : '#8fc6cc';
+          els.ctx.globalAlpha = .12 + (1 - Math.abs(spread)) * .25;
+          els.ctx.lineWidth = strand % 9 === 0 ? 1 : .55;
+          els.ctx.beginPath();
+          els.ctx.moveTo(p0.x, p0.y + (input ? fan : spread * 2));
+          els.ctx.bezierCurveTo(p1.x, p1.y + fan + wave, p2.x, p2.y - fan * .4, p3.x, p3.y + (input ? spread * 2 : fan));
+          els.ctx.stroke();
+        }
       }
+      const glow = els.ctx.createRadialGradient(layout.singularity.x, layout.singularity.y, 0, layout.singularity.x, layout.singularity.y, 80);
+      glow.addColorStop(0, 'rgba(255,235,201,.75)');
+      glow.addColorStop(.08, 'rgba(245,201,155,.28)');
+      glow.addColorStop(1, 'rgba(216,141,158,0)');
+      els.ctx.globalAlpha = 1;
+      els.ctx.fillStyle = glow;
+      els.ctx.fillRect(layout.singularity.x - 80, layout.singularity.y - 80, 160, 160);
       els.ctx.globalAlpha = 1;
       for (const block of layout.blocks) {
         els.ctx.strokeStyle = '#00f0ff';
@@ -116,23 +126,25 @@ export function View2NeuralFunnel({ stream = telemetryStream }: { stream?: typeo
         els.ctx.fill();
       }
       els.ctx.globalAlpha = 1;
+      surface!.present();
     }
 
     function frame(now: number): void {
       if (cleaned) return;
-      pulses = advancePulses(pulses, now - last);
+      if (!isReduced()) pulses = advancePulses(pulses, now - last);
       last = now;
       draw();
-      raf = window.requestAnimationFrame(frame);
+
     }
     draw();
-    raf = window.requestAnimationFrame(frame);
+    const loop = createLarpRenderLoop(frame, stream);
 
     function cleanup(): void {
       if (cleaned) return;
       cleaned = true;
-      window.cancelAnimationFrame(raf);
+      loop.dispose();
       unsubscribe();
+      surface!.dispose();
     }
     const unregister = registerDisposer(cleanup);
     return () => {

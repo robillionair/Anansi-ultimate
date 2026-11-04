@@ -1,335 +1,45 @@
-/* LARP Mode Slice 1. Void background #030305, 0.5px #16161a hairlines,
-   Berkeley Mono / JetBrains Mono stack with tabular-nums. No rounded
-   bubbly cards, no drop-shadows anywhere in the HUD. The toggle pill is
-   the single exception: the assignment explicitly specifies a pill. */
-
-.larp-header-group {
-  display: inline-flex;
-  gap: 12px;
-  align-items: center;
-}
-
-.larp-toggle-frame {
-  display: inline-flex;
-  padding: 1.5px;
-  border-radius: 999px;
-  background: conic-gradient(from 0deg, #00f0ff, #ff1e7a, #8b5cf6, #e8b93c, #a3e635, #00f0ff);
-  opacity: 0.35;
-  align-self: center;
-}
-
-.larp-toggle-frame-on {
-  opacity: 1;
-  animation: larp-rgb-cycle 6s linear infinite, larp-aberration 2.4s ease-in-out infinite;
-}
-
-.larp-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  border: 0;
-  border-radius: 999px;
-  padding: 6px 12px;
-  cursor: pointer;
-  font-family: "Berkeley Mono", "JetBrains Mono", ui-monospace, Menlo, monospace;
-  font-size: 11px;
-  letter-spacing: 1px;
-  font-variant-numeric: tabular-nums;
-  color: #16161a;
-  background: linear-gradient(180deg, #f5f7fa 0%, #c3c9d4 18%, #8f97a8 38%, #e8ecf2 52%, #6f7789 70%, #aab2c2 100%);
-  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6), 0 -1px 0 rgba(0, 0, 0, 0.25);
-}
-
-.larp-toggle-led {
-  width: 7px;
-  height: 7px;
-  border-radius: 999px;
-  background: #3a3f4a;
-  flex: none;
-}
-
-.larp-toggle-led-on {
-  background: #00f0ff;
-  animation: larp-led-pulse 1.6s ease-in-out infinite;
-}
-
-.larp-toggle-label {
-  white-space: nowrap;
-}
-
-@keyframes larp-rgb-cycle {
-  from { filter: hue-rotate(0deg); }
-  to { filter: hue-rotate(360deg); }
-}
-
-@keyframes larp-aberration {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.82; }
-}
-
-@keyframes larp-led-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.45; }
-}
-
-[data-reduced-motion="true"] .larp-toggle-frame-on {
-  animation: none;
-}
-
-[data-reduced-motion="true"] .larp-toggle-led-on {
-  animation: none;
-}
-
-/* Perimeter HUD frame. The frame is pointer-events: none; only the view
-   selector buttons take pointer events, so the app stays usable under it. */
-
-.larp-hud {
-  position: fixed;
-  inset: 0;
-  width: 100vw;
-  height: 100vh;
-  z-index: 1000;
-  display: grid;
-  grid-template-columns: 280px 1fr 280px;
-  grid-template-rows: 32px 1fr 28px;
-  grid-template-areas:
-    "top top top"
-    "left center right"
-    "bottom bottom bottom";
-  pointer-events: none;
-  font-family: "Berkeley Mono", "JetBrains Mono", ui-monospace, Menlo, monospace;
-  font-variant-numeric: tabular-nums;
-  color: #e8e8ec;
-  font-size: 11px;
-}
-
-.larp-rail {
-  background: #030305;
-  border: 0.5px solid #16161a;
-  overflow: hidden;
-  padding: 8px;
-}
-
-.larp-rail-top {
-  grid-area: top;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-bottom: 0.5px solid #16161a;
-}
-
-.larp-rail-left {
-  grid-area: left;
-  border-right: 0.5px solid #16161a;
-  overflow-y: auto;
-}
-
-.larp-rail-right {
-  grid-area: right;
-  border-left: 0.5px solid #16161a;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.larp-rail-bottom {
-  grid-area: bottom;
-  display: flex;
-  align-items: center;
-  border-top: 0.5px solid #16161a;
-  color: #71717a;
-  letter-spacing: 1px;
-}
-
-.larp-center {
-  grid-area: center;
-  display: grid;
-  place-items: center;
-}
-
-.larp-hud-title,
-.larp-hud-status {
-  letter-spacing: 2px;
-}
-
-.larp-hud-status {
-  color: #00f0ff;
-}
-
-.larp-panel {
-  border: 0.5px solid #16161a;
-  padding: 8px;
-  background: #030305;
-}
-
-.larp-panel h3 {
-  margin: 0 0 8px;
-  font-size: 11px;
-  letter-spacing: 1.5px;
-  color: #a1a1aa;
-}
-
-.larp-legend {
-  list-style: none;
-  margin: 8px 0 0;
-  padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  color: #a1a1aa;
-}
-
-.larp-swatch {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  margin-right: 4px;
-  vertical-align: middle;
-}
-
-.larp-empty {
-  color: #71717a;
-  margin: 8px 0 0;
-}
-
-.larp-delta-log {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  max-height: 220px;
-  overflow-y: auto;
-}
-
-.larp-delta-log li {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  white-space: nowrap;
-}
-
-.larp-centerpiece {
-  pointer-events: none;
-  background: #030305;
-  border: 0.5px solid #16161a;
-  padding: 16px;
-  text-align: center;
-  max-width: 420px;
-}
-
-.larp-centerpiece h3 {
-  margin: 0 0 8px;
-  font-size: 11px;
-  letter-spacing: 2px;
-  color: #a1a1aa;
-}
-
-.larp-view-buttons {
-  display: flex;
-  gap: 6px;
-  justify-content: center;
-  margin-top: 12px;
-  pointer-events: auto;
-}
-
-.larp-view-button {
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  border: 0.5px solid #16161a;
-  border-radius: 0;
-  background: #030305;
-  color: #e8e8ec;
-  font-family: inherit;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.larp-view-button-on {
-  border-color: #00f0ff;
-  color: #00f0ff;
-}
-
-/* LARP Mode Slice 2: centerpiece views. */
-
-.larp-centerpiece-view {
-  width: 100%;
-  height: 100%;
-  max-width: none;
-  display: flex;
-  flex-direction: column;
-}
-
-.larp-centerpiece-view .larp-view-buttons {
-  margin-top: 0;
-  margin-bottom: 8px;
-}
-
-.larp-view-container {
-  position: relative;
-  flex: 1;
-  min-height: 0;
-  width: 100%;
-  overflow: hidden;
-  background: #030305;
-  border: 0.5px solid #16161a;
-}
-
-.larp-view-canvas {
-  display: block;
-  width: 100%;
-  height: 100%;
-}
-
-.larp-tag-layer {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  overflow: hidden;
-}
-
-.larp-tag {
-  position: absolute;
-  transform: translate(6px, -50%);
-  white-space: nowrap;
-  font-size: 10px;
-  letter-spacing: 1px;
-  color: #e8e8ec;
-  border-left: 0.5px solid #00f0ff;
-  padding-left: 6px;
-  pointer-events: none;
-}
-
-.larp-view-fallback {
-  padding: 16px;
-  color: #a1a1aa;
-}
-
-/* LARP Mode Slice 3: spectrum readout + legend. */
-
-.larp-spectrum-readout {
-  padding: 6px 8px;
-  font-size: 10px;
-  letter-spacing: 1px;
-  color: #e8e8ec;
-  border-top: 0.5px solid #16161a;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.larp-spectrum-legend {
-  padding: 6px 8px;
-  font-size: 10px;
-  letter-spacing: 1px;
-  color: #a1a1aa;
-  border-top: 0.5px solid #16161a;
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-/* LARP Mode Slice 4: heatmap reuses the spectrum readout + legend. */
+/* Cinematic local observatory. No CSS glow substitutes: optics live in WebGL. */
+.larp-header-group{display:inline-flex;gap:12px;align-items:center}
+.larp-toggle-frame{display:inline-flex;padding:1px;background:#645442;align-self:center}
+.larp-toggle-frame-on{background:#d3aa70}
+.larp-toggle{display:inline-flex;align-items:center;gap:8px;border:0;border-radius:0;padding:7px 11px;cursor:pointer;font:10px "JetBrains Mono",ui-monospace,monospace;letter-spacing:1px;color:#ded2c1;background:#100e0b}
+.larp-toggle-led{width:5px;height:5px;background:#534a3e}.larp-toggle-led-on{background:#e7bb78}.larp-toggle-label{white-space:nowrap}
+.larp-hud{--larp-ink:#e1d5c4;--larp-muted:#8b8176;--larp-accent:#d8ac6c;position:fixed;inset:0;width:100vw;height:100dvh;z-index:1000;display:grid;grid-template-columns:clamp(184px,16vw,256px) minmax(0,1fr) clamp(190px,18vw,280px);grid-template-rows:43px minmax(0,1fr) 66px 24px;grid-template-areas:"top top top" "left center right" "dock dock dock" "bottom bottom bottom";pointer-events:none;font-family:"Berkeley Mono","JetBrains Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums;color:var(--larp-ink);font-size:10px;background:#030305;letter-spacing:.035em;isolation:isolate}
+.larp-hud[data-view="6"]{--larp-accent:#d6a0ce}
+.larp-hud *{box-sizing:border-box}.larp-hud button{border-radius:0;font-family:inherit;box-shadow:none}.larp-hud button:focus-visible{outline:1px solid #f1cb93;outline-offset:-3px}
+.larp-rail{background:#060607;border:0 solid #242021;overflow:hidden;padding:14px}
+.larp-rail-top{grid-area:top;display:flex;align-items:center;justify-content:space-between;border-bottom:.5px solid #30271e;padding:0 20px;background:#070708}
+.larp-brand{display:flex;align-items:center;gap:12px;font-size:9px;letter-spacing:.18em;color:#b2a89b}.larp-brand b{font-size:17px;color:#eee6db;letter-spacing:.12em;font-weight:500}.larp-brand i{height:13px;width:.5px;background:#584736}.larp-version{color:#625b53;font-size:8px;letter-spacing:.1em}
+.larp-top-actions{display:flex;align-items:center;gap:24px}.larp-top-actions button{pointer-events:auto;cursor:pointer;background:none;color:#d0c3af;border:0;border-left:.5px solid #3d3228;padding:10px 0 10px 18px;font-size:9px;letter-spacing:.15em}.larp-top-actions button span{color:#e6b97d;margin-left:14px;font-size:14px}.larp-hud-status{display:flex;gap:8px;align-items:center;color:#bca27e;font-size:8px;letter-spacing:.12em}.larp-hud-status i{width:4px;height:4px;background:#ddbd8d}
+.larp-rail-left{grid-area:left;border-right:.5px solid #211d1b;padding:22px 16px;display:flex;flex-direction:column;gap:20px}
+.larp-rail-right{grid-area:right;border-left:.5px solid #211d1b;padding:22px 15px;display:flex;flex-direction:column;gap:18px}
+.larp-rail-caption{font-size:8px;letter-spacing:.15em;color:#73695b;border-bottom:.5px solid #25201b;padding-bottom:12px}
+.larp-center{grid-area:center;min-width:0;min-height:0;overflow:hidden;background:#030305}
+.larp-centerpiece{position:relative;width:100%;height:100%;display:flex;flex-direction:column;max-width:none;padding:0;border:0;background:#030305;text-align:left;pointer-events:none}
+.larp-scene-caption{display:flex;justify-content:space-between;position:absolute;top:19px;left:23px;right:23px;z-index:2;font-size:8px;color:#7b6b5b;letter-spacing:.13em}
+.larp-scene-title{position:absolute;top:53px;left:24px;right:24px;z-index:2;display:flex;justify-content:space-between;align-items:flex-start;pointer-events:none}
+.larp-scene-title>div>span{font-size:8px;color:#817061;letter-spacing:.18em}.larp-centerpiece h3{margin:7px 0 0;font-size:clamp(17px,2.2vw,33px);font-weight:400;color:#e8dccb;letter-spacing:.13em;line-height:1.1}
+.larp-scene-coordinate{text-align:right;font-size:8px;line-height:1.9;color:#75695d;letter-spacing:.06em;padding-top:3px}
+.larp-scene-footnote{height:31px;display:flex;justify-content:space-between;align-items:center;padding:0 20px;color:#746754;font-size:7px;letter-spacing:.08em;border-top:.5px solid #1e1915;flex:none}
+.larp-view-container{position:relative;flex:1;min-height:0;width:100%;overflow:hidden;background:#030305;border:0;padding:0}
+.larp-view-canvas{display:block;width:100%;height:100%}
+.larp-tag-layer{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.larp-tag{position:absolute;transform:translate(13px,-50%);white-space:nowrap;max-width:180px;overflow:hidden;text-overflow:ellipsis;font-size:8px;letter-spacing:.07em;line-height:1.6;color:#e2c69d;border-left:.5px solid #ad895b;background:rgba(7,6,6,.78);padding:4px 8px;pointer-events:none}
+.larp-tag:before{content:"";position:absolute;left:-14px;top:50%;width:14px;height:.5px;background:#796347}
+.larp-view-fallback{position:absolute;inset:130px 24px 35px;display:flex;flex-direction:column;justify-content:center;align-items:center;color:#95826b;font-size:11px;line-height:1.9;border:.5px solid #211b15;background:radial-gradient(ellipse at center,#17100b 0%,#060607 65%);text-align:center}
+.larp-eyebrow{display:flex;justify-content:space-between;font-size:8px;color:#9a8870;letter-spacing:.11em}.larp-eyebrow span{font-size:6px;color:#6c665d}
+.larp-hero-metric{padding:23px 0 18px;display:flex;flex-direction:column;gap:8px}.larp-hero-metric>span,.larp-metric-pair span,.larp-instrument>span{font-size:7px;letter-spacing:.14em;color:#897a67}.larp-hero-metric strong{font-size:clamp(30px,3.8vw,54px);font-weight:300;line-height:1;letter-spacing:-.055em;color:#eacb9e}
+.larp-metric-pair{display:grid;grid-template-columns:1fr 1fr;gap:10px;border-top:.5px solid #292119;padding:15px 0}.larp-metric-pair>div{display:flex;flex-direction:column;gap:9px}.larp-metric-pair b{font-size:15px;font-weight:400;color:#ccbaa1}
+.larp-instrument{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;padding:12px 0}.larp-instrument b{font-size:8px;color:#897a67;font-weight:400}.larp-meter-track{width:100%;height:2px;background:#211b16}.larp-meter-track i{height:100%;display:block;background:#b88c57}
+.larp-key-values{margin:12px 0 0;font-size:7px}.larp-key-values>div{display:flex;justify-content:space-between;padding:9px 0;border-bottom:.5px solid #191614}.larp-key-values dt{color:#74695d}.larp-key-values dd{margin:0;color:#bc9d76;font-size:7px}
+.larp-archive-heading{display:flex;justify-content:space-between;font-size:8px;color:#a28d73;letter-spacing:.09em}.larp-archive-heading span{font-size:6px;color:#72675a}.larp-record-list{list-style:none;margin:0;padding:0}.larp-record-list li{display:grid;grid-template-columns:18px minmax(0,1fr);gap:5px;padding:8px 0;border-bottom:.5px solid #191614;color:#88745a;font-size:8px}.larp-record-list b{font-weight:400;color:#b6a38b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.larp-record-list small{grid-column:2;font-size:6px;color:#62594e;text-transform:uppercase}.larp-local-seal{margin-top:auto;display:flex;gap:9px;color:#a78961;font-size:18px}.larp-local-seal span{font-size:6px;line-height:1.9;color:#5f594f;letter-spacing:.1em}.larp-local-seal b{font-weight:400;color:#9b866b}
+.larp-panel{border:0;border-bottom:.5px solid #211b16;padding:0 0 15px;background:none;min-width:0}.larp-panel h3{font-size:8px;font-weight:400;letter-spacing:.12em;color:#9e896d;margin:0 0 13px}.larp-legend{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-wrap:wrap;gap:7px 10px;font-size:7px;color:#82796f}.larp-swatch{display:inline-block;width:4px;height:4px;margin-right:4px}.larp-empty{font-size:8px;line-height:1.9;color:#776b5c;margin:7px 0}.larp-matrix-canvas{max-width:100%;object-fit:contain;object-position:left}.larp-wave-canvas{max-width:100%;object-fit:contain;object-position:left}
+.larp-delta-log{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px;max-height:180px;overflow:hidden}.larp-delta-log li{display:flex;justify-content:space-between;gap:4px;white-space:nowrap;font-size:7px;color:#bfa583}.larp-delta-log li>span:nth-child(2){color:#e7c187}.larp-terminal-note{margin-top:auto;font-size:7px;color:#746755;letter-spacing:.08em}.larp-terminal-note>span{color:#a68c6a}.larp-terminal-note p{font-size:7px;line-height:2;color:#696056}
+.larp-mode-dock{margin:0;grid-area:dock;display:grid;grid-template-columns:repeat(6,minmax(0,1fr));border-top:.5px solid #3b2d20;pointer-events:auto;background:#070708}
+.larp-mode-dock>.larp-view-button{margin:0;min-height:0;display:flex;align-items:center;gap:12px;position:relative;text-align:left;background:none;color:#8b7d6b;border:0;border-right:.5px solid #211b16;border-radius:0;padding:10px 16px;cursor:pointer;min-width:0;width:auto;height:auto}.larp-view-button>span:nth-child(2){min-width:0}.larp-mode-index{font-size:19px;font-weight:300;letter-spacing:-.1em;color:#4c4236}.larp-view-button b{display:block;font-size:8px;font-weight:400;letter-spacing:.13em;color:#8c7e6c;white-space:nowrap}.larp-view-button small{display:block;font-size:7px;color:#534c42;margin-top:7px;white-space:nowrap}.larp-view-button-on{background:#14100b}.larp-view-button-on:before{content:"";position:absolute;top:0;left:0;right:0;height:1px;background:#d3a76a}.larp-view-button-on .larp-mode-index{color:#be925b}.larp-view-button-on b{color:#edcca0}.larp-view-button-on small{color:#a28a6a}.larp-view-button:hover{background:#100e0a}.larp-view-button i{position:absolute;right:9px;top:10px;width:3px;height:3px;background:#393126}.larp-view-button-on i{background:#d0ad7b}
+.larp-rail-bottom{grid-area:bottom;display:flex;justify-content:space-between;align-items:center;border-top:.5px solid #201a14;padding:0 15px;color:#675b4b;font-size:6px;letter-spacing:.12em}.larp-rail-bottom b{font-weight:400;color:#a88e6b;margin-left:9px}
+.larp-spectrum-readout{position:absolute;bottom:28px;left:15px;right:15px;padding:8px 0;font-size:8px;color:#c3a67e;letter-spacing:.07em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:rgba(3,3,5,.85)}.larp-spectrum-legend{position:absolute;bottom:0;left:0;right:0;padding:8px 15px;display:flex;gap:12px;flex-wrap:wrap;font-size:7px;color:#8d7e6a;border-top:.5px solid #1d1915;background:rgba(3,3,5,.85)}
+@media(min-width:1900px){.larp-hud{grid-template-columns:280px minmax(0,1fr) 300px}.larp-rail{padding-left:22px;padding-right:22px}.larp-scene-title{top:65px;left:35px}.larp-mode-dock{padding:0 40px}.larp-view-button{padding-left:25px}.larp-hero-metric strong{font-size:62px}}
+@media(max-width:1000px){.larp-hud{grid-template-columns:170px minmax(0,1fr) 180px;grid-template-rows:40px minmax(0,1fr) 55px 22px}.larp-rail{padding:15px 11px}.larp-version,.larp-scene-coordinate,.larp-view-button small{display:none}.larp-view-button{padding:8px;gap:6px}.larp-mode-index{font-size:15px}.larp-view-button b{font-size:6px}.larp-scene-caption{left:12px;right:12px;font-size:6px}.larp-scene-title{left:12px;right:12px}.larp-centerpiece h3{font-size:20px}.larp-key-values{font-size:6px}.larp-hero-metric strong{font-size:35px}}
+@media(max-width:700px){.larp-hud{grid-template-columns:minmax(0,1fr) 160px;grid-template-areas:"top top" "center right" "dock dock" "bottom bottom"}.larp-rail-left{display:none}.larp-brand{font-size:7px}.larp-brand b{font-size:12px}.larp-hud-status{display:none}.larp-top-actions{gap:5px}.larp-mode-dock{grid-template-columns:repeat(6,minmax(0,1fr))}.larp-view-button{justify-content:center}.larp-view-button>span:nth-child(2){display:none}.larp-scene-footnote{font-size:5px;padding:0 8px}.larp-rail-bottom>span:nth-child(2){display:none}}
+@media(max-height:650px){.larp-rail-left,.larp-rail-right{gap:11px;padding-top:12px}.larp-local-seal,.larp-terminal-note,.larp-record-list{display:none}.larp-hero-metric{padding:12px 0}.larp-panel{padding-bottom:8px}.larp-delta-log{max-height:75px}}

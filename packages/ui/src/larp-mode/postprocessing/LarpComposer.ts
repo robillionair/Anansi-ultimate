@@ -15,21 +15,22 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
 import { chromaticAberrationShader, filmGrainShader } from './shaders.ts';
 
 export const MAX_PIXEL_RATIO = 2;
-export const BLOOM_STRENGTH = 0.6;
-export const BLOOM_RADIUS = 0.4;
-export const BLOOM_THRESHOLD = 0.85;
+export const BLOOM_STRENGTH = 0.85;
+export const BLOOM_RADIUS = 0.65;
+export const BLOOM_THRESHOLD = 0.32;
 
 export function clampPixelRatio(dpr: number): number {
   if (!Number.isFinite(dpr) || dpr <= 0) return 1;
   return Math.min(dpr, MAX_PIXEL_RATIO);
 }
 
-export type LarpPassKind = 'render' | 'bloom' | 'aberration' | 'grain' | 'output';
+export type LarpPassKind = 'render' | 'bloom' | 'smaa' | 'aberration' | 'grain' | 'output';
 
-export const LARP_PASS_ORDER: LarpPassKind[] = ['render', 'bloom', 'aberration', 'grain', 'output'];
+export const LARP_PASS_ORDER: LarpPassKind[] = ['render', 'bloom', 'smaa', 'aberration', 'grain', 'output'];
 
 /** Assembly with an injected pass factory — the unit-testable shape. */
 export function buildLarpPasses<T>(create: (kind: LarpPassKind) => T): T[] {
@@ -64,6 +65,7 @@ export function createLarpComposer(
     BLOOM_THRESHOLD,
   );
   composer.addPass(bloom);
+  composer.addPass(new SMAAPass());
   composer.addPass(new ShaderPass(chromaticAberrationShader));
   const grainPass = new ShaderPass(filmGrainShader);
   composer.addPass(grainPass);

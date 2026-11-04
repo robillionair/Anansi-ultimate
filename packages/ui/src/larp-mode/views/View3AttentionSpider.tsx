@@ -19,6 +19,7 @@ import { buildGraph, layoutGraph, latestCitedIds } from './forceLayout.ts';
 import { latestMemoryNodes } from '../MemoryMatrix.tsx';
 import { telemetryStream } from '../telemetry.ts';
 import { registerDisposer } from '../store.ts';
+import { createLarpRenderLoop } from '../renderLoop.ts';
 
 const NODE_COLORS: Record<string, string> = {
   memory: '#ff8a3d',
@@ -51,7 +52,8 @@ export function View3AttentionSpider({ stream = telemetryStream }: { stream?: ty
     const cited = latestCitedIds(stream.snapshot());
     const graph = buildGraph(nodes, cited);
     const positions = layoutGraph(graph);
-    const reduced = document.documentElement.dataset.reducedMotion === 'true';
+    const motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const isReduced = () => document.documentElement.dataset.reducedMotion === 'true' || motionPreference.matches;
 
     let renderer: THREE.WebGLRenderer;
     try {
@@ -127,18 +129,17 @@ export function View3AttentionSpider({ stream = telemetryStream }: { stream?: ty
     );
     resize();
 
-    let raf = 0;
     let frames = 0;
     let cleaned = false;
-    const observer = new ResizeObserver(() => resize());
+    const observer = new ResizeObserver(() => { resize(); loop.redraw(); });
     observer.observe(els.container);
     els.container.dataset.nodes = String(graph.nodes.length);
     els.container.dataset.edges = String(graph.edges.length);
 
     function frame(time: number): void {
       if (cleaned) return;
-      if (!reduced) group.rotation.y += 0.0012;
-      composerHandle.grainPass.uniforms.uTime.value = time / 1000;
+      if (!isReduced()) group.rotation.y += 0.0012;
+      composerHandle.grainPass.uniforms.uTime.value = isReduced() ? 0 : time / 1000;
       composerHandle.render();
       frames += 1;
       els.container.dataset.frames = String(frames);
@@ -155,19 +156,15 @@ export function View3AttentionSpider({ stream = telemetryStream }: { stream?: ty
           div.style.top = `${(-projected.y * 0.5 + 0.5) * 100}%`;
         }
       }
-      if (!reduced) raf = window.requestAnimationFrame(frame);
     }
 
-    if (reduced) {
-      frame(0);
-    } else {
-      raf = window.requestAnimationFrame(frame);
-    }
+    frame(0);
+    const loop = createLarpRenderLoop(frame, stream);
 
     function cleanup(): void {
       if (cleaned) return;
       cleaned = true;
-      window.cancelAnimationFrame(raf);
+      loop.dispose();
       observer.disconnect();
       composerHandle.dispose();
       nodeGeometry.dispose();

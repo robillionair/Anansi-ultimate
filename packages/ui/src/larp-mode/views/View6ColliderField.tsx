@@ -18,6 +18,8 @@ import { createLarpComposer, clampPixelRatio, BLOOM_STRENGTH } from '../postproc
 import { beamPoint, dopplerColor, type BeamId } from './colliderField.ts';
 import { telemetryStream } from '../telemetry.ts';
 import { registerDisposer } from '../store.ts';
+import { createLarpRenderLoop } from '../renderLoop.ts';
+import { createOrbitalAtmosphere } from './orbitalAtmosphere.ts';
 
 const PARTICLES_PER_BEAM = 2000;
 const FLASH_MS = 1200;
@@ -54,7 +56,8 @@ export function View6ColliderField({ stream = telemetryStream }: { stream?: type
     const canvas = canvasRef.current;
     if (!container || !canvas) return;
     const els = { container, canvas };
-    const reduced = document.documentElement.dataset.reducedMotion === 'true';
+    const motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const isReduced = () => document.documentElement.dataset.reducedMotion === 'true' || motionPreference.matches;
 
     let renderer: THREE.WebGLRenderer;
     try {
@@ -71,6 +74,7 @@ export function View6ColliderField({ stream = telemetryStream }: { stream?: type
     camera.lookAt(0, 0, 0);
     const group = new THREE.Group();
     scene.add(group);
+    const atmosphere = createOrbitalAtmosphere(scene, 32000);
 
     const beams: { id: BeamId; particles: Particle[]; positions: Float32Array; colors: Float32Array; geometry: THREE.BufferGeometry }[] = (
       ['A', 'B'] as BeamId[]
@@ -83,28 +87,32 @@ export function View6ColliderField({ stream = telemetryStream }: { stream?: type
       geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
       return { id, particles, positions, colors, geometry };
     });
-    const material = new THREE.PointsMaterial({
-      size: 2.5,
+    const material = new THREE.ShaderMaterial({
       vertexColors: true,
-      transparent: true,
-      opacity: 0.9,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
+      vertexShader: `varying vec3 vColor;
+        void main(){vColor=color;vec4 mv=modelViewMatrix*vec4(position,1.);
+        gl_PointSize=clamp(400./max(-mv.z,1.),.8,3.);gl_Position=projectionMatrix*mv;}`,
+      fragmentShader: `varying vec3 vColor;
+        void main(){float d=length(gl_PointCoord-.5);float a=exp(-d*d*42.);
+        gl_FragColor=vec4(vColor*1.5,a*.7);}`,
+      transparent:true, blending:THREE.AdditiveBlending, depthWrite:false,
     });
     for (const beam of beams) group.add(new THREE.Points(beam.geometry, material));
 
     // Interaction point marker: one white-hot point at the origin.
     const pointGeometry = new THREE.BufferGeometry();
     pointGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array([0, 0, 0]), 3));
-    const pointMaterial = new THREE.PointsMaterial({ size: 6, color: '#ffffff', transparent: true, opacity: 0.95 });
+    const pointMaterial = new THREE.PointsMaterial({ size: 1.5, color: '#ffffff', transparent: true, opacity: 0.95 });
     group.add(new THREE.Points(pointGeometry, pointMaterial));
 
     function updateBeam(beam: (typeof beams)[number]): void {
       beam.particles.forEach((p, i) => {
-        p.t += p.speed;
+        if (!isReduced()) p.t += p.speed;
         if (p.t >= 1) p.t -= 1;
         const pos = beamPoint(beam.id, p.t);
-        beam.positions.set([pos.x, pos.y, pos.z], i * 3);
+        // Fixed braided lanes add depth without inventing collision events.
+        const lane = Math.sin(i * 13.37) * 3;
+        beam.positions.set([pos.x, pos.y + lane * Math.sin(p.t * Math.PI), pos.z + Math.cos(i * 3.17) * 4], i * 3);
         const c = dopplerColor(beam.id, p.t);
         beam.colors.set(c, i * 3);
       });
@@ -130,17 +138,16 @@ export function View6ColliderField({ stream = telemetryStream }: { stream?: type
     );
     resize();
 
-    let raf = 0;
     let frames = 0;
     let cleaned = false;
     let collisions = events.filter((e) => e.kind === 'collision').length;
     let flashStart = -1;
     const now = Date.now();
-    if (!reduced && events.some((e) => e.kind === 'collision' && now - e.at < 60000)) {
+    if (!isReduced() && events.some((e) => e.kind === 'collision' && now - e.at < 60000)) {
       flashStart = performance.now();
     }
     els.container.dataset.collisions = String(collisions);
-    const observer = new ResizeObserver(() => resize());
+    const observer = new ResizeObserver(() => { resize(); loop.redraw(); });
     observer.observe(els.container);
     const unsubscribe = stream.subscribe((event) => {
       if (event.kind !== 'collision') return;
@@ -151,7 +158,8 @@ export function View6ColliderField({ stream = telemetryStream }: { stream?: type
 
     function frame(time: number): void {
       if (cleaned) return;
-      if (!reduced) group.rotation.y += 0.0012;
+      if (!isReduced()) group.rotation.y += 0.0012;
+      if (isReduced()) { composerHandle.bloomPass.strength = BLOOM_STRENGTH; flashStart = -1; }
       if (flashStart >= 0) {
         const elapsed = (time - flashStart) / FLASH_MS;
         if (elapsed >= 1) {
@@ -161,24 +169,23 @@ export function View6ColliderField({ stream = telemetryStream }: { stream?: type
           composerHandle.bloomPass.strength = BLOOM_STRENGTH + (FLASH_PEAK - BLOOM_STRENGTH) * (1 - elapsed);
         }
       }
-      composerHandle.grainPass.uniforms.uTime.value = time / 1000;
+      atmosphere.update(isReduced() ? 0 : time / 1000, flashStart >= 0 ? Math.max(0, 1 - (time - flashStart) / FLASH_MS) : 0);
+      composerHandle.grainPass.uniforms.uTime.value = isReduced() ? 0 : time / 1000;
       for (const beam of beams) updateBeam(beam);
       composerHandle.render();
       frames += 1;
       els.container.dataset.frames = String(frames);
-      if (!reduced) raf = window.requestAnimationFrame(frame);
+
     }
 
-    if (reduced) {
-      frame(0);
-    } else {
-      raf = window.requestAnimationFrame(frame);
-    }
+    frame(0);
+    const loop = createLarpRenderLoop(frame, stream);
 
     function cleanup(): void {
       if (cleaned) return;
       cleaned = true;
-      window.cancelAnimationFrame(raf);
+      loop.dispose();
+      atmosphere.dispose();
       observer.disconnect();
       unsubscribe();
       composerHandle.dispose();

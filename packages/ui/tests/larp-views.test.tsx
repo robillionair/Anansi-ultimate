@@ -81,20 +81,20 @@ test('post shaders carry the specified defaults', () => {
   assert.equal(CHROMATIC_OFFSET, 0.0012);
   assert.equal(chromaticAberrationShader.uniforms.uOffset.value, 0.0012);
   assert.ok(chromaticAberrationShader.fragmentShader.includes('tDiffuse'));
-  assert.equal(FILM_GRAIN_AMOUNT, 0.05);
-  assert.equal(filmGrainShader.uniforms.uAmount.value, 0.05);
+  assert.equal(FILM_GRAIN_AMOUNT, 0.035);
+  assert.equal(filmGrainShader.uniforms.uAmount.value, 0.035);
   assert.ok(filmGrainShader.fragmentShader.includes('snoise'));
 });
 
-test('composer pass order is render, bloom, aberration, grain, output', () => {
-  assert.deepEqual(LARP_PASS_ORDER, ['render', 'bloom', 'aberration', 'grain', 'output']);
+test('composer pass order is render, bloom, smaa, aberration, grain, output', () => {
+  assert.deepEqual(LARP_PASS_ORDER, ['render', 'bloom', 'smaa', 'aberration', 'grain', 'output']);
   const seen: string[] = [];
   const passes = buildLarpPasses((kind) => {
     seen.push(kind);
     return { kind };
   });
   assert.deepEqual(seen, LARP_PASS_ORDER);
-  assert.equal(passes.length, 5);
+  assert.equal(passes.length, 6);
 });
 
 test('pixel ratio clamps to 2 and rejects nonsense', () => {
