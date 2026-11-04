@@ -2117,6 +2117,153 @@ export interface ListRelationshipsRequest {
   recordId?: string | null;
   workspaceId: string;
 }
+export interface McpListRequest {
+  contractVersion: number;
+  workspaceId: string;
+}
+export interface McpProbeRequest {
+  contractVersion: number;
+  id: string;
+  workspaceId: string;
+}
+export interface McpProbeResult {
+  contractVersion: number;
+  error?: string | null;
+  healthMethod?: string | null;
+  healthy: boolean;
+  prompts?: McpPrompt[];
+  protocolVersion?: string | null;
+  serverId: string;
+  serverName?: string | null;
+  tools?: McpTool[];
+  truncated: boolean;
+}
+export interface McpPrompt {
+  arguments?: McpPromptArgument[];
+  description?: string | null;
+  name: string;
+}
+export interface McpPromptArgument {
+  description?: string | null;
+  name: string;
+  required?: boolean | null;
+}
+export interface McpTool {
+  annotations?: McpToolAnnotations | null;
+  description?: string | null;
+  inputSchema?: {
+    [k: string]: unknown;
+  };
+  name: string;
+}
+export interface McpToolAnnotations {
+  destructiveHint?: boolean | null;
+  idempotentHint?: boolean | null;
+  openWorldHint?: boolean | null;
+  readOnlyHint?: boolean | null;
+  title?: string | null;
+}
+export interface McpPrompt {
+  arguments?: McpPromptArgument[];
+  description?: string | null;
+  name: string;
+}
+export interface McpPromptArgument {
+  description?: string | null;
+  name: string;
+  required?: boolean | null;
+}
+export interface McpPromptArgument {
+  description?: string | null;
+  name: string;
+  required?: boolean | null;
+}
+export interface McpRegisterRequest {
+  contractVersion: number;
+  draft: McpServerDraft;
+  workspaceId: string;
+}
+export interface McpServerDraft {
+  args?: string[];
+  command?: string | null;
+  env?: {
+    [k: string]: string;
+  };
+  name: string;
+  transport: string;
+  url?: string | null;
+}
+export interface McpRemoveRequest {
+  contractVersion: number;
+  id: string;
+  workspaceId: string;
+}
+export interface McpRemoveResult {
+  contractVersion: number;
+  removed: boolean;
+}
+/**
+ * Public server view: env values redacted to their keys.
+ */
+export interface McpServer {
+  args?: string[];
+  command?: string | null;
+  contractVersion: number;
+  envKeys?: string[];
+  id: string;
+  name: string;
+  transport: string;
+  url?: string | null;
+}
+export interface McpServerDraft {
+  args?: string[];
+  command?: string | null;
+  env?: {
+    [k: string]: string;
+  };
+  name: string;
+  transport: string;
+  url?: string | null;
+}
+export interface McpServerList {
+  contractVersion: number;
+  servers: McpServer[];
+}
+/**
+ * Public server view: env values redacted to their keys.
+ */
+export interface McpServer {
+  args?: string[];
+  command?: string | null;
+  contractVersion: number;
+  envKeys?: string[];
+  id: string;
+  name: string;
+  transport: string;
+  url?: string | null;
+}
+export interface McpTool {
+  annotations?: McpToolAnnotations | null;
+  description?: string | null;
+  inputSchema?: {
+    [k: string]: unknown;
+  };
+  name: string;
+}
+export interface McpToolAnnotations {
+  destructiveHint?: boolean | null;
+  idempotentHint?: boolean | null;
+  openWorldHint?: boolean | null;
+  readOnlyHint?: boolean | null;
+  title?: string | null;
+}
+export interface McpToolAnnotations {
+  destructiveHint?: boolean | null;
+  idempotentHint?: boolean | null;
+  openWorldHint?: boolean | null;
+  readOnlyHint?: boolean | null;
+  title?: string | null;
+}
 export type MemoryState = "proposed" | "confirmed" | "temporary" | "durable" | "superseded" | "archived";
 export type Privacy = "sealed" | "private" | "standard" | "public";
 

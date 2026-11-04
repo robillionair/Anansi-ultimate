@@ -47,6 +47,7 @@ pub fn router(state: Arc<ApiState>) -> Router {
         .route("/v1/memories/{operation}", post(memory))
         .route("/v1/relationships/{operation}", post(relationship))
         .route("/v1/jobs/{operation}", post(job))
+        .route("/v1/mcp/{operation}", post(mcp))
         .route("/v1/ai/{operation}", post(ai))
         .route("/v1/artifacts/{operation}", post(artifact))
         .route("/v1/vault/{operation}", post(vault))
@@ -77,6 +78,10 @@ pub fn command_path(path: &str) -> bool {
             | "/v1/jobs/restore"
             | "/v1/jobs/schedule"
             | "/v1/jobs/schedule-read"
+            | "/v1/mcp/servers-list"
+            | "/v1/mcp/servers-register"
+            | "/v1/mcp/servers-remove"
+            | "/v1/mcp/servers-probe"
             | "/v1/jobs/upload-begin"
             | "/v1/jobs/upload-part"
             | "/v1/memories/read"
@@ -201,6 +206,50 @@ async fn job(
         }
     };
     match tokio::task::spawn_blocking(move || state.core.job_command(&operation, input)).await {
+        Ok(Ok(value)) => Json(value).into_response(),
+        Ok(Err(e)) => {
+            let status = match e.code {
+                ErrorCode::NotFound | ErrorCode::WorkspaceNotFound => StatusCode::NOT_FOUND,
+                ErrorCode::RevisionConflict | ErrorCode::ContentIntegrity => StatusCode::CONFLICT,
+                ErrorCode::StorageUnavailable => StatusCode::SERVICE_UNAVAILABLE,
+                ErrorCode::VaultUnavailable | ErrorCode::Forbidden => StatusCode::FORBIDDEN,
+                ErrorCode::Unauthorized => StatusCode::UNAUTHORIZED,
+                _ => StatusCode::BAD_REQUEST,
+            };
+            (status, Json(e)).into_response()
+        }
+        Err(_) => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(anansi_core::storage::unavailable()),
+        )
+            .into_response(),
+    }
+}
+async fn mcp(
+    Path(operation): Path<String>,
+    State(state): State<Arc<ApiState>>,
+    request: Request<Body>,
+) -> Response {
+    let input = match axum::body::to_bytes(request.into_body(), 384 * 1024).await {
+        Ok(bytes) => match serde_json::from_slice(&bytes) {
+            Ok(value) => value,
+            Err(_) => {
+                return error(
+                    StatusCode::BAD_REQUEST,
+                    ErrorCode::InvalidRequest,
+                    "Use a supported MCP request.",
+                );
+            }
+        },
+        Err(_) => {
+            return error(
+                StatusCode::BAD_REQUEST,
+                ErrorCode::InvalidRequest,
+                "MCP request exceeds its limit.",
+            );
+        }
+    };
+    match tokio::task::spawn_blocking(move || state.core.mcp_command(&operation, input)).await {
         Ok(Ok(value)) => Json(value).into_response(),
         Ok(Err(e)) => {
             let status = match e.code {

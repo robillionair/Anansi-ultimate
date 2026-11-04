@@ -124,8 +124,9 @@ test('navigation has a small active set, complete grouped unavailable tools and 
   assert.match(html, /aria-current="page"[^>]*>Dashboard<\/button>/);
   assert.doesNotMatch(html, />Workspace<\/button>/);
   assert.ok(html.includes('disabled=""'));
-  assert.equal((html.match(/<button/g) || []).length, 16);
+  assert.equal((html.match(/<button/g) || []).length, 17);
   assert.ok(!plannedGroups.some(group=>group.items.includes('Search')));
+  assert.ok(!plannedGroups.some(group=>group.items.includes('MCP')));
   assert.ok(!plannedGroups.some(group=>group.items.includes('Product Forge')));
   assert.match(html,/disabled=""[^>]*>Ideas &amp; Product Forge<\/button>/);
   assert.doesNotMatch(renderToStaticMarkup(<Navigation view="projects" hasWorkspace={true} onNavigate={()=>{}}/>),/disabled=""[^>]*>Ideas &amp; Product Forge<\/button>/);

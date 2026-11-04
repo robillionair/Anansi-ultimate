@@ -7941,6 +7941,738 @@
     "title": "ListRelationshipsRequest",
     "type": "object"
   },
+  "McpListRequest": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "workspaceId"
+    ],
+    "title": "McpListRequest",
+    "type": "object"
+  },
+  "McpProbeRequest": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "id": {
+        "type": "string"
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "workspaceId",
+      "id"
+    ],
+    "title": "McpProbeRequest",
+    "type": "object"
+  },
+  "McpProbeResult": {
+    "$defs": {
+      "McpPrompt": {
+        "properties": {
+          "arguments": {
+            "default": [],
+            "items": {
+              "$ref": "#/$defs/McpPromptArgument"
+            },
+            "type": "array"
+          },
+          "description": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "McpPromptArgument": {
+        "properties": {
+          "description": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "required": {
+            "default": null,
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "McpTool": {
+        "properties": {
+          "annotations": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/McpToolAnnotations"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "description": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "inputSchema": {
+            "default": null
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "McpToolAnnotations": {
+        "properties": {
+          "destructiveHint": {
+            "default": null,
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "idempotentHint": {
+            "default": null,
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "openWorldHint": {
+            "default": null,
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "readOnlyHint": {
+            "default": null,
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "title": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "error": {
+        "default": null,
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "healthMethod": {
+        "default": null,
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "healthy": {
+        "type": "boolean"
+      },
+      "prompts": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/McpPrompt"
+        },
+        "type": "array"
+      },
+      "protocolVersion": {
+        "default": null,
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "serverId": {
+        "type": "string"
+      },
+      "serverName": {
+        "default": null,
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "tools": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/McpTool"
+        },
+        "type": "array"
+      },
+      "truncated": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "serverId",
+      "healthy",
+      "truncated"
+    ],
+    "title": "McpProbeResult",
+    "type": "object"
+  },
+  "McpPrompt": {
+    "$defs": {
+      "McpPromptArgument": {
+        "properties": {
+          "description": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "required": {
+            "default": null,
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "arguments": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/McpPromptArgument"
+        },
+        "type": "array"
+      },
+      "description": {
+        "default": null,
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "name": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "name"
+    ],
+    "title": "McpPrompt",
+    "type": "object"
+  },
+  "McpPromptArgument": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "description": {
+        "default": null,
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "name": {
+        "type": "string"
+      },
+      "required": {
+        "default": null,
+        "type": [
+          "boolean",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "name"
+    ],
+    "title": "McpPromptArgument",
+    "type": "object"
+  },
+  "McpRegisterRequest": {
+    "$defs": {
+      "McpServerDraft": {
+        "properties": {
+          "args": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "command": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "env": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "default": {},
+            "type": "object"
+          },
+          "name": {
+            "type": "string"
+          },
+          "transport": {
+            "type": "string"
+          },
+          "url": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "transport"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "draft": {
+        "$ref": "#/$defs/McpServerDraft"
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "workspaceId",
+      "draft"
+    ],
+    "title": "McpRegisterRequest",
+    "type": "object"
+  },
+  "McpRemoveRequest": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "id": {
+        "type": "string"
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "workspaceId",
+      "id"
+    ],
+    "title": "McpRemoveRequest",
+    "type": "object"
+  },
+  "McpRemoveResult": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "removed": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "removed"
+    ],
+    "title": "McpRemoveResult",
+    "type": "object"
+  },
+  "McpServer": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "description": "Public server view: env values redacted to their keys.",
+    "properties": {
+      "args": {
+        "default": [],
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "command": {
+        "default": null,
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "envKeys": {
+        "default": [],
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "id": {
+        "type": "string"
+      },
+      "name": {
+        "type": "string"
+      },
+      "transport": {
+        "type": "string"
+      },
+      "url": {
+        "default": null,
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "contractVersion",
+      "id",
+      "name",
+      "transport"
+    ],
+    "title": "McpServer",
+    "type": "object"
+  },
+  "McpServerDraft": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "args": {
+        "default": [],
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "command": {
+        "default": null,
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "env": {
+        "additionalProperties": {
+          "type": "string"
+        },
+        "default": {},
+        "type": "object"
+      },
+      "name": {
+        "type": "string"
+      },
+      "transport": {
+        "type": "string"
+      },
+      "url": {
+        "default": null,
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "name",
+      "transport"
+    ],
+    "title": "McpServerDraft",
+    "type": "object"
+  },
+  "McpServerList": {
+    "$defs": {
+      "McpServer": {
+        "description": "Public server view: env values redacted to their keys.",
+        "properties": {
+          "args": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "command": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "contractVersion": {
+            "format": "uint8",
+            "maximum": 255,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "envKeys": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "transport": {
+            "type": "string"
+          },
+          "url": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "contractVersion",
+          "id",
+          "name",
+          "transport"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "servers": {
+        "items": {
+          "$ref": "#/$defs/McpServer"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "servers"
+    ],
+    "title": "McpServerList",
+    "type": "object"
+  },
+  "McpTool": {
+    "$defs": {
+      "McpToolAnnotations": {
+        "properties": {
+          "destructiveHint": {
+            "default": null,
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "idempotentHint": {
+            "default": null,
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "openWorldHint": {
+            "default": null,
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "readOnlyHint": {
+            "default": null,
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "title": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "annotations": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/McpToolAnnotations"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "description": {
+        "default": null,
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "inputSchema": {
+        "default": null
+      },
+      "name": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "name"
+    ],
+    "title": "McpTool",
+    "type": "object"
+  },
+  "McpToolAnnotations": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "destructiveHint": {
+        "default": null,
+        "type": [
+          "boolean",
+          "null"
+        ]
+      },
+      "idempotentHint": {
+        "default": null,
+        "type": [
+          "boolean",
+          "null"
+        ]
+      },
+      "openWorldHint": {
+        "default": null,
+        "type": [
+          "boolean",
+          "null"
+        ]
+      },
+      "readOnlyHint": {
+        "default": null,
+        "type": [
+          "boolean",
+          "null"
+        ]
+      },
+      "title": {
+        "default": null,
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "title": "McpToolAnnotations",
+    "type": "object"
+  },
   "MemoryDetails": {
     "$defs": {
       "MemoryMetadata": {

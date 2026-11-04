@@ -1,5 +1,6 @@
 import { Jobs } from './Jobs';
 import { Backups } from './Backups';
+import { Mcp } from './Mcp.tsx';
 import { Notes } from './Notes';
 import { Memory } from './Memory';
 import { Search } from './Search';
@@ -46,7 +47,7 @@ export function Workspace({client,native,connection,connected,busy:connecting}:{
   useEffect(()=>{setWorkspace(null);setList([]);setSelected('');setChoosing(false);setError('');setNotice('');if(client)void run(refresh);},[client]);
   useEffect(()=>{document.documentElement.dataset.reducedMotion=String(workspace?.settings.reducedMotion??false);return()=>{delete document.documentElement.dataset.reducedMotion;};},[workspace?.settings.reducedMotion]);
   const larpOn=useLarpModeStore();
-  const heading=view==='dashboard'?'Dashboard':view==='providers'?'AI providers':view==='ask'?'Ask ANANSI':view==='models'?'Local AI models':view==='search'?'Search your workspace':view==='backups'?'Your backups':view==='jobs'?'Your jobs and exports':view==='notes'?'Your notes':view==='memory'?'Your memories':view==='projects'?'Your projects':view==='tasks'?'Your tasks':view==='people'?'Your contacts':view==='records'?'Knowledge records':view==='connection'?'Your local connection':view==='settings'?'Make it yours':ready?workspace!.workspace.name:'Welcome to ANANSI';
+  const heading=view==='dashboard'?'Dashboard':view==='providers'?'AI providers':view==='mcp'?'MCP servers':view==='ask'?'Ask ANANSI':view==='models'?'Local AI models':view==='search'?'Search your workspace':view==='backups'?'Your backups':view==='jobs'?'Your jobs and exports':view==='notes'?'Your notes':view==='memory'?'Your memories':view==='projects'?'Your projects':view==='tasks'?'Your tasks':view==='people'?'Your contacts':view==='records'?'Knowledge records':view==='connection'?'Your local connection':view==='settings'?'Make it yours':ready?workspace!.workspace.name:'Welcome to ANANSI';
   return <div className="shell"><a className="skip-link" href="#main">Skip to main content</a><aside><a className="brand" href="#main"><span className="mark">A</span> ANANSI<span className="edition">ULTIMATE</span></a><Navigation view={view} hasWorkspace={ready} onNavigate={navigate}/><p className="edition-label">{native?'Windows desktop':'Browser edition'}<br/>Development preview</p></aside>
     <main id="main" tabIndex={-1}><header><span className="eyebrow">YOUR PRIVATE STARTING POINT</span><span className="larp-header-group"><span className={'badge '+(connected?'ready':'')} role="status">{connecting?'Checking…':connected?'Connected':'Not connected'}</span><LarpToggle/></span></header><h1 ref={title} tabIndex={-1}>{heading}</h1><p className="intro">{view==='connection'?'Check your connection or pair this browser with your computer.':view==='dashboard'?'Your workspace at a glance — a few meaningful actions, nothing more.':ready?'Your workspace is ready. Save memories, explore ideas or prepare source for review in a project.':'Your memory, ideas, AI, and products—all in one private workspace.'}</p>
     {view==='connection'||!client?<>{!client&&view!=='connection'&&<p>Connect locally to create or reopen a workspace. No cloud account is needed.</p>}{connection}</>:<>
@@ -55,6 +56,7 @@ export function Workspace({client,native,connection,connected,busy:connecting}:{
        view==='dashboard'&&workspace&&ready?<Dashboard key={workspace.workspace.id} client={client} workspace={workspace} onNavigate={navigate} onOpenProject={openProjectFocus} onManageWorkspace={()=>navigate('workspace')}/>:
        view==='models'&&client?<LocalModels key="models" client={client}/>:
        view==='providers'&&workspace&&ready?<Providers key={workspace.workspace.id} client={client} workspaceId={workspace.workspace.id}/>:
+       view==='mcp'&&workspace&&ready?<Mcp key={workspace.workspace.id} client={client} workspaceId={workspace.workspace.id}/>:
        view==='backups'&&workspace&&ready?<Backups key={workspace.workspace.id} client={client} workspaceId={workspace.workspace.id}/>:view==='jobs'&&workspace&&ready?<Jobs key={workspace.workspace.id} client={client} workspaceId={workspace.workspace.id} native={native}/>:view==='notes'&&workspace&&ready?<Notes key={workspace.workspace.id} client={client} workspaceId={workspace.workspace.id}/>:
        view==='memory'&&workspace&&ready?<Memory key={workspace.workspace.id} client={client} workspaceId={workspace.workspace.id}/>:
        view==='search'&&workspace&&ready?<Search key={workspace.workspace.id} client={client} workspaceId={workspace.workspace.id}/>:
