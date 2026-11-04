@@ -2215,6 +2215,15 @@ export interface McpServer {
   transport: string;
   url?: string | null;
 }
+/**
+ * Launch-time server configuration (a contract DTO; never carries a token).
+ */
+export interface McpServerConfig {
+  contractVersion: number;
+  enabled: boolean;
+  tools: string[];
+  workspaceId: string;
+}
 export interface McpServerDraft {
   args?: string[];
   command?: string | null;
@@ -2224,6 +2233,16 @@ export interface McpServerDraft {
   name: string;
   transport: string;
   url?: string | null;
+}
+/**
+ * Capability surface exposed through the contracts (never carries a token).
+ */
+export interface McpServerInfo {
+  contractVersion: number;
+  name: string;
+  protocolVersions: string[];
+  tools: string[];
+  version: string;
 }
 export interface McpServerList {
   contractVersion: number;
@@ -2241,6 +2260,27 @@ export interface McpServer {
   name: string;
   transport: string;
   url?: string | null;
+}
+/**
+ * One tool definition, as returned by `tools/list`.
+ */
+export interface McpServerToolDef {
+  description: string;
+  inputSchema: McpToolInputSchema;
+  name: string;
+}
+export interface McpToolInputSchema {
+  properties: {
+    [k: string]: McpSchemaProperty;
+  };
+  required?: string[];
+  type: string;
+}
+export interface McpSchemaProperty {
+  description?: string | null;
+  maximum?: number | null;
+  minimum?: number | null;
+  type: string;
 }
 export interface McpTool {
   annotations?: McpToolAnnotations | null;

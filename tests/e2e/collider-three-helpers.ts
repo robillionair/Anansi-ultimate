@@ -107,6 +107,7 @@ type Session = {
   openProject: () => Promise<void>;
   workspaceId: string;
   projectId: string;
+  storageRoot: string;
   call: (group: string, operation: string, input: Record<string, unknown>) => Promise<{ status: number; body: Record<string, any> }>;
   pairAndOpen: (ws: string) => Promise<void>;
   openWorkspace: (ws: string) => Promise<void>;
@@ -249,6 +250,7 @@ export async function startSession(page: Page, reducedMotion: boolean): Promise<
     },
     workspaceId,
     projectId,
+    storageRoot: path.join(root, 'storage'),
     call,
     pairAndOpen,
     openWorkspace,

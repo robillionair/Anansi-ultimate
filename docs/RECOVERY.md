@@ -1,3 +1,42 @@
+## Resume point — 2026-11-04 MCP Server Core Slice 3 delivered (Linux; Windows rerun pending)
+
+Owner-authorized Milestone 13 slice on branch
+`muse/mcp-slice3` from the Windows-certified
+Slice 2 review tip
+`a3c517267d58761a63e9d50795a406f0d02b5810`
+(verified from origin by hash; only the
+certified Windows package hash was supplied,
+so the ZIP itself was not re-hashed). Slice 2
+is CLOSED on Windows per that review. Slice 3
+adds the MCP server core: NDJSON stdio loop
+in `crates/core/src/mcp_server.rs`, backend
+trait, production backend on the validated
+`Core::memory_command` path, and a
+`--mcp-server` mode on `anansi-api`,
+exposing exactly three approved read-only
+tools (`memory.search`, `memory.get`,
+`projects.search`). Disabled by default
+(flag + `ANANSI_MCP_SERVER_TOKEN` both
+required); token gate on `initialize`
+`_meta.anansiMcpToken`; allowlist before any
+backend call; sealed boundary in three
+layers with missing and sealed `get`
+identical; read-only by construction (no
+export worker or backup scheduler).
+Linux verification: `npm run typecheck` 0
+errors, contracts 0 drift, docs 273 PASS, UI
+suite 293/293 PASS, production web build
+clean, API build clean, `mcp_server::tests`
+12/12 PASS, cargo `--lib` 240 passed,
+Playwright `mcp-server.spec.ts` 2/2 PASS,
+`mcp.spec.ts` 6/6 PASS, full regression
+battery 54/54 PASS.
+AN-017 stays `in progress`.
+Windows rerun of MCP Slice 3 pending.
+M7 native acceptance, preview promotion,
+§32 sandbox, M5 gates, and M8 Slice 4 Windows
+verification remain open.
+
 ## Resume point — 2026-11-04 MCP Client Integration Slice 2 verified on Windows
 
 Owner-authorized Milestone 13 slice on review branch

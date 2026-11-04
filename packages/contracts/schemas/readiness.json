@@ -8430,6 +8430,38 @@
     "title": "McpServer",
     "type": "object"
   },
+  "McpServerConfig": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "description": "Launch-time server configuration (a contract DTO; never carries a token).",
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "enabled": {
+        "type": "boolean"
+      },
+      "tools": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "enabled",
+      "workspaceId",
+      "tools"
+    ],
+    "title": "McpServerConfig",
+    "type": "object"
+  },
   "McpServerDraft": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "properties": {
@@ -8473,6 +8505,45 @@
       "transport"
     ],
     "title": "McpServerDraft",
+    "type": "object"
+  },
+  "McpServerInfo": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "description": "Capability surface exposed through the contracts (never carries a token).",
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "name": {
+        "type": "string"
+      },
+      "protocolVersions": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "tools": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "version": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "name",
+      "version",
+      "protocolVersions",
+      "tools"
+    ],
+    "title": "McpServerInfo",
     "type": "object"
   },
   "McpServerList": {
@@ -8553,6 +8624,88 @@
       "servers"
     ],
     "title": "McpServerList",
+    "type": "object"
+  },
+  "McpServerToolDef": {
+    "$defs": {
+      "McpSchemaProperty": {
+        "properties": {
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "maximum": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "minimum": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "type": "object"
+      },
+      "McpToolInputSchema": {
+        "properties": {
+          "properties": {
+            "additionalProperties": {
+              "$ref": "#/$defs/McpSchemaProperty"
+            },
+            "type": "object"
+          },
+          "required": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "properties"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "description": "One tool definition, as returned by `tools/list`.",
+    "properties": {
+      "description": {
+        "type": "string"
+      },
+      "inputSchema": {
+        "$ref": "#/$defs/McpToolInputSchema"
+      },
+      "name": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "name",
+      "description",
+      "inputSchema"
+    ],
+    "title": "McpServerToolDef",
     "type": "object"
   },
   "McpTool": {

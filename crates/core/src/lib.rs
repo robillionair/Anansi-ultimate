@@ -21,6 +21,7 @@ pub mod ideas;
 pub mod jobs;
 pub mod lifecycle;
 pub mod mcp;
+pub mod mcp_server;
 pub mod memory;
 pub mod opportunities;
 pub mod pipeline;
