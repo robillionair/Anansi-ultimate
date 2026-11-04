@@ -11,3 +11,14 @@ Acceptance before implementation:
 - Hardware-dependent frame rate reported as observed, never claimed60FPS without measurement. This is Three.js/WebGL cinematic presentation, no claim of UE5 engine equivalence or full GPGPU implementation unless built/tested.
 
 No backend/schema/provider/credential changes, generated product execution, cloud/model calls, pushes, installer or owner-data migration. Build/temp/evidence kept on E:. Antigravity worktrees untouched.
+
+## All-six-view continuation — acceptance before implementation
+
+Owner authorized extending the cinematic treatment to every LARP view while retaining functionality. Continue from `77dfc1d5f` on the same isolated branch.
+
+- Preserve the upgraded memory, funnel and collider; bring the graph, real spectrum and word-alignment matrix to the same optical/detail standard.
+- Graph: soft luminous node constellations and curved relationship filaments; decorative particles never become graph nodes/edges or measured attention. Actual labels/counts/citations remain intact and live snapshots update while mounted.
+- Spectrum/matrix: shared GPU optics with 2D fallback, restrained depth/ornamental stage, readable actual data, correct axis/cell hover mapping and resize. No synthetic chart samples, matrices or model metrics.
+- Empty, reduced-motion, unavailable-WebGL and OFF states remain truthful and operable. Dispose GPU surfaces, subscriptions and observers; no new provider/network operations.
+- Add pure layout/hit-test checks and browser regressions for populated graph/spectrum/matrix, live updates, hover after resize, six-view switching and teardown. Inspect populated screenshots of every view, not only empty-state screens. Run UI/type/docs/build and all relevant LARP browser specs.
+- Evidence distinguishes browser acceptance from native desktop build/promotion and target frame cadence from measured GPU throughput.
