@@ -49,3 +49,9 @@
 .larp-view-fallback:before{content:"";position:absolute;z-index:-1;width:125%;aspect-ratio:1;left:-12.5%;top:5%;border:.5px solid #64503b;background:repeating-radial-gradient(ellipse at center,transparent 0 27px,#8e6b3b33 28px,transparent 29px 45px);transform:perspective(600px) rotateX(68deg) rotateZ(-16deg);opacity:.6;pointer-events:none}
 .larp-view-fallback:after{content:"";position:absolute;z-index:-1;inset:10%;background:linear-gradient(90deg,transparent 49.9%,#b18e5722 50%,transparent 50.1%),linear-gradient(transparent 49.9%,#b18e5722 50%,transparent 50.1%);pointer-events:none}
 .larp-view-fallback p{max-width:80%;padding:9px 14px;background:#070709cc;border-top:.5px solid #57422d;border-bottom:.5px solid #29221b}
+
+.larp-view-canvas[data-interactive="true"]{pointer-events:auto;touch-action:none;cursor:grab;outline:none}.larp-view-canvas[data-interactive="true"]:active{cursor:grabbing}.larp-view-canvas[data-interactive="true"]:focus-visible{outline:1px solid #927048;outline-offset:-2px}
+.larp-camera-tools{position:absolute;z-index:4;bottom:69px;left:20px;right:20px;display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:7px;color:#b59870;pointer-events:none}.larp-camera-tools button{pointer-events:auto;cursor:pointer;border:.5px solid #685035;background:#0d0b09e8;color:#dfc49c;padding:8px 12px;font-size:8px}.larp-camera-tools span{padding:7px;background:#050506ba}.larp-refresh-error{position:absolute;top:115px;left:24px;color:#ffbb99;z-index:4;font-size:10px}
+
+/* The observatory owns input while open; never click invisible application controls. */
+.larp-hud{pointer-events:auto}body:has(.larp-hud){overflow:hidden}

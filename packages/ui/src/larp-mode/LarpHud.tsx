@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { toggleLarpMode } from './store.ts';
 import { telemetryStream, type TelemetryEvent } from './telemetry.ts';
 import { MemoryMatrix, latestMemoryNodes } from './MemoryMatrix.tsx';
@@ -22,9 +22,13 @@ const MODES = [
   ['ORBITAL COLLIDER', 'Concept resonance field', '06 / COLLISION OBSERVATORY'],
 ];
 
-export function LarpHud({ stream = telemetryStream, initialView = 1 }: { stream?: typeof telemetryStream; initialView?: number }) {
+export function LarpHud({ stream = telemetryStream, initialView = 1, onRefreshMemory, demo=false }: { stream?: typeof telemetryStream; initialView?: number; onRefreshMemory?:()=>Promise<void>;demo?:boolean }) {
   const [events, setEvents] = useState<TelemetryEvent[]>(() => stream.snapshot());
   const [view, setView] = useState(initialView);
+  const [refreshing,setRefreshing]=useState(false);
+  const [refreshError,setRefreshError]=useState('');
+  const rootRef=useRef<HTMLDivElement>(null);
+  useEffect(()=>{rootRef.current?.querySelector<HTMLButtonElement>('.larp-view-button-on')?.focus();},[]);
   useEffect(() => stream.subscribe(() => setEvents(stream.snapshot())), [stream]);
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
@@ -40,10 +44,10 @@ export function LarpHud({ stream = telemetryStream, initialView = 1 }: { stream?
   const nodes = latestMemoryNodes(events);
   const memoryIdentity=JSON.stringify(nodes);
   const graphIdentity=memoryIdentity+JSON.stringify([...latestCitedIds(events)]);
-  return <div className="larp-hud" role="complementary" aria-label="LARP telemetry frame" data-view={view}>
+  return <div ref={rootRef} className="larp-hud" role="complementary" aria-label="LARP telemetry frame" data-view={view}>
     <div className="larp-rail larp-rail-top">
-      <span className="larp-brand"><b>ANANSI</b><i/> SECOND BRAIN <span className="larp-version">/ LOCAL INTELLIGENCE SYSTEM</span></span>
-      <div className="larp-top-actions"><span className="larp-hud-status"><i/> [ LARP: ACTIVE ]</span><button type="button" aria-label="Exit LARP mode" onClick={toggleLarpMode}>EXIT <span>↗</span></button></div>
+      <span className="larp-brand"><b>ANANSI</b><i/> SECOND BRAIN <span className="larp-version">{demo?'DEMO / SAMPLE DATA':'/ LOCAL INTELLIGENCE SYSTEM'}</span></span>
+      <div className="larp-top-actions">{onRefreshMemory&&<button type="button" aria-label="Refresh LARP memory" disabled={refreshing} onClick={async()=>{setRefreshing(true);setRefreshError('');try{await onRefreshMemory();}catch{setRefreshError('Memory refresh failed. Try again.');}finally{setRefreshing(false);}}}>{refreshing?'REFRESHING…':'REFRESH MEMORY'}</button>}<span className="larp-hud-status"><i/> [ LARP: ACTIVE ]</span><button type="button" aria-label="Exit LARP mode" onClick={toggleLarpMode}>EXIT <span>↗</span></button></div>
     </div>
     <div className="larp-rail larp-rail-left">
       <div className="larp-rail-caption">01 / SIGNAL INTELLIGENCE</div>
@@ -57,6 +61,8 @@ export function LarpHud({ stream = telemetryStream, initialView = 1 }: { stream?
       <div className="larp-scene-caption"><span>{active[2]}</span><span>REALTIME RENDER / OBSERVATORY</span></div>
       <div className="larp-scene-title"><div><span>ANANSI OBSERVATORY</span><h3 id="larp-center-heading">{active[0]}</h3></div><span className="larp-scene-coordinate">{active[1]}<br/>LOCAL / IN-MEMORY</span></div>
       {view===1 ? <View1MemoryVault key={memoryIdentity} stream={stream}/> : view===2 ? <View2NeuralFunnel stream={stream}/> : view===3 ? <View3AttentionSpider key={graphIdentity} stream={stream}/> : view===4 ? <View4QuantDrift stream={stream}/> : view===5 ? <View5AttentionHeatmap stream={stream}/> : <View6ColliderField stream={stream}/>}
+      {[1,3,6].includes(view)&&<div className="larp-camera-tools"><span>DRAG ROTATE · SCROLL ZOOM · RIGHT-DRAG PAN</span><button type="button" aria-label="Reset scene camera" onClick={event=>event.currentTarget.closest('.larp-centerpiece')?.querySelector('canvas[data-interactive="true"]')?.dispatchEvent(new Event('larp-camera-reset'))}>RESET VIEW</button></div>}
+      {refreshError&&<p className="larp-refresh-error" role="alert">{refreshError}</p>}
       <div className="larp-scene-footnote"><span>PARTICLES / LAYOUT ARE ORNAMENTAL · VALUES COME FROM TELEMETRY</span><span>SCENE {String(view).padStart(2,'0')} / 06</span></div>
     </section></div>
     <div className="larp-rail larp-rail-right">

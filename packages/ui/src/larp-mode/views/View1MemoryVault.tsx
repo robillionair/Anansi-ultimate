@@ -22,6 +22,7 @@ import { latestMemoryNodes } from '../MemoryMatrix.tsx';
 import { telemetryStream } from '../telemetry.ts';
 import { registerDisposer } from '../store.ts';
 import { createLarpRenderLoop } from '../renderLoop.ts';
+import {bindSceneNavigation} from './sceneNavigation.ts';
 import { createOrbitalAtmosphere } from './orbitalAtmosphere.ts';
 
 const PARTICLE_SEED = 20261103;
@@ -102,6 +103,7 @@ export function View1MemoryVault({ stream = telemetryStream }: { stream?: typeof
     );
     resize();
 
+    let navigation:ReturnType<typeof bindSceneNavigation>|null=null;
     let frames = 0;
     let cleaned = false;
     const observer = new ResizeObserver(() => { resize(); loop.redraw(); });
@@ -110,7 +112,8 @@ export function View1MemoryVault({ stream = telemetryStream }: { stream?: typeof
     function frame(time: number): void {
       if (cleaned) return;
       const t = isReduced() ? 0 : time / 1000;
-      points.rotation.y = Math.sin(t*.06)*.16;
+      if(!navigation?.touched())points.rotation.y = Math.sin(t*.06)*.16;
+      material.uniforms.uFocalDepth.value=navigation?.distance()??VAULT_CAMERA_Z;
       material.uniforms.uTime.value = t;
       atmosphere.update(t);
       composerHandle.grainPass.uniforms.uTime.value = isReduced() ? 0 : time / 1000;
@@ -133,10 +136,12 @@ export function View1MemoryVault({ stream = telemetryStream }: { stream?: typeof
     }
     frame(0);
     const loop = createLarpRenderLoop(frame, stream);
+    navigation=bindSceneNavigation(camera,els.canvas,loop.redraw);
 
     function cleanup(): void {
       if (cleaned) return;
       cleaned = true;
+      navigation?.dispose();
       loop.dispose();
       observer.disconnect();
       composerHandle.dispose();
@@ -168,7 +173,7 @@ export function View1MemoryVault({ stream = telemetryStream }: { stream?: typeof
 
   return (
     <div ref={containerRef} className="larp-view-container" aria-label="SECOND BRAIN // 3D MEMORY VAULT">
-      <canvas ref={canvasRef} className="larp-view-canvas" aria-label="Memory vault particle field" />
+      <canvas ref={canvasRef} className="larp-view-canvas" data-interactive="true" tabIndex={0} aria-description="Drag to rotate, scroll to zoom, right-drag or arrow keys to pan. Home resets the view." aria-label="Memory vault particle field" />
       <div ref={tagLayerRef} className="larp-tag-layer" aria-hidden="true" />
     </div>
   );

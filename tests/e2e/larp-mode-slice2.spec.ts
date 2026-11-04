@@ -67,15 +67,16 @@ test('a live ask run fires a compilation pulse in view 2', async ({ page }) => {
     const funnel = page.getByLabel('NEURAL FUNNEL // CONTEXT COMPILER');
     await expect(funnel).toBeVisible();
 
-    // The HUD overlays the Ask view but is pointer-events none except
-    // the view buttons, so the Ask form stays usable underneath it.
+    // Leave the input-owning observatory to use the application, then reopen it.
+    await page.getByLabel('Exit LARP mode').click();
     await page.getByRole('button', { name: 'Ask ANANSI', exact: true }).click();
     await page.getByLabel('Your Question').fill('What is the capital of France?');
     await page.getByRole('button', { name: 'Ask Question' }).click();
     await expect(page.locator('.ask-result-section')).toBeVisible({ timeout: 60000 });
 
-    // The completed run pushed a compilation event; View 2 was mounted
-    // throughout, so its live subscription spawned a pulse.
+    await page.getByLabel('Toggle LARP mode').click();
+    await page.getByLabel('LARP view 2').click();
+    // The completed run's real event survives HUD unmount and seeds its pulse.
     await expect
       .poll(async () => Number(await funnel.getAttribute('data-pulses-fired')), { timeout: 30000 })
       .toBeGreaterThan(0);

@@ -20,6 +20,7 @@ import { latestMemoryNodes } from '../MemoryMatrix.tsx';
 import { telemetryStream } from '../telemetry.ts';
 import { registerDisposer } from '../store.ts';
 import { createLarpRenderLoop } from '../renderLoop.ts';
+import {bindSceneNavigation} from './sceneNavigation.ts';
 import {generateParticles} from './particleLayout.ts';
 import {BOKEH_VERTEX,BOKEH_FRAGMENT} from './vaultShaders.ts';
 import {createOrbitalAtmosphere} from './orbitalAtmosphere.ts';
@@ -150,6 +151,7 @@ export function View3AttentionSpider({ stream = telemetryStream }: { stream?: ty
     );
     resize();
 
+    let navigation:ReturnType<typeof bindSceneNavigation>|null=null;
     let frames = 0;
     let cleaned = false;
     const observer = new ResizeObserver(() => { resize(); loop.redraw(); });
@@ -159,9 +161,10 @@ export function View3AttentionSpider({ stream = telemetryStream }: { stream?: ty
 
     function frame(time: number): void {
       if (cleaned) return;
-      if (!isReduced()) group.rotation.y += 0.0012;
+      if (!isReduced()&&!navigation?.touched()) group.rotation.y += 0.0012;
       composerHandle.grainPass.uniforms.uTime.value = isReduced() ? 0 : time / 1000;
       atmosphere.update(isReduced()?0:time/1000);
+      cloudMaterial.uniforms.uFocalDepth.value=navigation?.distance()??190;
       cloudMaterial.uniforms.uTime.value=isReduced()?0:time/1000;
       composerHandle.render();
       frames += 1;
@@ -183,10 +186,12 @@ export function View3AttentionSpider({ stream = telemetryStream }: { stream?: ty
 
     frame(0);
     const loop = createLarpRenderLoop(frame, stream);
+    navigation=bindSceneNavigation(camera,els.canvas,loop.redraw);
 
     function cleanup(): void {
       if (cleaned) return;
       cleaned = true;
+      navigation?.dispose();
       loop.dispose();
       observer.disconnect();
       composerHandle.dispose();
@@ -229,7 +234,7 @@ export function View3AttentionSpider({ stream = telemetryStream }: { stream?: ty
 
   return (
     <div ref={containerRef} className="larp-view-container" aria-label="ATTENTION SPIDER // GRAPH DRIFT ENGINE">
-      <canvas ref={canvasRef} className="larp-view-canvas" aria-label="Attention spider graph" />
+      <canvas ref={canvasRef} className="larp-view-canvas" data-interactive="true" tabIndex={0} aria-description="Drag to rotate, scroll to zoom, right-drag or arrow keys to pan. Home resets the view." aria-label="Attention spider graph" />
       <div ref={tagLayerRef} className="larp-tag-layer" aria-hidden="true" />
       <div className="larp-spectrum-legend"><span>Bright links: recorded relationships.</span><span>Faint links: layout only.</span><span>Dust: ornamental, not additional records.</span></div>
     </div>

@@ -19,6 +19,7 @@ import { beamPoint, dopplerColor, type BeamId } from './colliderField.ts';
 import { telemetryStream } from '../telemetry.ts';
 import { registerDisposer } from '../store.ts';
 import { createLarpRenderLoop } from '../renderLoop.ts';
+import {bindSceneNavigation} from './sceneNavigation.ts';
 import { createOrbitalAtmosphere } from './orbitalAtmosphere.ts';
 
 const PARTICLES_PER_BEAM = 2000;
@@ -138,6 +139,7 @@ export function View6ColliderField({ stream = telemetryStream }: { stream?: type
     );
     resize();
 
+    let navigation:ReturnType<typeof bindSceneNavigation>|null=null;
     let frames = 0;
     let cleaned = false;
     let collisions = events.filter((e) => e.kind === 'collision').length;
@@ -158,7 +160,7 @@ export function View6ColliderField({ stream = telemetryStream }: { stream?: type
 
     function frame(time: number): void {
       if (cleaned) return;
-      if (!isReduced()) group.rotation.y += 0.0012;
+      if (!isReduced()&&!navigation?.touched()) group.rotation.y += 0.0012;
       if (isReduced()) { composerHandle.bloomPass.strength = BLOOM_STRENGTH; flashStart = -1; }
       if (flashStart >= 0) {
         const elapsed = (time - flashStart) / FLASH_MS;
@@ -180,10 +182,12 @@ export function View6ColliderField({ stream = telemetryStream }: { stream?: type
 
     frame(0);
     const loop = createLarpRenderLoop(frame, stream);
+    navigation=bindSceneNavigation(camera,els.canvas,loop.redraw);
 
     function cleanup(): void {
       if (cleaned) return;
       cleaned = true;
+      navigation?.dispose();
       loop.dispose();
       atmosphere.dispose();
       observer.disconnect();
@@ -216,7 +220,7 @@ export function View6ColliderField({ stream = telemetryStream }: { stream?: type
 
   return (
     <div ref={containerRef} className="larp-view-container" aria-label="COLLIDER FIELD // CONCEPT RESONANCE ACCELERATOR">
-      <canvas ref={canvasRef} className="larp-view-canvas" aria-label="Collider field beams" />
+      <canvas ref={canvasRef} className="larp-view-canvas" data-interactive="true" tabIndex={0} aria-description="Drag to rotate, scroll to zoom, right-drag or arrow keys to pan. Home resets the view." aria-label="Collider field beams" />
       <div className="larp-spectrum-legend">
         {lastBeamA !== null && lastBeamB !== null ? (
           <span>

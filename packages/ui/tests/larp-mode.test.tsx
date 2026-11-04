@@ -351,3 +351,14 @@ test('cinematic instrument cell picking matches the drawn grid after resize',()=
     const plot=instrumentBounds(w,h);assert.ok(plot.left+plot.width<=w&&plot.top+plot.height<=h);
   }
 });
+
+import {isLarpDemoBuild,loadLarpDemo} from '../src/larp-mode/demoMode.ts';
+test('demo startup only opens the named sample and reads its real snapshot',async()=>{
+  assert.equal(isLarpDemoBuild(),false);
+  const calls:string[]=[];
+  const client={listWorkspaces:async()=>({workspaces:[{id:'private',name:'Private work'},{id:'demo',name:'LARP Demo'}]}),openWorkspace:async(id:string)=>{calls.push('open:'+id);return {workspace:{id,name:'LARP Demo'},settings:{onboardingComplete:true}};},listMemories:async(id:string)=>{calls.push('read:'+id);return {memories:[{id:'sample-record'}]};}} as unknown as Parameters<typeof loadLarpDemo>[0];
+  const result=await loadLarpDemo(client);assert.equal(result.memories[0].id,'sample-record');assert.deepEqual(calls,['open:demo','read:demo']);
+  calls.length=0;
+  await assert.rejects(()=>loadLarpDemo({...client,listWorkspaces:async()=>({workspaces:[{id:'private',name:'Private work'}]})} as unknown as Parameters<typeof loadLarpDemo>[0]),/missing/);
+  assert.deepEqual(calls,[]);
+});

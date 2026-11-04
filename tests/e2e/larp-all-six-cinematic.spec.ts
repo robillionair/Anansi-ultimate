@@ -39,7 +39,7 @@ test('all cinematic views retain real data, hover, live snapshots and resize beh
     await expect(graph).toHaveAttribute('data-nodes','8');await shot(3);
     // Current record refresh while the graph stays mounted must update the scene.
     await session.call('memories','create',{workspaceId:session.workspaceId,kind:'memory',draft:{title:'Aurora live update',body:'SQLite live snapshot update.'}});
-    await page.getByRole('button',{name:'Refresh memories',exact:true}).click();
+    await page.getByLabel('Refresh LARP memory').click();
     await expect(graph).toHaveAttribute('data-nodes','9');
     await page.getByLabel('Exit LARP mode').click();
     await page.getByRole('button',{name:'Ask ANANSI',exact:true}).click();
