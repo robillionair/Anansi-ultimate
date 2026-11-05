@@ -168,7 +168,7 @@ test('MCP server: notes.search, experiments.list, products.get with strict priva
       // tools/list now returns six tools in the documented order.
       client.send({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} });
       response = await client.next();
-      expect(response.result.tools.map((t: any) => t.name)).toEqual(['memory.search', 'memory.get', 'notes.search', 'projects.search', 'experiments.list', 'products.get']);
+      expect(response.result.tools.map((t: any) => t.name)).toEqual(['memory.search', 'memory.get', 'notes.search', 'projects.search', 'experiments.list', 'products.get', 'ideas.create']);
 
       // notes.search: kind fixed to note — the project row never
       // appears, the private note never appears, no bodies.
