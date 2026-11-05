@@ -1,23 +1,19 @@
-## Resume point - 2026-11-05 MCP Integration Slice 5 & Milestone 13 Closure verified on Windows
+## Resume point — 2026-11-05 Windows readiness and closure baseline
 
-Owner-authorized Milestone 13 slice and milestone closure on review branch
-`codex/review-mcp-slice5` from the delivery tip
-`ec87ca92869264265f40716b02eaf22c3a336e3d`
-over baseline `b6c6f39ea0fa0b79339e7bdfa503a893666b6c0e`.
-Slice 5 adds the mutation-gated `ideas.create` tool (7th tool)
-with five security layers, live pairing authentication, project gating,
-and validated artifact registration, closing Milestone 13.
-Windows verification: `tsc --noEmit` 0 errors, contracts 0 drift,
-docs 280 PASS, UI suite 297/297 PASS, production web build clean (4.94s),
-API build clean (2m 54s), workspace `--lib` 247 passed (0 failed),
-Playwright `mcp-slice5.spec.ts` 2/2 PASS, `mcp-server.spec.ts` 2/2 PASS,
-`mcp-slice4.spec.ts` 3/3 PASS, `mcp.spec.ts` 6/6 PASS, full regression
-battery 59/59 PASS across all 24 specs in 11.2m.
-Milestone 13 is CLOSED on Windows. AN-017 is `verified`.
-
-## Resume point — 2026-11-05 cinematic Entity/Desktop delivery
-
-Continue visual work in isolated `E:/Anansi/worktrees/larp-entity`, branch `codex/larp-entity-chat`; do not switch the other agent's `review-m8-overnight` worktree. Merge `043060316` integrates interactive `414f75fd2` with verified MCP4 `b6c6f39ea`. Runtime checkpoints: entity `900a661f6`, slow-renderer adaptation `3923d2ca8`, truthful overhead display `548f3b36e`. [Evidence](evidence/larp-entity-chat.md) preserves verification scopes; [owner guide](handoffs/larp-entity-desktop-guide.md) explains the Desktop demo. Versioned binary/launcher/readme and synthetic data live under `E:/Anansi/previews/larp-cinematic`; Desktop shortcut is `ANANSI Ultimate Demo`. Never repoint it at owner data or infer full release certification. No inference on opening the face. Chat settings/history are session-only; choose an already-installed local model or configured provider for real inference. Prior MCP recovery context follows intact.
+Authoritative baseline on branch `codex/windows-readiness-closure` at tip
+`7e24859e6c042aaa135d632ad7009d20ab3c35e1`.
+Combines verified MCP Integration Slice 5 (`ec87ca928`) with verified holographic
+LARP entity chat and cinematic upgrades (`b5417f551`).
+Authoritative status ledger: [docs/evidence/project-status-ledger-2026-11-05.md](evidence/project-status-ledger-2026-11-05.md).
+Scope status:
+1. MCP Integration (Slices 1–5): closed on Windows; AN-017 verified.
+2. Milestone 13 broader scope: document formats, connectors, and background ingestion
+   remain planned/in-progress under AN-025.
+3. LARP Mode & Entity: 7 observatory scenes, animated portrait relief with literal text streaming,
+   calibrated input overhead, adaptive resolution scaling, 314 UI tests passing.
+4. Desktop demo runtime: `ANANSI-Demo-548f3b36e.exe` in `E:/Anansi/previews/larp-cinematic`.
+5. Standing gates: M7 native acceptance & preview promotion, §32 sandbox, M5 gates,
+   M8 Slice 4 Windows verification, release tooling integration.
 
 ## Resume point — 2026-11-05 MCP Integration Slice 4 verified on Windows
 

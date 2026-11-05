@@ -30,9 +30,9 @@ ANANSI Ultimate is a local-first product creation and intelligence workspace del
 | **M10** | SOMNIA | Verified | Deterministic replay evaluator, seeded nightmare generator, consolidation proposals, Forge QA bridge, dashboard |
 | **M11** | GHOST-PROMPT | Verified | Privacy-first draft exploration, in-memory revision capture, Three.js 3D timeline, rule-based draft analysis, dual-panel comparison |
 | **M12** | Product Lifecycle | Verified | 7-stage pipeline engine & navigator, Launch Studio with deterministic ZIP bundling, Guided Lifecycle Walk with recovery |
-| **LARP** | LARP Mode & Holographic Entity | Verified | 6 cinematic observatory views, interactive holographic entity avatar with streaming chat, adaptive slow-renderer pipeline, telemetry bus & HUD |
+| **LARP** | LARP Mode & Holographic Entity | Verified | 7 observatory scenes, animated Three.js portrait relief with streaming text chat, adaptive slow-renderer pipeline, telemetry bus & HUD |
 | **HOME** | Command Dashboard | Verified | Landing hub with genuine uptime telemetry, recency-ordered projects hub with Guided Walk jump, system backup and queue health |
-| **M13** | MCP Integration | Verified | Stdio MCP client (tools, resources, prompts) with explicit review; MCP server exposing 7 tools (6 read-only + mutation-gated ideas.create) with pairing auth & strict privacy |
+| **M13** | Model Context Protocol (MCP) | Verified | Stdio MCP client (tools, resources, prompts) with explicit review; MCP server exposing 7 tools (6 read-only + mutation-gated ideas.create) with pairing auth & strict privacy. (Document ingestion & connectors in progress under AN-025) |
 
 See [docs/BUILD_STATUS.md](docs/BUILD_STATUS.md) and [docs/REQUIREMENTS_MATRIX.md](docs/REQUIREMENTS_MATRIX.md) for detailed verification evidence.
 

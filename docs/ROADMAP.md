@@ -1,5 +1,20 @@
 # ANANSI Ultimate — Approved Development Roadmap
 
+## Current Development Status & Baseline (2026-11-05)
+
+- **Baseline Tip**: `7e24859e6c042aaa135d632ad7009d20ab3c35e1` on branch `codex/windows-readiness-closure`.
+- **Authoritative Status Ledger**: [docs/evidence/project-status-ledger-2026-11-05.md](evidence/project-status-ledger-2026-11-05.md).
+- **Milestones Complete**: M0 (Foundation), M1 (Desktop & Web Shell), M2 (Local Memory OS), M6 (Opportunity Engine), M9 (SwarmTank 3D), M10 (SOMNIA), M11 (GHOST-PROMPT), M12 (Product Lifecycle & Launch Studio), HOME (Command Dashboard), LARP Mode (7 observatory scenes, animated portrait relief, telemetry bus).
+- **Milestones In Progress**:
+  - **M13 (Integrations & MCP)**: Model Context Protocol (MCP) Integration Slices 1–5 verified on Windows NTFS. Document intelligence, text/Markdown ingestion, and connectors are in progress (AN-025).
+  - **M7 (Product Forge)**: Code generation & packaging verified; sandbox execution (§32 / AN-032) and native desktop acceptance remain open.
+  - **M8 (LEXI-COLLIDER)**: Slices 1–3 verified; Slice 4 context picker review findings remain open.
+  - **M3–M5 (Search, Context, Providers)**: Local search and provider plumbing verified; live model benchmarks and paid cloud credentials remain open.
+  - **M15 (Release Tooling)**: Windows release test harness qualified; production code signing and EV certificates remain open.
+- **Milestone Scheduled Next**: M14 (macOS & ANANSI Core Appliance).
+
+Historical authorization and roadmap planning records follow intact below:
+
 Current Owner authorization (2026-10-20): complete remaining M2–M4 application integration and local acceptance in the [integration checkout](handoffs/M2-M4-integration-owner.md). Historical scheduling exceptions below are superseded within this scope. M2–M4 are incomplete; [M5 readiness](evidence/M5-READINESS.md) is pending. Remote publication/certification and independent audit remain explicitly deferred, never passed. Do not implement M5 in this task.
 
 Scheduling exception, 2026-10-19: the user explicitly authorized independent next-phase work while awaiting audit feedback. [M3.1 title search](../plans/03-search-and-ollama.md) may proceed on verified M2.1–M2.5 record/transport contracts without a persistent plaintext index or inference. Earlier stop-before-M3 wording is superseded only for that slice. M2.6/G1, M2.7 and M2.8 remain incomplete; no milestone tag or full Memory OS/search completion is implied. ADR-0024 records the boundaries. M3.2 body indexing, local runtime and Ask slices retain separate design/privacy gates.
