@@ -24,8 +24,18 @@ import {
 import {
   buildLarpPasses,
   clampPixelRatio,
+  nextRenderScale,
   LARP_PASS_ORDER,
 } from '../src/larp-mode/postprocessing/LarpComposer.ts';
+
+test('slow-renderer scale preserves full quality for fast frames and stays bounded',()=>{
+  assert.equal(nextRenderScale(16,1),1);assert.equal(nextRenderScale(50,1),1);
+  assert.equal(nextRenderScale(70,1),.75);assert.equal(nextRenderScale(90,.75),.5625);
+  assert.equal(nextRenderScale(100,.5625),.5);assert.equal(nextRenderScale(100,.5),.5);
+  assert.equal(nextRenderScale(16,.5),.5);assert.equal(nextRenderScale(NaN,1),1);
+  assert.equal(nextRenderScale(Infinity,1),1);assert.equal(nextRenderScale(16,NaN),1);
+  assert.equal(nextRenderScale(16,0),.5);assert.equal(nextRenderScale(16,2),1);
+});
 import {
   cubicBezierPoint,
   filamentLayout,

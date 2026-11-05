@@ -28,6 +28,12 @@ export function clampPixelRatio(dpr: number): number {
   return Math.min(dpr, MAX_PIXEL_RATIO);
 }
 
+/** Keep the same scene and optics while bounding work on a slow renderer. */
+export function nextRenderScale(frameMs:number,current:number):number {
+  const scale=Number.isFinite(current)?Math.max(.5,Math.min(1,current)):1;
+  return Number.isFinite(frameMs)&&frameMs>50?Math.max(.5,scale*.75):scale;
+}
+
 export type LarpPassKind = 'render' | 'bloom' | 'smaa' | 'aberration' | 'grain' | 'output';
 
 export const LARP_PASS_ORDER: LarpPassKind[] = ['render', 'bloom', 'smaa', 'aberration', 'grain', 'output'];
@@ -72,11 +78,18 @@ export function createLarpComposer(
   composer.addPass(new OutputPass());
   const passes = composer.passes.slice();
   let disposed = false;
+  let renderScale=1;
+  renderer.domElement.dataset.renderScale='1';
   return {
     composer,
     grainPass,
     bloomPass: bloom,
-    render: () => composer.render(),
+    render: () => {
+      if(disposed)return;
+      const began=performance.now();composer.render();
+      const next=nextRenderScale(performance.now()-began,renderScale);
+      if(next!==renderScale){renderScale=next;composer.setPixelRatio(clampPixelRatio(window.devicePixelRatio||1)*renderScale);renderer.domElement.dataset.renderScale=String(renderScale);}
+    },
     setSize: (w: number, h: number) => composer.setSize(w, h),
     dispose: () => {
       if (disposed) return;
