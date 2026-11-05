@@ -1,4 +1,20 @@
-﻿## Resume point — 2026-11-05 MCP Integration Slice 5 delivered (Linux; Milestone 13 closed, Slice 5 Windows rerun pending)
+﻿## Resume point - 2026-11-05 MCP Integration Slice 5 & Milestone 13 Closure verified on Windows
+
+Owner-authorized Milestone 13 slice and milestone closure on review branch
+codex/review-mcp-slice5 from the delivery tip
+ec87ca92869264265f40716b02eaf22c3a336e3d
+over baseline 6c6f39ea0fa0b79339e7bdfa503a893666b6c0e.
+Slice 5 adds the mutation-gated ideas.create tool (7th tool)
+with five security layers, live pairing authentication, project gating,
+and validated artifact registration, closing Milestone 13.
+Windows verification: 	sc --noEmit 0 errors, contracts 0 drift,
+docs 279 PASS, UI suite 297/297 PASS, production web build clean (4.94s),
+API build clean (2m 54s), workspace --lib 247 passed (0 failed),
+Playwright mcp-slice5.spec.ts 2/2 PASS, mcp-server.spec.ts 2/2 PASS,
+mcp-slice4.spec.ts 3/3 PASS, mcp.spec.ts 6/6 PASS, full regression
+battery 59/59 PASS across all 24 specs in 11.2m.
+Milestone 13 is CLOSED on Windows. AN-017 is erified.
+## Resume point — 2026-11-05 MCP Integration Slice 5 delivered (Linux; Milestone 13 closed, Slice 5 Windows rerun pending)
 
 Owner-authorized Milestone 13 closure slice on branch `muse/mcp-slice5`
 from the Windows-certified Slice 4 review tip `b6c6f39ea` (verified
