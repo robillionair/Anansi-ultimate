@@ -1,4 +1,4 @@
-export type View = 'workspace'|'dashboard'|'settings'|'connection'|'memory'|'notes'|'projects'|'tasks'|'people'|'records'|'jobs'|'backups'|'search'|'models'|'ask'|'providers'|'mcp';
+export type View = 'workspace'|'dashboard'|'settings'|'connection'|'memory'|'notes'|'projects'|'tasks'|'people'|'records'|'documents'|'jobs'|'backups'|'search'|'models'|'ask'|'providers'|'mcp';
 export const plannedGroups = [
   {name:'HOME',items:[]},
   {name:'KNOWLEDGE',items:['Files','Big Brain']},
@@ -23,6 +23,7 @@ export function Navigation({view,hasWorkspace,onNavigate}:{view:View;hasWorkspac
     <button disabled={!hasWorkspace} aria-current={view==='memory'?'page':undefined} onClick={()=>onNavigate('memory')}>Memory</button>
     <button disabled={!hasWorkspace} aria-current={view==='notes'?'page':undefined} onClick={()=>onNavigate('notes')}>Notes</button>
     <button disabled={!hasWorkspace} aria-current={view==='records'?'page':undefined} onClick={()=>onNavigate('records')}>Records</button>
+    <button disabled={!hasWorkspace} aria-current={view==='documents'?'page':undefined} onClick={()=>onNavigate('documents')}>Documents</button>
     <p className="nav-group">SYSTEM</p>
     <button disabled={!hasWorkspace} aria-current={view==='jobs'?'page':undefined} onClick={()=>onNavigate('jobs')}>Jobs and export</button>
     <button disabled={!hasWorkspace} aria-current={view==='backups'?'page':undefined} onClick={()=>onNavigate('backups')}>Backups</button>

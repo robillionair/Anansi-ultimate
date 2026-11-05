@@ -1176,6 +1176,33 @@ export interface DiscoveredRuntime {
   status: RuntimeStatus;
   version?: string | null;
 }
+/**
+ * Exact-source provenance stored on a published `document` memory.
+ * `media_type` is derived from the kind, never trusted from the client.
+ */
+export interface DocumentProvenance {
+  bom: boolean;
+  fileName: string;
+  mediaType: string;
+  rawBytes: number;
+  rawHash: string;
+  textChars: number;
+  textHash: string;
+}
+/**
+ * The exact-source record for one beam/document text. Mirrors
+ * `ColliderDocumentSource` field for field; ingestion builds this from
+ * the staged upload, the collider builds it from the picked file.
+ */
+export interface DocumentSource {
+  bom: boolean;
+  kind: string;
+  label: string;
+  rawBytes: number;
+  rawHash: string;
+  textChars: number;
+  textHash: string;
+}
 export type ExportSelection =
   | {
       kind: "workspace";
@@ -1191,7 +1218,18 @@ export type ExportSelection =
   | {
       ids: string[];
       kind: "records";
+    }
+  | {
+      expectedBytes: number;
+      expectedHash: string;
+      fileName: string;
+      format: string;
+      kind: "ingestion";
+      privacy: Privacy;
+      projectId?: string | null;
+      uploadId: string;
     };
+export type Privacy = "sealed" | "private" | "standard" | "public";
 
 export interface EnqueueExportRequest {
   contractVersion: number;
@@ -2038,7 +2076,50 @@ export interface IndexEmbeddingsResponse {
   indexedMemories: number;
   model: string;
 }
+
+export interface IngestionBegin {
+  bytes: number;
+  contractVersion: number;
+  fileName: string;
+  privacy: Privacy;
+  projectId?: string | null;
+  sha256: string;
+  workspaceId: string;
+}
+export interface IngestionPart {
+  bytes: number[];
+  contractVersion: number;
+  finish: boolean;
+  id: string;
+  offset: number;
+  workspaceId: string;
+}
 export type JobState = "Queued" | "Running" | "Paused" | "Completed" | "Failed" | "Cancelled";
+
+export interface IngestionStatus {
+  contractVersion: number;
+  id: string;
+  job?: Job | null;
+  received: number;
+}
+export interface Job {
+  artifactBytes?: number | null;
+  artifactHash?: string | null;
+  artifactId?: string | null;
+  checkpoint: string;
+  checkpointVersion: number;
+  createdAt: string;
+  id: string;
+  log: string;
+  maxBytes: number;
+  maxRecords: number;
+  progress: number;
+  selection: ExportSelection;
+  state: JobState;
+  updatedAt: string;
+  version: number;
+  workspaceId: string;
+}
 
 export interface Job {
   artifactBytes?: number | null;
@@ -2476,7 +2557,6 @@ export interface McpToolCallContent {
   type: string;
 }
 export type MemoryState = "proposed" | "confirmed" | "temporary" | "durable" | "superseded" | "archived";
-export type Privacy = "sealed" | "private" | "standard" | "public";
 
 export interface MemoryDetails {
   body: string;
@@ -2488,6 +2568,12 @@ export interface MemoryMetadata {
   completed?: boolean | null;
   confidence?: number | null;
   createdAt: string;
+  /**
+   * Exact-source provenance for imported documents (`document_import`
+   * records only). Absent for every other record, including all
+   * pre-ingestion rows, which parse with `None`.
+   */
+  document?: DocumentProvenance | null;
   dueDate?: string | null;
   duplicateOf?: string | null;
   eventDate?: string | null;
@@ -2515,6 +2601,19 @@ export interface MemoryMetadata {
   validationStatus: string;
   version: number;
   workspaceId: string;
+}
+/**
+ * Exact-source provenance stored on a published `document` memory.
+ * `media_type` is derived from the kind, never trusted from the client.
+ */
+export interface DocumentProvenance {
+  bom: boolean;
+  fileName: string;
+  mediaType: string;
+  rawBytes: number;
+  rawHash: string;
+  textChars: number;
+  textHash: string;
 }
 export interface MemoryDraft {
   body: string;
@@ -2540,6 +2639,12 @@ export interface MemoryMetadata {
   completed?: boolean | null;
   confidence?: number | null;
   createdAt: string;
+  /**
+   * Exact-source provenance for imported documents (`document_import`
+   * records only). Absent for every other record, including all
+   * pre-ingestion rows, which parse with `None`.
+   */
+  document?: DocumentProvenance | null;
   dueDate?: string | null;
   duplicateOf?: string | null;
   eventDate?: string | null;
@@ -2567,6 +2672,19 @@ export interface MemoryMetadata {
   validationStatus: string;
   version: number;
   workspaceId: string;
+}
+/**
+ * Exact-source provenance stored on a published `document` memory.
+ * `media_type` is derived from the kind, never trusted from the client.
+ */
+export interface DocumentProvenance {
+  bom: boolean;
+  fileName: string;
+  mediaType: string;
+  rawBytes: number;
+  rawHash: string;
+  textChars: number;
+  textHash: string;
 }
 export interface MemoryListRequest {
   contractVersion: number;
@@ -2596,6 +2714,12 @@ export interface MemoryMetadata {
   completed?: boolean | null;
   confidence?: number | null;
   createdAt: string;
+  /**
+   * Exact-source provenance for imported documents (`document_import`
+   * records only). Absent for every other record, including all
+   * pre-ingestion rows, which parse with `None`.
+   */
+  document?: DocumentProvenance | null;
   dueDate?: string | null;
   duplicateOf?: string | null;
   eventDate?: string | null;
@@ -2624,6 +2748,19 @@ export interface MemoryMetadata {
   version: number;
   workspaceId: string;
 }
+/**
+ * Exact-source provenance stored on a published `document` memory.
+ * `media_type` is derived from the kind, never trusted from the client.
+ */
+export interface DocumentProvenance {
+  bom: boolean;
+  fileName: string;
+  mediaType: string;
+  rawBytes: number;
+  rawHash: string;
+  textChars: number;
+  textHash: string;
+}
 export interface MemoryReadRequest {
   contractVersion: number;
   id: string;
@@ -2634,14 +2771,38 @@ export interface MemoryReadRequest {
 export interface MemoryWriteRequest {
   confirmPrivacyChange?: boolean;
   contractVersion: number;
+  /**
+   * Exact-source provenance for an imported document. Accepted only
+   * with kind `document` on create; refused on revise.
+   */
+  document?: DocumentProvenance | null;
   draft: MemoryDraft;
   expectedRevision?: string | null;
   id?: string | null;
   kind?: string | null;
   lifecycle?: LifecycleChange | null;
+  /**
+   * Only `document_import` is accepted, only together with `document`
+   * and kind `document`, only on create. Provenance is verified
+   * against the body (see `validate_import`), never trusted.
+   */
+  provenance?: string | null;
   restoreArchive?: boolean;
   restoreRevision?: string | null;
   workspaceId: string;
+}
+/**
+ * Exact-source provenance stored on a published `document` memory.
+ * `media_type` is derived from the kind, never trusted from the client.
+ */
+export interface DocumentProvenance {
+  bom: boolean;
+  fileName: string;
+  mediaType: string;
+  rawBytes: number;
+  rawHash: string;
+  textChars: number;
+  textHash: string;
 }
 export interface MemoryDraft {
   body: string;

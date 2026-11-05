@@ -109,7 +109,7 @@ fn selected(
 ) -> Result<BTreeSet<String>, CommandError> {
     let mut ids = BTreeSet::new();
     match selection {
-        ExportSelection::Backup { .. } => return Err(invalid()),
+        ExportSelection::Backup { .. } | ExportSelection::Ingestion { .. } => return Err(invalid()),
         ExportSelection::Records { ids: requested } => {
             for id in requested {
                 let exists: bool = connection

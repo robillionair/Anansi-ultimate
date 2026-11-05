@@ -107,6 +107,22 @@ pub fn read(
     String::from_utf8(bytes).map_err(|_| integrity())
 }
 
+/// Remove one content file best-effort (orphan cleanup after an aborted
+/// publish). A missing file is fine; link rejection still applies.
+pub(crate) fn remove(
+    root: &Path,
+    workspace: &str,
+    record: &str,
+    revision: &str,
+) -> Result<(), CommandError> {
+    let file = location(root, workspace, record, revision, false)?;
+    match fs::remove_file(&file) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(_) => Err(unavailable()),
+    }
+}
+
 /// Operation-scoped batch permission proofs for content reads, following
 /// the `vault/io.rs` `VerifiedFiles` pattern. One Windows native
 /// operation verifies the whole batch natively with the same

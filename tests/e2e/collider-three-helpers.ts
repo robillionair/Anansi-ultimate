@@ -97,7 +97,7 @@ function walkSpecJson(): string {
   });
 }
 
-type Session = {
+export type Session = {
   cleanup: () => Promise<void>;
   collider: ReturnType<Page['locator']>;
   artifacts: ReturnType<Page['locator']>;
@@ -229,11 +229,27 @@ export async function startSession(page: Page, reducedMotion: boolean): Promise<
 
   return {
     cleanup: async () => {
-      if (child && child.exitCode === null) {
-        const ended = new Promise((resolve) => child!.once('exit', resolve));
+      // A signal-killed child keeps exitCode null after it exits, so
+      // exitCode alone cannot tell "still running" from "already
+      // dead" (a restart test SIGKILLs the API, then cleanup waited
+      // forever on an 'exit' event that had already fired).
+      if (child && child.exitCode === null && child.signalCode === null) {
         child.kill();
-        await ended;
+        await Promise.race([
+          new Promise((resolve) => child!.once('exit', resolve)),
+          new Promise((resolve) =>
+            setTimeout(() => {
+              child!.kill('SIGKILL');
+              resolve(null);
+            }, 10000),
+          ),
+        ]);
       }
+      // The browser can hold an idle keep-alive connection to the fake
+      // provider server; server.close() alone waits for it forever
+      // (this hung a long-running restart test at cleanup). Drop idle
+      // connections first so close() can call back.
+      fake.closeAllConnections();
       await new Promise<void>(r => fake.close(() => r()));
     },
     collider,

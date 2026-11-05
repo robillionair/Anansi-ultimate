@@ -1272,6 +1272,7 @@ mod tests {
             restored_from: None,
             privacy,
             provenance: "test".to_string(),
+            document: None,
             source_references: vec![],
             generator_model: None,
             validation_status: "ok".to_string(),

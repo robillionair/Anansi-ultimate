@@ -1,5 +1,6 @@
 import {useEffect,useRef,useState} from 'react';
 import {saveNativeExport,type Client,type Job,type MemoryMetadata,type ExportSelection,type JobAction} from '@anansi/contracts';
+import { ingestionJobLabel } from './documents.ts';
 
 export function Jobs({client,workspaceId,native}:{client:Client;workspaceId:string;native:boolean}){
   const [jobs,setJobs]=useState<Job[]>([]);
@@ -56,7 +57,7 @@ export function Jobs({client,workspaceId,native}:{client:Client;workspaceId:stri
       {scope!=='workspace'&&choiceOffset!==null&&<button type="button" disabled={busy} onClick={()=>void run(()=>loadChoices(choiceOffset))}>Load more choices</button>}
       <button disabled={busy||(scope!=='workspace'&&!ids.length)} type="submit">Create knowledge export</button>
     </form><div className="actions"><button disabled={busy} onClick={()=>void refresh()}>Refresh jobs</button><button disabled={busy||offset===0} onClick={()=>setOffset(Math.max(0,offset-50))}>Newer jobs</button><button disabled={busy||next===null} onClick={()=>setOffset(next!)}>Older jobs</button></div>
-    <ul>{jobs.map(job=><li key={job.id} data-job-id={job.id}><h3>{job.selection.kind==='backup'?(job.selection.application?'Application data backup':'Workspace backup'):job.selection.kind==='project'?'Project export':job.selection.kind==='records'?'Selected records export':'Workspace export'}</h3>{job.id===createdJob&&<p>Your latest export request.</p>}<p>Created {new Date(job.createdAt).toLocaleString()}</p><p>State: <strong>{job.state}</strong> · Records processed: {job.progress}</p><p>Checkpoint {job.checkpointVersion}: {job.checkpoint}. {job.log}</p><div className="actions">
+    <ul>{jobs.map(job=><li key={job.id} data-job-id={job.id}><h3>{ingestionJobLabel(job)}</h3>{job.id===createdJob&&<p>Your latest export request.</p>}<p>Created {new Date(job.createdAt).toLocaleString()}</p><p>State: <strong>{job.state}</strong> · Records processed: {job.progress}</p><p>Checkpoint {job.checkpointVersion}: {job.checkpoint}. {job.log}</p><div className="actions">
       {['Queued','Running'].includes(job.state)&&<button disabled={busy} onClick={()=>void run(()=>control(job,'pause'))}>Pause export</button>}
       {job.state==='Paused'&&<button disabled={busy} onClick={()=>void run(()=>control(job,'resume'))}>Resume export</button>}
       {['Queued','Running','Paused'].includes(job.state)&&<button disabled={busy} onClick={()=>void run(()=>control(job,'cancel'))}>Cancel export</button>}
