@@ -32,7 +32,7 @@ ANANSI Ultimate is a local-first product creation and intelligence workspace del
 | **M12** | Product Lifecycle | Verified | 7-stage pipeline engine & navigator, Launch Studio with deterministic ZIP bundling, Guided Lifecycle Walk with recovery |
 | **LARP** | LARP Mode Telemetry Engine | Verified | Real-time telemetry bus & HUD, 6 visual views (Memory Vault 3D, Context Funnel, Kinetic Spider, Quant Drift Spectrum, Attention Matrix, Collider Field) |
 | **HOME** | Command Dashboard | Verified | Landing hub with genuine uptime telemetry, recency-ordered projects hub with Guided Walk jump, system backup and queue health |
-| **M13** | MCP Integration | In Progress | Stdio MCP client (tools, resources, prompts) with explicit review; MCP server exposing 6 knowledge tools with pairing auth & strict privacy |
+| **M13** | MCP Integration | Verified | Stdio MCP client (tools, resources, prompts) with explicit review; MCP server exposing 7 tools (6 read-only + mutation-gated ideas.create) with pairing auth & strict privacy |
 
 See [docs/BUILD_STATUS.md](docs/BUILD_STATUS.md) and [docs/REQUIREMENTS_MATRIX.md](docs/REQUIREMENTS_MATRIX.md) for detailed verification evidence.
 
@@ -82,7 +82,7 @@ cargo test --workspace --locked --lib
 # Build production web bundle
 pnpm --filter @anansi/web build
 
-# Run Playwright browser test battery (57 tests across M0–M13)
+# Run Playwright browser test battery (59 tests across M0–M13)
 pnpm exec playwright test
 ```
 

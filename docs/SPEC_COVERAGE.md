@@ -71,7 +71,7 @@ All original numbered sections are retained verbatim in MASTER_SPEC.md. This led
 | 65 | 3D PERFORMANCE AND ACCESSIBILITY | M8, M9, M11, M15 | planned |
 | 66 | SHARED BACKGROUND JOB SYSTEM | M2, M3, M6, M13 | planned |
 | 67 | AI COST MANAGEMENT | M3, M5; all inference milestones | planned |
-| 68 | MCP INTEGRATION | M13 | planned |
+| 68 | MCP INTEGRATION | M13 | verified |
 | 69 | ANANSI CORE HARDWARE ARCHITECTURE | M14 | planned |
 | 70 | PLATFORM SUPPORT | M1, M14, M15 | planned |
 | 71 | SECURITY MODEL | M0–M15 | planned |

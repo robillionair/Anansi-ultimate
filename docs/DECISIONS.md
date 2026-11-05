@@ -1,5 +1,30 @@
 # ANANSI Ultimate — Architecture Decisions
 
+## ADR-0032: MCP deferred protocols at Milestone 13 closure (Slice 5)
+
+Milestone 13 closes with the §68 tool list complete over stdio: six
+read-only knowledge tools plus the mutation-gated `ideas.create`.
+Three protocol directions are intentionally deferred, with rationale,
+rather than half-built:
+
+- **SSE / Streamable HTTP remote server hosting**: no POST HTTP client
+  exists in-tree, and §68 default-deny plus §71 SSRF require remote
+  access behind explicit per-server authorization. A future slice needs
+  a transport design and an authorization design first.
+- **Subscription pushes** (`resources/subscribe`, change notifications):
+  the server is a one-shot stdio process with no push channel and no
+  persistent-connection lifecycle. A future slice needs a
+  connection-lifecycle design first.
+- **Per-tool / per-client permission grants**: the pairing token is
+  session-scoped — the authenticated user's own session. Finer grants
+  need a grant store, a grant UI, and a revocation story, which is a
+  separate slice, not part of the mutation gate.
+
+No part of this deferral weakens the closed scope: the stdio server,
+its seven tools, pairing auth, and the sealed-AND-private boundary are
+complete and tested, and the deferred items are not claimed as
+available.
+
 ## ADR-0031: Native Windows verify-only permissions and explicit process accounting
 
 The approved Windows Ask performance repair reuses the existing native owner-only

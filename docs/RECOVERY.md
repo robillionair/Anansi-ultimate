@@ -1,4 +1,16 @@
-﻿## Resume point — 2026-11-05 MCP Integration Slice 4 verified on Windows
+﻿## Resume point — 2026-11-05 MCP Integration Slice 5 delivered (Linux; Milestone 13 closed, Slice 5 Windows rerun pending)
+
+Owner-authorized Milestone 13 closure slice on branch `muse/mcp-slice5`
+from the Windows-certified Slice 4 review tip `b6c6f39ea` (verified
+from origin by hash; review head == origin master, parent exactly the
+Slice 4 delivery tip, docs-only diff, report confirms Slice 4 hashes).
+Slice 4 is CLOSED on Windows per that review. Slice 5 adds the
+mutation-gated `ideas.create` tool (7th tool) and closes the
+milestone: AN-017 `verified`, §68 coverage `verified`, deferred
+protocols in ADR-0032. Resume from the Slice 5 tip for any follow-up;
+the outstanding item is the Windows rerun of Slice 5.
+
+## Resume point — 2026-11-05 MCP Integration Slice 4 verified on Windows
 
 Owner-authorized Milestone 13 slice on review branch
 `codex/review-mcp-slice4` from the delivery tip
