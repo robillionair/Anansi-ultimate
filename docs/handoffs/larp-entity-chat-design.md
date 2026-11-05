@@ -15,3 +15,5 @@ The reference's decorative hex dumps and 'cognitive load' gauges are not measure
 ## Acceptance extension — slow-renderer responsiveness
 
 The unchanged scene-navigation and all-six browser checks repeatedly timed out while switching GPU scenes (8-second action limit), including an idle rerun. Keep those tests and limits unchanged. Add bounded, measured post-processing resolution adaptation for slow frames: full resolution on fast renderers, gradual reduction to no less than half linear resolution on slow renderers, same scene data/pass order/camera controls, no inference or changes to telemetry values. Test the pure scaling bounds and rerun the original workflows. This is a responsiveness repair, not permission to claim the earlier failures passed.
+
+Native acceptance exposed a clipped negative reduction for a short question with a larger compiled prompt. Preserve the underlying event values and estimated badge, but label that case input overhead, show the compiled/typed multiplier and name its baseline. Cover overhead, positive reduction and absent data without changing any benchmark claim.
