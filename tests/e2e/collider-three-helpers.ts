@@ -110,6 +110,7 @@ export type Session = {
   storageRoot: string;
   pairingRoot: string;
   pairingToken: string;
+  restartApi: () => Promise<void>;
   call: (group: string, operation: string, input: Record<string, unknown>) => Promise<{ status: number; body: Record<string, any> }>;
   pairAndOpen: (ws: string) => Promise<void>;
   openWorkspace: (ws: string) => Promise<void>;
@@ -166,6 +167,27 @@ export async function startSession(page: Page, reducedMotion: boolean): Promise<
         }
       });
     });
+  }
+
+  // Kill the harness-owned API child and confirm it exits, then start
+  // the platform-correct executable against the same storage and
+  // pairing roots. The harness owns the child and its pairing, so no
+  // port lookup (`ss` does not exist on Windows) and no spec-side
+  // respawn are needed: `call` reads the closure `pairing` and
+  // re-points at the fresh API automatically.
+  async function restartApi() {
+    if (child && child.exitCode === null && child.signalCode === null) {
+      const exited = new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => reject(Error('API did not exit after SIGKILL')), 10000);
+        child!.once('exit', () => {
+          clearTimeout(timer);
+          resolve();
+        });
+      });
+      child.kill('SIGKILL');
+      await exited;
+    }
+    await startApi();
   }
 
   async function call(group: string, operation: string, input: Record<string, unknown>) {
@@ -270,7 +292,12 @@ export async function startSession(page: Page, reducedMotion: boolean): Promise<
     projectId,
     storageRoot: path.join(root, 'storage'),
     pairingRoot: path.join(root, 'pairing'),
-    pairingToken: pairing.token,
+    // A getter, not a snapshot: after restartApi the pairing (and its
+    // token) belong to the fresh API child.
+    get pairingToken() {
+      return pairing.token;
+    },
+    restartApi,
     call,
     pairAndOpen,
     openWorkspace,

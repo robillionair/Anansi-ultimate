@@ -1,6 +1,4 @@
 import { test, expect } from '@playwright/test';
-import { spawn, type ChildProcess } from 'node:child_process';
-import { execSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import http from 'node:http';
 import fs from 'node:fs';
@@ -311,7 +309,6 @@ test('documents API: concurrent duplicate imports create exactly one record', as
 
 test('documents API: killing the API mid-upload, restarting, and resuming imports once', async ({ page }) => {
   const session = await startSession(page, true);
-  let restarted: ChildProcess | undefined;
   try {
     const workspaceId = session.workspaceId;
     const text = 'Resumed after a restart, exactly once.';
@@ -326,55 +323,13 @@ test('documents API: killing the API mid-upload, restarting, and resuming import
     });
     expect(opened.status).toBe(200);
     const id = opened.body.id as string;
-    // Kill the API process by its listening port (ss reports the pid).
-    // The pairing file lives under <pairingRoot>/session-*/pairing.json.
-    const pairingDir = fs
-      .readdirSync(session.pairingRoot)
-      .find(name => name.startsWith('session-'))!;
-    const pairing = JSON.parse(
-      fs.readFileSync(path.join(session.pairingRoot, pairingDir, 'pairing.json'), 'utf8'),
-    ) as { endpoint: string; token: string };
-    const apiPort = new URL(pairing.endpoint).port;
-    const ss = execSync(`ss -ltnp "sport = :${apiPort}"`, { encoding: 'utf8' });
-    const pid = Number(/pid=(\d+)/.exec(ss)?.[1]);
-    expect(pid).toBeGreaterThan(0);
-    process.kill(pid, 'SIGKILL');
-    // Restart a fresh API process on the same storage and pairing roots.
-    restarted = spawn(
-      path.resolve('target/debug/anansi-api'),
-      ['--port', '0', '--pairing-root', session.pairingRoot],
-      {
-        windowsHide: true,
-        env: { ...process.env, ANANSI_STORAGE_ROOT: session.storageRoot },
-        stdio: ['ignore', 'pipe', 'ignore'],
-      },
-    );
-    const fresh = await new Promise<{ endpoint: string; token: string }>((resolve, reject) => {
-      let output = '';
-      const timer = setTimeout(() => reject(Error('Restarted API startup timeout')), 20000);
-      restarted!.stdout!.on('data', data => {
-        output += data.toString();
-        const match = output.match(/Pairing file: (.+)\r?\n/);
-        if (match) {
-          clearTimeout(timer);
-          resolve(JSON.parse(fs.readFileSync(match[1].trim(), 'utf8')));
-        }
-      });
-    });
-    async function callFresh(group: string, operation: string, input: Record<string, unknown>) {
-      const response = await fetch(fresh.endpoint + '/v1/' + group + '/' + operation, {
-        method: 'POST',
-        headers: {
-          Origin: 'http://127.0.0.1:1420',
-          Authorization: `Bearer ${fresh.token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ contractVersion: 1, ...input }),
-      });
-      return { status: response.status, body: (await response.json()) as Record<string, any> };
-    }
+    // Kill the harness-owned API child, confirm it exits, then restart
+    // the platform-correct executable against the same storage root.
+    // No port lookup and no spec-side respawn: `ss` does not exist on
+    // Windows, and the harness owns both the child and its pairing.
+    await session.restartApi();
     // The interrupted upload resumes from offset 0 (nothing was sent yet).
-    const resumed = await callFresh('jobs', 'ingest-part', {
+    const resumed = await session.call('jobs', 'ingest-part', {
       workspaceId,
       id,
       offset: 0,
@@ -382,24 +337,13 @@ test('documents API: killing the API mid-upload, restarting, and resuming import
       finish: true,
     });
     expect(resumed.status).toBe(200);
-    let job: Record<string, any> | undefined;
-    for (let i = 0; i < 60 && (!job || job.state !== 'Completed'); i++) {
-      await new Promise(r => setTimeout(r, 1000));
-      const list = await callFresh('jobs', 'list', { workspaceId });
-      job = (list.body.jobs as Array<Record<string, any>>).find(j => j.id === id);
-    }
+    const job = await pollJob(session, workspaceId, id, 'Completed');
     expect(job?.state).toBe('Completed');
-    const docs = await callFresh('memories', 'list', { workspaceId, kind: 'document' });
-    const found = (docs.body.memories as Array<Record<string, any>>).filter(
-      d => d.title === 'resumed.txt',
-    );
+    const docs = await listDocuments(session, workspaceId);
+    const found = docs.filter(d => d.title === 'resumed.txt');
     expect(found).toHaveLength(1);
     expect(found[0].document.fileName).toBe('resumed.txt');
   } finally {
-    if (restarted && restarted.exitCode === null) {
-      restarted.kill();
-      await new Promise(r => restarted!.once('exit', r));
-    }
     await session.cleanup();
   }
 });

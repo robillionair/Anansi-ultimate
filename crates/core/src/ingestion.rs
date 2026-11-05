@@ -95,16 +95,31 @@ fn project_exists(
         .map_err(|_| unavailable())
 }
 
-/// Delete staged files that can no longer be resumed: their job is
+/// Decide which staged files can no longer be resumed: their job is
 /// Completed/Cancelled, or no job row exists at all. Bounded (the
 /// export directory holds at most a handful of `.upload` files) and
 /// job-owned only — owner files are never touched.
-fn sweep_staging(storage: &Storage, workspace: &str) -> Result<(), CommandError> {
+///
+/// The decision runs on the caller's open transaction, so the
+/// job-state reads see the same snapshot as the insert that follows
+/// and never contend with a concurrent begin on a second connection
+/// (on Windows that cross-connection read failed with
+/// StorageUnavailable and aborted the begin with HTTP 503). Only the
+/// *paths* are returned: the caller deletes them after its
+/// transaction commits, so a file is never removed while its job row
+/// is still uncommitted — a concurrent begin's staged file can never
+/// be mistaken for an orphan. Genuine storage failures (unreadable
+/// directory, failed job lookup) still surface as errors; only a
+/// single unreadable directory entry is skipped, and its file simply
+/// waits for the next sweep.
+fn sweep_staging(
+    tx: &rusqlite::Transaction,
+    storage: &Storage,
+    workspace: &str,
+) -> Result<Vec<std::path::PathBuf>, CommandError> {
     let directory = crate::export::directory(storage, workspace)?;
-    let entries = match std::fs::read_dir(&directory) {
-        Ok(entries) => entries,
-        Err(_) => return Ok(()),
-    };
+    let entries = std::fs::read_dir(&directory).map_err(|_| unavailable())?;
+    let mut stale = Vec::new();
     for entry in entries.flatten() {
         let path = entry.path();
         if path.extension().and_then(|e| e.to_str()) != Some("upload") {
@@ -113,11 +128,7 @@ fn sweep_staging(storage: &Storage, workspace: &str) -> Result<(), CommandError>
         let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
             continue;
         };
-        let connection = match storage.connection(false)? {
-            Some(connection) => connection,
-            None => continue,
-        };
-        let state: Option<String> = connection
+        let state: Option<String> = tx
             .query_row(
                 "SELECT state FROM jobs WHERE workspace_id=?1 AND id=?2",
                 params![workspace, stem],
@@ -126,13 +137,13 @@ fn sweep_staging(storage: &Storage, workspace: &str) -> Result<(), CommandError>
             .optional()
             .map_err(|_| unavailable())?;
         match state.as_deref() {
-            None | Some("Completed") | Some("Cancelled") => {
-                let _ = crate::storage::reject_links(&path).map(|_| std::fs::remove_file(&path));
-            }
+            // Active uploads (Queued/Running/Paused) are always
+            // preserved; only terminal or ownerless staging is stale.
+            None | Some("Completed") | Some("Cancelled") => stale.push(path),
             _ => {}
         }
     }
-    Ok(())
+    Ok(stale)
 }
 
 impl Storage {
@@ -175,7 +186,6 @@ impl Storage {
             validate_id(pid)?;
         }
         self.open(&r.workspace_id)?;
-        sweep_staging(self, &r.workspace_id)?;
         let mut connection = self.connection(false)?.ok_or_else(unavailable)?;
         let tx = connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
@@ -211,6 +221,10 @@ impl Storage {
                 "Too many active document imports in this workspace (8). Wait for one to finish or cancel it.",
             ));
         }
+        // The stale-staging decision runs inside this transaction, on
+        // the same connection as the insert below — never across a
+        // concurrent begin's uncommitted transaction.
+        let stale = sweep_staging(&tx, self, &r.workspace_id)?;
         let id = content::random_id()?;
         let selection = ExportSelection::Ingestion {
             upload_id: id.clone(),
@@ -223,11 +237,6 @@ impl Storage {
         };
         selection.validate()?;
         let stamp = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-        // The staged file is created before the job row, mirroring the
-        // backup upload: a failed insert leaves an orphan the next
-        // upload-begin sweep removes.
-        let path = staged_path(self, &r.workspace_id, &id)?;
-        crate::snapshots::new_file(&path)?;
         tx.execute(
             "INSERT INTO jobs(workspace_id,id,state,version,checkpoint_version,checkpoint,selection,created_at,updated_at,log) VALUES(?1,?2,'Paused',1,1,'uploading:0',?3,?4,?4,'Upload in progress')",
             params![r.workspace_id, id, serde_json::to_string(&selection).map_err(|_| invalid())?, stamp],
@@ -235,7 +244,41 @@ impl Storage {
         .map_err(|_| unavailable())?;
         let job = crate::jobs::read(&tx, &r.workspace_id, &id)?;
         tx.commit().map_err(|_| unavailable())?;
+        // The staged file is created only after the job row commits:
+        // a file never exists without its row, so a concurrent
+        // begin's sweep can never mistake a live upload for an orphan.
+        // If creation fails, the job is failed honestly instead of
+        // sitting Paused with no staging to upload into, and the error
+        // surfaces.
+        let path = staged_path(self, &r.workspace_id, &id)?;
+        if let Err(e) = crate::snapshots::new_file(&path) {
+            self.fail_paused_ingestion(&r.workspace_id, &id);
+            return Err(e);
+        }
+        for path in stale {
+            let _ = crate::storage::reject_links(&path).map(|_| std::fs::remove_file(&path));
+        }
         Ok((job, id))
+    }
+
+    /// Mark a Paused ingestion job Failed (best effort). Used when the
+    /// staged file could not be created after the job row committed:
+    /// the job never sits Paused with no staging to upload into, and
+    /// the checkpoint reads `discarded` because no staging exists to
+    /// resume. A later Retry fails honestly in the worker ("Upload
+    /// staging is missing; import the file again.").
+    fn fail_paused_ingestion(&self, workspace: &str, id: &str) {
+        let Ok(Some(connection)) = self.connection(false) else {
+            return;
+        };
+        let _ = connection.execute(
+            "UPDATE jobs SET state='Failed',version=version+1,checkpoint_version=checkpoint_version+1,checkpoint='discarded',updated_at=?1,log='Upload staging could not be created.' WHERE workspace_id=?2 AND id=?3 AND state='Paused'",
+            params![
+                chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+                workspace,
+                id
+            ],
+        );
     }
 
     /// Mark an ingestion job Failed with a specific log. The checkpoint
@@ -980,6 +1023,139 @@ mod tests {
                 .unwrap()
                 .len(),
             0
+        );
+    }
+
+    #[test]
+    fn sweep_preserves_active_uploads_and_removes_stale_staging() {
+        let (_temp, core, ws) = setup();
+        let storage = core.storage().unwrap();
+        let exports = storage.root_path().join("exports").join(&ws);
+        // An active (Paused) upload whose staging must survive the sweep.
+        let bytes = b"active upload stays";
+        let sha = content::hash(bytes);
+        let opened = begin(&core, &ws, "active.txt", bytes, &sha, "private");
+        let active_id = opened["id"].as_str().unwrap().to_string();
+        let active_path = exports.join(format!("{active_id}.upload"));
+        assert!(active_path.exists());
+        // A completed import whose staged file the worker already
+        // removed; plant a stale file at its path, plus an ownerless one.
+        let done_bytes = b"already done";
+        let done = begin(
+            &core,
+            &ws,
+            "done.txt",
+            done_bytes,
+            &content::hash(done_bytes),
+            "private",
+        );
+        let done_id = done["id"].as_str().unwrap().to_string();
+        part(&core, &ws, &done_id, 0, done_bytes, true).unwrap();
+        assert_eq!(
+            wait_for_terminal(&core, &ws, &done_id).state,
+            crate::jobs::JobState::Completed
+        );
+        let done_path = exports.join(format!("{done_id}.upload"));
+        assert!(!done_path.exists());
+        std::fs::write(&done_path, b"stale bytes").unwrap();
+        let orphan_path = exports.join("00000000000000000000000000000000.upload");
+        std::fs::write(&orphan_path, b"no job owns this").unwrap();
+        // The next begin runs the sweep inside its transaction.
+        let next_bytes = b"next";
+        let next = begin(
+            &core,
+            &ws,
+            "next.txt",
+            next_bytes,
+            &content::hash(next_bytes),
+            "private",
+        );
+        let next_id = next["id"].as_str().unwrap().to_string();
+        assert!(active_path.exists(), "sweep deleted an active upload");
+        assert!(!done_path.exists(), "sweep kept a completed job's staging");
+        assert!(!orphan_path.exists(), "sweep kept ownerless staging");
+        assert!(exports.join(format!("{next_id}.upload")).exists());
+    }
+
+    #[test]
+    fn enqueue_surfaces_genuine_storage_failure() {
+        let (temp, core, ws) = setup();
+        // Plant a regular file where the workspace export directory
+        // belongs, so the staging sweep cannot list it: a genuine
+        // storage failure must surface from ingest-begin, never be
+        // swallowed by cleanup.
+        let exports = temp.path().join("storage").join("exports");
+        std::fs::create_dir_all(&exports).unwrap();
+        std::fs::write(exports.join(&ws), b"not a directory").unwrap();
+        let bytes = b"nowhere to stage";
+        let error = core
+            .job_command(
+                "ingest-begin",
+                json!({"contractVersion":1,"workspaceId":ws,"fileName":"blocked.txt","bytes":bytes.len(),"sha256":content::hash(bytes),"privacy":"private"}),
+            )
+            .unwrap_err();
+        assert_eq!(error.code, crate::ErrorCode::StorageUnavailable);
+        let list = core
+            .job_command(
+                "list",
+                json!({"contractVersion":1,"workspaceId":ws,"offset":0}),
+            )
+            .unwrap();
+        assert!(list["jobs"].as_array().unwrap().is_empty());
+    }
+
+    #[test]
+    fn concurrent_begin_calls_all_succeed_and_publish_once() {
+        let (_temp, core, ws) = setup();
+        let bytes = b"The same file, imported eight times at once.";
+        let sha = content::hash(bytes);
+        // Eight concurrent ingest-begin calls for the identical file:
+        // the staging sweep must never abort a begin (the Windows
+        // finding: cross-connection reads failed with 503), and the
+        // atomic publish guard must still publish exactly one document.
+        let opened: Vec<Result<serde_json::Value, CommandError>> =
+            std::thread::scope(|s| {
+                let mut handles = Vec::new();
+                for _ in 0..8 {
+                    handles.push(s.spawn(|| {
+                        core.job_command(
+                            "ingest-begin",
+                            json!({"contractVersion":1,"workspaceId":ws,"fileName":"eight.txt","bytes":bytes.len(),"sha256":sha,"privacy":"private"}),
+                        )
+                    }));
+                }
+                handles
+                    .into_iter()
+                    .map(|h| h.join().expect("begin thread panicked"))
+                    .collect()
+            });
+        assert_eq!(opened.len(), 8);
+        let mut ids = Vec::new();
+        for result in &opened {
+            let value = result
+                .as_ref()
+                .unwrap_or_else(|e| panic!("concurrent ingest-begin failed: {e:?}"));
+            ids.push(value["id"].as_str().unwrap().to_string());
+        }
+        for id in &ids {
+            part(&core, &ws, id, 0, bytes, true).unwrap();
+        }
+        let mut artifact_id = None;
+        for id in &ids {
+            let job = wait_for_terminal(&core, &ws, id);
+            assert_eq!(job.state, crate::jobs::JobState::Completed);
+            match artifact_id {
+                None => artifact_id = job.artifact_id,
+                Some(ref first) => assert_eq!(job.artifact_id.as_ref(), Some(first)),
+            }
+        }
+        assert!(artifact_id.is_some());
+        assert_eq!(
+            list_documents(&core, &ws)["memories"]
+                .as_array()
+                .unwrap()
+                .len(),
+            1
         );
     }
 }
