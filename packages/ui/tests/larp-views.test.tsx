@@ -7,6 +7,15 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createElement } from 'react';
+import {TelemetryReadout} from '../src/larp-mode/TelemetryReadout.tsx';
+
+test('readout names prompt overhead honestly and preserves reductions and unavailable data',()=>{
+  const event={kind:'token-delta' as const,at:1,rawInputTokens:10,compiledInputTokens:427,rawOutputTokens:0,compiledOutputTokens:0,latencyMs:25,estimated:true};
+  const html=renderToStaticMarkup(createElement(TelemetryReadout,{events:[event]}));
+  assert.match(html,/INPUT OVERHEAD/);assert.match(html,/42.7×/);assert.match(html,/ESTIMATED/);assert.match(html,/Compiled prompt vs typed question/);assert.doesNotMatch(html,/-4170/);
+  const reduced=renderToStaticMarkup(createElement(TelemetryReadout,{events:[{...event,compiledInputTokens:4}]}));assert.match(reduced,/INPUT REDUCTION/);assert.match(reduced,/60.0%/);
+  const empty=renderToStaticMarkup(createElement(TelemetryReadout,{events:[]}));assert.match(empty,/WAITING/);assert.match(empty,/—/);assert.doesNotMatch(empty,/INPUT OVERHEAD/);
+});
 import {
   clusterCentroids,
   generateParticles,
