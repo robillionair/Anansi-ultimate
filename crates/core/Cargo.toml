@@ -26,6 +26,7 @@ rustls-pki-types = "=1.15.1"
 webpki-roots = "=1.0.10"
 chacha20poly1305 = { version = "=0.11.0", default-features = false, features = ["alloc", "zeroize"] }
 zeroize = { version = "=1.9.1", features = ["derive"] }
+pdf-extract = "=0.12.1"
 
 [target.'cfg(windows)'.dependencies]
 keyring = { version = "=3.6.3", default-features = false, features = ["windows-native"] }
@@ -38,3 +39,5 @@ keyring = { version = "=3.6.3", default-features = false }
 tempfile = "=3.27.0"
 # Synthetic HTTPS servers: test-only certificates.
 rcgen = "=0.13.2"
+lopdf = "=0.42.0"
+flate2 = "=1.1.10"

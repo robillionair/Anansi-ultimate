@@ -98,15 +98,36 @@ M13 is not declared complete by this slice; DOCX follows PDF.
 - **Security (disclosed).** RUSTSEC-2026-0187: stack overflow in lopdf
   via deeply nested PDF objects (CVSS 7.5, published 2026-06-21),
   fixed in lopdf 0.42.0. The design therefore pins **pdf-extract
-  ^0.12** (which resolves lopdf ≥ 0.42) and requires the spike to
-  record the resolved lopdf version from `Cargo.lock`. Residual risk,
-  stated honestly: a stack overflow aborts the process and cannot be
-  caught in Rust; the version floor is the primary mitigation, and
-  extraction runs in the background worker (never on an API request
-  thread), so a hostile PDF cannot stall a user-facing request. A
+  =0.12.1** (resolving lopdf =0.42.0, a single version — the direct
+  lopdf dependency is pinned to the same version so the graph holds
+  exactly one lopdf) and requires the spike to record the resolved
+  lopdf version from `Cargo.lock`. Residual risk, stated honestly: a
+  stack overflow aborts the process and cannot be caught in Rust;
+  the version floor is the primary mitigation, and extraction runs
+  in the background worker (never on an API request thread), so a
+  hostile PDF cannot stall a user-facing request. A
   spawned-thread-with-guard hardening is follow-up work, not claimed
-  here. The decompression-bomb fixture (§6) exists to measure the
-  memory behavior in the spike; see §3.2.
+  here.
+- **Spike result (2026-11-05): the bounded pre-scan is mandatory.**
+  pdf-extract alone does NOT stop the decompression bomb during
+  decoding — it fully decodes the 20 MB fixture (~45 s, ~64 MB peak)
+  and would take ~35 minutes / ~3 GB on a 1 GiB expansion. The
+  pre-scan (lopdf + capped FlateDecode, 16 MiB total decoded
+  budget) stops the fixture bomb in ~190 ms / ~7 MB and a 1 GiB
+  worst-case expansion in ~160–180 ms / ~11 MB, and must run before
+  pdf-extract on every PDF (§3.2, path D). lopdf is therefore a
+  **production** dependency (structure + pre-scan), not just
+  pdf-extract's transitive dep.
+- **Audit (2026-11-05, cargo-audit 0.22.2).** 1 vulnerability,
+  7 warnings. The vulnerability (`ctutils` 0.4.3,
+  RUSTSEC-2026-0385) is **pre-existing** — already in the baseline
+  lock via `argon2`/`chacha20poly1305`, not introduced by this
+  slice; flagged for the owner, out of scope. Of the warnings, 1 is
+  new: `ttf-parser` 0.25.1 is unmaintained (RUSTSEC-2026-0192),
+  pulled in by lopdf ← pdf-extract for font parsing — a warning,
+  not a vulnerability; if a future advisory appears against it, the
+  parser choice is revisited. The other 6 warnings are
+  pre-existing. Lock grows 551 → 580 crates (+29, all pure Rust).
 
 ### 2.3 Spike gate (before integration)
 
@@ -138,6 +159,19 @@ committed fixtures in `tests/fixtures/pdf/`:
 If any spike check fails, the slice stops and reports; no weaker
 parser is silently substituted.
 
+**Spike outcomes (2026-11-05, `docs/handoffs/m13-pdf-spike-results.md`):**
+1. PASS — by-pages returns the manifest text exactly (modulo one
+   trailing newline per page, removed by the worker's trim).
+2. PARTIAL — truncated and encrypted error ✓; the xref fixture
+   yields 0 pages with no error, corrected by the worker's
+   0-pages→parse-error mapping (§3.2, correction 4).
+3. PASS — scanned + empty yield 0 chars.
+4. FAIL for pdf-extract alone (~45 s / ~64 MB on the fixture bomb);
+   PASS with the pre-scan (~190 ms / ~7 MB fixture, ~160–180 ms / ~11 MB
+   worst case). The pre-scan is now mandatory (§3.2).
+5. PASS — lopdf refuses the bad-header fixture (`invalid file
+   header`); the fixture stands as-is.
+
 ## 3. Design
 
 ### 3.1 Limits (locked before coding)
@@ -148,8 +182,8 @@ parser is silently substituted.
 | Upload part | ≤ 64 KiB, offset-exact, sequential | `ingest-part` (unchanged) — a 1 MiB PDF is 16 parts, so multi-part resume is finally exercised |
 | Pages | 1–100 | Worker, after extraction (page count from the extractor) |
 | Extracted text, per page | 1–8,000 chars | Worker, per page (a page holding more text than a whole TXT document is pathological) |
-| Extracted text, per document | 1–32,000 chars | Worker, running total. 32,000 = `MAX_ALLOWED_BUDGET_CHARS`: a max-size PDF can still be fully used as Ask evidence |
-| Single stream, decompressed | ≤ 16 MiB (spike-verified, §2.3.4) | Extraction bound (see §3.2) |
+| Extracted text, per document | 1–32,000 chars | Worker, running total. The 32,000-char cap is a **storage** cap, justified on its own grounds (worker time, memory, FTS index size, UI rendering, 4× the TXT cap for multi-page documents). It is **not** an Ask-retrieval guarantee: Ask retrieves top-ranked chunks within a separate per-query budget (default 4,000 chars, max 32,000 only if requested — §3.4). A max-size document is never fully retrieved by default. |
+| Single stream, decompressed | ≤ 16 MiB | Enforced by the mandatory pre-scan before any extraction (see §3.2) |
 | Active ingestion uploads / jobs | 8 / 32 per workspace | Unchanged (Slice 1 caps) |
 | File name | 1–255 chars, basename, `.pdf` | `ingest-begin` (extension must match kind `pdf`) |
 
@@ -170,29 +204,69 @@ pub struct ExtractedPdf { pub pages: Vec<ExtractedPage> }
 pub fn extract_pdf_text(bytes: &[u8]) -> Result<ExtractedPdf, ExtractError>
 ```
 
-- Calls `pdf_extract::extract_text_from_mem_by_pages(bytes)`.
-  An error maps to `ExtractError::Parse` ("This PDF could not be
-  read. It may be damaged or use features this importer does not
-  support."). An encrypted document is detected first (the
-  `/Encrypt` dictionary / the extractor's encrypted error) and maps to
-  `ExtractError::Encrypted` ("This PDF is encrypted. Password-protected
-  PDFs cannot be imported in this slice.").
+- **Check ordering (spike-proven).** lopdf/pdf-extract return 0 pages
+  with *no error* for a broken document (bad `/Root`) and for an
+  encrypted document (undecryptable page tree), so the worker must
+  check in this order: (1) `/Encrypt` present in the trailer →
+  `ExtractError::Encrypted`; (2) load error → `ExtractError::Parse`;
+  (3) **0 pages → `ExtractError::Parse`** (never "empty"); (4)
+  per-page extraction + caps; (5) empty total → `ExtractError::Empty`.
+  A page-count-first flow misclassifies encrypted documents as empty.
+- **Bounded pre-scan (mandatory, runs first).** Before any text
+  extraction, lopdf loads the document structure and decodes every
+  page content stream (and Form XObject streams, one level) through
+  a capped FlateDecode reader with a 16 MiB **total** decoded
+  budget, aborting mid-stream when the budget is exceeded
+  (`ExtractError::Bomb`). Non-content streams are never decoded
+  (the raw cap's job). The spike measured: fixture bomb refused in
+  ~190 ms / ~7 MB peak; a 1 GiB worst-case expansion refused in
+  ~160–180 ms / ~11 MB peak. Without the pre-scan, pdf-extract fully
+  decodes the bomb (~45 s / ~64 MB for the 20 MB fixture).
+  Prototype gaps for integration: filter chains are refused;
+  non-Flate expanding filters (LZW) are refused as unsupported
+  (integration adds a capped LZW path via `weezl`, already in the
+  graph, or refuses LZW content streams); nested Form XObjects are
+  walked one level only. Object streams (PDF 1.5+ compressed
+  objects) are decoded by lopdf at load, outside the pre-scan's
+  budget — residual risk, same class as RUSTSEC-2026-0187,
+  mitigated by the version floor + raw cap; a dedicated
+  object-stream bomb fixture is follow-up work.
+- **Per-page extraction with pdf-extract's quality.** The worker
+  calls the public `pdf_extract::output_doc_page` + `PlainTextOutput`
+  API (exactly what `extract_text_by_page` does internally), one
+  page at a time, accumulating chars and stopping early when a cap
+  trips (a 20-page / 141,400-char document stops at page 5 in
+  115 ms, versus 430 ms for all-pages extraction). The output is
+  identical to `extract_text_from_mem_by_pages` (270 chars on the
+  normal fixture, 5 on the CMap fixture). An error maps to
+  `ExtractError::Parse` ("This PDF could not be read. It may be
+  damaged or use features this importer does not support.").
+  **lopdf's own extractor must never supply text**: it drops line
+  breaks entirely and uses glyph names over ToUnicode (capitals
+  U+0391/U+0392 instead of the mapped lowercase U+03B1/U+03B2).
+  lopdf is structure-only (page count, content-stream enumeration
+  for the pre-scan); pdf-extract is the sole text extractor.
+- **Encrypted.** A document whose trailer carries `/Encrypt` and
+  does not open with an empty password maps to
+  `ExtractError::Encrypted` ("This PDF is encrypted.
+  Password-protected PDFs cannot be imported in this slice.").
+  A document that opens with an **empty password** is treated as
+  unencrypted and imports normally (lopdf strips `/Encrypt` after
+  a successful empty-password decryption; no credential is needed).
 - Normalizes each page: trims trailing whitespace per line, drops
   empty trailing lines, joins lines with `\n`. No layout heuristics,
   no reading-order repair, no Markdown conversion: the stored text is
   the extractor's text, and the provenance records exactly that.
-- Enforces the page cap (error if `pages.len() > 100`), the per-page
-  cap, and the running total cap; empty total (all pages whitespace)
-  maps to `ExtractError::Empty` ("This PDF contains no readable text.
+  (pdf-extract returns one trailing newline per page; the trim
+  removes it, so stored pages equal the fixture manifest exactly.)
+- Enforces the page cap (error if the page count > 100, checked
+  before any text extraction), the per-page cap, and the running
+  total cap; empty total (all pages whitespace) maps to
+  `ExtractError::Empty` ("This PDF contains no readable text.
   Scanned or image-only PDFs need OCR, which is a separate slice.").
   A page with zero text is kept as an empty page (it still counts
   toward the page cap and appears in provenance with 0 chars) — page
   numbers must stay aligned with the file.
-- The decompression bound (§2.3.4) is verified by the spike; if the
-  spike shows unbounded growth, the module decodes streams through a
-  capped reader before calling pdf-extract, and this section is
-  revised in the implementation commit — the design does not pretend
-  the bound is already proven.
 
 ### 3.3 Provenance and stored body
 
@@ -242,6 +316,17 @@ pub struct DocumentProvenance {
   change (§1). The compiled prompt's chunk header includes the page
   label, so the model cites the page it used. Non-PDF documents keep
   the existing heading-based chunking.
+  **Storage cap vs retrieval budget (corrected 2026-11-05 — see
+  §10).** The 32,000-char document cap is a *storage* cap: how much
+  text a document may hold. What Ask *retrieves* is a separate
+  per-query budget — default 4,000 chars, max 32,000 only if the
+  caller requests it — shared across **all** evidence and spent on
+  top-ranked 1,000-char chunks. A 32,000-char document is therefore
+  never fully retrieved by default; it contributes at most a few
+  1,000-char chunks to any one answer (fewer if other evidence
+  competes), and the page-level citation points at the chunk's page.
+  No claim is made that a max-size document is "fully used as
+  evidence".
 - **Backup/restore.** Provenance (including `pages`) lives in the
   memory metadata that restore already preserves and re-validates;
   the body is restored verbatim. No restore change. The e2e proves a
@@ -366,7 +451,7 @@ with `pdftotext` (poppler, dev-time only — never the app's parser).
 | `unicode-cmap.pdf` | 1,079 B, 1 p. | Imported; extracts `αβ€` via ToUnicode CMap |
 | `malformed-truncated.pdf` | 887 B | Refused: parse error (cut at 60%) |
 | `malformed-header.pdf` | 1,479 B | Refused: parse error (bad `%PDF` magic; poppler recovers — spike item §2.3.5) |
-| `malformed-xref.pdf` | 1,479 B | Refused: parse error (xref offsets zeroed + trailer `/Root` broken) |
+| `malformed-xref.pdf` | 1,479 B | Refused: parse error (xref offsets zeroed + trailer `/Root` broken; the parser reports **0 pages with no error**, so the worker maps 0 pages to a parse failure — §3.2) |
 | `encrypted-user.pdf` | 1,030 B, 1 p. | Refused: encrypted (R=2 RC4, user password `secret`; `pdftotext -upw secret` extracts it) |
 | `oversized-raw.pdf` | 1,100,767 B | Refused: raw cap (unreferenced 1.1 MB stream) |
 | `oversized-text.pdf` | 2,058 B, 5 pp. | Refused: text cap (35,360 chars over 32,000; raw under cap) |
@@ -400,8 +485,10 @@ outcome is `malformed-header.pdf` (poppler recovers it) — see §2.3.5.
   page hashes/ranges; forged-provenance test.
 - `crates/contracts/src/main.rs` + regenerated contracts — new
   provenance field.
-- `crates/core/Cargo.toml` + `Cargo.lock` — `pdf-extract ^0.12`
-  (spike-locked exact version).
+- `crates/core/Cargo.toml` + `Cargo.lock` — `pdf-extract =0.12.1`
+  and `lopdf =0.42.0` (production: the pre-scan uses lopdf
+  directly; both pinned to the same version so the graph holds
+  exactly one lopdf), `flate2 =1.1.10` (miniz_oxide backend).
 - `packages/ui/src/Documents.tsx`, `documents.ts`, `documentInput.ts`
   — `.pdf` accept, page tabs, plain-text reader, page-of-match.
 - `packages/ui/tests/documents.test.tsx` — PDF UI tests.
@@ -418,8 +505,10 @@ outcome is `malformed-header.pdf` (poppler recovers it) — see §2.3.5.
    implementation baseline — not `dd0423ced`, and not the readiness
    branch tip. If the rerun finds a regression, repair that finding
    first; this design waits.
-2. **Spike gate (§2.3)** passes against the committed fixtures,
-   including the resolved lopdf version and the bomb memory bound.
+2. **Spike gate (§2.3)** passed with the amendments in §10,
+   recorded in `docs/handoffs/m13-pdf-spike-results.md` (resolved
+   versions, advisory coverage, bomb memory/time, per-fixture
+   outcomes).
 3. **Design + acceptance criteria committed before code** (this
    document), per the owner's standing rule.
 
@@ -432,3 +521,78 @@ tables, layout reconstruction, password entry, encrypted-PDF support,
 and any MCP tool exposure. No paid/cloud inference, no model
 downloads, no generated-product execution, no pushes, no CI, no
 publication, no preview promotion.
+
+## 10. Spike amendments (2026-11-05)
+
+The parser spike ran on branch `muse/m13-pdf-spike` against the 12
+committed fixtures; full evidence in
+`docs/handoffs/m13-pdf-spike-results.md`. The amendments below
+supersede the original wording where they conflict.
+
+1. **Storage cap vs Ask retrieval budget (§3.1, §3.4).** The original
+   §3.1 justified the 32,000-char document cap as "a max-size PDF
+   can still be fully used as Ask evidence" because it equals
+   `MAX_ALLOWED_BUDGET_CHARS`. That is wrong and is corrected: the
+   32,000-char cap is a **storage** cap (worker time, memory, FTS
+   index size, UI rendering, 4× the TXT cap). What Ask *retrieves*
+   is a separate **per-query** budget — default 4,000 chars, max
+   32,000 only if the caller requests it — shared across **all**
+   evidence and spent on top-ranked 1,000-char chunks. A 32,000-char
+   document is never fully retrieved by default; it contributes at
+   most a few 1,000-char chunks per answer, and the page-level
+   citation points at the chunk's page. No claim is made that a
+   max-size document is "fully used as evidence".
+2. **Bounded pre-scan is mandatory (§2.2, §3.2).** pdf-extract alone
+   does not stop the decompression bomb during decoding: it fully
+   decodes the 20 MB fixture (~45 s, ~64 MB peak) and would take
+   ~35 minutes / ~3 GB on a 1 GiB expansion. The pre-scan (lopdf +
+   capped FlateDecode, 16 MiB total decoded budget) stops the
+   fixture bomb in ~190 ms / ~7 MB and a 1 GiB worst case in
+   ~160–180 ms / ~11 MB, and must run before pdf-extract on every PDF. lopdf is
+   therefore a **production** dependency, pinned `=0.42.0` (the
+   version pdf-extract resolves, so the graph holds exactly one
+   lopdf).
+3. **Per-page pdf-extract is the extraction path (§3.2).** The
+   public `output_doc_page` + `PlainTextOutput` API gives per-page
+   extraction with output identical to `extract_text_from_mem_by_pages`
+   (270 chars normal, 5 chars CMap), enabling early termination at
+   the text cap (a 20-page / 141,400-char document stops at page 5
+   in 115 ms, versus 430 ms for all-pages extraction) with no
+   quality loss.
+4. **Worker check ordering (§3.2, AC-PDF-04).** lopdf/pdf-extract
+   return 0 pages with *no error* for a broken document (bad
+   `/Root`) and for an encrypted document (undecryptable page
+   tree). The worker checks in order: `/Encrypt` → encrypted;
+   load error → parse error; **0 pages → parse error** (never
+   "empty"); then caps; empty total → empty/no-text-layer. The
+   malformed-xref fixture's expected outcome is corrected to
+   "refused: parse error (0 pages — the parser reports no error;
+   the worker maps 0 pages to a parse failure)".
+5. **Empty-password documents (§3.2, AC-PDF-03).** Documents that
+   open with an empty password are treated as unencrypted and
+   import normally (lopdf strips `/Encrypt` after a successful
+   empty-password decryption; no credential is needed).
+6. **lopdf is structure-only (§2.2, §3.2).** Its own extractor
+   drops line breaks entirely and uses glyph names over ToUnicode
+   (capitals U+0391/U+0392 instead of the mapped lowercase
+   U+03B1/U+03B2), so it must never supply text; pdf-extract is
+   the sole text extractor. This is why the production needs both
+   crates, not lopdf alone.
+7. **Pre-scan scope and gaps (§3.2).** Decodes page content
+   streams + Form XObject streams (one level; nested forms are a
+   documented integration gap). Filter chains are refused in the
+   prototype (gap). Non-Flate expanding filters (LZW) are refused
+   as unsupported in the prototype (gap — integration adds a
+   capped LZW path via `weezl`, already in the graph, or refuses
+   LZW content streams). Non-content streams are never decoded
+   (raw cap's job). Object streams (PDF 1.5+ compressed objects)
+   are decoded by lopdf at load, outside the pre-scan's budget —
+   residual risk, same class as RUSTSEC-2026-0187, mitigated by
+   the version floor + raw cap; a dedicated object-stream bomb
+   fixture is follow-up work.
+8. **Audit (§2.2).** `ctutils` 0.4.3 / RUSTSEC-2026-0385 is
+   pre-existing (baseline lock via `argon2`/`chacha20poly1305`),
+   flagged for the owner, out of scope. `ttf-parser` 0.25.1
+   unmaintained (RUSTSEC-2026-0192) is new via lopdf ← pdf-extract
+   — a warning, not a vulnerability; revisit if an advisory
+   appears.
