@@ -1,4 +1,8 @@
-﻿## Resume point — 2026-11-05 MCP Integration Slice 4 verified on Windows
+## Resume point — 2026-11-05 cinematic Entity/Desktop delivery
+
+Continue visual work in isolated `E:/Anansi/worktrees/larp-entity`, branch `codex/larp-entity-chat`; do not switch the other agent's `review-m8-overnight` worktree. Merge `043060316` integrates interactive `414f75fd2` with verified MCP4 `b6c6f39ea`. Runtime checkpoints: entity `900a661f6`, slow-renderer adaptation `3923d2ca8`, truthful overhead display `548f3b36e`. [Evidence](evidence/larp-entity-chat.md) preserves verification scopes; [owner guide](handoffs/larp-entity-desktop-guide.md) explains the Desktop demo. Versioned binary/launcher/readme and synthetic data live under `E:/Anansi/previews/larp-cinematic`; Desktop shortcut is `ANANSI Ultimate Demo`. Never repoint it at owner data or infer full release certification. No inference on opening the face. Chat settings/history are session-only; choose an already-installed local model or configured provider for real inference. Prior MCP recovery context follows intact.
+
+## Resume point — 2026-11-05 MCP Integration Slice 4 verified on Windows
 
 Owner-authorized Milestone 13 slice on review branch
 `codex/review-mcp-slice4` from the delivery tip
