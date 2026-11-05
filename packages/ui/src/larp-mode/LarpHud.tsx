@@ -1,3 +1,7 @@
+import type {Client} from '@anansi/contracts';
+import {EntityAvatar} from './EntityAvatar.tsx';
+import {EntityChat} from './EntityChat.tsx';
+import type {EntityChatState} from './entityChatRun.ts';
 import { useEffect, useState, useRef } from 'react';
 import { toggleLarpMode } from './store.ts';
 import { telemetryStream, type TelemetryEvent } from './telemetry.ts';
@@ -20,11 +24,13 @@ const MODES = [
   ['QUANT DRIFT', 'Signal observatory', '04 / COHERENCE ANALYSIS'],
   ['TOKEN ALIGNMENT', 'Context correspondence', '05 / WORD ALIGNMENT'],
   ['ORBITAL COLLIDER', 'Concept resonance field', '06 / COLLISION OBSERVATORY'],
+  ['ANANSI ENTITY', 'Conversation interface', '07 / ENTITY INTERFACE'],
 ];
 
-export function LarpHud({ stream = telemetryStream, initialView = 1, onRefreshMemory, demo=false }: { stream?: typeof telemetryStream; initialView?: number; onRefreshMemory?:()=>Promise<void>;demo?:boolean }) {
+export function LarpHud({ stream = telemetryStream, initialView = 1, onRefreshMemory, demo=false, client, workspaceId }: { stream?: typeof telemetryStream; initialView?: number; onRefreshMemory?:()=>Promise<void>;demo?:boolean;client?:Client;workspaceId?:string }) {
   const [events, setEvents] = useState<TelemetryEvent[]>(() => stream.snapshot());
   const [view, setView] = useState(initialView);
+  const [entity,setEntity]=useState<EntityChatState>({phase:'idle',turns:[],error:'',ask:null,disclosure:null,startedAt:0});
   const [refreshing,setRefreshing]=useState(false);
   const [refreshError,setRefreshError]=useState('');
   const rootRef=useRef<HTMLDivElement>(null);
@@ -35,7 +41,7 @@ export function LarpHud({ stream = telemetryStream, initialView = 1, onRefreshMe
       if (event.metaKey || event.ctrlKey || event.altKey) return;
       const target = event.target;
       if (target instanceof HTMLElement && (['INPUT','TEXTAREA','SELECT'].includes(target.tagName) || target.isContentEditable)) return;
-      if (['1','2','3','4','5','6'].includes(event.key)) setView(Number(event.key));
+      if (['1','2','3','4','5','6','7'].includes(event.key)) setView(Number(event.key));
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
@@ -60,17 +66,18 @@ export function LarpHud({ stream = telemetryStream, initialView = 1, onRefreshMe
     <div className="larp-center"><section className="larp-centerpiece larp-centerpiece-view" aria-labelledby="larp-center-heading">
       <div className="larp-scene-caption"><span>{active[2]}</span><span>REALTIME RENDER / OBSERVATORY</span></div>
       <div className="larp-scene-title"><div><span>ANANSI OBSERVATORY</span><h3 id="larp-center-heading">{active[0]}</h3></div><span className="larp-scene-coordinate">{active[1]}<br/>LOCAL / IN-MEMORY</span></div>
-      {view===1 ? <View1MemoryVault key={memoryIdentity} stream={stream}/> : view===2 ? <View2NeuralFunnel stream={stream}/> : view===3 ? <View3AttentionSpider key={graphIdentity} stream={stream}/> : view===4 ? <View4QuantDrift stream={stream}/> : view===5 ? <View5AttentionHeatmap stream={stream}/> : <View6ColliderField stream={stream}/>}
+      {view===1 ? <View1MemoryVault key={memoryIdentity} stream={stream}/> : view===2 ? <View2NeuralFunnel stream={stream}/> : view===3 ? <View3AttentionSpider key={graphIdentity} stream={stream}/> : view===4 ? <View4QuantDrift stream={stream}/> : view===5 ? <View5AttentionHeatmap stream={stream}/> : view===6?<View6ColliderField stream={stream}/>:<EntityAvatar phase={entity.phase} characters={entity.turns.at(-1)?.text.length??0}/>}
       {[1,3,6].includes(view)&&<div className="larp-camera-tools"><span>DRAG ROTATE · SCROLL ZOOM · RIGHT-DRAG PAN</span><button type="button" aria-label="Reset scene camera" onClick={event=>event.currentTarget.closest('.larp-centerpiece')?.querySelector('canvas[data-interactive="true"]')?.dispatchEvent(new Event('larp-camera-reset'))}>RESET VIEW</button></div>}
       {refreshError&&<p className="larp-refresh-error" role="alert">{refreshError}</p>}
-      <div className="larp-scene-footnote"><span>PARTICLES / LAYOUT ARE ORNAMENTAL · VALUES COME FROM TELEMETRY</span><span>SCENE {String(view).padStart(2,'0')} / 06</span></div>
+      <div className="larp-scene-footnote"><span>PARTICLES / LAYOUT ARE ORNAMENTAL · VALUES COME FROM TELEMETRY</span><span>SCENE {String(view).padStart(2,'0')} / 07</span></div>
     </section></div>
     <div className="larp-rail larp-rail-right">
-      <div className="larp-rail-caption">02 / CONTEXT ALLOCATION</div>
-      <MemoryMatrix nodes={nodes}/><CoherenceWaveform events={events}/><TokenDeltaStream events={events}/>
-      <div className="larp-terminal-note"><span>BOUNDARY STATUS</span><p>Events stay in this process.<br/>No provider traffic from this view.<br/>Unavailable metrics remain unreported.</p></div>
+      <div className="larp-rail-caption">{view===7?'07 / CONVERSATION CHANNEL':'02 / CONTEXT ALLOCATION'}</div>
+      {view!==7&&<><MemoryMatrix nodes={nodes}/><CoherenceWaveform events={events}/><TokenDeltaStream events={events}/></>}
+      {client&&workspaceId?<div className="entity-chat-host" hidden={view!==7}><EntityChat key={workspaceId} client={client} workspaceId={workspaceId} active={view===7} onState={setEntity}/></div>:view===7&&<p className="larp-empty">Open a workspace to chat with ANANSI.</p>}
+      <div className="larp-terminal-note" hidden={view===7}><span>BOUNDARY STATUS</span><p>Events stay in this process.<br/>Scenes do not start provider traffic. Chat sends only on your command.<br/>Unavailable metrics remain unreported.</p></div>
     </div>
     <nav className="larp-mode-dock" aria-label="LARP centerpiece view">{MODES.map((mode,i)=><button key={i} type="button" className={view===i+1?'larp-view-button larp-view-button-on':'larp-view-button'} aria-pressed={view===i+1} aria-label={`LARP view ${i+1}`} onClick={()=>setView(i+1)}><span className="larp-mode-index">0{i+1}</span><span><b>{mode[0]}</b><small>{mode[1]}</small></span><i/></button>)}</nav>
-    <div className="larp-rail larp-rail-bottom"><span>ANANSI // OBSERVATORY</span><span>IN-MEMORY ONLY · NO PROVIDER TRAFFIC</span><span>CTRL + SHIFT + L <b>EXIT</b></span></div>
+    <div className="larp-rail larp-rail-bottom"><span>ANANSI // OBSERVATORY</span><span>{view===7?'EXPLICIT SEND ONLY · EXISTING PRIVACY / COST GATES':'IN-MEMORY ONLY · NO PROVIDER TRAFFIC'}</span><span>CTRL + SHIFT + L <b>EXIT</b></span></div>
   </div>;
 }
