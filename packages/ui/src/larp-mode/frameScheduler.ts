@@ -33,7 +33,7 @@ export function createFrameScheduler(
   let pending = false;
   let handle = 0;
   let lastInteraction = 0;
-  let lastTick = 0;
+  let lastTick = -Infinity;
 
   function schedule(): void {
     if (running && !hidden && !pending) {
@@ -46,8 +46,8 @@ export function createFrameScheduler(
     pending = false;
     if (!running || hidden) return;
     const idle = time - lastInteraction > IDLE_AFTER_MS;
-    const interval = idle ? 1000 / IDLE_FPS : 0;
-    if (interval === 0 || time - lastTick >= interval) {
+    const interval = 1000 / (idle ? IDLE_FPS : 60);
+    if (time - lastTick >= interval - 0.01) {
       lastTick = time;
       onTick(time);
     }
@@ -59,7 +59,7 @@ export function createFrameScheduler(
       if (running) return;
       running = true;
       lastInteraction = deps.now();
-      lastTick = 0;
+      lastTick = -Infinity;
       schedule();
     },
     stop(): void {

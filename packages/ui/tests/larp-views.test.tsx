@@ -7,6 +7,15 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createElement } from 'react';
+import {TelemetryReadout} from '../src/larp-mode/TelemetryReadout.tsx';
+
+test('readout names prompt overhead honestly and preserves reductions and unavailable data',()=>{
+  const event={kind:'token-delta' as const,at:1,rawInputTokens:10,compiledInputTokens:427,rawOutputTokens:0,compiledOutputTokens:0,latencyMs:25,estimated:true};
+  const html=renderToStaticMarkup(createElement(TelemetryReadout,{events:[event]}));
+  assert.match(html,/INPUT OVERHEAD/);assert.match(html,/42.7×/);assert.match(html,/ESTIMATED/);assert.match(html,/Compiled prompt vs typed question/);assert.doesNotMatch(html,/-4170/);
+  const reduced=renderToStaticMarkup(createElement(TelemetryReadout,{events:[{...event,compiledInputTokens:4}]}));assert.match(reduced,/INPUT REDUCTION/);assert.match(reduced,/60.0%/);
+  const empty=renderToStaticMarkup(createElement(TelemetryReadout,{events:[]}));assert.match(empty,/WAITING/);assert.match(empty,/—/);assert.doesNotMatch(empty,/INPUT OVERHEAD/);
+});
 import {
   clusterCentroids,
   generateParticles,
@@ -24,8 +33,18 @@ import {
 import {
   buildLarpPasses,
   clampPixelRatio,
+  nextRenderScale,
   LARP_PASS_ORDER,
 } from '../src/larp-mode/postprocessing/LarpComposer.ts';
+
+test('slow-renderer scale preserves full quality for fast frames and stays bounded',()=>{
+  assert.equal(nextRenderScale(16,1),1);assert.equal(nextRenderScale(50,1),1);
+  assert.equal(nextRenderScale(70,1),.75);assert.equal(nextRenderScale(90,.75),.5625);
+  assert.equal(nextRenderScale(100,.5625),.5);assert.equal(nextRenderScale(100,.5),.5);
+  assert.equal(nextRenderScale(16,.5),.5);assert.equal(nextRenderScale(NaN,1),1);
+  assert.equal(nextRenderScale(Infinity,1),1);assert.equal(nextRenderScale(16,NaN),1);
+  assert.equal(nextRenderScale(16,0),.5);assert.equal(nextRenderScale(16,2),1);
+});
 import {
   cubicBezierPoint,
   filamentLayout,
@@ -81,20 +100,20 @@ test('post shaders carry the specified defaults', () => {
   assert.equal(CHROMATIC_OFFSET, 0.0012);
   assert.equal(chromaticAberrationShader.uniforms.uOffset.value, 0.0012);
   assert.ok(chromaticAberrationShader.fragmentShader.includes('tDiffuse'));
-  assert.equal(FILM_GRAIN_AMOUNT, 0.05);
-  assert.equal(filmGrainShader.uniforms.uAmount.value, 0.05);
+  assert.equal(FILM_GRAIN_AMOUNT, 0.035);
+  assert.equal(filmGrainShader.uniforms.uAmount.value, 0.035);
   assert.ok(filmGrainShader.fragmentShader.includes('snoise'));
 });
 
-test('composer pass order is render, bloom, aberration, grain, output', () => {
-  assert.deepEqual(LARP_PASS_ORDER, ['render', 'bloom', 'aberration', 'grain', 'output']);
+test('composer pass order is render, bloom, smaa, aberration, grain, output', () => {
+  assert.deepEqual(LARP_PASS_ORDER, ['render', 'bloom', 'smaa', 'aberration', 'grain', 'output']);
   const seen: string[] = [];
   const passes = buildLarpPasses((kind) => {
     seen.push(kind);
     return { kind };
   });
   assert.deepEqual(seen, LARP_PASS_ORDER);
-  assert.equal(passes.length, 5);
+  assert.equal(passes.length, 6);
 });
 
 test('pixel ratio clamps to 2 and rejects nonsense', () => {

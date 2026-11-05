@@ -21,6 +21,9 @@ import { BOKEH_VERTEX, BOKEH_FRAGMENT, VAULT_CAMERA_Z } from './vaultShaders.ts'
 import { latestMemoryNodes } from '../MemoryMatrix.tsx';
 import { telemetryStream } from '../telemetry.ts';
 import { registerDisposer } from '../store.ts';
+import { createLarpRenderLoop } from '../renderLoop.ts';
+import {bindSceneNavigation} from './sceneNavigation.ts';
+import { createOrbitalAtmosphere } from './orbitalAtmosphere.ts';
 
 const PARTICLE_SEED = 20261103;
 
@@ -38,8 +41,9 @@ export function View1MemoryVault({ stream = telemetryStream }: { stream?: typeof
     const els = { container, canvas, tagLayer };
     const nodes = latestMemoryNodes(stream.snapshot());
     const centroids = clusterCentroids(nodes);
-    const labels = nodes.length > 0 ? nodes.map((n) => n.title) : ['Memory', 'Projects', 'Notes'];
-    const reduced = document.documentElement.dataset.reducedMotion === 'true';
+    const labels = nodes.length > 0 ? nodes.map((n) => n.title) : ['AMBIENT / MEMORY', 'AMBIENT / PROJECTS', 'AMBIENT / NOTES'];
+    const motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const isReduced = () => document.documentElement.dataset.reducedMotion === 'true' || motionPreference.matches;
 
     let renderer: THREE.WebGLRenderer;
     try {
@@ -63,13 +67,14 @@ export function View1MemoryVault({ stream = telemetryStream }: { stream?: typeof
     const material = new THREE.ShaderMaterial({
       vertexShader: BOKEH_VERTEX,
       fragmentShader: BOKEH_FRAGMENT,
-      uniforms: { uFocalDepth: { value: VAULT_CAMERA_Z } },
+      uniforms: { uFocalDepth: { value: VAULT_CAMERA_Z }, uTime: { value: 0 } },
       transparent: true,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
     });
     const points = new THREE.Points(geometry, material);
     scene.add(points);
+    const atmosphere = createOrbitalAtmosphere(scene, 9000);
 
     const tagDivs = centroids.map((_, i) => {
       const div = document.createElement('div');
@@ -98,22 +103,27 @@ export function View1MemoryVault({ stream = telemetryStream }: { stream?: typeof
     );
     resize();
 
-    let raf = 0;
+    let navigation:ReturnType<typeof bindSceneNavigation>|null=null;
     let frames = 0;
     let cleaned = false;
-    const observer = new ResizeObserver(() => resize());
+    const observer = new ResizeObserver(() => { resize(); loop.redraw(); });
     observer.observe(els.container);
 
     function frame(time: number): void {
       if (cleaned) return;
-      if (!reduced) points.rotation.y += 0.0012;
-      composerHandle.grainPass.uniforms.uTime.value = time / 1000;
+      const t = isReduced() ? 0 : time / 1000;
+      if(!navigation?.touched())points.rotation.y = Math.sin(t*.06)*.16;
+      material.uniforms.uFocalDepth.value=navigation?.distance()??VAULT_CAMERA_Z;
+      material.uniforms.uTime.value = t;
+      atmosphere.update(t);
+      composerHandle.grainPass.uniforms.uTime.value = isReduced() ? 0 : time / 1000;
       composerHandle.render();
       frames += 1;
       els.container.dataset.frames = String(frames);
+      scene.updateMatrixWorld(true);
       for (let i = 0; i < centroids.length; i++) {
         const c = centroids[i];
-        projected.set(c.x, c.y, c.z).project(camera);
+        projected.set(c.x, c.y, c.z).applyMatrix4(points.matrixWorld).project(camera);
         const div = tagDivs[i];
         if (projected.z > 1) {
           div.style.display = 'none';
@@ -123,23 +133,21 @@ export function View1MemoryVault({ stream = telemetryStream }: { stream?: typeof
           div.style.top = `${(-projected.y * 0.5 + 0.5) * 100}%`;
         }
       }
-      if (!reduced) raf = window.requestAnimationFrame(frame);
     }
-
-    if (reduced) {
-      frame(0);
-    } else {
-      raf = window.requestAnimationFrame(frame);
-    }
+    frame(0);
+    const loop = createLarpRenderLoop(frame, stream);
+    navigation=bindSceneNavigation(camera,els.canvas,loop.redraw);
 
     function cleanup(): void {
       if (cleaned) return;
       cleaned = true;
-      window.cancelAnimationFrame(raf);
+      navigation?.dispose();
+      loop.dispose();
       observer.disconnect();
       composerHandle.dispose();
       geometry.dispose();
       material.dispose();
+      atmosphere.dispose();
       renderer.dispose();
       renderer.forceContextLoss();
       els.tagLayer.innerHTML = '';
@@ -165,7 +173,7 @@ export function View1MemoryVault({ stream = telemetryStream }: { stream?: typeof
 
   return (
     <div ref={containerRef} className="larp-view-container" aria-label="SECOND BRAIN // 3D MEMORY VAULT">
-      <canvas ref={canvasRef} className="larp-view-canvas" aria-label="Memory vault particle field" />
+      <canvas ref={canvasRef} className="larp-view-canvas" data-interactive="true" tabIndex={0} aria-description="Drag to rotate, scroll to zoom, right-drag or arrow keys to pan. Home resets the view." aria-label="Memory vault particle field" />
       <div ref={tagLayerRef} className="larp-tag-layer" aria-hidden="true" />
     </div>
   );

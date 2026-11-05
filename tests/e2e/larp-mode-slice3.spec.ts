@@ -101,10 +101,13 @@ test('a live ask run leaves a compilation marker in view 4', async ({ page }) =>
     const spectrum = page.getByLabel('QUANT DRIFT & COLLIDER SPECTRUM');
     await expect(spectrum).toBeVisible();
 
+    await page.getByLabel('Exit LARP mode').click();
     await page.getByRole('button', { name: 'Ask ANANSI', exact: true }).click();
     await page.getByLabel('Your Question').fill('What is the capital of France?');
     await page.getByRole('button', { name: 'Ask Question' }).click();
     await expect(page.locator('.ask-result-section')).toBeVisible({ timeout: 60000 });
+    await page.getByLabel('Toggle LARP mode').click();
+    await page.getByLabel('LARP view 4').click();
 
     await expect
       .poll(async () => Number(await spectrum.getAttribute('data-markers')), { timeout: 30000 })

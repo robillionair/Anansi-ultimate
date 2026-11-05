@@ -1,7 +1,7 @@
 // LARP Mode Slice 4: View 5 — ATTENTION TENSOR HEATMAP // TOKEN
-// ATTENTION MATRIX. High-DPI 2D canvas (Canvas 2D chosen over a WebGL
-// shader grid, same rationale as View 2: token labels need crisp
-// text). Rows = raw-prompt words, columns = compiled-prompt words,
+// ATTENTION MATRIX. Crisp canvas typography and cells are composited
+// through shared WebGL optics with direct 2D fallback. Rows are raw-prompt
+// words; columns are compiled-prompt words;
 // cell = word presence — a genuine alignment matrix, NOT attention
 // weights (none exist in this app) and NOT provider tokens (this app
 // has no tokenizer; sequences are whitespace words, labeled as such).
@@ -17,10 +17,10 @@ import { useEffect, useRef, useState } from 'react';
 import { alignmentMatrix, latestAskTokens, type AlignmentMatrix } from './tokenAlignment.ts';
 import { telemetryStream } from '../telemetry.ts';
 import { registerDisposer } from '../store.ts';
+import {useInstrumentSurface} from '../useInstrumentSurface.ts';
+import {drawInstrumentStage,matrixLayout,matrixCellAt} from './instrumentScene.ts';
 
 const MONO_FONT = '"Berkeley Mono", "JetBrains Mono", ui-monospace, Menlo, monospace';
-const GUTTER = 100;
-const BOTTOM_MARGIN = 44;
 
 export function View5AttentionHeatmap({ stream = telemetryStream }: { stream?: typeof telemetryStream }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -33,49 +33,40 @@ export function View5AttentionHeatmap({ stream = telemetryStream }: { stream?: t
     : null;
   const matrixRef = useRef(matrix);
   matrixRef.current = matrix;
-  const layoutRef = useRef({ gutter: GUTTER, cellW: 10, cellH: 10 });
+  const layoutRef = useRef(matrixLayout(640,480,1,1));
 
   useEffect(() => stream.subscribe(() => setEvents(stream.snapshot())), [stream]);
 
-  function draw(): void {
-    const container = containerRef.current;
-    const canvas = canvasRef.current;
-    if (!container || !canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const m = matrixRef.current;
-    const w = canvas.clientWidth || 640;
-    const h = canvas.clientHeight || 480;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
-      canvas.width = Math.round(w * dpr);
-      canvas.height = Math.round(h * dpr);
-    }
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, w, h);
-    ctx.fillStyle = '#030305';
-    ctx.fillRect(0, 0, w, h);
+  function draw(ctx:CanvasRenderingContext2D,w:number,h:number): void {
+    const container=containerRef.current;if(!container)return;
+    const m=matrixRef.current;drawInstrumentStage(ctx,w,h);
     if (!m || m.rows.length === 0 || m.cols.length === 0) {
       container.dataset.rawTokens = '0';
       container.dataset.compiledTokens = '0';
       container.dataset.matches = '0';
       return;
     }
-    const gridH = h - BOTTOM_MARGIN;
-    const cellW = (w - GUTTER) / m.cols.length;
-    const cellH = gridH / m.rows.length;
-    layoutRef.current = { gutter: GUTTER, cellW, cellH };
+    const layout=matrixLayout(w,h,m.rows.length,m.cols.length);
+    const {left,top,cellW,cellH}=layout;layoutRef.current=layout;
+    ctx.fillStyle='#ad9475';ctx.font=`9px ${MONO_FONT}`;ctx.textAlign='left';
+    ctx.fillText('RAW WORDS ↓ / COMPILED WORDS →',left,top-18);
+    ctx.strokeStyle='#6a4e35';ctx.lineWidth=.6;ctx.strokeRect(left-3,top-3,layout.width+6,layout.height+6);
     ctx.font = `10px ${MONO_FONT}`;
     m.rows.forEach((row, ri) => {
-      const y = ri * cellH;
+      const y = top+ri * cellH;
       ctx.fillStyle = '#e8e8ec';
       ctx.textAlign = 'right';
-      ctx.fillText(row.slice(0, 12), GUTTER - 4, y + cellH / 2 + 3);
+      if(cellH>=10||ri%Math.ceil(12/cellH)===0)ctx.fillText(row.slice(0, 12),left-8,y+Math.min(cellH/2+3,12));
       m.cols.forEach((_, ci) => {
-        ctx.fillStyle = m.matches[ri][ci] ? '#ff8a3d' : '#18181f';
-        ctx.fillRect(GUTTER + ci * cellW + 0.5, y + 0.5, cellW - 1, cellH - 1);
+        const match=m.matches[ri][ci];
+        ctx.fillStyle=match?'#dcb37b':'rgba(47,41,45,.65)';
+        ctx.fillRect(left+ci*cellW+.25,y+.25,Math.max(.3,cellW-.5),Math.max(.3,cellH-.5));
+        if(match&&cellW>3&&cellH>3){ctx.fillStyle='#fff0d5';ctx.fillRect(left+ci*cellW+cellW*.3,y+cellH*.3,Math.max(.5,cellW*.4),Math.max(.5,cellH*.4));}
       });
     });
+    ctx.font=`8px ${MONO_FONT}`;ctx.fillStyle='#b49d7e';
+    const stride=Math.max(1,Math.ceil(35/cellW));
+    m.cols.forEach((word,ci)=>{if(ci%stride)return;ctx.save();ctx.translate(left+(ci+.5)*cellW,top+layout.height+9);ctx.rotate(.65);ctx.textAlign='left';ctx.fillText(word.slice(0,9),0,0);ctx.restore();});
     container.dataset.rawTokens = String(m.rows.length);
     container.dataset.compiledTokens = String(m.cols.length);
     container.dataset.matches = String(m.matchCount);
@@ -95,9 +86,8 @@ export function View5AttentionHeatmap({ stream = telemetryStream }: { stream?: t
       if (readoutRef.current) readoutRef.current.textContent = 'Hover the matrix to inspect a cell.';
       return;
     }
-    const { gutter, cellW, cellH } = layoutRef.current;
-    const ci = Math.floor((event.clientX - rect.left - gutter) / cellW);
-    const ri = Math.floor((event.clientY - rect.top) / cellH);
+    const cell=matrixCellAt(event.clientX-rect.left,event.clientY-rect.top,layoutRef.current,m.rows.length,m.cols.length);
+    const ci=cell?.col??-1,ri=cell?.row??-1;
     if (readoutRef.current) {
       if (ri >= 0 && ri < m.rows.length && ci >= 0 && ci < m.cols.length) {
         readoutRef.current.textContent = `raw "${m.rows[ri]}" · compiled "${m.cols[ci]}" · ${m.matches[ri][ci] ? 'match' : 'no match'}`;
@@ -107,10 +97,7 @@ export function View5AttentionHeatmap({ stream = telemetryStream }: { stream?: t
     }
   }
 
-  useEffect(() => {
-    draw();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [events]);
+  useInstrumentSurface(canvasRef,draw,!!matrix&&matrix.rows.length>0&&matrix.cols.length>0);
 
   useEffect(() => {
     window.addEventListener('mousemove', onMove);

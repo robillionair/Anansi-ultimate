@@ -19,7 +19,9 @@ import { AskAnansi } from './AskAnansi';
 import { Dashboard } from './Dashboard.tsx';
 import { LarpToggle } from './larp-mode/LarpToggle.tsx';
 import { LarpHud } from './larp-mode/LarpHud.tsx';
-import { useLarpModeStore } from './larp-mode/store.ts';
+import { useLarpModeStore,setLarpMode } from './larp-mode/store.ts';
+import {isLarpDemoBuild,loadLarpDemo} from './larp-mode/demoMode.ts';
+import {reportMemorySnapshot} from './larp-mode/telemetryProducers.ts';
 import { Providers } from './Providers';
 
 export function Workspace({client,native,connection,connected,busy:connecting}:{client:Client|null;native:boolean;connection:ReactNode;connected:boolean;busy:boolean}) {
@@ -45,6 +47,16 @@ export function Workspace({client,native,connection,connected,busy:connecting}:{
   async function refresh(){if(client)setList((await client.listWorkspaces()).workspaces);}
   async function run(action:()=>Promise<void>){setBusy(true);setError('');setNotice('');try{await action();}catch(error){setError(error instanceof Error?error.message:'Workspace unavailable. Retry the operation.');}finally{setBusy(false);}}
   useEffect(()=>{setWorkspace(null);setList([]);setSelected('');setChoosing(false);setError('');setNotice('');if(client)void run(refresh);},[client]);
+  useEffect(()=>{
+    if(!client||!isLarpDemoBuild())return;
+    let active=true;
+    void loadLarpDemo(client).then(({opened,memories})=>{
+      if(!active)return;
+      reportMemorySnapshot(memories);setWorkspace(opened);setSelected(opened.workspace.id);setIntent(opened.settings.intent);setView('memory');setError('');setLarpMode(true);
+    }).catch(error=>{if(active)setError(error instanceof Error?error.message:'Demo startup failed.');});
+    return()=>{active=false;};
+  },[client]);
+  async function refreshLarpMemory(){if(client&&workspace){const snapshot=await client.listMemories(workspace.workspace.id,{offset:0,kind:view==='notes'?'note':'memory'});reportMemorySnapshot(snapshot.memories);}}
   useEffect(()=>{document.documentElement.dataset.reducedMotion=String(workspace?.settings.reducedMotion??false);return()=>{delete document.documentElement.dataset.reducedMotion;};},[workspace?.settings.reducedMotion]);
   const larpOn=useLarpModeStore();
   const heading=view==='dashboard'?'Dashboard':view==='providers'?'AI providers':view==='mcp'?'MCP servers':view==='ask'?'Ask ANANSI':view==='models'?'Local AI models':view==='search'?'Search your workspace':view==='backups'?'Your backups':view==='jobs'?'Your jobs and exports':view==='notes'?'Your notes':view==='memory'?'Your memories':view==='projects'?'Your projects':view==='tasks'?'Your tasks':view==='people'?'Your contacts':view==='records'?'Knowledge records':view==='connection'?'Your local connection':view==='settings'?'Make it yours':ready?workspace!.workspace.name:'Welcome to ANANSI';
@@ -70,5 +82,5 @@ export function Workspace({client,native,connection,connected,busy:connecting}:{
         <form onSubmit={event=>{event.preventDefault();void run(async()=>{const opened=await client.openWorkspace(selected);setWorkspace(opened);setIntent(opened.settings.intent);});}}><label htmlFor="workspace-choice">Existing workspace</label><select id="workspace-choice" value={selected} onChange={event=>setSelected(event.target.value)} disabled={busy||!list.length}><option value="">Choose a workspace</option>{list.map(workspace=><option key={workspace.id} value={workspace.id}>{workspace.name}</option>)}</select>{!list.length&&<p className="help">No local workspaces yet. Create one to get started.</p>}<div className="actions"><button disabled={busy||!selected} type="submit">Open workspace</button><button disabled={busy} type="button" className="secondary" onClick={()=>void run(refresh)}>Refresh workspaces</button></div></form>
       </section>}
     </>}
-    <footer><strong>Local foundation · In development</strong><p>Workspace settings, notes, memory lifecycle, projects, tasks, entities and relationships work today. Workspace backups and restore preview are available. Project-scoped ideas, source revision and documented exports are available with a configured provider. Generated products are not executed, built or deployed here. This development preview is not production-certified.</p></footer></main>{larpOn&&<LarpHud/>}</div>;
+    <footer><strong>Local foundation · In development</strong><p>Workspace settings, notes, memory lifecycle, projects, tasks, entities and relationships work today. Workspace backups and restore preview are available. Project-scoped ideas, source revision and documented exports are available with a configured provider. Generated products are not executed, built or deployed here. This development preview is not production-certified.</p></footer></main>{larpOn&&<LarpHud client={client??undefined} workspaceId={workspace?.workspace.id} demo={isLarpDemoBuild()} onRefreshMemory={workspace?refreshLarpMemory:undefined}/>}</div>;
 }

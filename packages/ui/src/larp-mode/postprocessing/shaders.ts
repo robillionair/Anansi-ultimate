@@ -40,7 +40,7 @@ export const chromaticAberrationShader: LarpShader = {
   `,
 };
 
-export const FILM_GRAIN_AMOUNT = 0.05;
+export const FILM_GRAIN_AMOUNT = 0.035;
 
 export const filmGrainShader: LarpShader = {
   uniforms: {
@@ -80,7 +80,8 @@ export const filmGrainShader: LarpShader = {
     void main() {
       vec4 color = texture2D(tDiffuse, vUv);
       float n = snoise(vUv * 480.0 + uTime * 60.0);
-      color.rgb += n * uAmount;
+      // Multiplicative grain preserves the black floor before linear-to-display conversion.
+      color.rgb *= 1.0 + n * uAmount * 2.0;
       gl_FragColor = color;
     }
   `,

@@ -1,5 +1,6 @@
 // LARP Mode Slice 3: View 4 — QUANT DRIFT & COLLIDER SPECTRUM.
-// High-DPI 2D canvas over real bus series only: drift scores, token
+// Event-driven high-DPI instruments through shared GPU optics (2D fallback),
+// over real bus series only: drift scores, token
 // compression percent, compilation markers, and latest confidence
 // values. X is EVENT ORDER, not wall time (see spectrum.ts). The legend
 // carries per-series sample counts and states plainly that collision
@@ -16,6 +17,8 @@ import { useEffect, useRef, useState } from 'react';
 import { spectrumSeries, type SpectrumSeries } from './spectrum.ts';
 import { telemetryStream } from '../telemetry.ts';
 import { registerDisposer } from '../store.ts';
+import {useInstrumentSurface} from '../useInstrumentSurface.ts';
+import {drawInstrumentStage,instrumentBounds} from './instrumentScene.ts';
 
 const MONO_FONT = '"Berkeley Mono", "JetBrains Mono", ui-monospace, Menlo, monospace';
 
@@ -29,23 +32,17 @@ export function View4QuantDrift({ stream = telemetryStream }: { stream?: typeof 
 
   useEffect(() => stream.subscribe(() => setEvents(stream.snapshot())), [stream]);
 
-  function draw(): void {
-    const container = containerRef.current;
-    const canvas = canvasRef.current;
-    if (!container || !canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const w = canvas.clientWidth || 640;
-    const h = canvas.clientHeight || 480;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
-      canvas.width = Math.round(w * dpr);
-      canvas.height = Math.round(h * dpr);
+  function draw(ctx:CanvasRenderingContext2D,w:number,h:number): void {
+    const container=containerRef.current;if(!container)return;
+    drawInstrumentStage(ctx,w,h);
+    const b=instrumentBounds(w,h),band=b.height*.38;
+    ctx.font=`9px ${MONO_FONT}`;
+    for(const [name,top] of [['CONTEXT DRIFT / 0 — 1',b.top],['INPUT REDUCTION / −100 — +100%',b.top+b.height*.48]] as const){
+      ctx.fillStyle='#bba17f';ctx.textAlign='left';ctx.fillText(name,b.left,top-15);
+      ctx.strokeStyle='#302620';ctx.lineWidth=.6;ctx.strokeRect(b.left,top,b.width,band);
+      for(let x=1;x<12;x++){ctx.strokeStyle='#201c1c';ctx.beginPath();ctx.moveTo(b.left+x*b.width/12,top);ctx.lineTo(b.left+x*b.width/12,top+band);ctx.stroke();}
+      for(let y=1;y<4;y++){ctx.beginPath();ctx.moveTo(b.left,top+y*band/4);ctx.lineTo(b.left+b.width,top+y*band/4);ctx.stroke();}
     }
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, w, h);
-    ctx.fillStyle = '#030305';
-    ctx.fillRect(0, 0, w, h);
     const series = seriesRef.current;
     const plot = (points: { x: number; y: number }[], top: number, height: number, color: string) => {
       if (points.length === 0) return;
@@ -53,33 +50,23 @@ export function View4QuantDrift({ stream = telemetryStream }: { stream?: typeof 
       ctx.lineWidth = 1;
       ctx.beginPath();
       points.forEach((p, i) => {
-        const px = p.x * w;
+        const px = b.left + p.x * b.width;
         const py = top + height - p.y * height;
         if (i === 0) ctx.moveTo(px, py);
         else ctx.lineTo(px, py);
       });
       ctx.stroke();
+      for(const p of points){ctx.fillStyle=color;ctx.beginPath();ctx.arc(b.left+p.x*b.width,top+height-p.y*height,2,0,Math.PI*2);ctx.fill();}
     };
-    // Drift band (top 40%).
-    ctx.strokeStyle = '#16161a';
-    ctx.strokeRect(0, 0, w, h * 0.4);
-    plot(series.drift, 0, h * 0.4, '#00f0ff');
-    // Compression band (middle 40%, zero line centered).
-    const compTop = h * 0.45;
-    const compHeight = h * 0.4;
-    ctx.strokeStyle = '#16161a';
-    ctx.strokeRect(0, compTop, w, compHeight);
-    ctx.strokeStyle = '#3a3a44';
-    ctx.beginPath();
-    ctx.moveTo(0, compTop + compHeight / 2);
-    ctx.lineTo(w, compTop + compHeight / 2);
-    ctx.stroke();
+    plot(series.drift,b.top,band,'#a6cbd7');
+    const compTop=b.top+b.height*.48,compHeight=band;
+    ctx.strokeStyle='#544035';ctx.beginPath();ctx.moveTo(b.left,compTop+band/2);ctx.lineTo(b.left+b.width,compTop+band/2);ctx.stroke();
     if (series.compression.length > 0) {
-      ctx.strokeStyle = '#ff8a3d';
+      ctx.strokeStyle = '#e6bb81';
       ctx.lineWidth = 1;
       ctx.beginPath();
       series.compression.forEach((p, i) => {
-        const px = p.x * w;
+        const px = b.left + p.x * b.width;
         const py = compTop + compHeight / 2 - (p.y / 100) * (compHeight / 2);
         if (i === 0) ctx.moveTo(px, py);
         else ctx.lineTo(px, py);
@@ -91,24 +78,27 @@ export function View4QuantDrift({ stream = telemetryStream }: { stream?: typeof 
     ctx.globalAlpha = 0.5;
     for (const marker of series.markers) {
       ctx.beginPath();
-      ctx.moveTo(marker.x * w, 0);
-      ctx.lineTo(marker.x * w, h * 0.85);
+      ctx.moveTo(b.left + marker.x * b.width, b.top);
+      ctx.lineTo(b.left + marker.x * b.width, b.top+b.height*.86);
       ctx.stroke();
     }
     ctx.globalAlpha = 1;
     // Confidence strip (bottom).
-    const stripY = h * 0.92;
+    const stripY = b.top+b.height*.96;
     series.confidences.forEach((c, i) => {
-      const px = series.confidences.length <= 1 ? w / 2 : (i / (series.confidences.length - 1)) * w;
+      const px = series.confidences.length <= 1 ? b.left+b.width / 2 : b.left+(i / (series.confidences.length - 1)) * b.width;
       ctx.fillStyle = c >= 0.5 ? '#ffffff' : '#ff8a3d';
       ctx.beginPath();
       ctx.arc(px, stripY, 2.5, 0, Math.PI * 2);
       ctx.fill();
+      const bar=40*Math.max(0,Math.min(1,c));ctx.fillStyle='#ad8d6544';ctx.fillRect(px-3,stripY-bar,6,bar);
     });
     ctx.fillStyle = '#a1a1aa';
     ctx.font = `10px ${MONO_FONT}`;
     ctx.textAlign = 'left';
-    ctx.fillText('EVENT ORDER', 4, h - 4);
+    ctx.fillText(`EVENT ORDER / ${series.markers.length} COMPILATIONS / ${series.confidences.length} CONFIDENCE SAMPLES`,b.left,b.top+b.height+20);
+    if(!series.drift.length&&series.compression.length){ctx.fillStyle='#83735f';ctx.fillText('DRIFT NOT REPORTED',b.left+12,b.top+band*.5);}
+    if(!series.drift.length&&!series.compression.length){ctx.fillStyle='#83735f';ctx.fillText('AWAITING MEASURED SIGNAL — NO SYNTHETIC SERIES',b.left+12,b.top+band*.5);}
     container.dataset.markers = String(series.markers.length);
     container.dataset.confidences = String(series.confidences.length);
   }
@@ -128,7 +118,8 @@ export function View4QuantDrift({ stream = telemetryStream }: { stream?: typeof 
         return;
       }
     }
-    const fx = (event.clientX - rect.left) / Math.max(1, rect.width);
+    const b=instrumentBounds(rect.width,rect.height);
+    const fx = (event.clientX - rect.left-b.left) / b.width;
     const series = seriesRef.current;
     const nearest = (points: { x: number; y: number }[]) => {
       if (points.length === 0) return null;
@@ -151,14 +142,7 @@ export function View4QuantDrift({ stream = telemetryStream }: { stream?: typeof 
     }
   }
 
-  // Redraw after every render whose events changed: the subscription
-  // callback fires before React re-renders, so drawing only inside a
-  // subscription would read the stale series (the bug the e2e Ask leg
-  // caught — markers stayed 0 after a completed run).
-  useEffect(() => {
-    draw();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [events]);
+  useInstrumentSurface(canvasRef,draw);
 
   useEffect(() => {
     // Window-level listener, not canvas-level: the HUD frame is
