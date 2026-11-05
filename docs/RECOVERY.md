@@ -1,3 +1,55 @@
+﻿## Resume point — 2026-11-05 MCP Integration Slice 4 verified on Windows
+
+Owner-authorized Milestone 13 slice on review branch
+`codex/review-mcp-slice4` from the delivery tip
+`25bd957833f7fd8d8bb48f641b6ef7823f68e884`
+over baseline `1b55820973a8ad041933ba9cb468e21e7845f4fc`.
+Slice 4 adds client resources/prompts inspection
+(`resources/list`, `resources/read`, `prompts/list`,
+`prompts/get`) with explicit opt-in and review-only UI,
+plus extended server tools (`notes.search`,
+`experiments.list`, `products.get`) with strict
+fail-closed privacy gating.
+Windows verification: `tsc --noEmit` 0 errors,
+contracts 0 drift, docs 278 PASS, UI suite 297/297 PASS,
+production web build clean, API build clean,
+workspace `--lib` 244 passed, Playwright
+`mcp-slice4.spec.ts` 3/3 PASS, `mcp-server.spec.ts` 2/2 PASS,
+`mcp.spec.ts` 6/6 PASS, full regression battery 57/57 PASS.
+[Evidence](reviews/windows-mcp-slice4-verified.md).
+MCP Integration Slice 4 is verified and closed on Windows.
+AN-017 stays `in progress`.
+M7 native acceptance, preview promotion,
+§32 sandbox, M5 gates, and M8 Slice 4 Windows
+verification remain open.
+
+## Resume point — 2026-11-04 MCP Integration Slice 3 verified on Windows
+
+Owner-authorized Milestone 13 slice on review branch
+`codex/review-mcp-slice3` from the delivery tip
+`1e82892bee7f1cfdcc71ffd4edac158db5ed46c0`
+over baseline `a3c517267d58761a63e9d50795a406f0d02b5810`.
+Slice 3 implements the ANANSI MCP server core:
+stdio JSON-RPC 2.0 loop, `serverInfo.name: "anansi-server"`,
+multi-protocol negotiation, and three knowledge tools
+(`memory.search` with kind filter, `memory.get`,
+and `projects.search` with stage metadata).
+Strict fail-closed privacy: sealed and private memories
+are never exposed. Pairing-token authentication
+validated against live pairing files.
+Windows verification: `tsc --noEmit` 0 errors,
+contracts 0 drift, docs 276 PASS, UI suite 293/293 PASS,
+production web build clean, API build clean,
+`mcp_server::tests` 12/12 PASS, cargo `--lib` 239 passed,
+Playwright `mcp-server.spec.ts` 2/2 PASS,
+`mcp.spec.ts` 6/6 PASS, full regression battery 54/54 PASS.
+[Evidence](reviews/windows-mcp-slice3-verified.md).
+MCP Integration Slice 3 is verified and closed on Windows.
+AN-017 stays `in progress`.
+M7 native acceptance, preview promotion,
+§32 sandbox, M5 gates, and M8 Slice 4 Windows
+verification remain open.
+
 ## Resume point — 2026-11-04 MCP Client Integration Slice 2 verified on Windows
 
 Owner-authorized Milestone 13 slice on review branch

@@ -1,4 +1,4 @@
-# ANANSI Ultimate
+﻿# ANANSI Ultimate
 
 ANANSI Ultimate is a local-first product creation and intelligence workspace delivered as a Tauri 2 Windows desktop application and paired browser application. Both editions share domain models, business rules, visual design language, and API contracts.
 
@@ -29,6 +29,10 @@ ANANSI Ultimate is a local-first product creation and intelligence workspace del
 | **M9** | SwarmTank 3D | Verified | Synthetic persona generator, seven-factor decision engine, Three.js 3D amphitheater arena, scenario branching |
 | **M10** | SOMNIA | Verified | Deterministic replay evaluator, seeded nightmare generator, consolidation proposals, Forge QA bridge, dashboard |
 | **M11** | GHOST-PROMPT | Verified | Privacy-first draft exploration, in-memory revision capture, Three.js 3D timeline, rule-based draft analysis, dual-panel comparison |
+| **M12** | Product Lifecycle | Verified | 7-stage pipeline engine & navigator, Launch Studio with deterministic ZIP bundling, Guided Lifecycle Walk with recovery |
+| **LARP** | LARP Mode Telemetry Engine | Verified | Real-time telemetry bus & HUD, 6 visual views (Memory Vault 3D, Context Funnel, Kinetic Spider, Quant Drift Spectrum, Attention Matrix, Collider Field) |
+| **HOME** | Command Dashboard | Verified | Landing hub with genuine uptime telemetry, recency-ordered projects hub with Guided Walk jump, system backup and queue health |
+| **M13** | MCP Integration | In Progress | Stdio MCP client (tools, resources, prompts) with explicit review; MCP server exposing 6 knowledge tools with pairing auth & strict privacy |
 
 See [docs/BUILD_STATUS.md](docs/BUILD_STATUS.md) and [docs/REQUIREMENTS_MATRIX.md](docs/REQUIREMENTS_MATRIX.md) for detailed verification evidence.
 
@@ -69,16 +73,16 @@ node scripts/contracts.mjs --check
 # Typecheck workspace
 pnpm exec tsc --noEmit
 
-# Run UI component test suite (192 unit tests)
+# Run UI component test suite (297 unit tests)
 npm run test:ui
 
 # Run Rust workspace unit and integration tests
-cargo test --workspace
+cargo test --workspace --locked --lib
 
 # Build production web bundle
 pnpm --filter @anansi/web build
 
-# Run Playwright browser test battery
+# Run Playwright browser test battery (57 tests across M0–M13)
 pnpm exec playwright test
 ```
 

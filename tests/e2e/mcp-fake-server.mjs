@@ -67,6 +67,32 @@ rl.on('line', (line) => {
         }) + '\n',
       );
     }
+  } else if (message.method === 'resources/list') {
+    reply(message.id, {
+      resources: [
+        { uri: 'file:///guide.md', name: 'Guide', description: 'A guide.', mimeType: 'text/markdown' },
+        { uri: 'file:///notes.txt', name: 'Notes', mimeType: 'text/plain' },
+      ],
+    });
+  } else if (message.method === 'resources/read') {
+    const uri = message.params?.uri;
+    if (uri === 'file:///guide.md') {
+      reply(message.id, {
+        contents: [{ uri, mimeType: 'text/markdown', text: '# Guide\n\nReview me.' }],
+      });
+    } else if (uri === 'file:///notes.txt') {
+      reply(message.id, {
+        contents: [{ uri, mimeType: 'text/plain', text: 'Short notes.' }],
+      });
+    } else {
+      process.stdout.write(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          id: message.id,
+          error: { code: -32602, message: 'Unknown resource' },
+        }) + '\n',
+      );
+    }
   } else if (message.method === 'prompts/list') {
     reply(message.id, {
       prompts: [
@@ -75,8 +101,35 @@ rl.on('line', (line) => {
           description: 'Summarize.',
           arguments: [{ name: 'text', required: true }],
         },
+        {
+          name: 'greet',
+          description: 'Greet.',
+          arguments: [{ name: 'name', required: false }],
+        },
       ],
     });
+  } else if (message.method === 'prompts/get') {
+    const name = message.params?.name;
+    const args = message.params?.arguments ?? {};
+    if (name === 'summarize' && typeof args.text === 'string' && args.text !== '') {
+      reply(message.id, {
+        description: 'Summarized.',
+        messages: [{ role: 'user', content: [{ type: 'text', text: `Summary of "${args.text}".` }] }],
+      });
+    } else if (name === 'greet') {
+      const who = typeof args.name === 'string' && args.name !== '' ? args.name : 'friend';
+      reply(message.id, {
+        messages: [{ role: 'assistant', content: [{ type: 'text', text: `Hello, ${who}!` }] }],
+      });
+    } else {
+      process.stdout.write(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          id: message.id,
+          error: { code: -32602, message: 'Unknown prompt or missing argument' },
+        }) + '\n',
+      );
+    }
   } else if (message.method === 'ping') {
     reply(message.id, {});
   }
