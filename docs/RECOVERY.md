@@ -1,3 +1,25 @@
+## Resume point — 2026-11-05 Windows readiness closure and release tooling verification
+
+Authoritative baseline on branch `codex/windows-readiness-closure` at tip
+`fddb759ce` over baseline `7e24859e6c042aaa135d632ad7009d20ab3c35e1`.
+Combines verified MCP Integration Slice 5 (`ec87ca928`), verified holographic
+LARP entity chat/cinematic upgrades (`b5417f551`), and verified release tooling
+integration (`eed9a3bda`).
+Authoritative evidence:
+- Status ledger: [docs/evidence/project-status-ledger-2026-11-05.md](evidence/project-status-ledger-2026-11-05.md)
+- Readiness evidence: [docs/evidence/windows-readiness-closure-2026-11-05.md](evidence/windows-readiness-closure-2026-11-05.md)
+
+Verification summary:
+1. Static & documentation: `tsc --noEmit` 0 errors, contracts drift 0, docs 302 PASS (`validate-docs.mjs`).
+2. Unit suites: `npm run test:ui` 314/314 PASS, `cargo test --workspace --locked --lib` 247/247 PASS.
+3. Browser suites: MCP 13/13 PASS, LARP 6/7 PASS (1 skipped), Product Lifecycle 6/6 PASS.
+4. Native candidate: Built isolated candidate `ANANSI-Candidate-7e24859e6.exe` (SHA-256 `dd6cdc59e987b0e26f351bd57b7c97ae8690f281ff1487b83961aec636e50b5b`); executed automated 7-step CDP acceptance suite on port 19323 with isolated WebView2 UDF and synthetic storage root, verifying startup, shell ACL denial, workspace creation, memory search, project/artifact registration, backup, and survival across process restart. Running demo PID 87984 undisturbed.
+5. Release tooling: 54/54 release suite tests PASS across all 7 suites; privacy-safe support diagnostics verified; secret canaries 100% redacted.
+6. Scope status:
+   - MCP Slices 1–5: closed on Windows; AN-017 verified.
+   - M13 document formats/ingestion: in-progress under AN-025 (awaiting Muse review).
+   - Standing gates: G1 external audit, Authenticode signing, Windows Sandbox disposable installer, manual cloud provider gates remain open.
+
 ## Resume point — 2026-11-05 Windows readiness and closure baseline
 
 Authoritative baseline on branch `codex/windows-readiness-closure` at tip
