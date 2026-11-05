@@ -1,3 +1,15 @@
+## Resume point — 2026-11-05 M13 Document Ingestion Slice 1 reviewed on Windows
+
+Review worktree `E:/Anansi/worktrees/review-m13-document-ingestion` on branch
+`codex/review-m13-document-ingestion` tracking delivery tip `ba3f5a724` from baseline `7e24859e6`.
+Scope: TXT/Markdown foundation (AN-025 in progress).
+Windows verification: `npm run typecheck` 0 errors, contracts 0 drift, docs 289 PASS,
+UI suite 320/320 PASS, Rust workspace `--lib` 262/262 PASS, Vite web build clean, API build clean.
+Playwright ingestion: 7 of 9 tests PASS; 2 Windows findings diagnosed with reproducible probes:
+1. `ss` Linux utility used in test 7; `anansi-api` missing `.exe`.
+2. Concurrent duplicate `ingest-begin` returns 503 `STORAGE_UNAVAILABLE` under SQLite contention in `sweep_staging`.
+Evidence: [docs/reviews/windows-m13-ingestion-slice1-review.md](reviews/windows-m13-ingestion-slice1-review.md).
+
 ## Resume point — 2026-11-05 Windows readiness closure and release tooling verification
 
 Authoritative baseline on branch `codex/windows-readiness-closure` at tip

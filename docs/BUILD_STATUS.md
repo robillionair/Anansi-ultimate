@@ -1,3 +1,11 @@
+## 2026-11-05 — M13 Document Ingestion Slice 1 delivered & reviewed on Windows
+
+Incoming delivery `anansi-m13-document-ingestion-2026-11-05.zip` (delivery ZIP SHA-256 `f1f810cae2f18acb6b4f117736727941b86b372e26031de14d808d9334149dfe`, bundle SHA-256 `49e1227fa45a149a75a658d9bc0e97d196c6928dadaffdf3965d9c621aa50d02`, tip `ba3f5a724e4c56c575fae2563cb93d073fdb5cbe` over baseline `7e24859e6c042aaa135d632ad7009d20ab3c35e1`) reviewed on Windows in isolated worktree `E:/Anansi/worktrees/review-m13-document-ingestion`. Scope: MASTER_SPEC §12 local document ingestion foundation (TXT/Markdown only) — select file, review/approve, bounded chunked upload (`ingest-begin` / `ingest-part`, 64 KiB sequential), persistent job progress, restart/resume, open and search, Ask evidence/citation, and backup/restore. Strict validation: UTF-8 only (invalid refused), 1–65536 bytes, 1–8000 non-whitespace chars, BOM stripped and recorded, SHA-256 recomputed server-side. Inert React Markdown renderer (zero `dangerouslySetInnerHTML`). AN-025 stays `in progress` (M13 not declared complete).
+Windows verification: `npm run typecheck` 0 errors, `contracts.mjs --check` 0 drift, docs 289 PASS (`validate-docs.mjs`), UI suite 320/320 PASS, Rust workspace `--lib` 262/262 PASS, Vite web build clean (137 modules in 5.88s), API build clean. Playwright suite: 7 of 9 tests PASS (UI import, Markdown inertness, invalid UTF-8 refusal, oversize/sealed/format refusal, cancel cleanup, backup/restore, Ask citation). Two findings diagnosed and reported for partner agent Muse:
+1. `tests/e2e/documents-ingestion.spec.ts:338` uses Linux-only `ss` command and line 344 lacks `.exe` extension on Windows.
+2. Concurrent duplicate `ingest-begin` fails with 503 `STORAGE_UNAVAILABLE` on Windows due to SQLite lock contention in `sweep_staging`.
+Full review report: [docs/reviews/windows-m13-ingestion-slice1-review.md](reviews/windows-m13-ingestion-slice1-review.md).
+
 ## 2026-11-05 — Windows readiness closure and release tooling verification
 
 Authoritative baseline established on branch `codex/windows-readiness-closure` at tip `fddb759ce` over baseline `7e24859e6c042aaa135d632ad7009d20ab3c35e1`. All three readiness packages verified under strict isolation on drive E: (zero bytes unapproved growth on C:):
