@@ -1,10 +1,9 @@
-//! MCP *server* side (MASTER_SPEC §68, Milestone 13, Slice 4).
+//! MCP *server* side (MASTER_SPEC §68, Milestone 13, Slice 5).
 //!
 //! ANANSI itself answers MCP requests over NDJSON stdio, exposing exactly
-//! six approved read-only knowledge tools — `memory.search`, `memory.get`,
-//! `notes.search`, `projects.search`, `experiments.list`, `products.get`.
-//! Everything else §68 lists as possible (notably the write tool
-//! `ideas.create`) is out of this slice; the allowlist below is the whole
+//! seven approved knowledge tools — `memory.search`, `memory.get`,
+//! `notes.search`, `projects.search`, `experiments.list`, `products.get`,
+//! and the mutation-gated `ideas.create`. The allowlist below is the whole
 //! permission set, enforced in dispatch before any backend call.
 //!
 //! Security boundary, in three layers:
@@ -167,6 +166,14 @@ pub trait McpServerBackend {
         workspace_id: &str,
         project_id: &str,
     ) -> Result<Vec<ArtifactSummary>, CommandError>;
+    fn create_idea_artifact(
+        &self,
+        workspace_id: &str,
+        project_id: &str,
+        title: &str,
+        body: &str,
+        privacy: &str,
+    ) -> Result<String, CommandError>;
 }
 
 /// One artifact's summary metadata for the project tools. Bodies are
@@ -296,9 +303,34 @@ impl McpServerBackend for CoreMcpServerBackend<'_> {
             })
             .collect())
     }
+
+    fn create_idea_artifact(
+        &self,
+        workspace_id: &str,
+        project_id: &str,
+        title: &str,
+        body: &str,
+        privacy: &str,
+    ) -> Result<String, CommandError> {
+        // The assignment's `artifacts_command("create", ...)` does not
+        // exist: `register` is the validated creation operation, and
+        // the ideas module is provider-generation runs, not manual
+        // creation. This is the creation path, with type pinned to
+        // "idea" by the server layer, never by the caller.
+        let value = self.core.artifacts_command(
+            "register",
+            json!({"contractVersion": 1, "workspaceId": workspace_id, "projectId": project_id, "type": "idea", "title": title, "body": body, "privacy": privacy}),
+        )?;
+        value
+            .get("artifact")
+            .and_then(|a| a.get("artifactId"))
+            .and_then(|id| id.as_str())
+            .map(|id| id.to_string())
+            .ok_or_else(|| CommandError::new(ErrorCode::StorageUnavailable, "Creation failed."))
+    }
 }
 
-/// The three approved tools, in `tools/list` order.
+/// The seven approved tools, in `tools/list` order.
 pub fn tool_names() -> Vec<String> {
     vec![
         "memory.search".to_string(),
@@ -307,6 +339,7 @@ pub fn tool_names() -> Vec<String> {
         "projects.search".to_string(),
         "experiments.list".to_string(),
         "products.get".to_string(),
+        "ideas.create".to_string(),
     ]
 }
 
@@ -461,7 +494,57 @@ pub fn tool_definitions() -> Vec<McpServerToolDef> {
                 required: vec!["projectId".to_string()],
             },
         },
+        McpServerToolDef {
+            name: "ideas.create".to_string(),
+            description: "Create one idea artifact bound strictly to an active shareable project. The project must exist, be active, non-expired, and standard or public; anything else returns 'Project not found.'. The artifact's privacy mirrors the project's. The artifact schema has no tags column, so tags, when supplied, are appended to the stored body as a final 'Tags: ...' line with the description verbatim before it.".to_string(),
+            input_schema: McpToolInputSchema {
+                schema_type: "object".to_string(),
+                properties: idea_properties(),
+                required: vec!["projectId".to_string(), "title".to_string(), "description".to_string()],
+            },
+        },
     ]
+}
+
+fn idea_properties() -> BTreeMap<String, McpSchemaProperty> {
+    let mut properties = BTreeMap::new();
+    properties.insert(
+        "projectId".to_string(),
+        McpSchemaProperty {
+            property_type: "string".to_string(),
+            description: Some("32-character lowercase hex project memory ID.".to_string()),
+            minimum: None,
+            maximum: None,
+        },
+    );
+    properties.insert(
+        "title".to_string(),
+        McpSchemaProperty {
+            property_type: "string".to_string(),
+            description: Some("Idea title, 1 to 120 characters.".to_string()),
+            minimum: None,
+            maximum: None,
+        },
+    );
+    properties.insert(
+        "description".to_string(),
+        McpSchemaProperty {
+            property_type: "string".to_string(),
+            description: Some("Idea description, stored verbatim as the artifact body.".to_string()),
+            minimum: None,
+            maximum: None,
+        },
+    );
+    properties.insert(
+        "tags".to_string(),
+        McpSchemaProperty {
+            property_type: "array".to_string(),
+            description: Some("Optional tags, at most 32 of up to 64 characters each; appended to the body as a final 'Tags: ...' line.".to_string()),
+            minimum: None,
+            maximum: None,
+        },
+    );
+    properties
 }
 
 /// Byte-wise comparison without early exit on first difference, so a token
@@ -833,6 +916,7 @@ fn handle_tool_call<B: McpServerBackend>(
         "products.get" => {
             call_project_tool(&arguments, backend, options, ProjectToolKind::Products)
         }
+        "ideas.create" => call_ideas_create(&arguments, backend, options),
         "memory.get" => call_get(&arguments, backend, options),
         _ => unreachable!("allowlist checked above"),
     };
@@ -1000,6 +1084,106 @@ fn call_project_tool<B: McpServerBackend>(
     ))
 }
 
+/// The mutation gate for `ideas.create`: argument validation, then the
+/// same project gate as the read-only project tools, then a single
+/// `register` of a type-`idea` artifact bound to the validated project.
+/// Project gate failures return the identical not-found result as the
+/// read tools (no oracle); register *validation* failures surface as
+/// -32602, anything else as -32603.
+fn call_ideas_create<B: McpServerBackend>(
+    arguments: &Value,
+    backend: &B,
+    options: &McpServerOptions,
+) -> Result<Value, (i64, String)> {
+    let project_id = parse_id_field(arguments, "projectId")?;
+    let title = arguments
+        .get("title")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|t| !t.is_empty() && t.chars().count() <= 120)
+        .ok_or_else(|| invalid("title is required and must be 1 to 120 characters."))?;
+    let description = arguments
+        .get("description")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|d| !d.is_empty())
+        .ok_or_else(|| invalid("description is required and must be a non-empty string."))?;
+    let tags = match arguments.get("tags") {
+        None => Vec::new(),
+        Some(value) => {
+            let items = value
+                .as_array()
+                .ok_or_else(|| invalid("tags must be an array of strings."))?;
+            if items.len() > 32 {
+                return Err(invalid("tags must contain at most 32 entries."));
+            }
+            let mut tags = Vec::new();
+            for item in items {
+                let tag = item
+                    .as_str()
+                    .map(str::trim)
+                    .filter(|t| !t.is_empty() && t.chars().count() <= 64)
+                    .ok_or_else(|| invalid("each tag must be 1 to 64 characters."))?;
+                tags.push(tag.to_string());
+            }
+            tags
+        }
+    };
+    let not_found = || {
+        tool_result(
+            PROJECT_NOT_FOUND_TEXT,
+            json!({"error": PROJECT_NOT_FOUND_TEXT}),
+            true,
+        )
+    };
+    let meta = match backend.read_memory(&options.workspace_id, &project_id) {
+        Ok(details) => details.memory,
+        Err(_) => return Ok(not_found()),
+    };
+    if meta.kind != "project"
+        || !is_active_project(meta.status)
+        || !is_shareable(meta.privacy)
+        || is_expired(&meta.valid_until)
+    {
+        return Ok(not_found());
+    }
+    // The artifact is visible exactly where its project is visible.
+    let privacy = match meta.privacy {
+        Privacy::Standard => "standard",
+        Privacy::Public => "public",
+        _ => unreachable!("project gate passed above"),
+    };
+    // No tags column exists on artifacts: tags ride as a final body
+    // line, with the description verbatim before it.
+    let mut body = description.to_string();
+    if !tags.is_empty() {
+        body.push_str("\n\nTags: ");
+        body.push_str(&tags.join(", "));
+    }
+    let artifact_id = backend
+        .create_idea_artifact(&options.workspace_id, &project_id, title, &body, privacy)
+        .map_err(|err| {
+            if err.code == ErrorCode::InvalidRequest {
+                (-32602, err.message)
+            } else {
+                (-32603, "Tool execution failed.".to_string())
+            }
+        })?;
+    let value = json!({
+        "projectId": project_id,
+        "projectTitle": meta.title,
+        "artifactId": artifact_id,
+        "type": "idea",
+        "title": title,
+        "tags": tags,
+    });
+    Ok(tool_result(
+        &serde_json::to_string(&value).unwrap_or_else(|_| "{}".to_string()),
+        value,
+        false,
+    ))
+}
+
 fn call_get<B: McpServerBackend>(
     arguments: &Value,
     backend: &B,
@@ -1105,12 +1289,14 @@ mod tests {
 
     struct FakeBackend {
         calls: RefCell<Vec<String>>,
+        created: RefCell<Vec<(String, String, String, String)>>,
     }
 
     impl FakeBackend {
         fn new() -> Self {
             Self {
                 calls: RefCell::new(vec![]),
+                created: RefCell::new(vec![]),
             }
         }
     }
@@ -1174,11 +1360,19 @@ mod tests {
                 "44444444444444444444444444444444" => ("Private project", "project", MemoryState::Durable, Privacy::Private, "project body"),
                 "55555555555555555555555555555555" => ("Old project", "project", MemoryState::Superseded, Privacy::Standard, "project body"),
                 "66666666666666666666666666666666" => ("Some note", "note", MemoryState::Durable, Privacy::Standard, "note body"),
+                "88888888888888888888888888888888" => ("Expired project", "project", MemoryState::Durable, Privacy::Standard, "project body"),
                 _ => return Err(CommandError::new(ErrorCode::NotFound, "missing")),
             };
+            let mut memory = meta(id, title, kind, status, privacy);
+            // The expired project: a validity window that closed in
+            // 2020, so the gate must refuse it like the other
+            // non-active targets.
+            if id == "88888888888888888888888888888888" {
+                memory.valid_until = Some("2020-01-01T00:00:00Z".to_string());
+            }
             Ok(MemoryDetails {
                 contract_version: 1,
-                memory: meta(id, title, kind, status, privacy),
+                memory,
                 body: body.to_string(),
             })
         }
@@ -1269,6 +1463,23 @@ mod tests {
                 summary("art-scenario", "scenario", "Swarm branch", "standard"),
             ])
         }
+
+        fn create_idea_artifact(
+            &self,
+            _workspace_id: &str,
+            project_id: &str,
+            title: &str,
+            body: &str,
+            privacy: &str,
+        ) -> Result<String, CommandError> {
+            self.created.borrow_mut().push((
+                project_id.to_string(),
+                title.to_string(),
+                body.to_string(),
+                privacy.to_string(),
+            ));
+            Ok("art-idea-1".to_string())
+        }
     }
 
     /// Drive `serve` over one scripted input and return parsed output lines.
@@ -1350,7 +1561,7 @@ mod tests {
     }
 
     #[test]
-    fn tools_list_returns_exactly_six_tools() {
+    fn tools_list_returns_exactly_seven_tools() {
         let (_temp, options) = paired_root();
         let backend = FakeBackend::new();
         let out = run(
@@ -1375,6 +1586,7 @@ mod tests {
                 "projects.search",
                 "experiments.list",
                 "products.get",
+                "ideas.create",
             ]
         );
     }
@@ -1461,6 +1673,76 @@ mod tests {
                 "artifacts:33333333333333333333333333333333",
             ]
         );
+    }
+
+    #[test]
+    fn slice5_ideas_create_validates_gates_and_creates_once() {
+        let (_temp, options) = paired_root();
+        let backend = FakeBackend::new();
+        let long_title = "t".repeat(121);
+        let long_tag = "g".repeat(65);
+        let many_tags: Vec<Value> = (0..33).map(|i| json!(format!("tag{i}"))).collect();
+        let calls = vec![
+            // Happy path: tags ride as a final body line.
+            json!({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "ideas.create", "arguments": {"projectId": "33333333333333333333333333333333", "title": "Solar kiosk", "description": "A kiosk idea.", "tags": ["solar", "kiosk"]}}}),
+            // Every project-gate failure is the identical not-found.
+            json!({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "ideas.create", "arguments": {"projectId": "44444444444444444444444444444444", "title": "Hidden", "description": "No."}}}),
+            json!({"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {"name": "ideas.create", "arguments": {"projectId": "55555555555555555555555555555555", "title": "Old", "description": "No."}}}),
+            json!({"jsonrpc": "2.0", "id": 5, "method": "tools/call", "params": {"name": "ideas.create", "arguments": {"projectId": "66666666666666666666666666666666", "title": "Note", "description": "No."}}}),
+            json!({"jsonrpc": "2.0", "id": 6, "method": "tools/call", "params": {"name": "ideas.create", "arguments": {"projectId": "88888888888888888888888888888888", "title": "Expired", "description": "No."}}}),
+            json!({"jsonrpc": "2.0", "id": 7, "method": "tools/call", "params": {"name": "ideas.create", "arguments": {"projectId": "99999999999999999999999999999999", "title": "Unknown", "description": "No."}}}),
+            // Argument validation: all -32602, all before any write.
+            json!({"jsonrpc": "2.0", "id": 8, "method": "tools/call", "params": {"name": "ideas.create", "arguments": {"projectId": "not-hex", "title": "Bad id", "description": "No."}}}),
+            json!({"jsonrpc": "2.0", "id": 9, "method": "tools/call", "params": {"name": "ideas.create", "arguments": {"projectId": "33333333333333333333333333333333", "description": "No title."}}}),
+            json!({"jsonrpc": "2.0", "id": 10, "method": "tools/call", "params": {"name": "ideas.create", "arguments": {"projectId": "33333333333333333333333333333333", "title": "   ", "description": "Blank title."}}}),
+            json!({"jsonrpc": "2.0", "id": 11, "method": "tools/call", "params": {"name": "ideas.create", "arguments": {"projectId": "33333333333333333333333333333333", "title": long_title, "description": "Overlong title."}}}),
+            json!({"jsonrpc": "2.0", "id": 12, "method": "tools/call", "params": {"name": "ideas.create", "arguments": {"projectId": "33333333333333333333333333333333", "title": "No desc."}}}),
+            json!({"jsonrpc": "2.0", "id": 13, "method": "tools/call", "params": {"name": "ideas.create", "arguments": {"projectId": "33333333333333333333333333333333", "title": "Blank desc.", "description": "  "}}}),
+            json!({"jsonrpc": "2.0", "id": 14, "method": "tools/call", "params": {"name": "ideas.create", "arguments": {"projectId": "33333333333333333333333333333333", "title": "Bad tags", "description": "Tags not an array.", "tags": "solar"}}}),
+            json!({"jsonrpc": "2.0", "id": 15, "method": "tools/call", "params": {"name": "ideas.create", "arguments": {"projectId": "33333333333333333333333333333333", "title": "Empty tag", "description": "One empty tag.", "tags": ["solar", " "]}}}),
+            json!({"jsonrpc": "2.0", "id": 16, "method": "tools/call", "params": {"name": "ideas.create", "arguments": {"projectId": "33333333333333333333333333333333", "title": "Long tag", "description": "One overlong tag.", "tags": [long_tag]}}}),
+            json!({"jsonrpc": "2.0", "id": 17, "method": "tools/call", "params": {"name": "ideas.create", "arguments": {"projectId": "33333333333333333333333333333333", "title": "Too many", "description": "Thirty-three tags.", "tags": many_tags}}}),
+        ];
+        let script = authed_script(
+            &calls
+                .iter()
+                .map(|c| c.to_string())
+                .collect::<Vec<_>>()
+                .join("\n"),
+        );
+        let out = run(&script, &backend, &options);
+        assert_eq!(out.len(), 17);
+        // Happy path: artifact id, title, and tags echoed; the fake
+        // recorded exactly one creation, bound to the validated
+        // project, with the project's standard privacy and the tags
+        // trailer after the verbatim description.
+        let created = &out[1]["result"]["structuredContent"];
+        assert_eq!(created["artifactId"], "art-idea-1");
+        assert_eq!(created["title"], "Solar kiosk");
+        assert_eq!(created["tags"], json!(["solar", "kiosk"]));
+        assert_eq!(out[1]["result"]["isError"], false);
+        let recorded = backend.created.borrow();
+        assert_eq!(recorded.len(), 1);
+        assert_eq!(
+            recorded[0],
+            (
+                "33333333333333333333333333333333".to_string(),
+                "Solar kiosk".to_string(),
+                "A kiosk idea.\n\nTags: solar, kiosk".to_string(),
+                "standard".to_string(),
+            )
+        );
+        // Project-gate failures (lines 3–7): identical not-found, and
+        // no creation was recorded for any of them.
+        for line in &out[2..7] {
+            assert_eq!(line["result"]["isError"], true);
+            assert_eq!(line["result"]["content"][0]["text"], PROJECT_NOT_FOUND_TEXT);
+        }
+        // Argument failures (lines 8–17): all -32602.
+        for line in &out[7..17] {
+            assert_eq!(line["error"]["code"], -32602);
+        }
+        assert_eq!(recorded.len(), 1);
     }
 
     #[test]
@@ -1819,5 +2101,102 @@ mod tests {
         // The private project is not-found, identically to unknown.
         assert_eq!(lines[4]["result"]["isError"], true);
         assert_eq!(lines[4]["result"]["content"][0]["text"], PROJECT_NOT_FOUND_TEXT);
+    }
+
+    #[test]
+    fn component_ideas_create_with_real_artifacts_and_privacy() {
+        let temp = tempfile::tempdir().unwrap();
+        let core = crate::Core::with_storage_root(temp.path().join("storage"));
+        let workspace = core
+            .workspace_command("create", json!({"contractVersion": 1, "name": "Ideas fixture"}))
+            .unwrap()["workspace"]["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let project = core
+            .memory_command(
+                "create",
+                json!({"contractVersion": 1, "workspaceId": workspace, "kind": "project", "draft": {"title": "Ideas project", "body": "Project body.", "privacy": "standard"}}),
+            )
+            .unwrap();
+        let project_id = project["memory"]["id"].as_str().unwrap().to_string();
+        let private_project = core
+            .memory_command(
+                "create",
+                json!({"contractVersion": 1, "workspaceId": workspace, "kind": "project", "draft": {"title": "Hidden project", "body": "Project body.", "privacy": "private"}}),
+            )
+            .unwrap();
+        let private_project_id = private_project["memory"]["id"].as_str().unwrap().to_string();
+        let backend = CoreMcpServerBackend::new(&core);
+        let (_pairing_temp, mut options) = paired_root();
+        options.workspace_id = workspace.clone();
+        let script = format!(
+            "{}\n{}\n{}\n{}\n",
+            initialize("2025-11-25", Some(TOKEN)),
+            json!({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "ideas.create", "arguments": {"projectId": project_id, "title": "Solar kiosk", "description": "A kiosk idea.", "tags": ["alpha", "beta"]}}}),
+            json!({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "ideas.create", "arguments": {"projectId": project_id, "title": "Untagged idea", "description": "No tags here."}}}),
+            json!({"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {"name": "ideas.create", "arguments": {"projectId": private_project_id, "title": "Hidden idea", "description": "Must not land."}}}),
+        );
+        let mut reader = Cursor::new(script.into_bytes());
+        let mut out: Vec<u8> = vec![];
+        serve(&mut reader, &mut out, &backend, &options).unwrap();
+        let lines: Vec<Value> = String::from_utf8(out)
+            .unwrap()
+            .lines()
+            .map(|l| serde_json::from_str(l).unwrap())
+            .collect();
+        assert_eq!(lines.len(), 4);
+        // The tagged idea reports its artifact id and echoed tags.
+        let first = &lines[1]["result"]["structuredContent"];
+        assert_eq!(first["type"], "idea");
+        assert_eq!(first["title"], "Solar kiosk");
+        assert_eq!(first["tags"], json!(["alpha", "beta"]));
+        let artifact_id = first["artifactId"].as_str().unwrap().to_string();
+        assert_eq!(lines[2]["result"]["isError"], false);
+        // The private project is not-found and creates nothing.
+        assert_eq!(lines[3]["result"]["isError"], true);
+        assert_eq!(lines[3]["result"]["content"][0]["text"], PROJECT_NOT_FOUND_TEXT);
+        // The registry proves persistence: exactly the two ideas, with
+        // the tagged body carrying the verbatim description plus the
+        // tags line, and the untagged body exactly the description.
+        let listed = core
+            .artifacts_command(
+                "list",
+                json!({"contractVersion": 1, "workspaceId": workspace, "projectId": project_id}),
+            )
+            .unwrap();
+        let artifacts = listed["artifacts"].as_array().unwrap();
+        assert_eq!(artifacts.len(), 2);
+        let tagged = artifacts
+            .iter()
+            .find(|a| a["artifactId"].as_str() == Some(artifact_id.as_str()))
+            .unwrap();
+        assert_eq!(tagged["type"], "idea");
+        assert_eq!(tagged["privacy"], "standard");
+        let read = core
+            .artifacts_command(
+                "read",
+                json!({"contractVersion": 1, "workspaceId": workspace, "artifactId": artifact_id}),
+            )
+            .unwrap();
+        assert_eq!(read["body"], "A kiosk idea.\n\nTags: alpha, beta");
+        let untagged = artifacts
+            .iter()
+            .find(|a| a["title"].as_str() == Some("Untagged idea"))
+            .unwrap();
+        let untagged_read = core
+            .artifacts_command(
+                "read",
+                json!({"contractVersion": 1, "workspaceId": workspace, "artifactId": untagged["artifactId"].as_str().unwrap()}),
+            )
+            .unwrap();
+        assert_eq!(untagged_read["body"], "No tags here.");
+        let hidden_listed = core
+            .artifacts_command(
+                "list",
+                json!({"contractVersion": 1, "workspaceId": workspace, "projectId": private_project_id}),
+            )
+            .unwrap();
+        assert_eq!(hidden_listed["artifacts"].as_array().unwrap().len(), 0);
     }
 }

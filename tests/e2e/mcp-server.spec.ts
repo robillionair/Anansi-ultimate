@@ -99,10 +99,10 @@ test('MCP server: pairing auth, shareable tools, kind filter, stage metadata', a
       expect(response.result.serverInfo.name).toBe('anansi-server');
       expect(response.result.capabilities.tools).toBeDefined();
 
-      // 3. tools/list returns exactly the six approved tools.
+      // 3. tools/list returns exactly the seven approved tools.
       client.send({ jsonrpc: '2.0', id: 4, method: 'tools/list', params: {} });
       response = await client.next();
-      expect(response.result.tools.map((t: any) => t.name)).toEqual(['memory.search', 'memory.get', 'notes.search', 'projects.search', 'experiments.list', 'products.get']);
+      expect(response.result.tools.map((t: any) => t.name)).toEqual(['memory.search', 'memory.get', 'notes.search', 'projects.search', 'experiments.list', 'products.get', 'ideas.create']);
 
       // 4. memory.search finds the standard note, never the private one,
       // and never returns bodies.
