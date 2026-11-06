@@ -1921,3 +1921,13 @@ The authorized audit repair is complete; ADR-0019 records the schema/history/mem
 ## M2.4 local acceptance — 2026-10-18
 
 User authorized continuation after M2.3. Work is on `codex/m2-4-jobs-export`; [M2.4 acceptance criteria and verification ledger](evidence/M2-4.md) were created before implementation. The previous verified checkpoint remains c141939 (production implementation 5b83338). M2.4 local acceptance now passed at 8f7ff87, superseding the earlier in-progress entry. Remote publication/source recovery are finalized through the ledger referenced above. M2.5 has not started.
+
+## LARP SwarmTank
+
+Scene 08 opens the existing project-scoped SwarmTank workflow inside LARP. Run a simulation or open a saved report, inspect its synthetic personas, and adjust the scenario with the outcome counts and arena in view. The LARP renderer uses the shared effects and camera controls, with the report table available alongside it. The simulator and artifact formats are shared with Projects.
+
+Verification on Windows covers TypeScript, the production web build, the UI and contracts suite, and the browser workflow. The installed desktop preview requires a separate rebuild and native smoke test.
+
+The SwarmTank cinematic pass adds a suspended holographic core, segmented perimeter lighting, a layered arena deck, and a dedicated instrument frame. Windows browser inspection confirmed that the visual effects leave the decision legend and controls readable. Focused scene and arena tests passed 26/26, and the four SwarmTank browser workflows passed. See the [LARP SwarmTank handoff](handoffs/larp-swarmtank.md).
+
+The LARP SwarmTank matrix pass adds selectable, paginated persona cards and illuminated wiring over the connected 3D persona network. The focused Windows browser battery passed all four workflows, including the existing Projects arena and its fallback.

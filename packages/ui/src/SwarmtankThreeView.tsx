@@ -20,10 +20,14 @@
 
 import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
+import { createLarpComposer } from './larp-mode/postprocessing/LarpComposer';
+import { createLarpRenderLoop } from './larp-mode/renderLoop';
+import { bindSceneNavigation } from './larp-mode/views/sceneNavigation';
 import {
   ARENA_VIEW_HEIGHT,
   buildSwarmtankArena,
   detectWebGL,
+  isReducedMotion,
   type BuiltArenaScene,
 } from './swarmtankThreeScene';
 import type { ArenaLayout } from './swarmtankArenaLayout';
@@ -36,7 +40,9 @@ export function SwarmtankThreeView({
   onSelect,
   reducedMotion,
   onUnavailable,
+  cinematic = false,
 }: {
+  cinematic?: boolean;
   layout: ArenaLayout;
   /** Changes when the effective layout changes (run or scenario). */
   layoutKey: string;
@@ -48,7 +54,8 @@ export function SwarmtankThreeView({
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const builtRef = useRef<BuiltArenaScene | null>(null);
-  const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
+  const renderRef = useRef<(() => void) | null>(null);
+  const pointerStart = useRef<{ x: number; y: number } | null>(null);
 
   // Build the renderer and scene for this run; tear
   // everything down before the next one.
@@ -76,27 +83,39 @@ export function SwarmtankThreeView({
         2,
       ),
     );
+    const width = canvas.clientWidth || 640;
+    const height = cinematic ? canvas.clientHeight || ARENA_VIEW_HEIGHT : ARENA_VIEW_HEIGHT;
+    const built = buildSwarmtankArena(layout, width, height, { cinematic });
+    let composer: ReturnType<typeof createLarpComposer> | undefined;
+    if (cinematic) {
+      try {
+        composer = createLarpComposer(renderer, built.scene, built.camera, width, height);
+      } catch {
+        built.dispose();
+        renderer.dispose();
+        onUnavailable();
+        return;
+      }
+    }
     const render = () => {
-      const built = builtRef.current;
-      if (built) renderer.render(built.scene, built.camera);
+      if (composer) composer.render();
+      else renderer.render(built.scene, built.camera);
     };
     const resize = () => {
-      const built = builtRef.current;
-      if (!built) return;
       const width = canvas.clientWidth || 640;
-      renderer.setSize(width, ARENA_VIEW_HEIGHT, false);
-      built.camera.aspect = width / ARENA_VIEW_HEIGHT;
+      const height = cinematic ? canvas.clientHeight || ARENA_VIEW_HEIGHT : ARENA_VIEW_HEIGHT;
+      renderer.setSize(width, height, false);
+      composer?.setSize(width, height);
+      built.camera.aspect = width / height;
       built.camera.updateProjectionMatrix();
       render();
     };
-    const width = canvas.clientWidth || 640;
-    renderer.setSize(width, ARENA_VIEW_HEIGHT, false);
-    const built = buildSwarmtankArena(layout, width, ARENA_VIEW_HEIGHT);
-    built.camera.aspect = width / ARENA_VIEW_HEIGHT;
-    built.camera.updateProjectionMatrix();
     builtRef.current = built;
-    rendererRef.current = renderer;
-    render();
+    renderRef.current = render;
+    const navigation = cinematic ? bindSceneNavigation(built.camera, canvas, render, {
+      min: 120, max: 2000, pan: 420,
+    }) : undefined;
+    resize();
     const onLost = (event: Event) => {
       event.preventDefault();
       onUnavailable();
@@ -110,15 +129,17 @@ export function SwarmtankThreeView({
     return () => {
       observer?.disconnect();
       canvas.removeEventListener('webglcontextlost', onLost);
+      navigation?.dispose();
+      composer?.dispose();
       built.dispose();
       renderer.dispose();
       builtRef.current = null;
-      rendererRef.current = null;
+      renderRef.current = null;
     };
     // onUnavailable is a stable parent callback; the
     // run key drives rebuilds, not the callback.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [runKey]);
+  }, [runKey, cinematic]);
 
   // Scenario re-clustering: retarget the existing
   // scene (never rebuild it) when the effective
@@ -127,10 +148,10 @@ export function SwarmtankThreeView({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     const built = builtRef.current;
-    const renderer = rendererRef.current;
-    if (!built || !renderer) return;
+    const render = renderRef.current;
+    if (!built || !render) return;
     built.updateDecisions(layout, reducedMotion);
-    renderer.render(built.scene, built.camera);
+    render();
   }, [layoutKey, reducedMotion]);
 
   // Animation: one static frame under reduced motion,
@@ -138,41 +159,57 @@ export function SwarmtankThreeView({
   // advances any in-flight re-clustering transition.
   useEffect(() => {
     const built = builtRef.current;
-    const renderer = rendererRef.current;
-    if (!built || !renderer) return;
+    const render = renderRef.current;
+    if (!built || !render) return;
     if (reducedMotion) {
       built.animate(0);
-      renderer.render(built.scene, built.camera);
+      render();
       return;
     }
     let frame = 0;
     const start = performance.now();
     let previous = start;
     const tick = (now: number) => {
-      built.advanceTransition((now - previous) / 1000);
+      if (cinematic && isReducedMotion()) {
+        built.advanceTransition(Infinity);
+        built.animate(0);
+        render();
+        return;
+      }
+      built.advanceTransition(Math.min(now - previous, 100) / 1000);
       previous = now;
       built.animate((now - start) / 1000);
-      renderer.render(built.scene, built.camera);
-      frame = requestAnimationFrame(tick);
+      render();
     };
-    frame = requestAnimationFrame(tick);
+    if (cinematic) {
+      const loop = createLarpRenderLoop(tick);
+      return () => loop.dispose();
+    }
+    const step = (now: number) => {
+      tick(now);
+      frame = requestAnimationFrame(step);
+    };
+    frame = requestAnimationFrame(step);
     return () => cancelAnimationFrame(frame);
-  }, [reducedMotion, runKey]);
+  }, [reducedMotion, runKey, cinematic]);
 
   // Selection: rescale the picked instance and repaint
   // (a single frame even while the loop is stopped).
   useEffect(() => {
     const built = builtRef.current;
-    const renderer = rendererRef.current;
-    if (!built || !renderer) return;
+    const render = renderRef.current;
+    if (!built || !render) return;
     built.setSelected(selectedPersonaId);
-    renderer.render(built.scene, built.camera);
-  }, [selectedPersonaId]);
+    render();
+  }, [selectedPersonaId, runKey, cinematic]);
 
   function onCanvasClick(event: React.MouseEvent<HTMLCanvasElement>) {
     const canvas = canvasRef.current;
     const built = builtRef.current;
     if (!canvas || !built) return;
+    const start = pointerStart.current;
+    pointerStart.current = null;
+    if (cinematic && start && Math.hypot(event.clientX - start.x, event.clientY - start.y) > 5) return;
     const rect = canvas.getBoundingClientRect();
     const ndcX =
       ((event.clientX - rect.left) / Math.max(rect.width, 1)) * 2 - 1;
@@ -185,11 +222,14 @@ export function SwarmtankThreeView({
     <canvas
       ref={canvasRef}
       data-three-canvas
+      data-interactive={cinematic || undefined}
+      tabIndex={cinematic ? 0 : undefined}
       role="img"
       aria-label={`3D SwarmTank arena for this run: ${layout.agents.length} simulated persona agents around a central product pedestal, green for Convert, amber for Confused, red for Reject. Click an agent for details, or use the table below to select one.`}
       width={640}
       height={ARENA_VIEW_HEIGHT}
-      style={{ width: '100%', maxWidth: 640, background: '#0b2545' }}
+      style={cinematic ? undefined : { width: '100%', maxWidth: 640, background: '#0b2545' }}
+      onPointerDownCapture={cinematic ? event => { pointerStart.current = { x: event.clientX, y: event.clientY }; } : undefined}
       onClick={onCanvasClick}
     />
   );

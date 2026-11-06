@@ -67,3 +67,103 @@
 @media(max-width:850px){.larp-hud[data-view="7"]{grid-template-columns:minmax(0,1fr) 310px;grid-template-areas:"top top" "center right" "dock dock" "bottom bottom"}.larp-hud[data-view="7"] .larp-rail-left{display:none}.entity-state{font-size:8px}.entity-state small{font-size:5px}.entity-chat-boundary{font-size:8px}.larp-mode-dock{grid-template-columns:repeat(7,minmax(0,1fr))}}
 
 .entity-chat{overflow-y:auto;overscroll-behavior:contain}.entity-connection[open]{max-height:44vh;overflow-y:auto}
+
+.larp-mode-dock{grid-template-columns:repeat(8,minmax(0,1fr))}
+.larp-hud[data-view="8"]{--larp-accent:#83dbed;grid-template-columns:minmax(0,1fr);grid-template-areas:"top" "center" "dock" "bottom"}
+.larp-hud[data-view="8"] .larp-rail-left,.larp-hud[data-view="8"] .larp-rail-right{display:none}
+.larp-hud[data-view="8"] .larp-scene-title h3{color:#d8f2ff}
+.larp-swarmtank{position:absolute;inset:106px 20px 38px;display:grid;grid-template-columns:minmax(0,1fr) minmax(320px,380px);grid-template-areas:"arena console";gap:12px;pointer-events:auto;color:#cce7ee}
+.larp-swarm-stage,.larp-swarm-idle{grid-area:arena;min-height:0;min-width:0;border:1px solid #244452;background:#040912}
+.larp-swarm-stage:has(.larp-swarm-arena)+.larp-swarm-idle{display:none}
+.larp-swarm-idle{position:relative;display:flex;flex-direction:column;gap:12px;align-items:center;justify-content:center;overflow:hidden;background:radial-gradient(ellipse at 50% 55%,#103142,#07141e 43%,#040912 72%);text-align:center}
+.larp-swarm-idle>span,.larp-swarm-console header>span{color:#78c1d4;font-size:10px;letter-spacing:.18em}
+.larp-swarm-idle strong{font-size:clamp(18px,3vw,35px);font-weight:400}
+.larp-swarm-orbit{position:absolute;width:min(60%,420px);aspect-ratio:1;border:1px solid #559bb777;border-radius:50%;transform:rotate(-22deg) scaleY(.65);box-shadow:0 0 50px #54b9db33,inset 0 0 65px #54b9db22;pointer-events:none}
+.larp-swarm-orbit::after,.larp-swarm-orbit::before{content:"";position:absolute;inset:10%;border:1px dashed #68b6ce60;border-radius:50%}
+.larp-swarm-orbit::after{inset:-12%;border-style:solid;border-color:#76aeb631}
+.larp-swarm-console{grid-area:console;overflow:auto;overscroll-behavior:contain;background:#09141d;border:1px solid #244452;padding:16px;font-size:12px;line-height:1.45}
+.larp-swarm-console header{border-bottom:1px solid #244452;padding-bottom:8px;margin-bottom:12px}
+.larp-swarm-console h2,.larp-swarm-console h3,.larp-swarm-arena h4{font-size:15px;letter-spacing:.06em;color:#d8f2ff;margin:4px 0}
+.larp-swarm-console label{display:block;margin-top:6px}
+.larp-swarm-console :is(input:not([type="checkbox"]),textarea,select){background:#060d16;color:#e3f5fb;border:1px solid #365465;padding:5px;max-width:100%;font:inherit}
+.larp-swarm-console>select,.larp-swarm-console textarea{width:100%}
+.larp-swarm-console input[type="range"]{accent-color:#78dbef}
+.larp-swarmtank button{color:#d4f1f9;background:#122932;border:1px solid #3a6a78;padding:5px 8px;cursor:pointer;white-space:normal}
+.larp-swarmtank button:disabled{opacity:.55;cursor:default}
+.larp-swarm-console table{display:block;max-width:100%;overflow:auto}
+.larp-swarm-arena{height:100%;position:relative;display:flex;flex-direction:column;gap:4px;padding:12px;overflow:auto;font-size:11px}
+.larp-swarm-arena>p{margin:2px 0;color:#a3c4d1}
+.larp-swarm-arena canvas{display:block;min-height:160px;width:100%;height:0;flex:1 0 160px;touch-action:none;outline-offset:-2px}
+.larp-swarm-camera{display:flex;align-items:center;justify-content:space-between;gap:8px;color:#9bc3d0}
+.larp-swarm-arena>section{position:absolute;top:110px;left:16px;max-width:min(280px,90%);max-height:60%;overflow:auto;background:#071520ee;padding:12px;border:1px solid #3c6f80}
+.larp-swarm-arena>section h5,.larp-swarm-arena>section p{margin:2px 0}
+.larp-swarm-notice[role="alert"]{color:#ffad9f}
+@media(max-width:770px){
+  .larp-swarmtank{inset:94px 8px 34px;grid-template-columns:minmax(0,1fr);grid-template-areas:"arena" "console";grid-template-rows:minmax(300px,55%) auto;overflow:auto}
+  .larp-swarm-console{overflow:visible}
+}
+
+.larp-hud[data-view="8"] .larp-scene-footnote{margin-top:auto}
+.larp-swarm-outcomes{display:flex;flex-wrap:wrap;gap:8px}
+.larp-swarm-outcomes span{display:flex;align-items:center;gap:6px;padding:4px 10px;background:#0b1b27;border:1px solid #244452;color:#82e4aa}
+.larp-swarm-outcomes span:nth-child(2){color:#f3c279}
+.larp-swarm-outcomes span:nth-child(3){color:#ff9898}
+.larp-swarm-outcomes strong{font-size:15px}
+.larp-swarm-arena>p>label{display:inline-flex;align-items:center;gap:6px}
+.larp-swarm-arena input[type="checkbox"],.larp-swarm-console input[type="checkbox"]{width:16px;height:16px;min-height:0;margin:0;accent-color:#75d5e9}
+.larp-swarm-console td,.larp-swarm-console th{padding:5px 7px}
+
+/* SwarmTank viewport optics and instrument frame. */
+.larp-hud[data-view="8"] .larp-centerpiece{background:radial-gradient(ellipse at 44% 50%,#101d29,#04060b 73%)}
+.larp-swarm-stage,.larp-swarm-idle,.larp-swarm-console{border-color:#2c4d5a;box-shadow:inset 0 1px #7ed9ee22}
+.larp-swarm-console>header{display:grid;gap:4px;background:linear-gradient(100deg,#122737,#09141d);margin:-15px -15px 14px;padding:13px 15px;border-bottom-color:#2b596b}
+.larp-swarm-console>header p{margin:0;color:#9ac0d0}
+.larp-swarm-console>header>span,.larp-swarm-stage-title>span{font-size:9px;letter-spacing:.16em;color:#7ab6c6}
+.larp-swarm-stage-title{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.larp-swarm-stage-title i{display:inline-block;width:5px;height:5px;margin-left:5px;background:#81e2e9;box-shadow:0 0 9px #81e2e9}
+.larp-swarm-viewport{position:relative;flex:1 0 200px;min-height:0;isolation:isolate;display:flex;background:#02060c}
+.larp-swarm-viewport canvas{height:100%;min-height:0;position:absolute;inset:0}
+.larp-swarm-viewport::after{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(#79cae2,#79cae2) left top/20px 1px,linear-gradient(#79cae2,#79cae2) left top/1px 20px,linear-gradient(#79cae2,#79cae2) right bottom/20px 1px,linear-gradient(#79cae2,#79cae2) right bottom/1px 20px;background-repeat:no-repeat;box-shadow:inset 0 0 0 1px #417c913f}
+.larp-swarm-arena>section{z-index:1}
+.larp-swarm-idle{background:radial-gradient(ellipse at 50% 60%,#163c4d,#07131e 42%,#03070e 75%)}
+.larp-swarm-orbit{box-shadow:0 0 85px #53b9db44,inset 0 0 70px #54b9db38;border-color:#82d7ee88}
+
+/* Matrix mode layers accessible persona cards over the orbitable network. */
+.larp-hud[data-view="8"]{--larp-accent:#ff69ad}
+.larp-swarm-matrix{position:absolute;inset:0;display:grid;grid-template-rows:31px minmax(0,1fr) 24px;pointer-events:none;background:linear-gradient(110deg,#080615d9,#100b1d95 50%,#0a0716d9);overflow:hidden}
+.larp-swarm-matrix>header,.larp-swarm-matrix>footer{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 13px;background:#080913ee;color:#cba6be;font-size:9px;letter-spacing:.14em;border-bottom:1px solid #72446485}
+.larp-swarm-matrix>footer{border-top:1px solid #72446485;border-bottom:0;color:#a49bac}
+.larp-matrix-pages{display:flex;align-items:center;gap:9px;white-space:nowrap}
+.larp-matrix-pages button{pointer-events:auto;padding:1px 8px;background:#211322;border-color:#69415b;color:#ffb5d9;font-size:15px;line-height:1}
+.larp-matrix-field{position:relative;min-width:0;min-height:0;background:repeating-linear-gradient(90deg,transparent 0 calc(25% - 1px),#b680b618 calc(25% - 1px) 25%)}
+.larp-matrix-wires,.larp-matrix-card-grid{position:absolute;inset:0;width:100%;height:100%}
+.larp-matrix-wires path{fill:none;vector-effect:non-scaling-stroke}
+.larp-matrix-wires .wire-halo{stroke:#8edfff;stroke-width:4;opacity:.42;filter:blur(4px)}
+.larp-matrix-wires .wire-filament{stroke:#a2c9e3;stroke-width:.75;opacity:.65}
+.larp-matrix-wires .wire-signal{stroke:#fff4fb;stroke-width:2;stroke-linecap:round;stroke-dasharray:0.1 10;animation:swarm-signal 7s linear infinite}
+.larp-matrix-wires g:nth-child(3n) .wire-signal{animation-delay:-2.1s}
+.larp-matrix-wires g[data-active="true"] .wire-halo{stroke:#ff3d9f;stroke-width:9;opacity:.85}
+.larp-matrix-wires g[data-active="true"] .wire-filament{stroke:#ff91cf;stroke-width:1.5}
+@keyframes swarm-signal{to{stroke-dashoffset:-40.4}}
+.larp-swarm-matrix[data-static="true"] .wire-signal{animation:none}
+@media(prefers-reduced-motion:reduce){.larp-swarm-matrix .wire-signal{animation:none}}
+.larp-matrix-card-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));grid-template-rows:repeat(3,minmax(0,1fr));align-items:center;gap:8px clamp(9px,2.3vw,34px);padding:8px clamp(8px,2vw,30px)}
+.larp-swarmtank .larp-matrix-card{position:relative;min-width:0;min-height:0;pointer-events:auto;display:grid;gap:4px;text-align:left;border:1px solid #775977a6;background:linear-gradient(135deg,#1a192bf5,#101320f7 65%,#1b1223fa);box-shadow:0 9px 20px #030306a8,inset 0 1px #f6d4ee22;padding:8px 9px;color:#ebeff8;border-radius:3px;--card-state:#8de7b0}
+.larp-matrix-card[data-decision="Confused"]{--card-state:#f0c575}
+.larp-matrix-card[data-decision="Reject"]{--card-state:#ff9caa}
+.larp-matrix-card::before,.larp-matrix-card::after{content:"";position:absolute;top:50%;width:4px;height:4px;border-radius:50%;background:#e5f8ff;box-shadow:0 0 8px 2px #95d5ff88}
+.larp-matrix-card::before{left:-3px}.larp-matrix-card::after{right:-3px}
+.larp-matrix-card strong,.larp-matrix-card small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.larp-matrix-card strong{font-size:clamp(10px,1.08vw,15px)}
+.larp-matrix-card small{color:#c1b6cc;font-size:10px}
+.larp-card-channel{font-size:8px;letter-spacing:.12em;color:#c5a8c1}
+.larp-card-channel i{display:inline-block;width:5px;height:5px;margin-right:3px;background:var(--card-state);box-shadow:0 0 8px var(--card-state)}
+.larp-card-state{display:flex;justify-content:space-between;gap:5px;overflow:hidden;white-space:nowrap;font-size:9px;color:var(--card-state);border-top:1px solid #8e698850;padding-top:5px}
+.larp-card-state>span{color:#cbb8d2}
+.larp-swarmtank .larp-matrix-card:is(:hover,:focus-visible,[aria-pressed="true"]){border-color:#ff83bf;background:linear-gradient(120deg,#421b37f7,#201126f9);box-shadow:0 0 15px #ff3d9f85,inset 0 0 12px #ff3d9f48}
+.larp-matrix-card[aria-pressed="true"]::before,.larp-matrix-card[aria-pressed="true"]::after{background:#fff;box-shadow:0 0 9px 3px #ff56a9}
+.larp-swarm-stage-title button[aria-pressed="true"]{border-color:#b94f87;color:#ffc3e1;background:#2b1428}
+.larp-swarm-arena>.larp-swarm-detail{top:auto;bottom:47px;left:auto;right:24px;z-index:2;background:#14101e;border-color:#d6689f;box-shadow:0 0 24px #fc4ea943}
+@media(max-width:1000px),(max-height:740px){.larp-matrix-card-grid{gap:5px 12px;padding:5px 10px}.larp-swarmtank .larp-matrix-card{padding:4px;gap:2px}.larp-matrix-card small,.larp-card-state>span{display:none}.larp-card-state{padding-top:2px}.larp-swarm-viewport{flex-basis:220px}}
+.larp-swarm-matrix>header,.larp-swarm-matrix>footer{margin:0}
+.larp-matrix-card span{margin-left:0}

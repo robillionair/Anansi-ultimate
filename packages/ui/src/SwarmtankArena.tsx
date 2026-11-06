@@ -1,3 +1,4 @@
+import { SwarmtankMatrix } from './larp-mode/SwarmtankMatrix';
 /**
  * M9 SwarmTank Slice 2: the arena section of the
  * SwarmTank report. The 3D canvas is the visual
@@ -34,7 +35,9 @@ export function SwarmtankArena({
   layoutKey,
   selectedPersonaId,
   onSelectPersona,
+  cinematic = false,
 }: {
+  cinematic?: boolean;
   run: SwarmtankRunDoc;
   runKey: string;
   /** Decisions the arena currently displays (baseline or scenario). */
@@ -47,6 +50,7 @@ export function SwarmtankArena({
   // Synchronous initial value: system query OR
   // workspace dataset setting. See the module note.
   const [reduceMotion, setReduceMotion] = useState(() => isReducedMotion());
+  const [showMatrix, setShowMatrix] = useState(true);
   const [failedRunKey, setFailedRunKey] = useState<string | null>(null);
   const layout = useMemo(
     () => layoutSwarmtankArena(run.personas, effectiveDecisions),
@@ -65,14 +69,21 @@ export function SwarmtankArena({
   const rejects = layout.agents.filter(agent => agent.decision === 'Reject').length;
 
   return (
-    <section aria-label="SwarmTank 3D arena">
-      <h4>SwarmTank 3D arena</h4>
-      <p>
+    <section aria-label="SwarmTank 3D arena" className={cinematic ? "larp-swarm-arena" : undefined}>
+      <div className={cinematic ? 'larp-swarm-stage-title' : undefined}>
+        <h4>SwarmTank 3D arena</h4>
+        {cinematic && <button type="button" aria-pressed={showMatrix} onClick={() => setShowMatrix(!showMatrix)}>Persona matrix</button>}
+      </div>
+      {cinematic ? <div className="larp-swarm-outcomes" aria-label="Simulated decisions">
+        <span><strong>{converts}</strong> Convert</span>
+        <span><strong>{confused}</strong> Confused</span>
+        <span><strong>{rejects}</strong> Reject</span>
+      </div> : <p>
         Simulated persona agents around the product pedestal: {converts}{' '}
         Convert (green, near the pedestal, facing it), {confused} Confused
         (amber, orbiting the perimeter), {rejects} Reject (red, outer
         perimeter, facing away). Simulated personas, not real customers.
-      </p>
+      </p>}
       <p>
         <label>
           <input
@@ -86,11 +97,14 @@ export function SwarmtankArena({
       </p>
       {webglFailed ? (
         <p>
-          3D arena unavailable — the complete table below carries the same
-          information.
+          {cinematic
+            ? '3D arena unavailable — use the complete report table in SwarmTank controls.'
+            : '3D arena unavailable — the complete table below carries the same information.'}
         </p>
       ) : (
+        <div className={cinematic ? 'larp-swarm-viewport' : undefined}>
         <SwarmtankThreeView
+          cinematic={cinematic}
           layout={layout}
           layoutKey={layoutKey}
           runKey={runKey}
@@ -99,12 +113,18 @@ export function SwarmtankArena({
           reducedMotion={reduceMotion}
           onUnavailable={() => setFailedRunKey(runKey)}
         />
+        {cinematic && showMatrix && <SwarmtankMatrix key={runKey} personas={run.personas} decisions={effectiveDecisions} selected={selectedPersonaId} onSelect={onSelectPersona} staticView={reduceMotion} />}
+        </div>
       )}
+      {cinematic && !webglFailed && <div className="larp-swarm-camera">
+        <span>DRAG TO ORBIT · SCROLL TO ZOOM · RIGHT-DRAG TO PAN</span>
+        <button type="button" onClick={event => event.currentTarget.closest('section')?.querySelector('canvas')?.dispatchEvent(new Event('larp-camera-reset'))}>Reset arena camera</button>
+      </div>}
       {reduceMotion && !webglFailed ? (
         <p>Motion reduced — static view.</p>
       ) : null}
       {selectedPersona && selectedDecision ? (
-        <section aria-label="Selected persona">
+        <section aria-label="Selected persona" className={cinematic ? "larp-swarm-detail" : undefined}>
           <h5>
             {selectedPersona.name} <span>Simulated persona.</span>
           </h5>

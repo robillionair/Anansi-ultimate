@@ -1,3 +1,5 @@
+import { buildSwarmtankWiring } from './larp-mode/swarmtankWiring';
+import { buildSwarmtankSet } from './larp-mode/swarmtankSet';
 /**
  * M9 SwarmTank Slice 2: build a WebGL scene graph
  * from the pure arena layout (see
@@ -122,6 +124,7 @@ function labelTexture(label: string): THREE.Texture | null {
 }
 
 export type ArenaSceneOptions = {
+  cinematic?: boolean;
   createLabelSprite?: (
     label: string,
     position: THREE.Vector3,
@@ -226,29 +229,34 @@ export function buildSwarmtankArena(
   camera.position.set(0, ARENA_CAMERA_HEIGHT, 0);
   camera.lookAt(0, 0, 0);
 
-  // Central product monolith on a circular stage.
-  const stage = new THREE.Mesh(
-    new THREE.CylinderGeometry(40, 40, 8, 48),
-    new THREE.MeshBasicMaterial({ color: STAGE_COLOR }),
-  );
-  stage.position.set(0, 4, 0);
-  threeScene.add(stage);
-  const monolith = new THREE.Mesh(
-    new THREE.BoxGeometry(24, 60, 24),
-    new THREE.MeshBasicMaterial({ color: MONOLITH_COLOR }),
-  );
-  monolith.position.set(0, 38, 0);
-  threeScene.add(monolith);
-  const pedestalSprite = createLabelSprite(
-    'Product concept',
-    new THREE.Vector3(0, 76, 0),
-  );
+  const animateSet = options.cinematic ? buildSwarmtankSet(threeScene) : undefined;
+  if (options.cinematic) {
+    camera.up.set(0, 1, 0);
+    const distance = Math.max(1, 1.28 / camera.aspect);
+    camera.position.set(357 * distance, 407 * distance, 540 * distance);
+    camera.lookAt(0, 0, 0);
+    animateSet?.(0);
+  } else {
+    const stage = new THREE.Mesh(
+      new THREE.CylinderGeometry(40, 40, 8, 48),
+      new THREE.MeshBasicMaterial({ color: STAGE_COLOR }),
+    );
+    stage.position.set(0, 4, 0);
+    const monolith = new THREE.Mesh(
+      new THREE.BoxGeometry(24, 60, 24),
+      new THREE.MeshBasicMaterial({ color: MONOLITH_COLOR }),
+    );
+    monolith.position.set(0, 38, 0);
+    threeScene.add(stage, monolith);
+  }
+  const pedestalSprite = options.cinematic ? null : createLabelSprite('Product concept', new THREE.Vector3(0, 76, 0));
   if (pedestalSprite) threeScene.add(pedestalSprite);
 
   // Prebuilt amphitheater ring lines; only the
   // radii the current layout uses are visible.
+  const possibleRadii = possibleRingRadii();
   const ringLines: Array<{ radius: number; line: THREE.Line }> = [];
-  for (const radius of possibleRingRadii()) {
+  for (const radius of options.cinematic ? [] : possibleRadii) {
     const points: THREE.Vector3[] = [];
     for (let i = 0; i <= 64; i++) {
       const angle = (i / 64) * Math.PI * 2;
@@ -269,13 +277,14 @@ export function buildSwarmtankArena(
         opacity: 0.8,
       }),
     );
-    line.visible = layout.ringRadii.includes(radius);
+    line.visible = !options.cinematic && layout.ringRadii.includes(radius);
     threeScene.add(line);
     ringLines.push({ radius, line });
   }
 
   // Agent bodies: one instanced sphere per persona,
   // colored by decision. Only bodies are pickable.
+  const wiring = options.cinematic ? buildSwarmtankWiring(threeScene, agents.length) : undefined;
   const bodies = new THREE.InstancedMesh(
     new THREE.SphereGeometry(BODY_RADIUS, 16, 16),
     new THREE.MeshBasicMaterial({ color: 0xffffff }),
@@ -289,6 +298,7 @@ export function buildSwarmtankArena(
     new THREE.MeshBasicMaterial({ color: 0xffffff }),
     Math.max(agents.length, 1),
   );
+  noses.visible = !options.cinematic;
   // Hesitation markers: one mesh for all slots,
   // Confused-first in slot order; unused slots
   // collapse to scale 0.
@@ -297,6 +307,8 @@ export function buildSwarmtankArena(
     new THREE.MeshBasicMaterial({ color: MARKER_COLOR }),
     Math.max(agents.length, 1),
   );
+
+  markers.visible = !options.cinematic;
 
   // Per-slot transition state, in initial layout
   // order. Slots never reorder: a persona keeps
@@ -346,7 +358,13 @@ export function buildSwarmtankArena(
       const decision = decisionTo[i] ?? agent.decision;
       const facing = facingFor(decision, angle);
       const selected = agent.personaId === selectedId;
-      position.set(x, BODY_Y, z);
+      if (wiring) {
+        const spread = 1 + 75 / Math.max(radius, 1);
+        position.set(x * spread, 22 + (i * 37 % 67), z * spread);
+        wiring.place(i, position);
+      } else {
+        position.set(x, BODY_Y, z);
+      }
       quaternion.identity();
       scale.setScalar(selected ? 1.6 : 1);
       bodyMatrix.compose(position, quaternion, scale);
@@ -364,6 +382,7 @@ export function buildSwarmtankArena(
       color.set(DECISION_COLORS[decision] ?? '#ffffff');
       noses.setColorAt(i, color);
     });
+    wiring?.update();
     bodies.instanceMatrix.needsUpdate = true;
     if (bodies.instanceColor) bodies.instanceColor.needsUpdate = true;
     noses.instanceMatrix.needsUpdate = true;
@@ -395,7 +414,13 @@ export function buildSwarmtankArena(
 
   refreshBodies(0);
   refreshMarkers(0);
-  bodies.computeBoundingSphere();
+  if (options.cinematic) {
+    // The network can move beyond its initial cluster after scenario edits.
+    const outerRadius = Math.max(...possibleRadii) + 75;
+    bodies.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 55, 0), outerRadius + 50);
+  } else {
+    bodies.computeBoundingSphere();
+  }
   threeScene.add(bodies, noses, markers);
 
   const raycaster = new THREE.Raycaster();
@@ -414,6 +439,7 @@ export function buildSwarmtankArena(
   };
 
   const animate = (t: number) => {
+    animateSet?.(t);
     lastT = t;
     refreshBodies(t);
     refreshMarkers(t);
@@ -477,9 +503,12 @@ export function buildSwarmtankArena(
     },
     advanceTransition,
     dispose: () => {
+      const geometries = new Set<THREE.BufferGeometry>();
+      const sceneMaterials = new Set<THREE.Material>();
+      const textures = new Set<THREE.Texture>();
       threeScene.traverse(object => {
         const mesh = object as THREE.Mesh;
-        if (mesh.geometry) mesh.geometry.dispose();
+        if (mesh.geometry) geometries.add(mesh.geometry);
         const materials = Array.isArray(mesh.material)
           ? mesh.material
           : mesh.material
@@ -489,10 +518,13 @@ export function buildSwarmtankArena(
           const withMap = material as THREE.Material & {
             map?: THREE.Texture | null;
           };
-          if (withMap.map) withMap.map.dispose();
-          material.dispose();
+          if (withMap.map) textures.add(withMap.map);
+          sceneMaterials.add(material);
         }
       });
+      textures.forEach(texture => texture.dispose());
+      sceneMaterials.forEach(material => material.dispose());
+      geometries.forEach(geometry => geometry.dispose());
     },
   };
   return built;

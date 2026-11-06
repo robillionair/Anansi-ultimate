@@ -2,11 +2,11 @@ import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 import type {PerspectiveCamera} from 'three';
 
 /** One event-driven camera controller; it never owns an animation loop. */
-export function bindSceneNavigation(camera:PerspectiveCamera,canvas:HTMLCanvasElement,redraw:()=>void){
+export function bindSceneNavigation(camera:PerspectiveCamera,canvas:HTMLCanvasElement,redraw:()=>void,bounds={min:35,max:520,pan:160}){
   const controls=new OrbitControls(camera,canvas);
-  controls.enableDamping=false;controls.minDistance=35;controls.maxDistance=520;
+  controls.enableDamping=false;controls.minDistance=bounds.min;controls.maxDistance=bounds.max;
   controls.rotateSpeed=.6;controls.zoomSpeed=.9;controls.panSpeed=.65;
-  controls.maxTargetRadius=160;controls.listenToKeyEvents(canvas);controls.saveState();
+  controls.maxTargetRadius=bounds.pan;controls.listenToKeyEvents(canvas);controls.saveState();
   let touched=false,disposed=false;
   const publish=()=>{
     canvas.dataset.cameraPosition=camera.position.toArray().map(n=>n.toFixed(3)).join(',');

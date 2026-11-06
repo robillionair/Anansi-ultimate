@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 // ---------------------------------------------------------------------------
 // SwarmTank (M9 Slices 1–3): synthetic personas,
 // seeded decisions, report, scenario controls with
@@ -728,7 +729,9 @@ export function SwarmtankReportView({
   saveBranchDisabled,
   onExportComparisonJson,
   onExportComparisonMarkdown,
+  arenaHost,
 }: {
+  arenaHost?: HTMLElement;
   report: SwarmtankReport;
   run: SwarmtankRunDoc;
   runKey: string;
@@ -779,6 +782,17 @@ export function SwarmtankReportView({
     scenario === null
       ? `${runKey}|baseline`
       : `${runKey}|${scenarioSignature(scenario)}`;
+  const arena = (
+    <SwarmtankArena
+      cinematic={Boolean(arenaHost)}
+      run={run}
+      runKey={runKey}
+      effectiveDecisions={scenarioDecisions}
+      layoutKey={layoutKey}
+      selectedPersonaId={selectedPersonaId}
+      onSelectPersona={onSelectPersona}
+    />
+  );
   return (
     <section aria-label="SwarmTank report">
       <h3>SwarmTank report</h3>
@@ -866,14 +880,7 @@ export function SwarmtankReportView({
           </p>
         </>
       ) : null}
-      <SwarmtankArena
-        run={run}
-        runKey={runKey}
-        effectiveDecisions={scenarioDecisions}
-        layoutKey={layoutKey}
-        selectedPersonaId={selectedPersonaId}
-        onSelectPersona={onSelectPersona}
-      />
+      {arenaHost ? createPortal(arena, arenaHost) : arena}
       {scenario !== null && comparison !== null ? (
         <SwarmtankComparison
           comparison={comparison}
@@ -966,7 +973,9 @@ export function SwarmtankPanel({
   onSaved,
   notify,
   busy,
+  arenaHost,
 }: {
+  arenaHost?: HTMLElement;
   client: Client;
   workspaceId: string;
   projectId: string;
@@ -1674,6 +1683,7 @@ export function SwarmtankPanel({
       {report !== null && savedRun !== null && reportArtifact !== null ? (
         <>
           <SwarmtankReportView
+            arenaHost={arenaHost}
             report={report}
             run={savedRun}
             runKey={`${reportArtifact.artifactId}-v${reportArtifact.version}`}
