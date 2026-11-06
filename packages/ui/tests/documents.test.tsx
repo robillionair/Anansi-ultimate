@@ -88,10 +88,22 @@ test('ingestion job helpers read the checkpoint and label the file', () => {
 });
 
 test('prepareDocument refuses an unsupported format before any upload', async () => {
+  const file = new File([new Uint8Array([80, 75, 3, 4])], 'report.docx', {
+    type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  });
+  await assert.rejects(() => prepareDocument(file), /Only \.txt and \.md/);
+});
+
+test('prepareDocument accepts a PDF for server-side extraction', async () => {
   const file = new File([new Uint8Array([37, 80, 68, 70])], 'report.pdf', {
     type: 'application/pdf',
   });
-  await assert.rejects(() => prepareDocument(file), /Only \.txt and \.md/);
+  const prepared = await prepareDocument(file);
+  assert.equal(prepared.kind, 'pdf');
+  assert.equal(prepared.text, '');
+  assert.equal(prepared.textChars, 0);
+  assert.equal(prepared.rawBytes, 4);
+  assert.equal(prepared.rawHash.length, 64);
 });
 
 test('prepareDocument refuses invalid UTF-8 and oversize files', async () => {

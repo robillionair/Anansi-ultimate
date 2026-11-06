@@ -2,9 +2,11 @@
 //!
 //! A standalone, pure function over PDF bytes: [`extract_pdf_text`]
 //! takes the raw file and returns the extracted pages, the stored
-//! body, and per-page provenance — or a clear refusal. It does not
-//! touch the upload path, the ingestion job, or the workspace; the
-//! integration step wires it into `execute_ingestion`.
+//! body, and per-page provenance — or a clear refusal. The
+//! integration wires it into `execute_ingestion`
+//! (`crates/core/src/ingestion.rs`): the worker calls it for
+//! `kind == "pdf"` instead of decoding the staged bytes as UTF-8,
+//! and stores the per-page provenance on the published document.
 //!
 //! # The bound
 //!
@@ -109,6 +111,8 @@ use std::io::Read;
 use flate2::read::{DeflateDecoder, ZlibDecoder};
 use lopdf::{Dictionary, Document, Object, ObjectId, Stream};
 use pdf_extract::{ConvertToFmt, OutputError, PlainTextOutput, output_doc_page};
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
 use weezl::{BitOrder, decode::Decoder as LzwDecoder};
 
 use crate::content;
@@ -152,7 +156,10 @@ pub struct ExtractedPage {
 /// Page-level provenance for one stored page: the page number, the
 /// character range of that page's text inside the stored body, and
 /// the SHA-256 of the page's text (via `crate::content::hash`).
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Serialized into `DocumentProvenance.pages` (a generated contract),
+/// so the field names are camelCase on the wire.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct PdfPageProvenance {
     pub page: u32,
     pub start_char: u64,
@@ -191,6 +198,38 @@ pub enum ExtractError {
     TextCap,
     /// A valid document with no readable text (scanned / blank).
     Empty,
+}
+
+impl ExtractError {
+    /// The honest failure message the ingestion worker surfaces on
+    /// the job. No partial import is published for any of these.
+    pub fn message(&self) -> String {
+        match self {
+            ExtractError::Parse(detail) => {
+                format!("PDF could not be parsed: {detail}")
+            }
+            ExtractError::Encrypted => {
+                "PDF is password-protected. Encrypted PDFs cannot be imported; remove the password and try again.".to_string()
+            }
+            ExtractError::Bomb => {
+                "PDF expands too far when decoded (over the 16 MiB decode budget). The file is refused.".to_string()
+            }
+            ExtractError::Unsupported(detail) => {
+                format!("PDF uses a compression this importer does not support: {detail}")
+            }
+            ExtractError::PageCap => {
+                format!("PDF has more than {MAX_PDF_PAGES} pages. Split it and try again.")
+            }
+            ExtractError::TextCap => {
+                format!(
+                    "PDF text exceeds the limit ({MAX_PDF_PAGE_CHARS} characters per page, {MAX_PDF_CHARS} total)."
+                )
+            }
+            ExtractError::Empty => {
+                "This PDF contains no readable text. Scanned or image-only PDFs need OCR, which is a separate slice.".to_string()
+            }
+        }
+    }
 }
 
 impl fmt::Display for ExtractError {

@@ -329,6 +329,7 @@ fn validate_import(r: &MemoryWriteRequest) -> Result<(), CommandError> {
     let kind = match doc.media_type.as_str() {
         "text/plain" => "txt",
         "text/markdown" => "md",
+        "application/pdf" => "pdf",
         _ => return Err(invalid()),
     };
     if doc.media_type != DocumentProvenance::media_type_for(kind) {

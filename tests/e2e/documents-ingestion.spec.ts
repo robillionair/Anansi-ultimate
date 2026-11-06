@@ -105,7 +105,7 @@ test('documents UI: import a text file, open it, provenance visible, search find
   }
 });
 
-test('documents UI: markdown renders inertly and a PDF pick is refused', async ({ page }) => {
+test('documents UI: markdown renders inertly and a malformed PDF pick fails the job, publishing nothing', async ({ page }) => {
   const session = await startSession(page, true);
   try {
     await page.getByRole('button', { name: 'Documents', exact: true }).click();
@@ -124,10 +124,19 @@ test('documents UI: markdown renders inertly and a PDF pick is refused', async (
     await expect(page.locator('strong', { hasText: 'left' })).toBeVisible();
     await expect(page.locator('.documents script')).toHaveCount(0);
     await expect(page.getByText('<script>alert(1)</script>')).toBeVisible();
+    // A PDF is no longer refused at pick: the file is accepted and
+    // the import runs, but four bare `%PDF` bytes are not a document,
+    // so the worker fails the job and publishes nothing.
     const pdf = path.join(dir, 'report.pdf');
     fs.writeFileSync(pdf, Buffer.from([0x25, 0x50, 0x44, 0x46]));
     await page.locator('#document-file').setInputFiles(pdf);
-    await expect(page.getByRole('alert')).toContainText(/PDF files are not supported yet/);
+    await expect(page.getByText('Ready to import report.pdf')).toBeVisible();
+    await expect(page.getByText('PDF — text extracted on the server during import')).toBeVisible();
+    await page.getByRole('button', { name: 'Import document', exact: true }).click();
+    await expect(page.getByText(/Import failed: PDF could not be parsed/)).toBeVisible({
+      timeout: 30000,
+    });
+    expect(await listDocuments(session, session.workspaceId)).toHaveLength(1);
     fs.rmSync(dir, { recursive: true, force: true });
   } finally {
     await session.cleanup();
@@ -187,14 +196,14 @@ test('documents API: oversize, sealed, hash-mismatch and unsupported-format refu
       privacy: 'sealed',
     });
     expect(sealed.status).toBe(400);
-    const pdf = await session.call('jobs', 'ingest-begin', {
+    const docx = await session.call('jobs', 'ingest-begin', {
       workspaceId,
-      fileName: 'report.pdf',
+      fileName: 'report.docx',
       bytes: bytes.length,
       sha256: hash,
       privacy: 'private',
     });
-    expect(pdf.status).toBe(400);
+    expect(docx.status).toBe(400);
     const mismatch = await session.call('jobs', 'ingest-begin', {
       workspaceId,
       fileName: 'mismatch.txt',

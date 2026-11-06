@@ -4157,9 +4157,42 @@
     "type": "object"
   },
   "DocumentProvenance": {
+    "$defs": {
+      "PdfPageProvenance": {
+        "additionalProperties": false,
+        "description": "Page-level provenance for one stored page: the page number, the\ncharacter range of that page's text inside the stored body, and\nthe SHA-256 of the page's text (via `crate::content::hash`).\nSerialized into `DocumentProvenance.pages` (a generated contract),\nso the field names are camelCase on the wire.",
+        "properties": {
+          "chars": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "hash": {
+            "type": "string"
+          },
+          "page": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "startChar": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "page",
+          "startChar",
+          "chars",
+          "hash"
+        ],
+        "type": "object"
+      }
+    },
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
-    "description": "Exact-source provenance stored on a published `document` memory.\n`media_type` is derived from the kind, never trusted from the client.",
+    "description": "Exact-source provenance stored on a published `document` memory.\n`media_type` is derived from the kind, never trusted from the client.\n`pages` is present only for PDF documents: one entry per stored page\n(page number, character range inside the stored body, SHA-256 of the\npage's text), so a reader, a search hit, and an Ask citation can all\nname the page a passage came from. TXT/Markdown documents omit it.",
     "properties": {
       "bom": {
         "type": "boolean"
@@ -4169,6 +4202,15 @@
       },
       "mediaType": {
         "type": "string"
+      },
+      "pages": {
+        "items": {
+          "$ref": "#/$defs/PdfPageProvenance"
+        },
+        "type": [
+          "array",
+          "null"
+        ]
       },
       "rawBytes": {
         "format": "uint64",
@@ -10137,7 +10179,7 @@
     "$defs": {
       "DocumentProvenance": {
         "additionalProperties": false,
-        "description": "Exact-source provenance stored on a published `document` memory.\n`media_type` is derived from the kind, never trusted from the client.",
+        "description": "Exact-source provenance stored on a published `document` memory.\n`media_type` is derived from the kind, never trusted from the client.\n`pages` is present only for PDF documents: one entry per stored page\n(page number, character range inside the stored body, SHA-256 of the\npage's text), so a reader, a search hit, and an Ask citation can all\nname the page a passage came from. TXT/Markdown documents omit it.",
         "properties": {
           "bom": {
             "type": "boolean"
@@ -10147,6 +10189,15 @@
           },
           "mediaType": {
             "type": "string"
+          },
+          "pages": {
+            "items": {
+              "$ref": "#/$defs/PdfPageProvenance"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
           },
           "rawBytes": {
             "format": "uint64",
@@ -10384,6 +10435,37 @@
           "archived"
         ],
         "type": "string"
+      },
+      "PdfPageProvenance": {
+        "additionalProperties": false,
+        "description": "Page-level provenance for one stored page: the page number, the\ncharacter range of that page's text inside the stored body, and\nthe SHA-256 of the page's text (via `crate::content::hash`).\nSerialized into `DocumentProvenance.pages` (a generated contract),\nso the field names are camelCase on the wire.",
+        "properties": {
+          "chars": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "hash": {
+            "type": "string"
+          },
+          "page": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "startChar": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "page",
+          "startChar",
+          "chars",
+          "hash"
+        ],
+        "type": "object"
       },
       "Privacy": {
         "enum": [
@@ -10509,7 +10591,7 @@
     "$defs": {
       "DocumentProvenance": {
         "additionalProperties": false,
-        "description": "Exact-source provenance stored on a published `document` memory.\n`media_type` is derived from the kind, never trusted from the client.",
+        "description": "Exact-source provenance stored on a published `document` memory.\n`media_type` is derived from the kind, never trusted from the client.\n`pages` is present only for PDF documents: one entry per stored page\n(page number, character range inside the stored body, SHA-256 of the\npage's text), so a reader, a search hit, and an Ask citation can all\nname the page a passage came from. TXT/Markdown documents omit it.",
         "properties": {
           "bom": {
             "type": "boolean"
@@ -10519,6 +10601,15 @@
           },
           "mediaType": {
             "type": "string"
+          },
+          "pages": {
+            "items": {
+              "$ref": "#/$defs/PdfPageProvenance"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
           },
           "rawBytes": {
             "format": "uint64",
@@ -10757,6 +10848,37 @@
         ],
         "type": "string"
       },
+      "PdfPageProvenance": {
+        "additionalProperties": false,
+        "description": "Page-level provenance for one stored page: the page number, the\ncharacter range of that page's text inside the stored body, and\nthe SHA-256 of the page's text (via `crate::content::hash`).\nSerialized into `DocumentProvenance.pages` (a generated contract),\nso the field names are camelCase on the wire.",
+        "properties": {
+          "chars": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "hash": {
+            "type": "string"
+          },
+          "page": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "startChar": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "page",
+          "startChar",
+          "chars",
+          "hash"
+        ],
+        "type": "object"
+      },
       "Privacy": {
         "enum": [
           "sealed",
@@ -10875,7 +10997,7 @@
     "$defs": {
       "DocumentProvenance": {
         "additionalProperties": false,
-        "description": "Exact-source provenance stored on a published `document` memory.\n`media_type` is derived from the kind, never trusted from the client.",
+        "description": "Exact-source provenance stored on a published `document` memory.\n`media_type` is derived from the kind, never trusted from the client.\n`pages` is present only for PDF documents: one entry per stored page\n(page number, character range inside the stored body, SHA-256 of the\npage's text), so a reader, a search hit, and an Ask citation can all\nname the page a passage came from. TXT/Markdown documents omit it.",
         "properties": {
           "bom": {
             "type": "boolean"
@@ -10885,6 +11007,15 @@
           },
           "mediaType": {
             "type": "string"
+          },
+          "pages": {
+            "items": {
+              "$ref": "#/$defs/PdfPageProvenance"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
           },
           "rawBytes": {
             "format": "uint64",
@@ -10924,6 +11055,37 @@
           "archived"
         ],
         "type": "string"
+      },
+      "PdfPageProvenance": {
+        "additionalProperties": false,
+        "description": "Page-level provenance for one stored page: the page number, the\ncharacter range of that page's text inside the stored body, and\nthe SHA-256 of the page's text (via `crate::content::hash`).\nSerialized into `DocumentProvenance.pages` (a generated contract),\nso the field names are camelCase on the wire.",
+        "properties": {
+          "chars": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "hash": {
+            "type": "string"
+          },
+          "page": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "startChar": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "page",
+          "startChar",
+          "chars",
+          "hash"
+        ],
+        "type": "object"
       },
       "Privacy": {
         "enum": [
@@ -11169,7 +11331,7 @@
     "$defs": {
       "DocumentProvenance": {
         "additionalProperties": false,
-        "description": "Exact-source provenance stored on a published `document` memory.\n`media_type` is derived from the kind, never trusted from the client.",
+        "description": "Exact-source provenance stored on a published `document` memory.\n`media_type` is derived from the kind, never trusted from the client.\n`pages` is present only for PDF documents: one entry per stored page\n(page number, character range inside the stored body, SHA-256 of the\npage's text), so a reader, a search hit, and an Ask citation can all\nname the page a passage came from. TXT/Markdown documents omit it.",
         "properties": {
           "bom": {
             "type": "boolean"
@@ -11179,6 +11341,15 @@
           },
           "mediaType": {
             "type": "string"
+          },
+          "pages": {
+            "items": {
+              "$ref": "#/$defs/PdfPageProvenance"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
           },
           "rawBytes": {
             "format": "uint64",
@@ -11314,6 +11485,37 @@
           "archived"
         ],
         "type": "string"
+      },
+      "PdfPageProvenance": {
+        "additionalProperties": false,
+        "description": "Page-level provenance for one stored page: the page number, the\ncharacter range of that page's text inside the stored body, and\nthe SHA-256 of the page's text (via `crate::content::hash`).\nSerialized into `DocumentProvenance.pages` (a generated contract),\nso the field names are camelCase on the wire.",
+        "properties": {
+          "chars": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "hash": {
+            "type": "string"
+          },
+          "page": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "startChar": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "page",
+          "startChar",
+          "chars",
+          "hash"
+        ],
+        "type": "object"
       },
       "Privacy": {
         "enum": [

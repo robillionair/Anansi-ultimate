@@ -1179,15 +1179,33 @@ export interface DiscoveredRuntime {
 /**
  * Exact-source provenance stored on a published `document` memory.
  * `media_type` is derived from the kind, never trusted from the client.
+ * `pages` is present only for PDF documents: one entry per stored page
+ * (page number, character range inside the stored body, SHA-256 of the
+ * page's text), so a reader, a search hit, and an Ask citation can all
+ * name the page a passage came from. TXT/Markdown documents omit it.
  */
 export interface DocumentProvenance {
   bom: boolean;
   fileName: string;
   mediaType: string;
+  pages?: PdfPageProvenance[] | null;
   rawBytes: number;
   rawHash: string;
   textChars: number;
   textHash: string;
+}
+/**
+ * Page-level provenance for one stored page: the page number, the
+ * character range of that page's text inside the stored body, and
+ * the SHA-256 of the page's text (via `crate::content::hash`).
+ * Serialized into `DocumentProvenance.pages` (a generated contract),
+ * so the field names are camelCase on the wire.
+ */
+export interface PdfPageProvenance {
+  chars: number;
+  hash: string;
+  page: number;
+  startChar: number;
 }
 /**
  * The exact-source record for one beam/document text. Mirrors
@@ -2605,15 +2623,33 @@ export interface MemoryMetadata {
 /**
  * Exact-source provenance stored on a published `document` memory.
  * `media_type` is derived from the kind, never trusted from the client.
+ * `pages` is present only for PDF documents: one entry per stored page
+ * (page number, character range inside the stored body, SHA-256 of the
+ * page's text), so a reader, a search hit, and an Ask citation can all
+ * name the page a passage came from. TXT/Markdown documents omit it.
  */
 export interface DocumentProvenance {
   bom: boolean;
   fileName: string;
   mediaType: string;
+  pages?: PdfPageProvenance[] | null;
   rawBytes: number;
   rawHash: string;
   textChars: number;
   textHash: string;
+}
+/**
+ * Page-level provenance for one stored page: the page number, the
+ * character range of that page's text inside the stored body, and
+ * the SHA-256 of the page's text (via `crate::content::hash`).
+ * Serialized into `DocumentProvenance.pages` (a generated contract),
+ * so the field names are camelCase on the wire.
+ */
+export interface PdfPageProvenance {
+  chars: number;
+  hash: string;
+  page: number;
+  startChar: number;
 }
 export interface MemoryDraft {
   body: string;
@@ -2676,15 +2712,33 @@ export interface MemoryMetadata {
 /**
  * Exact-source provenance stored on a published `document` memory.
  * `media_type` is derived from the kind, never trusted from the client.
+ * `pages` is present only for PDF documents: one entry per stored page
+ * (page number, character range inside the stored body, SHA-256 of the
+ * page's text), so a reader, a search hit, and an Ask citation can all
+ * name the page a passage came from. TXT/Markdown documents omit it.
  */
 export interface DocumentProvenance {
   bom: boolean;
   fileName: string;
   mediaType: string;
+  pages?: PdfPageProvenance[] | null;
   rawBytes: number;
   rawHash: string;
   textChars: number;
   textHash: string;
+}
+/**
+ * Page-level provenance for one stored page: the page number, the
+ * character range of that page's text inside the stored body, and
+ * the SHA-256 of the page's text (via `crate::content::hash`).
+ * Serialized into `DocumentProvenance.pages` (a generated contract),
+ * so the field names are camelCase on the wire.
+ */
+export interface PdfPageProvenance {
+  chars: number;
+  hash: string;
+  page: number;
+  startChar: number;
 }
 export interface MemoryListRequest {
   contractVersion: number;
@@ -2751,15 +2805,33 @@ export interface MemoryMetadata {
 /**
  * Exact-source provenance stored on a published `document` memory.
  * `media_type` is derived from the kind, never trusted from the client.
+ * `pages` is present only for PDF documents: one entry per stored page
+ * (page number, character range inside the stored body, SHA-256 of the
+ * page's text), so a reader, a search hit, and an Ask citation can all
+ * name the page a passage came from. TXT/Markdown documents omit it.
  */
 export interface DocumentProvenance {
   bom: boolean;
   fileName: string;
   mediaType: string;
+  pages?: PdfPageProvenance[] | null;
   rawBytes: number;
   rawHash: string;
   textChars: number;
   textHash: string;
+}
+/**
+ * Page-level provenance for one stored page: the page number, the
+ * character range of that page's text inside the stored body, and
+ * the SHA-256 of the page's text (via `crate::content::hash`).
+ * Serialized into `DocumentProvenance.pages` (a generated contract),
+ * so the field names are camelCase on the wire.
+ */
+export interface PdfPageProvenance {
+  chars: number;
+  hash: string;
+  page: number;
+  startChar: number;
 }
 export interface MemoryReadRequest {
   contractVersion: number;
@@ -2794,15 +2866,33 @@ export interface MemoryWriteRequest {
 /**
  * Exact-source provenance stored on a published `document` memory.
  * `media_type` is derived from the kind, never trusted from the client.
+ * `pages` is present only for PDF documents: one entry per stored page
+ * (page number, character range inside the stored body, SHA-256 of the
+ * page's text), so a reader, a search hit, and an Ask citation can all
+ * name the page a passage came from. TXT/Markdown documents omit it.
  */
 export interface DocumentProvenance {
   bom: boolean;
   fileName: string;
   mediaType: string;
+  pages?: PdfPageProvenance[] | null;
   rawBytes: number;
   rawHash: string;
   textChars: number;
   textHash: string;
+}
+/**
+ * Page-level provenance for one stored page: the page number, the
+ * character range of that page's text inside the stored body, and
+ * the SHA-256 of the page's text (via `crate::content::hash`).
+ * Serialized into `DocumentProvenance.pages` (a generated contract),
+ * so the field names are camelCase on the wire.
+ */
+export interface PdfPageProvenance {
+  chars: number;
+  hash: string;
+  page: number;
+  startChar: number;
 }
 export interface MemoryDraft {
   body: string;
