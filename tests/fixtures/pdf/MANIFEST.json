@@ -305,6 +305,89 @@
       "expected_pages": [],
       "expected_outcome": "refused: extraction bound",
       "notes": "Bomb inside the second-level form /Fm2; a one-level form walk would miss it."
+    },
+    "indirect-resources-ok.pdf": {
+      "sha256": "977646a3feb9c54e050f331dda8bef882bfa026e7557746ccd3edc853f4eda1d",
+      "bytes": 990,
+      "pages": 1,
+      "expected_pages": [
+        "Harbor Ledger\nThe indirect-resources shipment cleared customs."
+      ],
+      "expected_outcome": "imported",
+      "notes": "Page /Resources is an indirect object holding a small Form. Must import; the pre-scan must resolve the indirect dict."
+    },
+    "indirect-resources-bomb.pdf": {
+      "sha256": "b336f3db4ec6a7fd7dbb34732466b9c6643c4526b9d785821ba25b674a0f82ed",
+      "bytes": 20379,
+      "pages": 0,
+      "expected_pages": [],
+      "expected_outcome": "refused: extraction bound",
+      "notes": "Bomb Form reachable only through an indirect /Resources. The old pre-scan never decoded it."
+    },
+    "inherited-resources-ok.pdf": {
+      "sha256": "f2bcef172bbea45eb94d957ea0d3fb3cfbe7d41a9edc8d0f028e66ef332a1abc",
+      "bytes": 950,
+      "pages": 1,
+      "expected_pages": [
+        "Harbor Ledger\nThe inherited-resources shipment cleared customs."
+      ],
+      "expected_outcome": "imported",
+      "notes": "Page has no /Resources; the /Pages node carries them (font + Form). Must import; the pre-scan must walk up the page tree."
+    },
+    "inherited-resources-bomb.pdf": {
+      "sha256": "60d4f8ffda7af85c280fbee0aab26c0a3fa0952419e0acc59042e82f98be7947",
+      "bytes": 20338,
+      "pages": 0,
+      "expected_pages": [],
+      "expected_outcome": "refused: extraction bound",
+      "notes": "Bomb Form reachable only through inherited /Resources. The old pre-scan never decoded it."
+    },
+    "tounicode-compressed-ok.pdf": {
+      "sha256": "71e88208bc8621d52511c7777c09b57e00b4c93b8b7fcecfe3d1d6b26d0ea7cc",
+      "bytes": 1091,
+      "pages": 1,
+      "expected_pages": [
+        "\u03b1"
+      ],
+      "expected_outcome": "imported",
+      "notes": "Compressed ToUnicode CMap, 256 bfchar entries (~3 KB decoded). Must import; the pre-scan must charge the CMap."
+    },
+    "tounicode-compressed-bomb.pdf": {
+      "sha256": "a6881d554629a7d0a4f6ba546ff365e347f0ebdeeb6685b8a920e3db6972c8b8",
+      "bytes": 40725,
+      "pages": 0,
+      "expected_pages": [],
+      "expected_outcome": "refused: extraction bound",
+      "notes": "Compressed ToUnicode CMap, 1,700,000 bfchar entries (~20 MB decoded, a few KB raw). The old pre-scan never measured CMaps."
+    },
+    "repeated-form-ok.pdf": {
+      "sha256": "3d8c5bf5c2cf8aecf7dedb20da162367fe3b925643aa9d271988372506efe444",
+      "bytes": 1236,
+      "pages": 2,
+      "expected_pages": [
+        "Harbor Ledger\nThe repeated-form shipment cleared customs.",
+        "Harbor Ledger\nThe repeated-form shipment cleared customs."
+      ],
+      "expected_outcome": "imported",
+      "notes": "The same small Form invoked once on each of two pages. Must import; the pre-scan must charge it once per page."
+    },
+    "repeated-form-bomb.pdf": {
+      "sha256": "b7862c8f6b879e27b7b3bb7645f812a602e1d8682c4ec5bb6c5f8383445ec37b",
+      "bytes": 1873,
+      "pages": 0,
+      "expected_pages": [],
+      "expected_outcome": "refused: extraction bound",
+      "notes": "One Form (~1 MB decoded) invoked 20 times on one page: one decode fits, 20 invocations cost ~20 MB. The old pre-scan charged it once."
+    },
+    "stream-boundary-ok.pdf": {
+      "sha256": "720cdfabede5d564a6bb0a11385591eaaa5f9839667ba21eed927689d8a02ea5",
+      "bytes": 854,
+      "pages": 1,
+      "expected_pages": [
+        "Harbor Ledger\nThe stream-boundary shipment cleared customs."
+      ],
+      "expected_outcome": "imported",
+      "notes": "PDF 1.5 /ObjStm compressed with a stored block carrying the literal bytes `endstream`, then a zlib block. The loader trusts /Length; a scan for `endstream` truncates. The repaired scan uses /Length."
     }
   }
 }

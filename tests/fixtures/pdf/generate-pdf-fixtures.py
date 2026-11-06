@@ -216,6 +216,41 @@ def a85_encode(data: bytes) -> bytes:
     return base64.a85encode(data, adobe=True)[2:]
 
 
+def flate_two_block(prefix: bytes, suffix: bytes) -> bytes:
+    """A FlateDecode (zlib) stream whose first deflate block is
+    stored (literal) and whose remaining blocks are raw-deflate
+    compressed. The stored block's bytes appear literally in the
+    compressed stream, so a marker in the prefix (e.g. the bytes
+    `endstream`) is visible to a raw scan for `endstream` — while
+    the loader, which trusts /Length, takes the whole stream. The
+    decoded output is prefix + suffix.
+
+    Stored block layout: 1 byte header (BFINAL=0, BTYPE=00, padding
+    0), then LEN (2 bytes LE), NLEN (2 bytes LE, one's complement),
+    then the literal data. The suffix is a raw deflate stream
+    (wbits=-15, no zlib wrapper) whose final block ends the stream.
+    The whole deflate stream is wrapped in the zlib envelope
+    (0x78 0x9C header + Adler32 of the uncompressed data), because
+    FlateDecode is zlib, not raw deflate.
+    """
+    n = len(prefix)
+    stored = b"\x00" + struct.pack("<H", n) + struct.pack("<H", (~n) & 0xFFFF) + prefix
+    comp = zlib.compressobj(9, zlib.DEFLATED, -15)
+    raw_deflate = stored + comp.compress(suffix) + comp.flush()
+    adler = zlib.adler32(prefix + suffix) & 0xFFFFFFFF
+    return b"\x78\x9c" + raw_deflate + struct.pack(">I", adler)
+
+
+def flate_split_at_marker(raw: bytes, marker: bytes = b"endstream") -> bytes:
+    """Compress `raw` as a two-block Flate stream, splitting just
+    after the first occurrence of `marker` so the marker lands in
+    the stored (literal) block. The decoded output is exactly `raw`."""
+    idx = raw.find(marker)
+    assert idx != -1, "marker not in raw content"
+    split = idx + len(marker)
+    return flate_two_block(raw[:split], raw[split:])
+
+
 class Pdf15:
     """Minimal PDF 1.5 writer: normal objects, compressed objects
     (in one /ObjStm), and a cross-reference stream. Object 0 is
@@ -235,7 +270,7 @@ class Pdf15:
         self.compressed[obj_id] = body
         return obj_id
 
-    def build(self, root_id: int, xref_stream_size: int = 0) -> bytes:
+    def build(self, root_id: int, xref_stream_size: int = 0, objstm_compress=None) -> bytes:
         # Object stream (id = next free) holding the compressed objects.
         objstm_id = None
         if self.compressed:
@@ -248,7 +283,8 @@ class Pdf15:
                 offset += len(body)
             index = b"".join(index_parts)
             raw = index + bytes(bodies)
-            comp = zlib.compress(raw)
+            compress = objstm_compress or zlib.compress
+            comp = compress(raw)
             self.normal[objstm_id] = (
                 b"<< /Type /ObjStm /N " + str(len(self.compressed)).encode()
                 + b" /First " + str(len(index)).encode()
@@ -686,6 +722,278 @@ def nested_form_bomb():
     return pdf.build(root), []
 
 
+def indirect_resources_ok():
+    """Page whose /Resources is an indirect object (not inline).
+    The indirect dict holds a font and a small Form. The old
+    pre-scan read only a direct /Resources on the page dict, so it
+    missed the Form; the extractor resolves the indirect dict
+    (get_inherited) and decodes the Form."""
+    pdf = Pdf()
+    pdf.reserve_page_tree()
+    font_id = pdf.add(font_object())
+    form_text = text_lines(["Harbor Ledger", "The indirect-resources shipment cleared customs."])
+    form_id = pdf.add(pdf.stream(
+        b"<< /Type /XObject /Subtype /Form /BBox [0 0 612 792] "
+        b"/Resources << /Font << /F1 " + str(font_id).encode() + b" 0 R >> >>",
+        form_text,
+    ))
+    resources_id = pdf.add(
+        b"<< /Font << /F1 " + str(font_id).encode() + b" 0 R >> "
+        b"/XObject << /Fm1 " + str(form_id).encode() + b" 0 R >> >>"
+    )
+    content_id = pdf.add(pdf.stream(b"<<", b"q /Fm1 Do Q"))
+    page_id = pdf.add(
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+        b"/Resources " + str(resources_id).encode() + b" 0 R "
+        b"/Contents " + str(content_id).encode() + b" 0 R >>"
+    )
+    pdf.objects[2] = b"<< /Type /Pages /Kids [" + str(page_id).encode() + b" 0 R] /Count 1 >>"
+    root = pdf.add(b"<< /Type /Catalog /Pages 2 0 R >>")
+    return pdf.build(root), ["Harbor Ledger\nThe indirect-resources shipment cleared customs."]
+
+
+def indirect_resources_bomb():
+    """Same shape as indirect-resources-ok, but the Form reached
+    only through the indirect /Resources is a FlateDecode bomb
+    (~20 MB). The old pre-scan never decoded it; the extractor
+    decoded it uncapped during extraction."""
+    pdf = Pdf()
+    pdf.reserve_page_tree()
+    font_id = pdf.add(font_object())
+    huge = b"BT /F1 12 Tf 72 720 Td (" + b"A" * 20_000_000 + b") Tj ET"
+    form_id = pdf.add(pdf.stream(
+        b"<< /Type /XObject /Subtype /Form /BBox [0 0 612 792] "
+        b"/Resources << /Font << /F1 " + str(font_id).encode() + b" 0 R >> >>",
+        huge,
+    ))
+    resources_id = pdf.add(
+        b"<< /Font << /F1 " + str(font_id).encode() + b" 0 R >> "
+        b"/XObject << /Fm1 " + str(form_id).encode() + b" 0 R >> >>"
+    )
+    content_id = pdf.add(pdf.stream(b"<<", b"q /Fm1 Do Q"))
+    page_id = pdf.add(
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+        b"/Resources " + str(resources_id).encode() + b" 0 R "
+        b"/Contents " + str(content_id).encode() + b" 0 R >>"
+    )
+    pdf.objects[2] = b"<< /Type /Pages /Kids [" + str(page_id).encode() + b" 0 R] /Count 1 >>"
+    root = pdf.add(b"<< /Type /Catalog /Pages 2 0 R >>")
+    return pdf.build(root), []
+
+
+def inherited_resources_ok():
+    """Page with NO /Resources of its own; the /Pages node carries
+    /Resources (font + small Form). The extractor inherits them
+    (get_inherited walks up the page tree); the old pre-scan read
+    only the page dict and missed the Form."""
+    pdf = Pdf()
+    pdf.reserve_page_tree()
+    font_id = pdf.add(font_object())
+    form_text = text_lines(["Harbor Ledger", "The inherited-resources shipment cleared customs."])
+    form_id = pdf.add(pdf.stream(
+        b"<< /Type /XObject /Subtype /Form /BBox [0 0 612 792] "
+        b"/Resources << /Font << /F1 " + str(font_id).encode() + b" 0 R >> >>",
+        form_text,
+    ))
+    content_id = pdf.add(pdf.stream(b"<<", b"q /Fm1 Do Q"))
+    page_id = pdf.add(
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+        b"/Contents " + str(content_id).encode() + b" 0 R >>"
+    )
+    pdf.objects[2] = (
+        b"<< /Type /Pages /Kids [" + str(page_id).encode() + b" 0 R] /Count 1 "
+        b"/Resources << /Font << /F1 " + str(font_id).encode() + b" 0 R >> "
+        b"/XObject << /Fm1 " + str(form_id).encode() + b" 0 R >> >> >>"
+    )
+    root = pdf.add(b"<< /Type /Catalog /Pages 2 0 R >>")
+    return pdf.build(root), ["Harbor Ledger\nThe inherited-resources shipment cleared customs."]
+
+
+def inherited_resources_bomb():
+    """Same shape as inherited-resources-ok, but the Form reached
+    only through the inherited /Resources is a FlateDecode bomb
+    (~20 MB). The old pre-scan never decoded it."""
+    pdf = Pdf()
+    pdf.reserve_page_tree()
+    font_id = pdf.add(font_object())
+    huge = b"BT /F1 12 Tf 72 720 Td (" + b"A" * 20_000_000 + b") Tj ET"
+    form_id = pdf.add(pdf.stream(
+        b"<< /Type /XObject /Subtype /Form /BBox [0 0 612 792] "
+        b"/Resources << /Font << /F1 " + str(font_id).encode() + b" 0 R >> >>",
+        huge,
+    ))
+    content_id = pdf.add(pdf.stream(b"<<", b"q /Fm1 Do Q"))
+    page_id = pdf.add(
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+        b"/Contents " + str(content_id).encode() + b" 0 R >>"
+    )
+    pdf.objects[2] = (
+        b"<< /Type /Pages /Kids [" + str(page_id).encode() + b" 0 R] /Count 1 "
+        b"/Resources << /Font << /F1 " + str(font_id).encode() + b" 0 R >> "
+        b"/XObject << /Fm1 " + str(form_id).encode() + b" 0 R >> >> >>"
+    )
+    root = pdf.add(b"<< /Type /Catalog /Pages 2 0 R >>")
+    return pdf.build(root), []
+
+
+def tounicode_cmap_text(entries):
+    """A ToUnicode CMap body with `entries` bfchar lines. Each line
+    maps code 0x01 to U+03B1 (alpha); the repetition compresses to
+    almost nothing, so a large entry count is a small raw stream
+    that expands to many megabytes."""
+    lines = [b"/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n"
+             b"/CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def\n"
+             b"/CMapName /Adobe-Identity-UCS def\n/CMapType 2 def\n"
+             b"1 begincodespacerange\n<00> <FF>\nendcodespacerange\n"
+             + str(entries).encode() + b" beginbfchar\n"]
+    lines.append(b"<01> <03B1>\n" * entries)
+    lines.append(b"endbfchar\nendcmap\nCMapName currentdict /CMap defineresource pop\nend\nend")
+    return b"".join(lines)
+
+
+def tounicode_compressed_ok():
+    """A font whose /ToUnicode is a FlateDecode-compressed CMap with
+    256 bfchar entries (~3 KB decoded). The old pre-scan never
+    measured CMap streams; the extractor decodes them (get_contents)
+    to map text. Must import, charging the small CMap."""
+    pdf = Pdf()
+    pdf.reserve_page_tree()
+    cmap_id = pdf.add(pdf.stream(b"<<", tounicode_cmap_text(256)))
+    font_id = pdf.add(
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica "
+        b"/Encoding << /Type /Encoding /BaseEncoding /WinAnsiEncoding "
+        b"/Differences [1 /Alpha /Beta /Euro] >> "
+        b"/ToUnicode " + str(cmap_id).encode() + b" 0 R >>"
+    )
+    content = b"BT /F1 12 Tf 72 720 Td (\\001) Tj ET"
+    content_id = pdf.add(pdf.stream(b"<<", content))
+    page_id = pdf.add(
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+        b"/Resources << /Font << /F1 " + str(font_id).encode() + b" 0 R >> >> "
+        b"/Contents " + str(content_id).encode() + b" 0 R >>"
+    )
+    pdf.objects[2] = b"<< /Type /Pages /Kids [" + str(page_id).encode() + b" 0 R] /Count 1 >>"
+    root = pdf.add(b"<< /Type /Catalog /Pages 2 0 R >>")
+    return pdf.build(root), ["\u03b1"]
+
+
+def tounicode_compressed_bomb():
+    """A font whose /ToUnicode is a FlateDecode-compressed CMap with
+    1,700,000 bfchar entries (~20 MB decoded, ~a few KB raw). The
+    old pre-scan never measured CMap streams, so the extractor
+    decoded ~20 MB uncapped while building the font (and then parsed
+    1.7M entries). The repaired pre-scan charges it and refuses it."""
+    pdf = Pdf()
+    pdf.reserve_page_tree()
+    cmap_id = pdf.add(pdf.stream(b"<<", tounicode_cmap_text(1_700_000)))
+    font_id = pdf.add(
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica "
+        b"/Encoding << /Type /Encoding /BaseEncoding /WinAnsiEncoding "
+        b"/Differences [1 /Alpha /Beta /Euro] >> "
+        b"/ToUnicode " + str(cmap_id).encode() + b" 0 R >>"
+    )
+    content = b"BT /F1 12 Tf 72 720 Td (\\001) Tj ET"
+    content_id = pdf.add(pdf.stream(b"<<", content))
+    page_id = pdf.add(
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+        b"/Resources << /Font << /F1 " + str(font_id).encode() + b" 0 R >> >> "
+        b"/Contents " + str(content_id).encode() + b" 0 R >>"
+    )
+    pdf.objects[2] = b"<< /Type /Pages /Kids [" + str(page_id).encode() + b" 0 R] /Count 1 >>"
+    root = pdf.add(b"<< /Type /Catalog /Pages 2 0 R >>")
+    return pdf.build(root), []
+
+
+def repeated_form_ok():
+    """The same small Form invoked once on each of two pages. The
+    old pre-scan's visited set charged it once across both pages;
+    the extractor decodes it once per page."""
+    pdf = Pdf()
+    pdf.reserve_page_tree()
+    font_id = pdf.add(font_object())
+    form_text = text_lines(["Harbor Ledger", "The repeated-form shipment cleared customs."])
+    form_id = pdf.add(pdf.stream(
+        b"<< /Type /XObject /Subtype /Form /BBox [0 0 612 792] "
+        b"/Resources << /Font << /F1 " + str(font_id).encode() + b" 0 R >> >>",
+        form_text,
+    ))
+    page_ids = []
+    for _ in range(2):
+        content_id = pdf.add(pdf.stream(b"<<", b"q /Fm1 Do Q"))
+        page_id = pdf.add(
+            b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+            b"/Resources << /Font << /F1 " + str(font_id).encode() + b" 0 R >> "
+            b"/XObject << /Fm1 " + str(form_id).encode() + b" 0 R >> >> "
+            b"/Contents " + str(content_id).encode() + b" 0 R >>"
+        )
+        page_ids.append(page_id)
+    kids = b" ".join(str(p).encode() + b" 0 R" for p in page_ids)
+    pdf.objects[2] = b"<< /Type /Pages /Kids [" + kids + b"] /Count 2 >>"
+    root = pdf.add(b"<< /Type /Catalog /Pages 2 0 R >>")
+    return pdf.build(root), ["Harbor Ledger\nThe repeated-form shipment cleared customs."] * 2
+
+
+def repeated_form_bomb():
+    """One Form (~1 MB decoded text) invoked 20 times on one page.
+    One decode fits the 16 MiB budget, but 20 invocations cost
+    ~20 MB. The old pre-scan charged it once (visited set); the
+    extractor decodes it once per `Do` (no caching)."""
+    pdf = Pdf()
+    pdf.reserve_page_tree()
+    font_id = pdf.add(font_object())
+    form_text = b"BT /F1 12 Tf 72 720 Td (" + b"A" * 1_000_000 + b") Tj ET"
+    form_id = pdf.add(pdf.stream(
+        b"<< /Type /XObject /Subtype /Form /BBox [0 0 612 792] "
+        b"/Resources << /Font << /F1 " + str(font_id).encode() + b" 0 R >> >>",
+        form_text,
+    ))
+    content = b"\n".join([b"q /Fm1 Do Q"] * 20)
+    content_id = pdf.add(pdf.stream(b"<<", content))
+    page_id = pdf.add(
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+        b"/Resources << /Font << /F1 " + str(font_id).encode() + b" 0 R >> "
+        b"/XObject << /Fm1 " + str(form_id).encode() + b" 0 R >> >> "
+        b"/Contents " + str(content_id).encode() + b" 0 R >>"
+    )
+    pdf.objects[2] = b"<< /Type /Pages /Kids [" + str(page_id).encode() + b" 0 R] /Count 1 >>"
+    root = pdf.add(b"<< /Type /Catalog /Pages 2 0 R >>")
+    return pdf.build(root), []
+
+
+def stream_boundary_ok():
+    """PDF 1.5 whose /ObjStm is compressed with a two-block Flate
+    stream: a stored block carrying the literal bytes `endstream`
+    (inside a string object), then a zlib block. The loader trusts
+    /Length and decodes the whole stream; a scan for `endstream`
+    truncates at the literal marker and either under-measures or
+    fails the truncated decode. The repaired scan uses /Length.
+    The /Pages tree is a compressed object; a second compressed
+    object is the string `(endstream marker)`."""
+    pdf = Pdf15()
+    # Reserve object 2 for the /Pages tree before any add_normal, so
+    # auto-assigned ids never collide with the hardcoded tree id
+    # (the same collision the Pdf builder's reserve_page_tree fixes).
+    pdf.compressed[2] = b""
+    # Page + content first (normal objects), so ids are stable.
+    font_id = pdf.add_normal(font_object())
+    content_id = pdf.add_normal(pdf_stream_raw(
+        b"<<", text_lines(["Harbor Ledger", "The stream-boundary shipment cleared customs."])))
+    page_id = pdf.add_normal(
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+        b"/Resources << /Font << /F1 " + str(font_id).encode() + b" 0 R >> >> "
+        b"/Contents " + str(content_id).encode() + b" 0 R >>"
+    )
+    # Compressed objects: the /Pages tree (id 2, by convention) and
+    # a string object whose body contains the literal `endstream`.
+    pdf.compressed[2] = (
+        b"<< /Type /Pages /Kids [" + str(page_id).encode() + b" 0 R] /Count 1 >>"
+    )
+    pdf.compressed[99] = b"(endstream marker)"
+    root = pdf.add_normal(b"<< /Type /Catalog /Pages 2 0 R >>")
+    data = pdf.build(root, objstm_compress=flate_split_at_marker)
+    return data, ["Harbor Ledger\nThe stream-boundary shipment cleared customs."]
+
+
 def pdf_stream_raw(dictionary: bytes, data: bytes) -> bytes:
     """A FlateDecode stream object body (used by the Pdf15 builder,
     whose stream() helper lives on Pdf)."""
@@ -835,6 +1143,46 @@ def main():
     add("nested-form-bomb.pdf", nf_bomb, [], "refused: extraction bound",
         "Bomb inside the second-level form /Fm2; a one-level form walk "
         "would miss it.")
+    # --- repair fixtures (pre-scan vs parser gaps) ---
+    ir_ok, ir_ok_pages = indirect_resources_ok()
+    add("indirect-resources-ok.pdf", ir_ok, ir_ok_pages, "imported",
+        "Page /Resources is an indirect object holding a small Form. "
+        "Must import; the pre-scan must resolve the indirect dict.")
+    ir_bomb, _ = indirect_resources_bomb()
+    add("indirect-resources-bomb.pdf", ir_bomb, [], "refused: extraction bound",
+        "Bomb Form reachable only through an indirect /Resources. "
+        "The old pre-scan never decoded it.")
+    inh_ok, inh_ok_pages = inherited_resources_ok()
+    add("inherited-resources-ok.pdf", inh_ok, inh_ok_pages, "imported",
+        "Page has no /Resources; the /Pages node carries them (font + "
+        "Form). Must import; the pre-scan must walk up the page tree.")
+    inh_bomb, _ = inherited_resources_bomb()
+    add("inherited-resources-bomb.pdf", inh_bomb, [], "refused: extraction bound",
+        "Bomb Form reachable only through inherited /Resources. "
+        "The old pre-scan never decoded it.")
+    tc_ok, tc_ok_pages = tounicode_compressed_ok()
+    add("tounicode-compressed-ok.pdf", tc_ok, tc_ok_pages, "imported",
+        "Compressed ToUnicode CMap, 256 bfchar entries (~3 KB decoded). "
+        "Must import; the pre-scan must charge the CMap.")
+    tc_bomb, _ = tounicode_compressed_bomb()
+    add("tounicode-compressed-bomb.pdf", tc_bomb, [], "refused: extraction bound",
+        "Compressed ToUnicode CMap, 1,700,000 bfchar entries (~20 MB "
+        "decoded, a few KB raw). The old pre-scan never measured CMaps.")
+    rf_ok, rf_ok_pages = repeated_form_ok()
+    add("repeated-form-ok.pdf", rf_ok, rf_ok_pages, "imported",
+        "The same small Form invoked once on each of two pages. Must "
+        "import; the pre-scan must charge it once per page.")
+    rf_bomb, _ = repeated_form_bomb()
+    add("repeated-form-bomb.pdf", rf_bomb, [], "refused: extraction bound",
+        "One Form (~1 MB decoded) invoked 20 times on one page: one "
+        "decode fits, 20 invocations cost ~20 MB. The old pre-scan "
+        "charged it once.")
+    sb_ok, sb_ok_pages = stream_boundary_ok()
+    add("stream-boundary-ok.pdf", sb_ok, sb_ok_pages, "imported",
+        "PDF 1.5 /ObjStm compressed with a stored block carrying the "
+        "literal bytes `endstream`, then a zlib block. The loader "
+        "trusts /Length; a scan for `endstream` truncates. The "
+        "repaired scan uses /Length.")
     with open(os.path.join(OUT, "MANIFEST.json"), "w") as f:
         json.dump(manifest, f, indent=2)
     print("MANIFEST.json written")

@@ -160,8 +160,8 @@ If any spike check fails, the slice stops and reports; no weaker
 parser is silently substituted.
 
 **Spike outcomes (2026-11-05, `docs/handoffs/m13-pdf-spike-results.md`):**
-1. PASS — by-pages returns the manifest text exactly (modulo one
-   trailing newline per page, removed by the worker's trim).
+1. PASS — by-pages returns the manifest text exactly (modulo two
+   leading newlines per page, removed by the worker's trim).
 2. PARTIAL — truncated and encrypted error ✓; the xref fixture
    yields 0 pages with no error, corrected by the worker's
    0-pages→parse-error mapping (§3.2, correction 4).
@@ -257,8 +257,9 @@ pub fn extract_pdf_text(bytes: &[u8]) -> Result<ExtractedPdf, ExtractError>
   empty trailing lines, joins lines with `\n`. No layout heuristics,
   no reading-order repair, no Markdown conversion: the stored text is
   the extractor's text, and the provenance records exactly that.
-  (pdf-extract returns one trailing newline per page; the trim
-  removes it, so stored pages equal the fixture manifest exactly.)
+  (pdf-extract returns two leading newlines per page and no
+  trailing newline; the trim removes them, so stored pages equal
+  the fixture manifest exactly.)
 - Enforces the page cap (error if the page count > 100, checked
   before any text extraction), the per-page cap, and the running
   total cap; empty total (all pages whitespace) maps to
