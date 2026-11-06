@@ -1763,6 +1763,7 @@ export function SwarmtankPanel({
           onSaved={onSaved}
           notify={notify}
           busy={busy}
+          cinematic={Boolean(arenaHost)}
         />
       )}
       {preview !== null ? (

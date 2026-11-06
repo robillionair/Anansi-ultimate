@@ -834,6 +834,7 @@ impl Core {
             | "swarmtank-ai-start"
             | "swarmtank-ai-poll"
             | "swarmtank-ai-cancel"
+            | "swarmtank-ai-branch"
             | "somnia-evaluate"
             | "somnia-save-evaluation"
             | "ideas-generate-start"
@@ -984,6 +985,7 @@ impl Core {
                         | "forge-deliverable-draft-start"
                         | "swarmtank-ai-estimate"
                         | "swarmtank-ai-start"
+                        | "swarmtank-ai-branch"
                 ) && !crate::provider_dispatch::has_config(&scope)
                     && let (Ok(root), Some(wid)) = (self.storage_root(), &workspace_id)
                     && let Some(json) = crate::provider_dispatch::load_config_file(&root, wid)?

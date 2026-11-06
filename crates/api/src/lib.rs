@@ -143,6 +143,7 @@ pub fn command_path(path: &str) -> bool {
             | "/v1/ai/swarmtank-ai-start"
             | "/v1/ai/swarmtank-ai-poll"
             | "/v1/ai/swarmtank-ai-cancel"
+            | "/v1/ai/swarmtank-ai-branch"
             | "/v1/ai/somnia-evaluate"
             | "/v1/ai/somnia-save-evaluation"
             | "/v1/ai/opportunities-generate-start"

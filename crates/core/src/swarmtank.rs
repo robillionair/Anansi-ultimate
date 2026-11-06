@@ -2757,7 +2757,7 @@ pub fn swarmtank_command(
         "swarmtank-territories" => territories_op(value),
         "swarmtank-market" => market_op(value),
         "swarmtank-markets" => markets_op(value),
-        "swarmtank-ai-estimate" | "swarmtank-ai-start" | "swarmtank-ai-poll" | "swarmtank-ai-cancel" => {
+        "swarmtank-ai-estimate" | "swarmtank-ai-start" | "swarmtank-ai-poll" | "swarmtank-ai-cancel" | "swarmtank-ai-branch" => {
             crate::swarmtank_ai::swarmtank_ai_command(operation, value, scope)
         }
         _ => Err(invalid("Use a supported SwarmTank operation.")),

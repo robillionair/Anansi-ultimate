@@ -13,6 +13,8 @@
 // ---------------------------------------------------------------------------
 
 import { useEffect, useRef, useState } from 'react';
+import { SwarmtankAiMatrix } from './larp-mode/SwarmtankAiMatrix.tsx';
+import { isReducedMotion } from './swarmtankThreeScene.ts';
 import type {
   AiAgent,
   AiRound,
@@ -65,7 +67,7 @@ function parseAiAgent(value: unknown): AiAgent | null {
 
 function parseAiRound(value: unknown): AiRound | null {
   if (!isRecord(value)) return null;
-  if (!exactKeys(value, ['round', 'actions', 'eventsDue'])) return null;
+  if (!exactKeys(value, ['round', 'actions', 'eventsDue', 'date']) && !exactKeys(value, ['round', 'actions', 'eventsDue'])) return null;
   if (typeof value.round !== 'number' || value.round < 1) return null;
   if (!Array.isArray(value.actions) || !Array.isArray(value.eventsDue)) return null;
   for (const action of value.actions) {
@@ -104,6 +106,8 @@ export function parseSwarmtankAiRunBody(raw: string): SwarmtankAiRunDoc | null {
     'market', 'seed', 'agents', 'scheduledEvents', 'rounds', 'status',
     'modelProvider', 'model', 'locality', 'caps', 'callsMade', 'tokensUsed',
     'assumptions', 'contentHash', 'createdMs',
+    'startDate', 'endDate', 'stepDays', 'stepCoarsened',
+    'parentRunId', 'parentArtifactId', 'parentRound', 'branchChanges',
   ];
   if (!Object.keys(value).every(k => allowed.includes(k))) return null;
   if (value.format !== 'anansi-swarmtank-ai-run') return null;
@@ -118,6 +122,8 @@ export function parseSwarmtankAiRunBody(raw: string): SwarmtankAiRunDoc | null {
     if (parseAiRound(round) === null) return null;
   }
   if (typeof value.contentHash !== 'string' || value.contentHash.length !== 64) return null;
+  if (typeof value.startDate !== 'string' || typeof value.stepDays !== 'number') return null;
+  if (typeof value.stepCoarsened !== 'boolean') return null;
   return value as unknown as SwarmtankAiRunDoc;
 }
 
@@ -157,9 +163,17 @@ function statusLabel(status: string): string {
 
 export function SwarmtankAiRunView({
   doc,
+  artifactId,
+  client,
+  workspaceId,
+  onBranchStarted,
   onClose,
 }: {
   doc: SwarmtankAiRunDoc;
+  artifactId?: string;
+  client?: Client;
+  workspaceId?: string;
+  onBranchStarted?: (runId: string) => void;
   onClose?: () => void;
 }) {
   const agentById = new Map(doc.agents.map(a => [a.id, a]));
@@ -168,6 +182,83 @@ export function SwarmtankAiRunView({
     (n, r) => n + r.actions.filter(a => a.status === 'failed').length,
     0,
   );
+  const [selectedRound, setSelectedRound] = useState(doc.rounds.length);
+  const selected = doc.rounds.find(r => r.round === selectedRound) ?? doc.rounds[doc.rounds.length - 1];
+  const [branchRound, setBranchRound] = useState(doc.rounds.length > 1 ? doc.rounds.length - 1 : 1);
+  const [branchPrice, setBranchPrice] = useState('');
+  const [branchEventKind, setBranchEventKind] = useState('price_change');
+  const [branchEventDescription, setBranchEventDescription] = useState('');
+  const [branchEventRound, setBranchEventRound] = useState(doc.rounds.length);
+  const [branchError, setBranchError] = useState<string | null>(null);
+  const [branchBusy, setBranchBusy] = useState(false);
+  const [comparison, setComparison] = useState<SwarmtankAiRunDoc | null>(null);
+  const [comparisonError, setComparisonError] = useState<string | null>(null);
+  const isBranch = doc.parentRunId !== undefined && doc.parentRunId !== null;
+  const horizonDays =
+    doc.endDate && doc.startDate
+      ? Math.round(
+          (Date.parse(doc.endDate) - Date.parse(doc.startDate)) / 86400000,
+        )
+      : 0;
+
+  async function startBranch() {
+    if (!client || !workspaceId) return;
+    setBranchError(null);
+    setBranchBusy(true);
+    try {
+      const price = branchPrice.trim() === '' ? undefined : Number(branchPrice);
+      if (price !== undefined && (!Number.isFinite(price) || price < 0)) {
+        setBranchError('The branch price must be a number of 0 or more.');
+        return;
+      }
+      const newEvents =
+        branchEventDescription.trim() === ''
+          ? undefined
+          : [
+              {
+                round: branchEventRound,
+                kind: branchEventKind,
+                description: branchEventDescription.trim(),
+              },
+            ];
+      if (price === undefined && newEvents === undefined) {
+        setBranchError('Change the price or add an event to branch from this round.');
+        return;
+      }
+      const result = await client.branchSwarmtankAi(workspaceId, {
+        projectId: doc.projectId,
+        parentArtifactId: artifactId ?? '',
+        parentRound: branchRound,
+        priceAmount: price,
+        newEvents,
+        rounds: doc.rounds.length,
+      });
+      // Track the branch run's progress in the panel (the poll loop
+      // reads runIdRef, so set both the ref and the state).
+      if (onBranchStarted) onBranchStarted(result.runId);
+    } catch (err) {
+      setBranchError(err instanceof Error ? err.message : 'Could not start the branch.');
+    } finally {
+      setBranchBusy(false);
+    }
+  }
+
+  async function loadComparison() {
+    if (!client || !workspaceId || !doc.parentArtifactId) return;
+    setComparisonError(null);
+    try {
+      const details = await client.readProjectArtifact(workspaceId, doc.parentArtifactId, undefined);
+      const parent = parseSwarmtankAiRunBody(details.body);
+      if (parent === null) {
+        setComparisonError('The parent run body is not readable.');
+        return;
+      }
+      setComparison(parent);
+    } catch (err) {
+      setComparisonError(err instanceof Error ? err.message : 'Could not load the parent run.');
+    }
+  }
+
   return (
     <section aria-label="SwarmTank AI run">
       <h3>SwarmTank AI run — {statusLabel(doc.status)}</h3>
@@ -176,18 +267,58 @@ export function SwarmtankAiRunView({
         {' '}{doc.callsMade} provider calls, {doc.tokensUsed} tokens used.
         {' '}{totalActions} agent actions ({failedActions} failed).
         {doc.market?.territoryName ? ` Market: ${doc.market.territoryName}.` : ''}
+        {isBranch ? ` Branch of run ${doc.parentRunId} from round ${doc.parentRound}.` : ''}
+        {doc.endDate ? ` Horizon: ${doc.startDate} to ${doc.endDate} (${horizonDays} days, ${doc.stepDays}-day steps${doc.stepCoarsened ? ', step coarsened to fit the run budget' : ''}).` : ''}
       </p>
+      {doc.endDate && horizonDays >= 90 ? (
+        <p>
+          <strong>Long horizon — assumptions matter more.</strong> The further
+          out the simulation runs, the more its outcomes depend on the
+          assumptions below rather than on the starting evidence.
+        </p>
+      ) : null}
       {doc.assumptions.map(assumption => (
         <p key={assumption}>{assumption}</p>
       ))}
-      {doc.rounds.map(round => (
-        <section key={round.round} aria-label={`AI round ${round.round}`}>
-          <h4>Round {round.round}</h4>
-          {round.eventsDue.length > 0 ? (
-            <p>Events due: {round.eventsDue.join(', ')}.</p>
+      <section aria-label="AI timeline">
+        <h4>Timeline</h4>
+        <label>
+          Round{' '}
+          <input
+            aria-label="AI timeline round"
+            type="range"
+            min={1}
+            max={Math.max(1, doc.rounds.length)}
+            value={selectedRound}
+            onChange={event => setSelectedRound(Number(event.target.value))}
+          />
+          {selected ? `Round ${selected.round} of ${doc.rounds.length}${selected.date ? ` — ${selected.date}` : ''}` : ''}
+        </label>
+        <div>
+          {doc.rounds.map(round => (
+            <button
+              key={round.round}
+              type="button"
+              aria-pressed={selectedRound === round.round}
+              onClick={() => setSelectedRound(round.round)}
+            >
+              Round {round.round}
+              {round.date ? ` (${round.date})` : ''}
+            </button>
+          ))}
+        </div>
+      </section>
+      {selected ? (
+        <section aria-label={`AI round ${selected.round} detail`}>
+          <h4>
+            Round {selected.round}
+            {selected.date ? ` — ${selected.date}` : ''}
+          </h4>
+          {selected.eventsDue.length > 0 ? (
+            <p>Events due: {selected.eventsDue.join(', ')}.</p>
           ) : null}
           <ul>
-            {round.actions.map((action, index) => {
+            {selected.actions.map((action, index) => {
               const agent = agentById.get(action.agentId);
               return (
                 <li key={`${action.agentId}-${index}`}>
@@ -214,7 +345,102 @@ export function SwarmtankAiRunView({
             })}
           </ul>
         </section>
-      ))}
+      ) : null}
+      {client && workspaceId && doc.rounds.length > 0 ? (
+        <section aria-label="Branch from this run">
+          <h4>Branch from this run (what-if)</h4>
+          <p>
+            Continue from a saved round with a changed price or a new event.
+            The branch keeps the original rounds up to the branch point and
+            runs new rounds after it. Both timelines are conditional
+            simulation results.
+          </p>
+          <label>
+            Branch from round{' '}
+            <select
+              aria-label="Branch from round"
+              value={branchRound}
+              onChange={event => setBranchRound(Number(event.target.value))}
+            >
+              {doc.rounds.map(round => (
+                <option key={round.round} value={round.round}>
+                  Round {round.round}
+                  {round.date ? ` (${round.date})` : ''}
+                </option>
+              ))}
+            </select>
+          </label>{' '}
+          <label>
+            New price amount (optional){' '}
+            <input
+              aria-label="Branch price amount"
+              type="number"
+              value={branchPrice}
+              onChange={event => setBranchPrice(event.target.value)}
+              placeholder="e.g. 79"
+            />
+          </label>{' '}
+          <label>
+            New event kind{' '}
+            <select
+              aria-label="Branch event kind"
+              value={branchEventKind}
+              onChange={event => setBranchEventKind(event.target.value)}
+            >
+              <option value="price_change">Price change</option>
+              <option value="competitor_launch">Competitor launch</option>
+              <option value="scenario">Scenario event</option>
+            </select>
+          </label>{' '}
+          <label>
+            New event description (optional){' '}
+            <input
+              aria-label="Branch event description"
+              value={branchEventDescription}
+              onChange={event => setBranchEventDescription(event.target.value)}
+              placeholder="e.g. A competitor launches a cheaper tier."
+              maxLength={1000}
+            />
+          </label>{' '}
+          <label>
+            New event round{' '}
+            <input
+              aria-label="Branch event round"
+              type="number"
+              min={branchRound + 1}
+              max={doc.rounds.length}
+              value={branchEventRound}
+              onChange={event => setBranchEventRound(Number(event.target.value))}
+            />
+          </label>
+          {branchError !== null ? <p role="alert">{branchError}</p> : null}
+          <p>
+            <button type="button" disabled={branchBusy} onClick={startBranch}>
+              Start branch
+            </button>
+          </p>
+        </section>
+      ) : null}
+      {isBranch && client && workspaceId ? (
+        <section aria-label="Branch comparison">
+          <h4>Compare with the original timeline</h4>
+          <p>
+            Both timelines are conditional simulation results. The branch
+            shares the original rounds up to round {doc.parentRound}; the
+            timelines diverge after it.
+          </p>
+          {comparisonError !== null ? <p role="alert">{comparisonError}</p> : null}
+          {comparison === null ? (
+            <p>
+              <button type="button" onClick={loadComparison}>
+                Compare with original
+              </button>
+            </p>
+          ) : (
+            <SwarmtankAiComparison original={comparison} branch={doc} />
+          )}
+        </section>
+      ) : null}
       {onClose ? (
         <p>
           <button type="button" onClick={onClose}>
@@ -222,6 +448,62 @@ export function SwarmtankAiRunView({
           </button>
         </p>
       ) : null}
+    </section>
+  );
+}
+
+export function SwarmtankAiComparison({
+  original,
+  branch,
+}: {
+  original: SwarmtankAiRunDoc;
+  branch: SwarmtankAiRunDoc;
+}) {
+  const branchFrom = branch.parentRound ?? 0;
+  const agentById = new Map(branch.agents.map(a => [a.id, a]));
+  const originalByRound = new Map(original.rounds.map(r => [r.round, r]));
+  return (
+    <section aria-label="Branch comparison table">
+      <p>
+        Conditional simulation results — original timeline beside the branch.
+        {branch.branchChanges?.priceAmount !== undefined
+          ? ` Branch price: $${branch.branchChanges.priceAmount} per month (original: $${original.input.priceAmount ?? '—'}).`
+          : ''}
+      </p>
+      {branch.rounds.map(round => {
+        const orig = originalByRound.get(round.round);
+        const shared = round.round <= branchFrom;
+        return (
+          <section key={round.round} aria-label={`Comparison round ${round.round}`}>
+            <h5>
+              Round {round.round}
+              {round.date ? ` — ${round.date}` : ''}
+              {shared ? ' (shared — identical to the original)' : ' (diverged)'}
+            </h5>
+            <div>
+              <p>
+                <strong>Original:</strong>{' '}
+                {orig
+                  ? orig.actions.map(a => `${a.agentId}: ${actionLabel(a.action)}`).join('; ')
+                  : '—'}
+              </p>
+              <p>
+                <strong>Branch:</strong>{' '}
+                {round.actions.map(a => `${a.agentId}: ${actionLabel(a.action)}`).join('; ')}
+              </p>
+            </div>
+            {round.actions.map((action, index) => {
+              const agent = agentById.get(action.agentId);
+              return (
+                <p key={`${action.agentId}-${index}`}>
+                  {agent ? agent.name : action.agentId}: {actionLabel(action.action)}.
+                  {action.rationale ? ` ${action.rationale}` : ''}
+                </p>
+              );
+            })}
+          </section>
+        );
+      })}
     </section>
   );
 }
@@ -237,6 +519,7 @@ export function SwarmtankAiPanel({
   onSaved,
   notify,
   busy,
+  cinematic = false,
 }: {
   client: Client;
   workspaceId: string;
@@ -248,17 +531,26 @@ export function SwarmtankAiPanel({
   onSaved: () => Promise<void>;
   notify: (message: string, isError: boolean) => void;
   busy: boolean;
+  cinematic?: boolean;
 }) {
   const [agents, setAgents] = useState(3);
   const [rounds, setRounds] = useState(2);
   const [maxOutputTokens, setMaxOutputTokens] = useState(512);
   const [maxTotalTokens, setMaxTotalTokens] = useState(20000);
+  const [endDate, setEndDate] = useState('');
+  const [stepDays, setStepDays] = useState(30);
+  const [events, setEvents] = useState<{ round: number; kind: string; description: string }[]>([]);
+  const [eventKind, setEventKind] = useState('price_change');
+  const [eventDescription, setEventDescription] = useState('');
+  const [eventRound, setEventRound] = useState(2);
   const [estimate, setEstimate] = useState<SwarmtankAiEstimateResponse | null>(null);
   const [estimateError, setEstimateError] = useState<string | null>(null);
   const [runId, setRunId] = useState<string | null>(null);
   const [poll, setPoll] = useState<SwarmtankAiPollResponse | null>(null);
   const [polling, setPolling] = useState(false);
   const [openedRun, setOpenedRun] = useState<SwarmtankAiRunDoc | null>(null);
+  const [reduceMotion, setReduceMotion] = useState(() => isReducedMotion());
+  const [openedArtifactId, setOpenedArtifactId] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
   const runIdRef = useRef<string | null>(null);
   const pollRef = useRef<SwarmtankAiPollResponse | null>(null);
@@ -286,6 +578,9 @@ export function SwarmtankAiPanel({
           rounds,
           maxOutputTokens,
           maxTotalTokens,
+          endDate: endDate.trim() === '' ? undefined : endDate.trim(),
+          stepDays,
+          scheduledEvents: events.length > 0 ? events : undefined,
         })
         .then(result => {
           if (active) {
@@ -304,7 +599,7 @@ export function SwarmtankAiPanel({
       active = false;
       clearTimeout(timer);
     };
-  }, [client, workspaceId, projectId, input, market, seed, agents, rounds, maxOutputTokens, maxTotalTokens, inputReady]);
+  }, [client, workspaceId, projectId, input, market, seed, agents, rounds, maxOutputTokens, maxTotalTokens, endDate, stepDays, events, inputReady]);
 
   // Poll while a run is in flight. The interval reads the run id from
   // a ref so the closure never goes stale.
@@ -353,6 +648,9 @@ export function SwarmtankAiPanel({
         rounds,
         maxOutputTokens,
         maxTotalTokens,
+        endDate: endDate.trim() === '' ? undefined : endDate.trim(),
+        stepDays,
+        scheduledEvents: events.length > 0 ? events : undefined,
       });
       setRunId(result.runId);
       runIdRef.current = result.runId;
@@ -391,6 +689,7 @@ export function SwarmtankAiPanel({
         return;
       }
       setOpenedRun(doc);
+      setOpenedArtifactId(artifact.artifactId);
     } catch (err) {
       notify(err instanceof Error ? err.message : 'Could not open the AI run.', true);
     }
@@ -452,7 +751,106 @@ export function SwarmtankAiPanel({
           value={maxTotalTokens}
           onChange={event => setMaxTotalTokens(Number(event.target.value))}
         />
+      </label>{' '}
+      <label>
+        Future end date (optional, YYYY-MM-DD){' '}
+        <input
+          aria-label="AI end date"
+          type="date"
+          value={endDate}
+          onChange={event => setEndDate(event.target.value)}
+        />
+      </label>{' '}
+      <label>
+        Step size{' '}
+        <select
+          aria-label="AI step size"
+          value={stepDays}
+          onChange={event => setStepDays(Number(event.target.value))}
+        >
+          <option value={1}>Daily</option>
+          <option value={7}>Weekly</option>
+          <option value={30}>Monthly</option>
+          <option value={90}>Quarterly</option>
+        </select>
       </label>
+      {estimate !== null && endDate.trim() !== '' ? (
+        <p>
+          Time plan: {estimate.stepCount} step{estimate.stepCount === 1 ? '' : 's'} of{' '}
+          {estimate.effectiveStepDays} day{estimate.effectiveStepDays === 1 ? '' : 's'}.
+          {estimate.stepCoarsened
+            ? ' The horizon forced a coarser step than requested, so the run uses fewer, longer steps.'
+            : ''}
+        </p>
+      ) : null}
+      <section aria-label="Scheduled events">
+        <h4>Scheduled events</h4>
+        <p>
+          Events the agents observe in the round they fall due — a price
+          change or a competitor launch. They are part of the run record.
+        </p>
+        {events.length > 0 ? (
+          <ul>
+            {events.map((event, index) => (
+              <li key={index}>
+                Round {event.round}: {event.kind} — {event.description}{' '}
+                <button
+                  type="button"
+                  onClick={() => setEvents(prev => prev.filter((_, i) => i !== index))}
+                >
+                  Remove
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        <label>
+          Event kind{' '}
+          <select
+            aria-label="Scheduled event kind"
+            value={eventKind}
+            onChange={event => setEventKind(event.target.value)}
+          >
+            <option value="price_change">Price change</option>
+            <option value="competitor_launch">Competitor launch</option>
+            <option value="scenario">Scenario event</option>
+          </select>
+        </label>{' '}
+        <label>
+          Event description{' '}
+          <input
+            aria-label="Scheduled event description"
+            value={eventDescription}
+            onChange={event => setEventDescription(event.target.value)}
+            placeholder="e.g. A competitor launches a cheaper tier."
+            maxLength={1000}
+          />
+        </label>{' '}
+        <label>
+          Event round{' '}
+          <input
+            aria-label="Scheduled event round"
+            type="number"
+            min={1}
+            max={rounds}
+            value={eventRound}
+            onChange={event => setEventRound(Number(event.target.value))}
+          />
+        </label>{' '}
+        <button
+          type="button"
+          disabled={eventDescription.trim() === ''}
+          onClick={() => {
+            setEvents(prev => [
+              ...prev,
+              { round: eventRound, kind: eventKind, description: eventDescription.trim() },
+            ]);
+            setEventDescription('');
+          }}
+        >
+          Add event
+        </button>
+      </section>
       {estimateError !== null ? <p role="alert">{estimateError}</p> : null}
       {estimate !== null ? (
         <p>
@@ -534,7 +932,43 @@ export function SwarmtankAiPanel({
         </section>
       ) : null}
       {openedRun !== null ? (
-        <SwarmtankAiRunView doc={openedRun} onClose={() => setOpenedRun(null)} />
+        <>
+          <SwarmtankAiRunView
+            doc={openedRun}
+            artifactId={openedArtifactId ?? undefined}
+            client={client}
+            workspaceId={workspaceId}
+            onBranchStarted={runId => {
+              setRunId(runId);
+              runIdRef.current = runId;
+              setPoll(null);
+              pollRef.current = null;
+              setPolling(true);
+              void onSaved();
+              notify('Branch started. Watch the run progress above.', false);
+            }}
+            onClose={() => {
+              setOpenedRun(null);
+              setOpenedArtifactId(null);
+            }}
+          />
+          {cinematic ? (
+            <>
+              <p>
+                <label>
+                  <input
+                    type="checkbox"
+                    aria-label="Reduce motion (static AI matrix view)"
+                    checked={reduceMotion}
+                    onChange={event => setReduceMotion(event.target.checked)}
+                  />{' '}
+                  Reduce motion (static AI matrix view)
+                </label>
+              </p>
+              <SwarmtankAiMatrix key={openedRun.runId} doc={openedRun} staticView={reduceMotion} />
+            </>
+          ) : null}
+        </>
       ) : null}
     </section>
   );

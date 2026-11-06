@@ -104,6 +104,11 @@ export interface AiMemoryWindow {
 }
 export interface AiRound {
   actions: AiAction[];
+  /**
+   * ISO date (YYYY-MM-DD) this round simulates, when the run has a
+   * time dimension (an end date). Absent on runs without one.
+   */
+  date?: string | null;
   eventsDue: string[];
   round: number;
 }
@@ -426,6 +431,13 @@ export interface BackupSchedule {
   missedRuns: number;
   nextDue?: number | null;
   retention: string;
+}
+/**
+ * What changed on a what-if branch, recorded with the run.
+ */
+export interface BranchChanges {
+  newEventIds?: string[];
+  priceAmount?: number | null;
 }
 /**
  * One proposed combination or architecture (§25 stage 4).
@@ -5022,6 +5034,40 @@ export interface CountedItem {
   count: number;
   item: string;
 }
+export interface SwarmtankAiBranchRequest {
+  contractVersion: number;
+  localOnly?: boolean | null;
+  maxOutputTokens?: number | null;
+  maxTotalTokens?: number | null;
+  newEvents?: SwarmtankAiEventRequest[] | null;
+  parentArtifactId: string;
+  parentRound: number;
+  permitId?: string | null;
+  priceAmount?: number | null;
+  projectId: string;
+  rounds?: number | null;
+  workspaceId: string;
+}
+export interface SwarmtankAiEventRequest {
+  description: string;
+  kind: string;
+  payload?: unknown;
+  round: number;
+}
+export interface SwarmtankAiBranchResponse {
+  contractVersion: number;
+  effectiveStepDays: number;
+  estimatedCalls: number;
+  estimatedTokens: number;
+  locality: string;
+  model: string;
+  parentRound: number;
+  parentRunId: string;
+  provider: string;
+  runId: string;
+  stepCoarsened: boolean;
+  stepCount: number;
+}
 export interface SwarmtankAiCancelRequest {
   contractVersion: number;
   runId: string;
@@ -5035,13 +5081,16 @@ export interface SwarmtankAiCancelResponse {
 export interface SwarmtankAiEstimateRequest {
   agents?: number | null;
   contractVersion: number;
+  endDate?: string | null;
   input: SwarmtankInput;
   market?: SwarmtankMarket | null;
   maxOutputTokens?: number | null;
   maxTotalTokens?: number | null;
   projectId: string;
   rounds?: number | null;
+  scheduledEvents?: SwarmtankAiEventRequest[] | null;
   seed?: string | null;
+  stepDays?: number | null;
   workspaceId: string;
 }
 /**
@@ -5085,13 +5134,22 @@ export interface MarketAssumption {
   rationale: string;
   value: string;
 }
+export interface SwarmtankAiEventRequest {
+  description: string;
+  kind: string;
+  payload?: unknown;
+  round: number;
+}
 export interface SwarmtankAiEstimateResponse {
   contractVersion: number;
+  effectiveStepDays: number;
   estimatedCalls: number;
   estimatedTokens: number;
   locality: string;
   model: string;
   provider: string;
+  stepCoarsened: boolean;
+  stepCount: number;
 }
 export interface SwarmtankAiEventRequest {
   description: string;
@@ -5133,6 +5191,11 @@ export interface AiAgent {
 }
 export interface AiRound {
   actions: AiAction[];
+  /**
+   * ISO date (YYYY-MM-DD) this round simulates, when the run has a
+   * time dimension (an end date). Absent on runs without one.
+   */
+  date?: string | null;
   eventsDue: string[];
   round: number;
 }
@@ -5172,10 +5235,15 @@ export interface AiUsage {
 export interface SwarmtankAiRunDoc {
   agents: AiAgent[];
   assumptions: string[];
+  branchChanges?: BranchChanges | null;
   callsMade: number;
   caps: AiCaps;
   contentHash: string;
   createdMs: number;
+  /**
+   * ISO date the run simulates toward, when the user chose one.
+   */
+  endDate?: string | null;
   format: string;
   input: SwarmtankInput;
   /**
@@ -5185,15 +5253,33 @@ export interface SwarmtankAiRunDoc {
   market?: SwarmtankMarket | null;
   model: string;
   modelProvider: string;
+  parentArtifactId?: string | null;
+  parentRound?: number | null;
+  /**
+   * Branch lineage: the parent run and round this run continues from.
+   */
+  parentRunId?: string | null;
   projectId: string;
   rounds: AiRound[];
   runId: string;
   scheduledEvents: AiEvent[];
   seed: string;
   /**
+   * ISO date (YYYY-MM-DD) the run starts from (its creation date).
+   */
+  startDate: string;
+  /**
    * "complete" | "cancelled" | "budget-exhausted" | "failed"
    */
   status: string;
+  /**
+   * True when the horizon forced a coarser step than requested.
+   */
+  stepCoarsened: boolean;
+  /**
+   * Step size in days between rounds.
+   */
+  stepDays: number;
   tokensUsed: number;
   version: number;
   workspaceId: string;
@@ -5206,6 +5292,13 @@ export interface AiAgent {
   name: string;
   personaId: string;
   role: string;
+}
+/**
+ * What changed on a what-if branch, recorded with the run.
+ */
+export interface BranchChanges {
+  newEventIds?: string[];
+  priceAmount?: number | null;
 }
 export interface AiCaps {
   maxAgents: number;
@@ -5259,6 +5352,11 @@ export interface MarketAssumption {
 }
 export interface AiRound {
   actions: AiAction[];
+  /**
+   * ISO date (YYYY-MM-DD) this round simulates, when the run has a
+   * time dimension (an end date). Absent on runs without one.
+   */
+  date?: string | null;
   eventsDue: string[];
   round: number;
 }
@@ -5305,6 +5403,10 @@ export interface AiEvent {
 export interface SwarmtankAiStartRequest {
   agents?: number | null;
   contractVersion: number;
+  /**
+   * Future end date (YYYY-MM-DD) the run simulates toward.
+   */
+  endDate?: string | null;
   input: SwarmtankInput;
   localOnly?: boolean | null;
   market?: SwarmtankMarket | null;
@@ -5315,6 +5417,10 @@ export interface SwarmtankAiStartRequest {
   rounds?: number | null;
   scheduledEvents?: SwarmtankAiEventRequest[] | null;
   seed?: string | null;
+  /**
+   * Step size in days between rounds (1, 7, 30 or 90).
+   */
+  stepDays?: number | null;
   workspaceId: string;
 }
 /**
@@ -5366,12 +5472,15 @@ export interface SwarmtankAiEventRequest {
 }
 export interface SwarmtankAiStartResponse {
   contractVersion: number;
+  effectiveStepDays: number;
   estimatedCalls: number;
   estimatedTokens: number;
   locality: string;
   model: string;
   provider: string;
   runId: string;
+  stepCoarsened: boolean;
+  stepCount: number;
 }
 export interface SwarmtankBatchInfo {
   count: number;

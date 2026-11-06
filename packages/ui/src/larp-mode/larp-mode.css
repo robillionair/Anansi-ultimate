@@ -146,6 +146,7 @@
 .larp-matrix-wires g[data-active="true"] .wire-filament{stroke:#ff91cf;stroke-width:1.5}
 @keyframes swarm-signal{to{stroke-dashoffset:-40.4}}
 .larp-swarm-matrix[data-static="true"] .wire-signal{animation:none}
+.larp-matrix-wires .wire-recorded{fill:none;vector-effect:non-scaling-stroke;stroke:#f5c542;stroke-width:3;opacity:.9}
 @media(prefers-reduced-motion:reduce){.larp-swarm-matrix .wire-signal{animation:none}}
 .larp-matrix-card-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));grid-template-rows:repeat(3,minmax(0,1fr));align-items:center;gap:8px clamp(9px,2.3vw,34px);padding:8px clamp(8px,2vw,30px)}
 .larp-swarmtank .larp-matrix-card{position:relative;min-width:0;min-height:0;pointer-events:auto;display:grid;gap:4px;text-align:left;border:1px solid #775977a6;background:linear-gradient(135deg,#1a192bf5,#101320f7 65%,#1b1223fa);box-shadow:0 9px 20px #030306a8,inset 0 1px #f6d4ee22;padding:8px 9px;color:#ebeff8;border-radius:3px;--card-state:#8de7b0}

@@ -162,6 +162,10 @@ pub struct AiRound {
     pub round: u32,
     pub actions: Vec<AiAction>,
     pub events_due: Vec<String>,
+    /// ISO date (YYYY-MM-DD) this round simulates, when the run has a
+    /// time dimension (an end date). Absent on runs without one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub date: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
@@ -203,6 +207,34 @@ pub struct SwarmtankAiRunDoc {
     pub assumptions: Vec<String>,
     pub content_hash: String,
     pub created_ms: u64,
+    /// ISO date (YYYY-MM-DD) the run starts from (its creation date).
+    pub start_date: String,
+    /// ISO date the run simulates toward, when the user chose one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end_date: Option<String>,
+    /// Step size in days between rounds.
+    pub step_days: u32,
+    /// True when the horizon forced a coarser step than requested.
+    pub step_coarsened: bool,
+    /// Branch lineage: the parent run and round this run continues from.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_run_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_artifact_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_round: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub branch_changes: Option<BranchChanges>,
+}
+
+/// What changed on a what-if branch, recorded with the run.
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct BranchChanges {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub price_amount: Option<f64>,
+    #[serde(default)]
+    pub new_event_ids: Vec<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -244,6 +276,12 @@ pub struct SwarmtankAiStartRequest {
     pub permit_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scheduled_events: Option<Vec<SwarmtankAiEventRequest>>,
+    /// Future end date (YYYY-MM-DD) the run simulates toward.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end_date: Option<String>,
+    /// Step size in days between rounds (1, 7, 30 or 90).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub step_days: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
@@ -256,6 +294,9 @@ pub struct SwarmtankAiStartResponse {
     pub locality: String,
     pub estimated_calls: u32,
     pub estimated_tokens: u64,
+    pub step_count: u32,
+    pub effective_step_days: u32,
+    pub step_coarsened: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
@@ -323,6 +364,12 @@ pub struct SwarmtankAiEstimateRequest {
     pub max_output_tokens: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_total_tokens: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end_date: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub step_days: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scheduled_events: Option<Vec<SwarmtankAiEventRequest>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
@@ -334,6 +381,50 @@ pub struct SwarmtankAiEstimateResponse {
     pub locality: String,
     pub estimated_calls: u32,
     pub estimated_tokens: u64,
+    pub step_count: u32,
+    pub effective_step_days: u32,
+    pub step_coarsened: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SwarmtankAiBranchRequest {
+    pub contract_version: u8,
+    pub workspace_id: String,
+    pub project_id: String,
+    pub parent_artifact_id: String,
+    pub parent_round: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub price_amount: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub new_events: Option<Vec<SwarmtankAiEventRequest>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rounds: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_output_tokens: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_total_tokens: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub local_only: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub permit_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SwarmtankAiBranchResponse {
+    pub contract_version: u8,
+    pub run_id: String,
+    pub parent_run_id: String,
+    pub parent_round: u32,
+    pub provider: String,
+    pub model: String,
+    pub locality: String,
+    pub estimated_calls: u32,
+    pub estimated_tokens: u64,
+    pub step_count: u32,
+    pub effective_step_days: u32,
+    pub step_coarsened: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -430,10 +521,151 @@ pub fn swarmtank_ai_command(
     match operation {
         "swarmtank-ai-estimate" => estimate_op(value, scope),
         "swarmtank-ai-start" => start_op(value, scope),
+        "swarmtank-ai-branch" => branch_op(value, scope),
         "swarmtank-ai-poll" => poll_op(value, scope),
         "swarmtank-ai-cancel" => cancel_op(value, scope),
         _ => Err(invalid("Use a supported SwarmTank AI request.")),
     }
+}
+
+// ---------------------------------------------------------------------------
+// Dates (Howard Hinnant's civil calendar algorithms; no date crate)
+// ---------------------------------------------------------------------------
+
+fn civil_from_days(z: i64) -> (i64, u32, u32) {
+    let z = z + 719468;
+    let era = if z >= 0 { z } else { z - 146096 } / 146097;
+    let doe = (z - era * 146097) as u64;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let y = yoe as i64 + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
+    (if m <= 2 { y + 1 } else { y }, m, d)
+}
+
+fn days_from_civil(y: i64, m: u32, d: u32) -> i64 {
+    let y = if m <= 2 { y - 1 } else { y };
+    let era = if y >= 0 { y } else { y - 399 } / 400;
+    let yoe = (y - era * 400) as u64;
+    let mp = if m > 2 { m - 3 } else { m + 9 } as u64;
+    let doy = (153 * mp + 2) / 5 + (d as u64) - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    era * 146097 + doe as i64 - 719468
+}
+
+fn parse_iso_date(text: &str) -> Option<(i64, u32, u32)> {
+    let parts: Vec<&str> = text.split('-').collect();
+    if parts.len() != 3 {
+        return None;
+    }
+    let y: i64 = parts[0].parse().ok()?;
+    let m: u32 = parts[1].parse().ok()?;
+    let d: u32 = parts[2].parse().ok()?;
+    if !(1..=12).contains(&m) || !(1..=31).contains(&d) {
+        return None;
+    }
+    // Reject impossible dates (e.g. 2026-02-30) by round-tripping.
+    let (ry, rm, rd) = civil_from_days(days_from_civil(y, m, d));
+    if ry != y || rm != m || rd != d {
+        return None;
+    }
+    Some((y, m, d))
+}
+
+fn format_iso_date(days: i64) -> String {
+    let (y, m, d) = civil_from_days(days);
+    format!("{y:04}-{m:02}-{d:02}")
+}
+
+fn today_days() -> i64 {
+    let secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    secs.div_euclid(86400)
+}
+
+/// The time plan for a run: the start date (today), the end date when
+/// the user chose one, the step size in days, how many rounds the
+/// horizon needs, and whether the horizon forced a coarser step than
+/// requested. A longer horizon uses coarser steps so the run stays
+/// within its round budget; the caller is told it happened.
+struct TimePlan {
+    start_days: i64,
+    start_date: String,
+    end_date: Option<String>,
+    step_days: u32,
+    step_count: u32,
+    step_coarsened: bool,
+}
+
+fn resolve_time_plan(
+    end_date: &Option<String>,
+    step_days: Option<u32>,
+    max_rounds: u32,
+) -> Result<TimePlan, CommandError> {
+    let step = step_days.unwrap_or(30);
+    if ![1, 7, 30, 90].contains(&step) {
+        return Err(invalid("Step size must be 1, 7, 30 or 90 days."));
+    }
+    let start_days = today_days();
+    let start_date = format_iso_date(start_days);
+    let Some(end_text) = end_date else {
+        // No end date: one round per step, up to the round budget.
+        return Ok(TimePlan {
+            start_days,
+            start_date,
+            end_date: None,
+            step_days: step,
+            step_count: max_rounds,
+            step_coarsened: false,
+        });
+    };
+    let (y, m, d) = parse_iso_date(end_text)
+        .ok_or_else(|| invalid("End date must be a valid YYYY-MM-DD date."))?;
+    let end_days = days_from_civil(y, m, d);
+    if end_days <= start_days {
+        return Err(invalid("End date must be in the future."));
+    }
+    let horizon = (end_days - start_days) as u32;
+    let mut effective = step;
+    let mut count = horizon.div_ceil(effective);
+    let mut coarsened = false;
+    if count > max_rounds {
+        // Coarsen the step so the horizon fits the round budget.
+        effective = horizon.div_ceil(max_rounds);
+        count = horizon.div_ceil(effective);
+        coarsened = true;
+    }
+    Ok(TimePlan {
+        start_days,
+        start_date,
+        end_date: Some(end_text.clone()),
+        step_days: effective,
+        step_count: count,
+        step_coarsened: coarsened,
+    })
+}
+
+/// The ISO date a round simulates. Round N lands N steps after the
+/// start date, clamped to the end date for the last round.
+fn round_date(plan: &TimePlan, round: u32) -> Option<String> {
+    if plan.end_date.is_none() {
+        return None;
+    }
+    let days = plan.start_days + (round as i64) * (plan.step_days as i64);
+    let end_days = plan
+        .end_date
+        .as_ref()
+        .and_then(|t| parse_iso_date(t))
+        .map(|(y, m, d)| days_from_civil(y, m, d));
+    let days = match end_days {
+        Some(end) if days > end => end,
+        _ => days,
+    };
+    Some(format_iso_date(days))
 }
 
 // ---------------------------------------------------------------------------
@@ -624,15 +856,21 @@ fn estimate_op(value: Value, scope: &CallerScope) -> Result<Value, CommandError>
     }
     let seed = crate::swarmtank::resolve_seed(req.seed).map_err(|e| e)?;
     let caps = resolve_caps(req.agents, req.rounds, req.max_output_tokens, req.max_total_tokens)?;
+    let plan = resolve_time_plan(&req.end_date, req.step_days, caps.max_rounds)?;
+    let rounds_to_run = if req.end_date.is_some() {
+        plan.step_count
+    } else {
+        caps.max_rounds
+    };
     let (provider, model, locality) = resolve_model(scope)?;
     let agents = build_agents(&seed, 20, &req.market, caps.max_agents)?;
     // Measure a real first-round prompt for the input estimate, so the
     // number shown before Start is the prompt the model will actually
     // see, not a guessed constant.
     let events: Vec<AiEvent> = Vec::new();
-    let prompt = build_prompt(&agents[0], &req.input, &req.market, 1, caps.max_rounds, &events, &[]);
+    let prompt = build_prompt(&agents[0], &req.input, &req.market, 1, rounds_to_run, &events, &[]);
     let estimated_input_tokens = (prompt.chars().count() / 4) as u64;
-    let estimated_calls = caps.max_calls;
+    let estimated_calls = (caps.max_agents as u32).saturating_mul(rounds_to_run);
     let estimated_tokens =
         estimated_calls as u64 * (estimated_input_tokens + caps.max_output_tokens as u64);
     serde_json::to_value(SwarmtankAiEstimateResponse {
@@ -642,6 +880,9 @@ fn estimate_op(value: Value, scope: &CallerScope) -> Result<Value, CommandError>
         locality,
         estimated_calls,
         estimated_tokens,
+        step_count: plan.step_count,
+        effective_step_days: plan.step_days,
+        step_coarsened: plan.step_coarsened,
     })
     .map_err(|_| crate::storage::unavailable())
 }
@@ -667,7 +908,13 @@ fn start_op(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
     }
     let seed = crate::swarmtank::resolve_seed(req.seed).map_err(|e| e)?;
     let caps = resolve_caps(req.agents, req.rounds, req.max_output_tokens, req.max_total_tokens)?;
-    let events = validate_events(&req.scheduled_events, caps.max_rounds)?;
+    let plan = resolve_time_plan(&req.end_date, req.step_days, caps.max_rounds)?;
+    let rounds_to_run = if req.end_date.is_some() {
+        plan.step_count
+    } else {
+        caps.max_rounds
+    };
+    let events = validate_events(&req.scheduled_events, rounds_to_run)?;
     let (provider, model, locality) = resolve_model(scope)?;
     // Zero-Cost Lock, up front: a cloud model without an explicit
     // permit refuses before any call is made.
@@ -683,11 +930,14 @@ fn start_op(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
         ));
     }
     let agents = build_agents(&seed, 20, &req.market, caps.max_agents)?;
-    let prompt = build_prompt(&agents[0], &req.input, &req.market, 1, caps.max_rounds, &events, &[]);
+    let prompt = build_prompt(&agents[0], &req.input, &req.market, 1, rounds_to_run, &events, &[]);
     let estimated_input_tokens = (prompt.chars().count() / 4) as u64;
-    let estimated_calls = caps.max_calls;
+    let estimated_calls = (caps.max_agents as u32).saturating_mul(rounds_to_run);
     let estimated_tokens =
         estimated_calls as u64 * (estimated_input_tokens + caps.max_output_tokens as u64);
+    let step_count = plan.step_count;
+    let effective_step_days = plan.step_days;
+    let step_coarsened = plan.step_coarsened;
     let run_id = new_run_id();
     collect_ai_evictions(Some(&scope.workspace));
     let cancel = Arc::new(AtomicBool::new(false));
@@ -731,6 +981,13 @@ fn start_op(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
         permit_id: req.permit_id.clone(),
         cancel,
         created_ms: now_ms(),
+        plan,
+        rounds: rounds_to_run,
+        resume_rounds: Vec::new(),
+        parent_run_id: None,
+        parent_artifact_id: None,
+        parent_round: None,
+        branch_changes: None,
     };
     std::thread::spawn(move || {
         run_ai_simulation(thread_run_id, thread_scope, thread_config);
@@ -743,6 +1000,255 @@ fn start_op(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
         locality,
         estimated_calls,
         estimated_tokens,
+        step_count,
+        effective_step_days,
+        step_coarsened,
+    })
+    .map_err(|_| crate::storage::unavailable())
+}
+
+
+// ---------------------------------------------------------------------------
+// Branch: continue a saved run from one of its rounds with a changed
+// price and/or new scheduled events. The branch is stored as a child
+// of the original run (branch id + parent round); its rounds are the
+// parent's rounds up to the branch point, then new rounds run with the
+// changed price/events. The comparison shows the original timeline
+// beside the branch; both are labelled conditional simulation results.
+// ---------------------------------------------------------------------------
+
+fn branch_op(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
+    let req: SwarmtankAiBranchRequest =
+        serde_json::from_value(value).map_err(|_| invalid("Use a supported SwarmTank AI request."))?;
+    if req.contract_version != 1 {
+        return Err(CommandError::new(
+            ErrorCode::UnsupportedContract,
+            "Use contract version 1.",
+        ));
+    }
+    let (workspace, storage) =
+        crate::swarmtank::require_workspace_and_project(scope, &req.workspace_id, &req.project_id)?;
+    // Read the parent run artifact (latest version) and parse it.
+    let details = storage
+        .artifact_read(&workspace, &req.parent_artifact_id, None)
+        .map_err(|_| invalid("The parent AI run was not found."))?;
+    let parent: SwarmtankAiRunDoc = serde_json::from_str(&details.body)
+        .map_err(|_| invalid("The parent AI run body is not readable."))?;
+    if parent.format != "anansi-swarmtank-ai-run" || parent.version != 1 {
+        return Err(invalid("The parent artifact is not a SwarmTank AI run."));
+    }
+    if details.artifact.artifact_type != "swarmtank-ai-run" {
+        return Err(invalid("The parent artifact is not a SwarmTank AI run."));
+    }
+    if req.parent_round < 1 || req.parent_round as usize > parent.rounds.len() {
+        return Err(invalid(
+            "The parent round must be one of the parent run's completed rounds.",
+        ));
+    }
+    // The branch input: the parent's input, with the price changed when
+    // the user asked for one.
+    let mut input = parent.input.clone();
+    if let Some(price) = req.price_amount {
+        if !(0.0..=1_000_000.0).contains(&price) {
+            return Err(invalid("The branch price must be between 0 and 1000000."));
+        }
+        input.price_amount = Some(price);
+        input.pricing = format!("${price} per month");
+    }
+    // New events must fall due after the branch point.
+    let total_rounds = req.rounds.unwrap_or(parent.caps.max_rounds);
+    if total_rounds <= req.parent_round {
+        return Err(invalid(
+            "The branch must continue past the parent round: choose more rounds than the branch point.",
+        ));
+    }
+    if total_rounds > MAX_AI_ROUNDS {
+        return Err(invalid("Round count must be between 1 and 10."));
+    }
+    let mut events = parent.scheduled_events.clone();
+    let mut new_event_ids: Vec<String> = Vec::new();
+    if let Some(new) = &req.new_events {
+        for (i, e) in new.iter().enumerate() {
+            if e.round <= req.parent_round || e.round > total_rounds {
+                return Err(invalid(
+                    "A new branch event must fall due after the branch point and within the run.",
+                ));
+            }
+            if !["price_change", "competitor_launch", "scenario"].contains(&e.kind.as_str()) {
+                return Err(invalid(
+                    "A scheduled event kind must be price_change, competitor_launch or scenario.",
+                ));
+            }
+            if e.description.trim().is_empty() || e.description.chars().count() > 1000 {
+                return Err(invalid(
+                    "A scheduled event description must be 1 to 1000 characters.",
+                ));
+            }
+            let id = format!("event-{}", events.len() + i + 1);
+            new_event_ids.push(id.clone());
+            events.push(AiEvent {
+                id,
+                round: e.round,
+                kind: e.kind.clone(),
+                description: e.description.trim().to_string(),
+                payload: e.payload.clone(),
+            });
+        }
+    }
+    // The branch reuses the parent's time plan and agents; only the
+    // price and the events change.
+    let (sy, sm, sd) = parse_iso_date(&parent.start_date)
+        .ok_or_else(|| invalid("The parent run has an unreadable start date."))?;
+    let plan = TimePlan {
+        start_days: days_from_civil(sy, sm, sd),
+        start_date: parent.start_date.clone(),
+        end_date: parent.end_date.clone(),
+        step_days: parent.step_days,
+        step_count: total_rounds,
+        step_coarsened: parent.step_coarsened,
+    };
+    let caps = AiCaps {
+        max_agents: parent.caps.max_agents,
+        max_rounds: total_rounds,
+        max_calls: (parent.caps.max_agents as u32).saturating_mul(total_rounds),
+        max_output_tokens: req
+            .max_output_tokens
+            .unwrap_or(parent.caps.max_output_tokens),
+        max_total_tokens: req
+            .max_total_tokens
+            .unwrap_or(parent.caps.max_total_tokens),
+        memory_max_events: parent.caps.memory_max_events,
+        memory_max_chars: parent.caps.memory_max_chars,
+    };
+    if !(MIN_AI_OUTPUT_TOKENS..=MAX_AI_OUTPUT_TOKENS).contains(&caps.max_output_tokens) {
+        return Err(invalid("Max output tokens must be between 64 and 2048."));
+    }
+    if !(MIN_AI_TOTAL_TOKENS..=MAX_AI_TOTAL_TOKENS).contains(&caps.max_total_tokens) {
+        return Err(invalid("Max total tokens must be between 1000 and 200000."));
+    }
+    let (provider, model, locality) = resolve_model(scope)?;
+    let local_only = req.local_only.unwrap_or_else(|| locality == "local");
+    if local_only && locality == "cloud" {
+        return Err(invalid(
+            "Local-only was requested but the configured model is not local.",
+        ));
+    }
+    if locality == "cloud" && req.permit_id.is_none() {
+        return Err(invalid(
+            "This model requires explicit authorization. Authorize it first (providers-authorize), then start the run with the permit.",
+        ));
+    }
+    let resume_rounds: Vec<AiRound> = parent
+        .rounds
+        .iter()
+        .take(req.parent_round as usize)
+        .cloned()
+        .collect();
+    let new_rounds = total_rounds - req.parent_round;
+    let estimated_calls = (caps.max_agents as u32).saturating_mul(new_rounds);
+    // Measure a real prompt for the input estimate (first new round).
+    let first_new_round = req.parent_round + 1;
+    let events_due: Vec<AiEvent> = events
+        .iter()
+        .filter(|e| e.round == first_new_round)
+        .cloned()
+        .collect();
+    let prior: Vec<String> = resume_rounds
+        .iter()
+        .flat_map(|r| r.actions.iter())
+        .rev()
+        .take(caps.memory_max_events)
+        .map(|a| {
+            format!(
+                "round-{}-{}: {}",
+                a.round,
+                a.agent_id,
+                a.rationale.clone().unwrap_or_default()
+            )
+        })
+        .collect();
+    let prompt = build_prompt(
+        &parent.agents[0],
+        &input,
+        &parent.market,
+        first_new_round,
+        total_rounds,
+        &events_due,
+        &prior,
+    );
+    let estimated_input_tokens = (prompt.chars().count() / 4) as u64;
+    let estimated_tokens =
+        estimated_calls as u64 * (estimated_input_tokens + caps.max_output_tokens as u64);
+    let step_count = plan.step_count;
+    let effective_step_days = plan.step_days;
+    let step_coarsened = plan.step_coarsened;
+    let run_id = new_run_id();
+    collect_ai_evictions(Some(&scope.workspace));
+    let cancel = Arc::new(AtomicBool::new(false));
+    let run = AiRun {
+        session: scope.session.clone(),
+        status: "running".to_string(),
+        agents: parent.agents.clone(),
+        rounds: resume_rounds.clone(),
+        calls_made: 0,
+        tokens_used: 0,
+        provider: provider.clone(),
+        model: model.clone(),
+        locality: locality.clone(),
+        cancel: cancel.clone(),
+        artifact_id: None,
+        artifact_version: None,
+        error: None,
+        created: Instant::now(),
+    };
+    with_ai_runs(|map| {
+        map.insert(ai_run_key(scope, &run_id), run);
+    });
+    let thread_scope = scope.clone();
+    let thread_run_id = run_id.clone();
+    let thread_config = AiRunConfig {
+        workspace_id: workspace,
+        project_id: req.project_id.clone(),
+        input,
+        market: parent.market.clone(),
+        seed: parent.seed.clone(),
+        agents: parent.agents.clone(),
+        events,
+        caps,
+        provider: provider.clone(),
+        model: model.clone(),
+        locality: locality.clone(),
+        local_only,
+        permit_id: req.permit_id.clone(),
+        cancel,
+        created_ms: now_ms(),
+        plan,
+        rounds: total_rounds,
+        resume_rounds,
+        parent_run_id: Some(parent.run_id.clone()),
+        parent_artifact_id: Some(req.parent_artifact_id.clone()),
+        parent_round: Some(req.parent_round),
+        branch_changes: Some(BranchChanges {
+            price_amount: req.price_amount,
+            new_event_ids,
+        }),
+    };
+    std::thread::spawn(move || {
+        run_ai_simulation(thread_run_id, thread_scope, thread_config);
+    });
+    serde_json::to_value(SwarmtankAiBranchResponse {
+        contract_version: 1,
+        run_id,
+        parent_run_id: parent.run_id,
+        parent_round: req.parent_round,
+        provider,
+        model,
+        locality,
+        estimated_calls,
+        estimated_tokens,
+        step_count,
+        effective_step_days,
+        step_coarsened,
     })
     .map_err(|_| crate::storage::unavailable())
 }
@@ -854,6 +1360,16 @@ struct AiRunConfig {
     permit_id: Option<String>,
     cancel: Arc<AtomicBool>,
     created_ms: u64,
+    plan: TimePlan,
+    /// Rounds this run will produce in total (its own new rounds plus
+    /// any resumed rounds from a parent branch).
+    rounds: u32,
+    /// Rounds copied from a parent run (a branch continues from them).
+    resume_rounds: Vec<AiRound>,
+    parent_run_id: Option<String>,
+    parent_artifact_id: Option<String>,
+    parent_round: Option<u32>,
+    branch_changes: Option<BranchChanges>,
 }
 
 /// Build the prompt for one agent in one round. The agent sees its own
@@ -1047,14 +1563,21 @@ fn memory_window(
 
 fn run_ai_simulation(run_id: String, scope: CallerScope, config: AiRunConfig) {
     let key = ai_run_key(&scope, &run_id);
-    let mut rounds: Vec<AiRound> = Vec::new();
+    // A branch resumes from its parent's rounds: they are the run's
+    // history, and the agents' memory is seeded from them.
+    let mut rounds: Vec<AiRound> = config.resume_rounds.clone();
     let mut calls_made: u32 = 0;
     let mut tokens_used: u64 = 0;
     let mut status = "complete".to_string();
     let error: Option<String> = None;
-    let mut prior_actions: Vec<AiAction> = Vec::new();
+    let mut prior_actions: Vec<AiAction> = config
+        .resume_rounds
+        .iter()
+        .flat_map(|r| r.actions.clone())
+        .collect();
+    let start_round = (config.resume_rounds.len() as u32) + 1;
 
-    'rounds: for round in 1..=config.caps.max_rounds {
+    'rounds: for round in start_round..=config.rounds {
         if config.cancel.load(Ordering::SeqCst) {
             status = "cancelled".to_string();
             break 'rounds;
@@ -1085,7 +1608,7 @@ fn run_ai_simulation(run_id: String, scope: CallerScope, config: AiRunConfig) {
                 &config.input,
                 &config.market,
                 round,
-                config.caps.max_rounds,
+                config.rounds,
                 &events_due,
                 &prior_lines,
             );
@@ -1131,6 +1654,7 @@ fn run_ai_simulation(run_id: String, scope: CallerScope, config: AiRunConfig) {
                 round,
                 actions: actions.clone(),
                 events_due: event_ids.clone(),
+                date: round_date(&config.plan, round),
             };
             let mut all_rounds = rounds.clone();
             all_rounds.push(round_snapshot);
@@ -1151,10 +1675,11 @@ fn run_ai_simulation(run_id: String, scope: CallerScope, config: AiRunConfig) {
             round,
             actions,
             events_due: event_ids,
+            date: round_date(&config.plan, round),
         });
     }
 
-    if status == "complete" && rounds.len() as u32 != config.caps.max_rounds {
+    if status == "complete" && rounds.len() as u32 != config.rounds {
         // The loop only ends early on cancel / budget-exhaustion;
         // a complete run has every round.
         status = "complete".to_string();
@@ -1350,6 +1875,14 @@ fn save_ai_run(
         ],
         content_hash: String::new(),
         created_ms: config.created_ms,
+        start_date: config.plan.start_date.clone(),
+        end_date: config.plan.end_date.clone(),
+        step_days: config.plan.step_days,
+        step_coarsened: config.plan.step_coarsened,
+        parent_run_id: config.parent_run_id.clone(),
+        parent_artifact_id: config.parent_artifact_id.clone(),
+        parent_round: config.parent_round,
+        branch_changes: config.branch_changes.clone(),
     };
     doc.content_hash = content_hash(&doc);
     let body = match serde_json::to_string(&doc) {
@@ -1370,7 +1903,12 @@ fn save_ai_run(
             .chars()
             .take(120)
             .collect();
-        format!("SwarmTank AI run ({status}): {excerpt}")
+        match (&config.parent_run_id, config.parent_round) {
+            (Some(parent), Some(round)) => format!(
+                "SwarmTank AI run ({status}, branch of {parent} from round {round}): {excerpt}"
+            ),
+            _ => format!("SwarmTank AI run ({status}): {excerpt}"),
+        }
     };
     let details = storage.artifact_register_generated(
         &crate::artifacts::ArtifactRegisterRequest {
@@ -1497,6 +2035,54 @@ mod tests {
         assert!(window.observed_interaction_ids.len() <= 2);
         assert!(lines.len() <= 2);
         assert!(window.max_events == 2 && window.max_chars == 40);
+    }
+
+    #[test]
+    fn iso_dates_round_trip_including_leap_years() {
+        // 2028 is a leap year: Feb 29 exists.
+        assert_eq!(parse_iso_date("2028-02-29"), Some((2028, 2, 29)));
+        assert_eq!(parse_iso_date("2026-02-29"), None);
+        assert_eq!(parse_iso_date("2026-13-01"), None);
+        assert_eq!(parse_iso_date("not-a-date"), None);
+        let days = days_from_civil(2026, 11, 6);
+        assert_eq!(civil_from_days(days), (2026, 11, 6));
+        assert_eq!(format_iso_date(days), "2026-11-06");
+        assert_eq!(format_iso_date(days + 30), "2026-12-06");
+        assert_eq!(format_iso_date(days_from_civil(2026, 12, 31) + 1), "2027-01-01");
+    }
+
+    #[test]
+    fn time_plan_coarsens_a_long_horizon_to_fit_the_round_budget() {
+        // No end date: the plan spans the round budget.
+        let plan = resolve_time_plan(&None, Some(7), 2).unwrap();
+        assert_eq!(plan.step_count, 2);
+        assert_eq!(plan.step_days, 7);
+        assert!(!plan.step_coarsened);
+        // A 60-day horizon at 7-day steps needs 9 rounds; the budget
+        // is 2, so the step coarsens to 30 days and 2 steps.
+        let start = format_iso_date(today_days());
+        let end = format_iso_date(today_days() + 60);
+        let _ = start;
+        let plan = resolve_time_plan(&Some(end), Some(7), 2).unwrap();
+        assert_eq!(plan.step_count, 2);
+        assert_eq!(plan.step_days, 30);
+        assert!(plan.step_coarsened);
+        // A 14-day horizon at 7-day steps fits: 2 steps, no coarsening.
+        let end = format_iso_date(today_days() + 14);
+        let plan = resolve_time_plan(&Some(end), Some(7), 2).unwrap();
+        assert_eq!(plan.step_count, 2);
+        assert_eq!(plan.step_days, 7);
+        assert!(!plan.step_coarsened);
+        // A past end date is refused.
+        let past = format_iso_date(today_days() - 1);
+        assert!(resolve_time_plan(&Some(past), Some(7), 2).is_err());
+        // An invalid step size is refused.
+        assert!(resolve_time_plan(&None, Some(5), 2).is_err());
+        // Round dates land on the step grid and clamp to the end date.
+        let end = format_iso_date(today_days() + 10);
+        let plan = resolve_time_plan(&Some(end.clone()), Some(7), 2).unwrap();
+        assert_eq!(round_date(&plan, 1), Some(format_iso_date(today_days() + 7)));
+        assert_eq!(round_date(&plan, 2), Some(end));
     }
 
     #[test]

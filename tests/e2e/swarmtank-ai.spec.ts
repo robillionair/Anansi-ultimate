@@ -246,6 +246,8 @@ test('a small AI run completes through the app with a synthetic provider', async
     await ai.getByRole('button', { name: 'View AI run' }).first().click();
     const opened = ai.locator('section[aria-label="SwarmTank AI run"]');
     await expect(opened.getByText(/SwarmTank AI run — Complete/)).toBeVisible();
+    // The timeline scrubber defaults to the last round; select round 1.
+    await opened.getByLabel('AI timeline round').fill('1');
     await expect(opened.getByText(/Fake recommend for call 1\./)).toBeVisible();
     expect(fx.fakeHits()).toBe(hitsAfterRun);
   } finally {

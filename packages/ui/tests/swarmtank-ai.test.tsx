@@ -73,6 +73,9 @@ function validAiRun(): Record<string, unknown> {
     assumptions: ['Outcomes are conditional simulation results.'],
     contentHash: 'a'.repeat(64),
     createdMs: 123,
+    startDate: '2026-11-06',
+    stepDays: 30,
+    stepCoarsened: false,
   };
 }
 

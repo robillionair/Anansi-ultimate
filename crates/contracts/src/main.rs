@@ -69,7 +69,8 @@ use anansi_core::swarmtank::{
     SwarmtankTransferResponse,
 };
 use anansi_core::swarmtank_ai::{
-    AiAction, AiAgent, AiCaps, AiEvent, AiMemoryWindow, AiRound, AiUsage, SwarmtankAiCancelRequest,
+    AiAction, AiAgent, AiCaps, AiEvent, AiMemoryWindow, AiRound, AiUsage, BranchChanges,
+    SwarmtankAiBranchRequest, SwarmtankAiBranchResponse, SwarmtankAiCancelRequest,
     SwarmtankAiCancelResponse, SwarmtankAiEstimateRequest, SwarmtankAiEstimateResponse,
     SwarmtankAiEventRequest, SwarmtankAiPollRequest, SwarmtankAiPollResponse,
     SwarmtankAiRunDoc, SwarmtankAiStartRequest, SwarmtankAiStartResponse,
@@ -177,6 +178,9 @@ fn main() {
         "SwarmtankAiCancelResponse":schemars::schema_for!(SwarmtankAiCancelResponse),
         "SwarmtankAiEstimateRequest":schemars::schema_for!(SwarmtankAiEstimateRequest),
         "SwarmtankAiEstimateResponse":schemars::schema_for!(SwarmtankAiEstimateResponse),
+        "BranchChanges":schemars::schema_for!(BranchChanges),
+        "SwarmtankAiBranchRequest":schemars::schema_for!(SwarmtankAiBranchRequest),
+        "SwarmtankAiBranchResponse":schemars::schema_for!(SwarmtankAiBranchResponse),
         "ScenarioTrustSignals":schemars::schema_for!(ScenarioTrustSignals),
         "SwarmtankScenario":schemars::schema_for!(SwarmtankScenario),
         "ScenarioTransition":schemars::schema_for!(ScenarioTransition),

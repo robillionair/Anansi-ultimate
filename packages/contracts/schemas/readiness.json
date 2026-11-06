@@ -672,6 +672,13 @@
         },
         "type": "array"
       },
+      "date": {
+        "description": "ISO date (YYYY-MM-DD) this round simulates, when the run has a\ntime dimension (an end date). Absent on runs without one.",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
       "eventsDue": {
         "items": {
           "type": "string"
@@ -1805,6 +1812,29 @@
       "retention"
     ],
     "title": "BackupSchedule",
+    "type": "object"
+  },
+  "BranchChanges": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "description": "What changed on a what-if branch, recorded with the run.",
+    "properties": {
+      "newEventIds": {
+        "default": [],
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "priceAmount": {
+        "format": "double",
+        "type": [
+          "number",
+          "null"
+        ]
+      }
+    },
+    "title": "BranchChanges",
     "type": "object"
   },
   "ColliderCombination": {
@@ -18985,6 +19015,188 @@
     "title": "SwarmtankAddendum",
     "type": "object"
   },
+  "SwarmtankAiBranchRequest": {
+    "$defs": {
+      "SwarmtankAiEventRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "payload": true,
+          "round": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "round",
+          "kind",
+          "description"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "localOnly": {
+        "type": [
+          "boolean",
+          "null"
+        ]
+      },
+      "maxOutputTokens": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "maxTotalTokens": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "newEvents": {
+        "items": {
+          "$ref": "#/$defs/SwarmtankAiEventRequest"
+        },
+        "type": [
+          "array",
+          "null"
+        ]
+      },
+      "parentArtifactId": {
+        "type": "string"
+      },
+      "parentRound": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "permitId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "priceAmount": {
+        "format": "double",
+        "type": [
+          "number",
+          "null"
+        ]
+      },
+      "projectId": {
+        "type": "string"
+      },
+      "rounds": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "workspaceId",
+      "projectId",
+      "parentArtifactId",
+      "parentRound"
+    ],
+    "title": "SwarmtankAiBranchRequest",
+    "type": "object"
+  },
+  "SwarmtankAiBranchResponse": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "effectiveStepDays": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "estimatedCalls": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "estimatedTokens": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "locality": {
+        "type": "string"
+      },
+      "model": {
+        "type": "string"
+      },
+      "parentRound": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "parentRunId": {
+        "type": "string"
+      },
+      "provider": {
+        "type": "string"
+      },
+      "runId": {
+        "type": "string"
+      },
+      "stepCoarsened": {
+        "type": "boolean"
+      },
+      "stepCount": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "runId",
+      "parentRunId",
+      "parentRound",
+      "provider",
+      "model",
+      "locality",
+      "estimatedCalls",
+      "estimatedTokens",
+      "stepCount",
+      "effectiveStepDays",
+      "stepCoarsened"
+    ],
+    "title": "SwarmtankAiBranchResponse",
+    "type": "object"
+  },
   "SwarmtankAiCancelRequest": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
@@ -19058,6 +19270,29 @@
           "value",
           "rationale",
           "editable"
+        ],
+        "type": "object"
+      },
+      "SwarmtankAiEventRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "payload": true,
+          "round": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "round",
+          "kind",
+          "description"
         ],
         "type": "object"
       },
@@ -19169,6 +19404,12 @@
         "minimum": 0,
         "type": "integer"
       },
+      "endDate": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
       "input": {
         "$ref": "#/$defs/SwarmtankInput"
       },
@@ -19209,9 +19450,26 @@
           "null"
         ]
       },
+      "scheduledEvents": {
+        "items": {
+          "$ref": "#/$defs/SwarmtankAiEventRequest"
+        },
+        "type": [
+          "array",
+          "null"
+        ]
+      },
       "seed": {
         "type": [
           "string",
+          "null"
+        ]
+      },
+      "stepDays": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": [
+          "integer",
           "null"
         ]
       },
@@ -19237,6 +19495,11 @@
         "minimum": 0,
         "type": "integer"
       },
+      "effectiveStepDays": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
       "estimatedCalls": {
         "format": "uint32",
         "minimum": 0,
@@ -19255,6 +19518,14 @@
       },
       "provider": {
         "type": "string"
+      },
+      "stepCoarsened": {
+        "type": "boolean"
+      },
+      "stepCount": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
       }
     },
     "required": [
@@ -19263,7 +19534,10 @@
       "model",
       "locality",
       "estimatedCalls",
-      "estimatedTokens"
+      "estimatedTokens",
+      "stepCount",
+      "effectiveStepDays",
+      "stepCoarsened"
     ],
     "title": "SwarmtankAiEstimateResponse",
     "type": "object"
@@ -19483,6 +19757,13 @@
               "$ref": "#/$defs/AiAction"
             },
             "type": "array"
+          },
+          "date": {
+            "description": "ISO date (YYYY-MM-DD) this round simulates, when the run has a\ntime dimension (an end date). Absent on runs without one.",
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "eventsDue": {
             "items": {
@@ -19859,6 +20140,13 @@
             },
             "type": "array"
           },
+          "date": {
+            "description": "ISO date (YYYY-MM-DD) this round simulates, when the run has a\ntime dimension (an end date). Absent on runs without one.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "eventsDue": {
             "items": {
               "type": "string"
@@ -19902,6 +20190,27 @@
             "minimum": 0,
             "type": [
               "integer",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "BranchChanges": {
+        "additionalProperties": false,
+        "description": "What changed on a what-if branch, recorded with the run.",
+        "properties": {
+          "newEventIds": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "priceAmount": {
+            "format": "double",
+            "type": [
+              "number",
               "null"
             ]
           }
@@ -20039,6 +20348,16 @@
         },
         "type": "array"
       },
+      "branchChanges": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/BranchChanges"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
       "callsMade": {
         "format": "uint32",
         "minimum": 0,
@@ -20054,6 +20373,13 @@
         "format": "uint64",
         "minimum": 0,
         "type": "integer"
+      },
+      "endDate": {
+        "description": "ISO date the run simulates toward, when the user chose one.",
+        "type": [
+          "string",
+          "null"
+        ]
       },
       "format": {
         "type": "string"
@@ -20081,6 +20407,27 @@
       "modelProvider": {
         "type": "string"
       },
+      "parentArtifactId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "parentRound": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "parentRunId": {
+        "description": "Branch lineage: the parent run and round this run continues from.",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
       "projectId": {
         "type": "string"
       },
@@ -20102,9 +20449,23 @@
       "seed": {
         "type": "string"
       },
+      "startDate": {
+        "description": "ISO date (YYYY-MM-DD) the run starts from (its creation date).",
+        "type": "string"
+      },
       "status": {
         "description": "\"complete\" | \"cancelled\" | \"budget-exhausted\" | \"failed\"",
         "type": "string"
+      },
+      "stepCoarsened": {
+        "description": "True when the horizon forced a coarser step than requested.",
+        "type": "boolean"
+      },
+      "stepDays": {
+        "description": "Step size in days between rounds.",
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
       },
       "tokensUsed": {
         "format": "uint64",
@@ -20140,7 +20501,10 @@
       "tokensUsed",
       "assumptions",
       "contentHash",
-      "createdMs"
+      "createdMs",
+      "startDate",
+      "stepDays",
+      "stepCoarsened"
     ],
     "title": "SwarmtankAiRunDoc",
     "type": "object"
@@ -20303,6 +20667,13 @@
         "minimum": 0,
         "type": "integer"
       },
+      "endDate": {
+        "description": "Future end date (YYYY-MM-DD) the run simulates toward.",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
       "input": {
         "$ref": "#/$defs/SwarmtankInput"
       },
@@ -20370,6 +20741,15 @@
           "null"
         ]
       },
+      "stepDays": {
+        "description": "Step size in days between rounds (1, 7, 30 or 90).",
+        "format": "uint32",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
       "workspaceId": {
         "type": "string"
       }
@@ -20389,6 +20769,11 @@
       "contractVersion": {
         "format": "uint8",
         "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "effectiveStepDays": {
+        "format": "uint32",
         "minimum": 0,
         "type": "integer"
       },
@@ -20413,6 +20798,14 @@
       },
       "runId": {
         "type": "string"
+      },
+      "stepCoarsened": {
+        "type": "boolean"
+      },
+      "stepCount": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
       }
     },
     "required": [
@@ -20422,7 +20815,10 @@
       "model",
       "locality",
       "estimatedCalls",
-      "estimatedTokens"
+      "estimatedTokens",
+      "stepCount",
+      "effectiveStepDays",
+      "stepCoarsened"
     ],
     "title": "SwarmtankAiStartResponse",
     "type": "object"
