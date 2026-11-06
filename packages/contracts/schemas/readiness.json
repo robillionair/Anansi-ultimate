@@ -1,4 +1,247 @@
 {
+  "AiAction": {
+    "$defs": {
+      "AiMemoryWindow": {
+        "additionalProperties": false,
+        "properties": {
+          "maxChars": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxEvents": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "observedEventIds": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "observedInteractionIds": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "maxEvents",
+          "maxChars",
+          "observedEventIds",
+          "observedInteractionIds"
+        ],
+        "type": "object"
+      },
+      "AiUsage": {
+        "additionalProperties": false,
+        "properties": {
+          "completionTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "promptTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "totalTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "action": {
+        "description": "The validated action, or null when the call failed (no valid\naction was produced). A null action with status \"failed\" is a\nrecorded failure, never a silent drop.",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "agentId": {
+        "type": "string"
+      },
+      "evidenceRef": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "failure": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "memory": {
+        "$ref": "#/$defs/AiMemoryWindow"
+      },
+      "model": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "priorInteractionRef": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "rationale": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "rawOutput": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "round": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "status": {
+        "description": "\"ok\" | \"failed\"",
+        "type": "string"
+      },
+      "usage": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/AiUsage"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "required": [
+      "agentId",
+      "round",
+      "status",
+      "memory"
+    ],
+    "title": "AiAction",
+    "type": "object"
+  },
+  "AiAgent": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "constraints": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "goal": {
+        "type": "string"
+      },
+      "id": {
+        "type": "string"
+      },
+      "language": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "name": {
+        "type": "string"
+      },
+      "personaId": {
+        "type": "string"
+      },
+      "role": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "id",
+      "personaId",
+      "name",
+      "role",
+      "goal",
+      "constraints"
+    ],
+    "title": "AiAgent",
+    "type": "object"
+  },
+  "AiCaps": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "maxAgents": {
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "maxCalls": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "maxOutputTokens": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "maxRounds": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "maxTotalTokens": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "memoryMaxChars": {
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "memoryMaxEvents": {
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "maxAgents",
+      "maxRounds",
+      "maxCalls",
+      "maxOutputTokens",
+      "maxTotalTokens",
+      "memoryMaxEvents",
+      "memoryMaxChars"
+    ],
+    "title": "AiCaps",
+    "type": "object"
+  },
   "AiDiscoveryRequest": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
@@ -206,6 +449,279 @@
       "downloadConsentRequired"
     ],
     "title": "AiDiscoveryResponse",
+    "type": "object"
+  },
+  "AiEvent": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "description": {
+        "type": "string"
+      },
+      "id": {
+        "type": "string"
+      },
+      "kind": {
+        "type": "string"
+      },
+      "payload": true,
+      "round": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "id",
+      "round",
+      "kind",
+      "description"
+    ],
+    "title": "AiEvent",
+    "type": "object"
+  },
+  "AiMemoryWindow": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "maxChars": {
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "maxEvents": {
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "observedEventIds": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "observedInteractionIds": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "maxEvents",
+      "maxChars",
+      "observedEventIds",
+      "observedInteractionIds"
+    ],
+    "title": "AiMemoryWindow",
+    "type": "object"
+  },
+  "AiRound": {
+    "$defs": {
+      "AiAction": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "description": "The validated action, or null when the call failed (no valid\naction was produced). A null action with status \"failed\" is a\nrecorded failure, never a silent drop.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "agentId": {
+            "type": "string"
+          },
+          "evidenceRef": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "failure": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "memory": {
+            "$ref": "#/$defs/AiMemoryWindow"
+          },
+          "model": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "priorInteractionRef": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "rationale": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "rawOutput": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "round": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "status": {
+            "description": "\"ok\" | \"failed\"",
+            "type": "string"
+          },
+          "usage": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/AiUsage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "agentId",
+          "round",
+          "status",
+          "memory"
+        ],
+        "type": "object"
+      },
+      "AiMemoryWindow": {
+        "additionalProperties": false,
+        "properties": {
+          "maxChars": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxEvents": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "observedEventIds": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "observedInteractionIds": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "maxEvents",
+          "maxChars",
+          "observedEventIds",
+          "observedInteractionIds"
+        ],
+        "type": "object"
+      },
+      "AiUsage": {
+        "additionalProperties": false,
+        "properties": {
+          "completionTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "promptTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "totalTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "actions": {
+        "items": {
+          "$ref": "#/$defs/AiAction"
+        },
+        "type": "array"
+      },
+      "eventsDue": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "round": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "round",
+      "actions",
+      "eventsDue"
+    ],
+    "title": "AiRound",
+    "type": "object"
+  },
+  "AiUsage": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "completionTokens": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "promptTokens": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "totalTokens": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      }
+    },
+    "title": "AiUsage",
     "type": "object"
   },
   "ArtifactChunk": {
@@ -18467,6 +18983,1448 @@
       "recommendations"
     ],
     "title": "SwarmtankAddendum",
+    "type": "object"
+  },
+  "SwarmtankAiCancelRequest": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "runId": {
+        "type": "string"
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "workspaceId",
+      "runId"
+    ],
+    "title": "SwarmtankAiCancelRequest",
+    "type": "object"
+  },
+  "SwarmtankAiCancelResponse": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "runId": {
+        "type": "string"
+      },
+      "status": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "runId",
+      "status"
+    ],
+    "title": "SwarmtankAiCancelResponse",
+    "type": "object"
+  },
+  "SwarmtankAiEstimateRequest": {
+    "$defs": {
+      "MarketAssumption": {
+        "additionalProperties": false,
+        "description": "One gap, stated as an editable assumption. Assumptions are never\npresented as evidence.",
+        "properties": {
+          "editable": {
+            "type": "boolean"
+          },
+          "field": {
+            "type": "string"
+          },
+          "rationale": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "field",
+          "value",
+          "rationale",
+          "editable"
+        ],
+        "type": "object"
+      },
+      "SwarmtankInput": {
+        "additionalProperties": false,
+        "description": "A SwarmTank run input: manual fields, or fields\ncopied from a saved experiment / Forge concept.\n`pricing` is display text; `price_amount` is the\noptional numeric monthly price the decision engine\ncompares against budgets. A missing numeric price\nis never invented from the text.",
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "features": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "industry": {
+            "default": "",
+            "type": "string"
+          },
+          "priceAmount": {
+            "default": null,
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "pricing": {
+            "default": "",
+            "type": "string"
+          },
+          "segment": {
+            "default": "",
+            "type": "string"
+          },
+          "valueProposition": {
+            "default": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "description"
+        ],
+        "type": "object"
+      },
+      "SwarmtankMarket": {
+        "additionalProperties": false,
+        "description": "The market a run was generated for. `custom` records a\nCustom-assumptions run (a territory with no researched profile):\nthe user supplied the assumptions explicitly and the run is\nlabelled custom, never as researched.",
+        "properties": {
+          "custom": {
+            "default": false,
+            "type": "boolean"
+          },
+          "customAssumptions": {
+            "items": {
+              "$ref": "#/$defs/MarketAssumption"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "profileId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "profileVersion": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "territoryCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "territoryName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "agents": {
+        "format": "uint",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "input": {
+        "$ref": "#/$defs/SwarmtankInput"
+      },
+      "market": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/SwarmtankMarket"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "maxOutputTokens": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "maxTotalTokens": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "projectId": {
+        "type": "string"
+      },
+      "rounds": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "seed": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "workspaceId",
+      "projectId",
+      "input"
+    ],
+    "title": "SwarmtankAiEstimateRequest",
+    "type": "object"
+  },
+  "SwarmtankAiEstimateResponse": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "estimatedCalls": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "estimatedTokens": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "locality": {
+        "type": "string"
+      },
+      "model": {
+        "type": "string"
+      },
+      "provider": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "provider",
+      "model",
+      "locality",
+      "estimatedCalls",
+      "estimatedTokens"
+    ],
+    "title": "SwarmtankAiEstimateResponse",
+    "type": "object"
+  },
+  "SwarmtankAiEventRequest": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "description": {
+        "type": "string"
+      },
+      "kind": {
+        "type": "string"
+      },
+      "payload": true,
+      "round": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "round",
+      "kind",
+      "description"
+    ],
+    "title": "SwarmtankAiEventRequest",
+    "type": "object"
+  },
+  "SwarmtankAiPollRequest": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "runId": {
+        "type": "string"
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "workspaceId",
+      "runId"
+    ],
+    "title": "SwarmtankAiPollRequest",
+    "type": "object"
+  },
+  "SwarmtankAiPollResponse": {
+    "$defs": {
+      "AiAction": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "description": "The validated action, or null when the call failed (no valid\naction was produced). A null action with status \"failed\" is a\nrecorded failure, never a silent drop.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "agentId": {
+            "type": "string"
+          },
+          "evidenceRef": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "failure": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "memory": {
+            "$ref": "#/$defs/AiMemoryWindow"
+          },
+          "model": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "priorInteractionRef": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "rationale": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "rawOutput": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "round": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "status": {
+            "description": "\"ok\" | \"failed\"",
+            "type": "string"
+          },
+          "usage": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/AiUsage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "agentId",
+          "round",
+          "status",
+          "memory"
+        ],
+        "type": "object"
+      },
+      "AiAgent": {
+        "additionalProperties": false,
+        "properties": {
+          "constraints": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "goal": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "language": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "personaId": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "personaId",
+          "name",
+          "role",
+          "goal",
+          "constraints"
+        ],
+        "type": "object"
+      },
+      "AiMemoryWindow": {
+        "additionalProperties": false,
+        "properties": {
+          "maxChars": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxEvents": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "observedEventIds": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "observedInteractionIds": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "maxEvents",
+          "maxChars",
+          "observedEventIds",
+          "observedInteractionIds"
+        ],
+        "type": "object"
+      },
+      "AiRound": {
+        "additionalProperties": false,
+        "properties": {
+          "actions": {
+            "items": {
+              "$ref": "#/$defs/AiAction"
+            },
+            "type": "array"
+          },
+          "eventsDue": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "round": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "round",
+          "actions",
+          "eventsDue"
+        ],
+        "type": "object"
+      },
+      "AiUsage": {
+        "additionalProperties": false,
+        "properties": {
+          "completionTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "promptTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "totalTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "agents": {
+        "items": {
+          "$ref": "#/$defs/AiAgent"
+        },
+        "type": "array"
+      },
+      "artifactId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "artifactVersion": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "callsMade": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "error": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "locality": {
+        "type": "string"
+      },
+      "model": {
+        "type": "string"
+      },
+      "provider": {
+        "type": "string"
+      },
+      "rounds": {
+        "items": {
+          "$ref": "#/$defs/AiRound"
+        },
+        "type": "array"
+      },
+      "runId": {
+        "type": "string"
+      },
+      "status": {
+        "description": "\"running\" | \"complete\" | \"cancelled\" | \"budget-exhausted\" | \"failed\"",
+        "type": "string"
+      },
+      "tokensUsed": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "runId",
+      "status",
+      "agents",
+      "rounds",
+      "callsMade",
+      "tokensUsed",
+      "provider",
+      "model",
+      "locality"
+    ],
+    "title": "SwarmtankAiPollResponse",
+    "type": "object"
+  },
+  "SwarmtankAiRunDoc": {
+    "$defs": {
+      "AiAction": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "description": "The validated action, or null when the call failed (no valid\naction was produced). A null action with status \"failed\" is a\nrecorded failure, never a silent drop.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "agentId": {
+            "type": "string"
+          },
+          "evidenceRef": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "failure": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "memory": {
+            "$ref": "#/$defs/AiMemoryWindow"
+          },
+          "model": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "priorInteractionRef": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "rationale": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "rawOutput": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "round": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "status": {
+            "description": "\"ok\" | \"failed\"",
+            "type": "string"
+          },
+          "usage": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/AiUsage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "agentId",
+          "round",
+          "status",
+          "memory"
+        ],
+        "type": "object"
+      },
+      "AiAgent": {
+        "additionalProperties": false,
+        "properties": {
+          "constraints": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "goal": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "language": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "personaId": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "personaId",
+          "name",
+          "role",
+          "goal",
+          "constraints"
+        ],
+        "type": "object"
+      },
+      "AiCaps": {
+        "additionalProperties": false,
+        "properties": {
+          "maxAgents": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxCalls": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxOutputTokens": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxRounds": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxTotalTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "memoryMaxChars": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "memoryMaxEvents": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "maxAgents",
+          "maxRounds",
+          "maxCalls",
+          "maxOutputTokens",
+          "maxTotalTokens",
+          "memoryMaxEvents",
+          "memoryMaxChars"
+        ],
+        "type": "object"
+      },
+      "AiEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "payload": true,
+          "round": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "round",
+          "kind",
+          "description"
+        ],
+        "type": "object"
+      },
+      "AiMemoryWindow": {
+        "additionalProperties": false,
+        "properties": {
+          "maxChars": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxEvents": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "observedEventIds": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "observedInteractionIds": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "maxEvents",
+          "maxChars",
+          "observedEventIds",
+          "observedInteractionIds"
+        ],
+        "type": "object"
+      },
+      "AiRound": {
+        "additionalProperties": false,
+        "properties": {
+          "actions": {
+            "items": {
+              "$ref": "#/$defs/AiAction"
+            },
+            "type": "array"
+          },
+          "eventsDue": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "round": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "round",
+          "actions",
+          "eventsDue"
+        ],
+        "type": "object"
+      },
+      "AiUsage": {
+        "additionalProperties": false,
+        "properties": {
+          "completionTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "promptTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "totalTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "MarketAssumption": {
+        "additionalProperties": false,
+        "description": "One gap, stated as an editable assumption. Assumptions are never\npresented as evidence.",
+        "properties": {
+          "editable": {
+            "type": "boolean"
+          },
+          "field": {
+            "type": "string"
+          },
+          "rationale": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "field",
+          "value",
+          "rationale",
+          "editable"
+        ],
+        "type": "object"
+      },
+      "SwarmtankInput": {
+        "additionalProperties": false,
+        "description": "A SwarmTank run input: manual fields, or fields\ncopied from a saved experiment / Forge concept.\n`pricing` is display text; `price_amount` is the\noptional numeric monthly price the decision engine\ncompares against budgets. A missing numeric price\nis never invented from the text.",
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "features": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "industry": {
+            "default": "",
+            "type": "string"
+          },
+          "priceAmount": {
+            "default": null,
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "pricing": {
+            "default": "",
+            "type": "string"
+          },
+          "segment": {
+            "default": "",
+            "type": "string"
+          },
+          "valueProposition": {
+            "default": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "description"
+        ],
+        "type": "object"
+      },
+      "SwarmtankMarket": {
+        "additionalProperties": false,
+        "description": "The market a run was generated for. `custom` records a\nCustom-assumptions run (a territory with no researched profile):\nthe user supplied the assumptions explicitly and the run is\nlabelled custom, never as researched.",
+        "properties": {
+          "custom": {
+            "default": false,
+            "type": "boolean"
+          },
+          "customAssumptions": {
+            "items": {
+              "$ref": "#/$defs/MarketAssumption"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "profileId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "profileVersion": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "territoryCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "territoryName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "agents": {
+        "items": {
+          "$ref": "#/$defs/AiAgent"
+        },
+        "type": "array"
+      },
+      "assumptions": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "callsMade": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "caps": {
+        "$ref": "#/$defs/AiCaps"
+      },
+      "contentHash": {
+        "type": "string"
+      },
+      "createdMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "format": {
+        "type": "string"
+      },
+      "input": {
+        "$ref": "#/$defs/SwarmtankInput"
+      },
+      "locality": {
+        "description": "\"local\" | \"cloud\"",
+        "type": "string"
+      },
+      "market": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/SwarmtankMarket"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "model": {
+        "type": "string"
+      },
+      "modelProvider": {
+        "type": "string"
+      },
+      "projectId": {
+        "type": "string"
+      },
+      "rounds": {
+        "items": {
+          "$ref": "#/$defs/AiRound"
+        },
+        "type": "array"
+      },
+      "runId": {
+        "type": "string"
+      },
+      "scheduledEvents": {
+        "items": {
+          "$ref": "#/$defs/AiEvent"
+        },
+        "type": "array"
+      },
+      "seed": {
+        "type": "string"
+      },
+      "status": {
+        "description": "\"complete\" | \"cancelled\" | \"budget-exhausted\" | \"failed\"",
+        "type": "string"
+      },
+      "tokensUsed": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "version": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "format",
+      "version",
+      "runId",
+      "workspaceId",
+      "projectId",
+      "input",
+      "seed",
+      "agents",
+      "scheduledEvents",
+      "rounds",
+      "status",
+      "modelProvider",
+      "model",
+      "locality",
+      "caps",
+      "callsMade",
+      "tokensUsed",
+      "assumptions",
+      "contentHash",
+      "createdMs"
+    ],
+    "title": "SwarmtankAiRunDoc",
+    "type": "object"
+  },
+  "SwarmtankAiStartRequest": {
+    "$defs": {
+      "MarketAssumption": {
+        "additionalProperties": false,
+        "description": "One gap, stated as an editable assumption. Assumptions are never\npresented as evidence.",
+        "properties": {
+          "editable": {
+            "type": "boolean"
+          },
+          "field": {
+            "type": "string"
+          },
+          "rationale": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "field",
+          "value",
+          "rationale",
+          "editable"
+        ],
+        "type": "object"
+      },
+      "SwarmtankAiEventRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "payload": true,
+          "round": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "round",
+          "kind",
+          "description"
+        ],
+        "type": "object"
+      },
+      "SwarmtankInput": {
+        "additionalProperties": false,
+        "description": "A SwarmTank run input: manual fields, or fields\ncopied from a saved experiment / Forge concept.\n`pricing` is display text; `price_amount` is the\noptional numeric monthly price the decision engine\ncompares against budgets. A missing numeric price\nis never invented from the text.",
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "features": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "industry": {
+            "default": "",
+            "type": "string"
+          },
+          "priceAmount": {
+            "default": null,
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "pricing": {
+            "default": "",
+            "type": "string"
+          },
+          "segment": {
+            "default": "",
+            "type": "string"
+          },
+          "valueProposition": {
+            "default": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "description"
+        ],
+        "type": "object"
+      },
+      "SwarmtankMarket": {
+        "additionalProperties": false,
+        "description": "The market a run was generated for. `custom` records a\nCustom-assumptions run (a territory with no researched profile):\nthe user supplied the assumptions explicitly and the run is\nlabelled custom, never as researched.",
+        "properties": {
+          "custom": {
+            "default": false,
+            "type": "boolean"
+          },
+          "customAssumptions": {
+            "items": {
+              "$ref": "#/$defs/MarketAssumption"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "profileId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "profileVersion": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "territoryCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "territoryName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "agents": {
+        "format": "uint",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "input": {
+        "$ref": "#/$defs/SwarmtankInput"
+      },
+      "localOnly": {
+        "type": [
+          "boolean",
+          "null"
+        ]
+      },
+      "market": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/SwarmtankMarket"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "maxOutputTokens": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "maxTotalTokens": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "permitId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "projectId": {
+        "type": "string"
+      },
+      "rounds": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "scheduledEvents": {
+        "items": {
+          "$ref": "#/$defs/SwarmtankAiEventRequest"
+        },
+        "type": [
+          "array",
+          "null"
+        ]
+      },
+      "seed": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "workspaceId",
+      "projectId",
+      "input"
+    ],
+    "title": "SwarmtankAiStartRequest",
+    "type": "object"
+  },
+  "SwarmtankAiStartResponse": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "estimatedCalls": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "estimatedTokens": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "locality": {
+        "type": "string"
+      },
+      "model": {
+        "type": "string"
+      },
+      "provider": {
+        "type": "string"
+      },
+      "runId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "runId",
+      "provider",
+      "model",
+      "locality",
+      "estimatedCalls",
+      "estimatedTokens"
+    ],
+    "title": "SwarmtankAiStartResponse",
     "type": "object"
   },
   "SwarmtankBatchInfo": {

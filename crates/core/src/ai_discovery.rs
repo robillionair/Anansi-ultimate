@@ -830,6 +830,10 @@ impl Core {
             | "swarmtank-territories"
             | "swarmtank-market"
             | "swarmtank-markets"
+            | "swarmtank-ai-estimate"
+            | "swarmtank-ai-start"
+            | "swarmtank-ai-poll"
+            | "swarmtank-ai-cancel"
             | "somnia-evaluate"
             | "somnia-save-evaluation"
             | "ideas-generate-start"
@@ -978,6 +982,8 @@ impl Core {
                         | "forge-build-start"
                         | "forge-revise-start"
                         | "forge-deliverable-draft-start"
+                        | "swarmtank-ai-estimate"
+                        | "swarmtank-ai-start"
                 ) && !crate::provider_dispatch::has_config(&scope)
                     && let (Ok(root), Some(wid)) = (self.storage_root(), &workspace_id)
                     && let Some(json) = crate::provider_dispatch::load_config_file(&root, wid)?

@@ -1,4 +1,55 @@
 // Generated from Rust serde DTOs. Run pnpm contracts:generate.
+export interface AiAction {
+  /**
+   * The validated action, or null when the call failed (no valid
+   * action was produced). A null action with status "failed" is a
+   * recorded failure, never a silent drop.
+   */
+  action?: string | null;
+  agentId: string;
+  evidenceRef?: string | null;
+  failure?: string | null;
+  memory: AiMemoryWindow;
+  model?: string | null;
+  priorInteractionRef?: string | null;
+  rationale?: string | null;
+  rawOutput?: string | null;
+  round: number;
+  /**
+   * "ok" | "failed"
+   */
+  status: string;
+  usage?: AiUsage | null;
+}
+export interface AiMemoryWindow {
+  maxChars: number;
+  maxEvents: number;
+  observedEventIds: string[];
+  observedInteractionIds: string[];
+}
+export interface AiUsage {
+  completionTokens?: number | null;
+  promptTokens?: number | null;
+  totalTokens?: number | null;
+}
+export interface AiAgent {
+  constraints: string[];
+  goal: string;
+  id: string;
+  language?: string | null;
+  name: string;
+  personaId: string;
+  role: string;
+}
+export interface AiCaps {
+  maxAgents: number;
+  maxCalls: number;
+  maxOutputTokens: number;
+  maxRounds: number;
+  maxTotalTokens: number;
+  memoryMaxChars: number;
+  memoryMaxEvents: number;
+}
 export interface AiDiscoveryRequest {
   contractVersion: number;
   customEndpoints?: string[] | null;
@@ -37,6 +88,62 @@ export interface DiscoveredRuntime {
   models: string[];
   status: RuntimeStatus;
   version?: string | null;
+}
+export interface AiEvent {
+  description: string;
+  id: string;
+  kind: string;
+  payload?: unknown;
+  round: number;
+}
+export interface AiMemoryWindow {
+  maxChars: number;
+  maxEvents: number;
+  observedEventIds: string[];
+  observedInteractionIds: string[];
+}
+export interface AiRound {
+  actions: AiAction[];
+  eventsDue: string[];
+  round: number;
+}
+export interface AiAction {
+  /**
+   * The validated action, or null when the call failed (no valid
+   * action was produced). A null action with status "failed" is a
+   * recorded failure, never a silent drop.
+   */
+  action?: string | null;
+  agentId: string;
+  evidenceRef?: string | null;
+  failure?: string | null;
+  memory: AiMemoryWindow;
+  model?: string | null;
+  priorInteractionRef?: string | null;
+  rationale?: string | null;
+  rawOutput?: string | null;
+  round: number;
+  /**
+   * "ok" | "failed"
+   */
+  status: string;
+  usage?: AiUsage | null;
+}
+export interface AiMemoryWindow {
+  maxChars: number;
+  maxEvents: number;
+  observedEventIds: string[];
+  observedInteractionIds: string[];
+}
+export interface AiUsage {
+  completionTokens?: number | null;
+  promptTokens?: number | null;
+  totalTokens?: number | null;
+}
+export interface AiUsage {
+  completionTokens?: number | null;
+  promptTokens?: number | null;
+  totalTokens?: number | null;
 }
 export interface ArtifactChunk {
   bytes: number[];
@@ -4914,6 +5021,357 @@ export interface SwarmtankRecommendation {
 export interface CountedItem {
   count: number;
   item: string;
+}
+export interface SwarmtankAiCancelRequest {
+  contractVersion: number;
+  runId: string;
+  workspaceId: string;
+}
+export interface SwarmtankAiCancelResponse {
+  contractVersion: number;
+  runId: string;
+  status: string;
+}
+export interface SwarmtankAiEstimateRequest {
+  agents?: number | null;
+  contractVersion: number;
+  input: SwarmtankInput;
+  market?: SwarmtankMarket | null;
+  maxOutputTokens?: number | null;
+  maxTotalTokens?: number | null;
+  projectId: string;
+  rounds?: number | null;
+  seed?: string | null;
+  workspaceId: string;
+}
+/**
+ * A SwarmTank run input: manual fields, or fields
+ * copied from a saved experiment / Forge concept.
+ * `pricing` is display text; `price_amount` is the
+ * optional numeric monthly price the decision engine
+ * compares against budgets. A missing numeric price
+ * is never invented from the text.
+ */
+export interface SwarmtankInput {
+  description: string;
+  features?: string[];
+  industry?: string;
+  priceAmount?: number | null;
+  pricing?: string;
+  segment?: string;
+  valueProposition?: string;
+}
+/**
+ * The market a run was generated for. `custom` records a
+ * Custom-assumptions run (a territory with no researched profile):
+ * the user supplied the assumptions explicitly and the run is
+ * labelled custom, never as researched.
+ */
+export interface SwarmtankMarket {
+  custom?: boolean;
+  customAssumptions?: MarketAssumption[] | null;
+  profileId?: string | null;
+  profileVersion?: number | null;
+  territoryCode?: string | null;
+  territoryName?: string | null;
+}
+/**
+ * One gap, stated as an editable assumption. Assumptions are never
+ * presented as evidence.
+ */
+export interface MarketAssumption {
+  editable: boolean;
+  field: string;
+  rationale: string;
+  value: string;
+}
+export interface SwarmtankAiEstimateResponse {
+  contractVersion: number;
+  estimatedCalls: number;
+  estimatedTokens: number;
+  locality: string;
+  model: string;
+  provider: string;
+}
+export interface SwarmtankAiEventRequest {
+  description: string;
+  kind: string;
+  payload?: unknown;
+  round: number;
+}
+export interface SwarmtankAiPollRequest {
+  contractVersion: number;
+  runId: string;
+  workspaceId: string;
+}
+export interface SwarmtankAiPollResponse {
+  agents: AiAgent[];
+  artifactId?: string | null;
+  artifactVersion?: number | null;
+  callsMade: number;
+  contractVersion: number;
+  error?: string | null;
+  locality: string;
+  model: string;
+  provider: string;
+  rounds: AiRound[];
+  runId: string;
+  /**
+   * "running" | "complete" | "cancelled" | "budget-exhausted" | "failed"
+   */
+  status: string;
+  tokensUsed: number;
+}
+export interface AiAgent {
+  constraints: string[];
+  goal: string;
+  id: string;
+  language?: string | null;
+  name: string;
+  personaId: string;
+  role: string;
+}
+export interface AiRound {
+  actions: AiAction[];
+  eventsDue: string[];
+  round: number;
+}
+export interface AiAction {
+  /**
+   * The validated action, or null when the call failed (no valid
+   * action was produced). A null action with status "failed" is a
+   * recorded failure, never a silent drop.
+   */
+  action?: string | null;
+  agentId: string;
+  evidenceRef?: string | null;
+  failure?: string | null;
+  memory: AiMemoryWindow;
+  model?: string | null;
+  priorInteractionRef?: string | null;
+  rationale?: string | null;
+  rawOutput?: string | null;
+  round: number;
+  /**
+   * "ok" | "failed"
+   */
+  status: string;
+  usage?: AiUsage | null;
+}
+export interface AiMemoryWindow {
+  maxChars: number;
+  maxEvents: number;
+  observedEventIds: string[];
+  observedInteractionIds: string[];
+}
+export interface AiUsage {
+  completionTokens?: number | null;
+  promptTokens?: number | null;
+  totalTokens?: number | null;
+}
+export interface SwarmtankAiRunDoc {
+  agents: AiAgent[];
+  assumptions: string[];
+  callsMade: number;
+  caps: AiCaps;
+  contentHash: string;
+  createdMs: number;
+  format: string;
+  input: SwarmtankInput;
+  /**
+   * "local" | "cloud"
+   */
+  locality: string;
+  market?: SwarmtankMarket | null;
+  model: string;
+  modelProvider: string;
+  projectId: string;
+  rounds: AiRound[];
+  runId: string;
+  scheduledEvents: AiEvent[];
+  seed: string;
+  /**
+   * "complete" | "cancelled" | "budget-exhausted" | "failed"
+   */
+  status: string;
+  tokensUsed: number;
+  version: number;
+  workspaceId: string;
+}
+export interface AiAgent {
+  constraints: string[];
+  goal: string;
+  id: string;
+  language?: string | null;
+  name: string;
+  personaId: string;
+  role: string;
+}
+export interface AiCaps {
+  maxAgents: number;
+  maxCalls: number;
+  maxOutputTokens: number;
+  maxRounds: number;
+  maxTotalTokens: number;
+  memoryMaxChars: number;
+  memoryMaxEvents: number;
+}
+/**
+ * A SwarmTank run input: manual fields, or fields
+ * copied from a saved experiment / Forge concept.
+ * `pricing` is display text; `price_amount` is the
+ * optional numeric monthly price the decision engine
+ * compares against budgets. A missing numeric price
+ * is never invented from the text.
+ */
+export interface SwarmtankInput {
+  description: string;
+  features?: string[];
+  industry?: string;
+  priceAmount?: number | null;
+  pricing?: string;
+  segment?: string;
+  valueProposition?: string;
+}
+/**
+ * The market a run was generated for. `custom` records a
+ * Custom-assumptions run (a territory with no researched profile):
+ * the user supplied the assumptions explicitly and the run is
+ * labelled custom, never as researched.
+ */
+export interface SwarmtankMarket {
+  custom?: boolean;
+  customAssumptions?: MarketAssumption[] | null;
+  profileId?: string | null;
+  profileVersion?: number | null;
+  territoryCode?: string | null;
+  territoryName?: string | null;
+}
+/**
+ * One gap, stated as an editable assumption. Assumptions are never
+ * presented as evidence.
+ */
+export interface MarketAssumption {
+  editable: boolean;
+  field: string;
+  rationale: string;
+  value: string;
+}
+export interface AiRound {
+  actions: AiAction[];
+  eventsDue: string[];
+  round: number;
+}
+export interface AiAction {
+  /**
+   * The validated action, or null when the call failed (no valid
+   * action was produced). A null action with status "failed" is a
+   * recorded failure, never a silent drop.
+   */
+  action?: string | null;
+  agentId: string;
+  evidenceRef?: string | null;
+  failure?: string | null;
+  memory: AiMemoryWindow;
+  model?: string | null;
+  priorInteractionRef?: string | null;
+  rationale?: string | null;
+  rawOutput?: string | null;
+  round: number;
+  /**
+   * "ok" | "failed"
+   */
+  status: string;
+  usage?: AiUsage | null;
+}
+export interface AiMemoryWindow {
+  maxChars: number;
+  maxEvents: number;
+  observedEventIds: string[];
+  observedInteractionIds: string[];
+}
+export interface AiUsage {
+  completionTokens?: number | null;
+  promptTokens?: number | null;
+  totalTokens?: number | null;
+}
+export interface AiEvent {
+  description: string;
+  id: string;
+  kind: string;
+  payload?: unknown;
+  round: number;
+}
+export interface SwarmtankAiStartRequest {
+  agents?: number | null;
+  contractVersion: number;
+  input: SwarmtankInput;
+  localOnly?: boolean | null;
+  market?: SwarmtankMarket | null;
+  maxOutputTokens?: number | null;
+  maxTotalTokens?: number | null;
+  permitId?: string | null;
+  projectId: string;
+  rounds?: number | null;
+  scheduledEvents?: SwarmtankAiEventRequest[] | null;
+  seed?: string | null;
+  workspaceId: string;
+}
+/**
+ * A SwarmTank run input: manual fields, or fields
+ * copied from a saved experiment / Forge concept.
+ * `pricing` is display text; `price_amount` is the
+ * optional numeric monthly price the decision engine
+ * compares against budgets. A missing numeric price
+ * is never invented from the text.
+ */
+export interface SwarmtankInput {
+  description: string;
+  features?: string[];
+  industry?: string;
+  priceAmount?: number | null;
+  pricing?: string;
+  segment?: string;
+  valueProposition?: string;
+}
+/**
+ * The market a run was generated for. `custom` records a
+ * Custom-assumptions run (a territory with no researched profile):
+ * the user supplied the assumptions explicitly and the run is
+ * labelled custom, never as researched.
+ */
+export interface SwarmtankMarket {
+  custom?: boolean;
+  customAssumptions?: MarketAssumption[] | null;
+  profileId?: string | null;
+  profileVersion?: number | null;
+  territoryCode?: string | null;
+  territoryName?: string | null;
+}
+/**
+ * One gap, stated as an editable assumption. Assumptions are never
+ * presented as evidence.
+ */
+export interface MarketAssumption {
+  editable: boolean;
+  field: string;
+  rationale: string;
+  value: string;
+}
+export interface SwarmtankAiEventRequest {
+  description: string;
+  kind: string;
+  payload?: unknown;
+  round: number;
+}
+export interface SwarmtankAiStartResponse {
+  contractVersion: number;
+  estimatedCalls: number;
+  estimatedTokens: number;
+  locality: string;
+  model: string;
+  provider: string;
+  runId: string;
 }
 export interface SwarmtankBatchInfo {
   count: number;

@@ -29,6 +29,7 @@ import type {
 } from '@anansi/contracts';
 import { SwarmtankArena } from './SwarmtankArena';
 import { SwarmtankMarketSelector } from './SwarmtankMarket.tsx';
+import { SwarmtankAiPanel } from './SwarmtankAi.tsx';
 import SwarmtankScenarioControls from './SwarmtankScenarioControls';
 import SwarmtankComparison from './SwarmtankComparison';
 import {
@@ -1081,6 +1082,7 @@ export function SwarmtankPanel({
   const [seed, setSeed] = useState('');
   const [source, setSource] = useState<SwarmtankSource | undefined>(undefined);
   const [market, setMarket] = useState<SwarmtankMarket | null>(null);
+  const [mode, setMode] = useState<'quick' | 'ai'>('quick');
   const [preview, setPreview] = useState<SwarmtankPersona[] | null>(null);
   const [previewBatches, setPreviewBatches] = useState(0);
   const [savedRun, setSavedRun] = useState<SwarmtankRunDoc | null>(null);
@@ -1719,14 +1721,50 @@ export function SwarmtankPanel({
           </button>
         </p>
       ) : null}
-      <p>
-        <button disabled={running || busy || input.description.trim() === ''} onClick={generate}>
-          Generate personas
-        </button>{' '}
-        <button disabled={running || busy || input.description.trim() === ''} onClick={evaluate}>
-          Evaluate decisions
-        </button>
-      </p>
+      <fieldset>
+        <legend>Simulation mode</legend>
+        <label>
+          <input
+            type="radio"
+            name="swarmtank-mode"
+            checked={mode === 'quick'}
+            onChange={() => setMode('quick')}
+          />
+          Quick simulation — seeded, deterministic, no provider call.
+        </label>{' '}
+        <label>
+          <input
+            type="radio"
+            name="swarmtank-mode"
+            checked={mode === 'ai'}
+            onChange={() => setMode('ai')}
+          />
+          AI simulation — synthetic agents answer through the configured provider.
+        </label>
+      </fieldset>
+      {mode === 'quick' ? (
+        <p>
+          <button disabled={running || busy || input.description.trim() === ''} onClick={generate}>
+            Generate personas
+          </button>{' '}
+          <button disabled={running || busy || input.description.trim() === ''} onClick={evaluate}>
+            Evaluate decisions
+          </button>
+        </p>
+      ) : (
+        <SwarmtankAiPanel
+          client={client}
+          workspaceId={workspaceId}
+          projectId={projectId}
+          input={input}
+          market={market}
+          seed={seed}
+          artifacts={artifacts}
+          onSaved={onSaved}
+          notify={notify}
+          busy={busy}
+        />
+      )}
       {preview !== null ? (
         <section aria-label="Simulated personas preview">
           <h3>Simulated personas (preview, not saved)</h3>

@@ -39,6 +39,7 @@ pub mod snapshots;
 pub mod somnia;
 pub mod storage;
 pub mod swarmtank;
+pub mod swarmtank_ai;
 pub mod swarmtank_market;
 pub mod transfer;
 pub mod url_fetch;

@@ -44,7 +44,7 @@ fn not_found(message: &str) -> CommandError {
     CommandError::new(ErrorCode::NotFound, message)
 }
 
-fn storage(scope: &CallerScope) -> Result<Storage, CommandError> {
+pub(crate) fn storage(scope: &CallerScope) -> Result<Storage, CommandError> {
     let root = scope
         .storage_root
         .clone()
@@ -708,7 +708,7 @@ fn window(pool: &[&str], start: usize, count: usize) -> Vec<String> {
         .collect()
 }
 
-fn validate_input(input: &SwarmtankInput) -> Result<(), String> {
+pub(crate) fn validate_input(input: &SwarmtankInput) -> Result<(), String> {
     check_text(&input.description, "description", MAX_DESCRIPTION_CHARS)?;
     check_optional_text(&input.pricing, "pricing", MAX_SHORT_CHARS)?;
     check_optional_text(&input.segment, "segment", MAX_SHORT_CHARS)?;
@@ -2254,7 +2254,7 @@ pub fn import_from_concept(doc: &crate::transfer::TransferConceptDoc) -> Swarmta
 // Operations
 // ---------------------------------------------------------------------------
 
-fn require_workspace_and_project(
+pub(crate) fn require_workspace_and_project(
     scope: &CallerScope,
     workspace_id: &str,
     project_id: &str,
@@ -2274,7 +2274,7 @@ fn require_workspace_and_project(
     Ok((workspace, storage))
 }
 
-fn resolve_seed(seed: Option<String>) -> Result<String, CommandError> {
+pub(crate) fn resolve_seed(seed: Option<String>) -> Result<String, CommandError> {
     match seed {
         Some(s) if !s.trim().is_empty() => {
             if s.chars().count() > 200 {
@@ -2757,6 +2757,9 @@ pub fn swarmtank_command(
         "swarmtank-territories" => territories_op(value),
         "swarmtank-market" => market_op(value),
         "swarmtank-markets" => markets_op(value),
+        "swarmtank-ai-estimate" | "swarmtank-ai-start" | "swarmtank-ai-poll" | "swarmtank-ai-cancel" => {
+            crate::swarmtank_ai::swarmtank_ai_command(operation, value, scope)
+        }
         _ => Err(invalid("Use a supported SwarmTank operation.")),
     }
 }
