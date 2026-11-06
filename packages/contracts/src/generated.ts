@@ -2198,6 +2198,243 @@ export interface ListRelationshipsRequest {
   recordId?: string | null;
   workspaceId: string;
 }
+/**
+ * One gap, stated as an editable assumption. Assumptions are never
+ * presented as evidence.
+ */
+export interface MarketAssumption {
+  editable: boolean;
+  field: string;
+  rationale: string;
+  value: string;
+}
+/**
+ * One evidence-backed input. `source` and `date` are required: an input
+ * without them is an assumption, not evidence.
+ */
+export interface MarketEvidence {
+  date: string;
+  field: string;
+  source: MarketSource;
+  value: string;
+}
+/**
+ * The source of one evidence-backed input.
+ */
+export interface MarketSource {
+  name: string;
+  url: string;
+}
+/**
+ * A language spoken in the market, with its role there.
+ */
+export interface MarketLanguage {
+  code: string;
+  name: string;
+  role: string;
+}
+/**
+ * One versioned market profile (data file).
+ */
+export interface MarketProfile {
+  assumptions: MarketAssumption[];
+  cldrVersion: string;
+  currency: string;
+  evidence: MarketEvidence[];
+  format: string;
+  id: string;
+  languages: MarketLanguage[];
+  name: string;
+  profileVersion: number;
+  segments: MarketSegment[];
+  subdivision?: string | null;
+  territoryCode: string;
+  version: number;
+}
+/**
+ * One gap, stated as an editable assumption. Assumptions are never
+ * presented as evidence.
+ */
+export interface MarketAssumption {
+  editable: boolean;
+  field: string;
+  rationale: string;
+  value: string;
+}
+/**
+ * One evidence-backed input. `source` and `date` are required: an input
+ * without them is an assumption, not evidence.
+ */
+export interface MarketEvidence {
+  date: string;
+  field: string;
+  source: MarketSource;
+  value: string;
+}
+/**
+ * The source of one evidence-backed input.
+ */
+export interface MarketSource {
+  name: string;
+  url: string;
+}
+/**
+ * A language spoken in the market, with its role there.
+ */
+export interface MarketLanguage {
+  code: string;
+  name: string;
+  role: string;
+}
+/**
+ * One buyer segment in the market. `roles` name buyer-role archetypes
+ * (see `swarmtank::ARCHETYPES`); `budget_multiplier` scales the
+ * archetype's base budget for this market.
+ */
+export interface MarketSegment {
+  budgetMultiplier: number;
+  buyingAuthority: string;
+  companySize: string;
+  id: string;
+  label: string;
+  languages: string[];
+  roles: string[];
+}
+/**
+ * `swarmtank-market` request: one researched profile by id.
+ */
+export interface MarketProfileRequest {
+  contractVersion?: number;
+  profileId: string;
+}
+/**
+ * `swarmtank-market` response. `researched` is false (and `profile`
+ * is None) when no researched profile exists for the id: the caller
+ * opens the Custom assumptions state. That is not an error.
+ */
+export interface MarketProfileResponse {
+  contractVersion: number;
+  profile?: MarketProfile | null;
+  researched: boolean;
+}
+/**
+ * One versioned market profile (data file).
+ */
+export interface MarketProfile {
+  assumptions: MarketAssumption[];
+  cldrVersion: string;
+  currency: string;
+  evidence: MarketEvidence[];
+  format: string;
+  id: string;
+  languages: MarketLanguage[];
+  name: string;
+  profileVersion: number;
+  segments: MarketSegment[];
+  subdivision?: string | null;
+  territoryCode: string;
+  version: number;
+}
+/**
+ * One gap, stated as an editable assumption. Assumptions are never
+ * presented as evidence.
+ */
+export interface MarketAssumption {
+  editable: boolean;
+  field: string;
+  rationale: string;
+  value: string;
+}
+/**
+ * One evidence-backed input. `source` and `date` are required: an input
+ * without them is an assumption, not evidence.
+ */
+export interface MarketEvidence {
+  date: string;
+  field: string;
+  source: MarketSource;
+  value: string;
+}
+/**
+ * The source of one evidence-backed input.
+ */
+export interface MarketSource {
+  name: string;
+  url: string;
+}
+/**
+ * A language spoken in the market, with its role there.
+ */
+export interface MarketLanguage {
+  code: string;
+  name: string;
+  role: string;
+}
+/**
+ * One buyer segment in the market. `roles` name buyer-role archetypes
+ * (see `swarmtank::ARCHETYPES`); `budget_multiplier` scales the
+ * archetype's base budget for this market.
+ */
+export interface MarketSegment {
+  budgetMultiplier: number;
+  buyingAuthority: string;
+  companySize: string;
+  id: string;
+  label: string;
+  languages: string[];
+  roles: string[];
+}
+/**
+ * One researched profile, summarized for the selector.
+ */
+export interface MarketProfileSummary {
+  id: string;
+  name: string;
+  profileVersion: number;
+  subdivision?: string | null;
+  territoryCode: string;
+}
+/**
+ * `swarmtank-markets` response: a summary of every researched profile,
+ * so the selector can show which territories have a researched profile
+ * (and which subdivisions) without hardcoding profile ids. Adding a
+ * region is a data file; the selector picks it up from this list.
+ */
+export interface MarketProfilesResponse {
+  contractVersion: number;
+  profiles: MarketProfileSummary[];
+}
+/**
+ * One researched profile, summarized for the selector.
+ */
+export interface MarketProfileSummary {
+  id: string;
+  name: string;
+  profileVersion: number;
+  subdivision?: string | null;
+  territoryCode: string;
+}
+/**
+ * One buyer segment in the market. `roles` name buyer-role archetypes
+ * (see `swarmtank::ARCHETYPES`); `budget_multiplier` scales the
+ * archetype's base budget for this market.
+ */
+export interface MarketSegment {
+  budgetMultiplier: number;
+  buyingAuthority: string;
+  companySize: string;
+  id: string;
+  label: string;
+  languages: string[];
+  roles: string[];
+}
+/**
+ * The source of one evidence-backed input.
+ */
+export interface MarketSource {
+  name: string;
+  url: string;
+}
 export interface McpListRequest {
   contractVersion: number;
   workspaceId: string;
@@ -4698,6 +4935,7 @@ export interface SwarmtankDecision {
 export interface SwarmtankEvaluateRequest {
   contractVersion?: number;
   input: SwarmtankInput;
+  market?: SwarmtankMarket | null;
   preset: number;
   projectId: string;
   seed?: string | null;
@@ -4720,6 +4958,30 @@ export interface SwarmtankInput {
   pricing?: string;
   segment?: string;
   valueProposition?: string;
+}
+/**
+ * The market a run was generated for. `custom` records a
+ * Custom-assumptions run (a territory with no researched profile):
+ * the user supplied the assumptions explicitly and the run is
+ * labelled custom, never as researched.
+ */
+export interface SwarmtankMarket {
+  custom?: boolean;
+  customAssumptions?: MarketAssumption[] | null;
+  profileId?: string | null;
+  profileVersion?: number | null;
+  territoryCode?: string | null;
+  territoryName?: string | null;
+}
+/**
+ * One gap, stated as an editable assumption. Assumptions are never
+ * presented as evidence.
+ */
+export interface MarketAssumption {
+  editable: boolean;
+  field: string;
+  rationale: string;
+  value: string;
 }
 /**
  * The import source pin: an exact experiment or
@@ -4805,17 +5067,44 @@ export interface SwarmtankInput {
   valueProposition?: string;
 }
 /**
+ * The market a run was generated for. `custom` records a
+ * Custom-assumptions run (a territory with no researched profile):
+ * the user supplied the assumptions explicitly and the run is
+ * labelled custom, never as researched.
+ */
+export interface SwarmtankMarket {
+  custom?: boolean;
+  customAssumptions?: MarketAssumption[] | null;
+  profileId?: string | null;
+  profileVersion?: number | null;
+  territoryCode?: string | null;
+  territoryName?: string | null;
+}
+/**
+ * One gap, stated as an editable assumption. Assumptions are never
+ * presented as evidence.
+ */
+export interface MarketAssumption {
+  editable: boolean;
+  field: string;
+  rationale: string;
+  value: string;
+}
+/**
  * One synthetic buyer. Every surface rendering a
  * persona must label it simulated; the `synthetic`
  * field is always true and is part of the stored
  * record so no consumer can render it unlabeled
- * by accident.
+ * by accident. `language` is the market's primary
+ * business language for this persona (v2); it is
+ * absent on runs generated before markets existed.
  */
 export interface SwarmtankPersona {
   approximateBudget: number;
   companySize: string;
   expectedImplementationEffort: string;
   id: string;
+  language?: string | null;
   name: string;
   needs: string[];
   priceSensitivity: number;
@@ -4829,6 +5118,7 @@ export interface SwarmtankPersona {
 export interface SwarmtankPersonasRequest {
   contractVersion?: number;
   input: SwarmtankInput;
+  market?: SwarmtankMarket | null;
   preset: number;
   projectId: string;
   seed?: string | null;
@@ -4851,6 +5141,30 @@ export interface SwarmtankInput {
   pricing?: string;
   segment?: string;
   valueProposition?: string;
+}
+/**
+ * The market a run was generated for. `custom` records a
+ * Custom-assumptions run (a territory with no researched profile):
+ * the user supplied the assumptions explicitly and the run is
+ * labelled custom, never as researched.
+ */
+export interface SwarmtankMarket {
+  custom?: boolean;
+  customAssumptions?: MarketAssumption[] | null;
+  profileId?: string | null;
+  profileVersion?: number | null;
+  territoryCode?: string | null;
+  territoryName?: string | null;
+}
+/**
+ * One gap, stated as an editable assumption. Assumptions are never
+ * presented as evidence.
+ */
+export interface MarketAssumption {
+  editable: boolean;
+  field: string;
+  rationale: string;
+  value: string;
 }
 /**
  * The import source pin: an exact experiment or
@@ -4878,13 +5192,16 @@ export interface SwarmtankBatchInfo {
  * persona must label it simulated; the `synthetic`
  * field is always true and is part of the stored
  * record so no consumer can render it unlabeled
- * by accident.
+ * by accident. `language` is the market's primary
+ * business language for this persona (v2); it is
+ * absent on runs generated before markets existed.
  */
 export interface SwarmtankPersona {
   approximateBudget: number;
   companySize: string;
   expectedImplementationEffort: string;
   id: string;
+  language?: string | null;
   name: string;
   needs: string[];
   priceSensitivity: number;
@@ -4993,13 +5310,16 @@ export interface SwarmtankRecommendation {
  * The stored run document. `content_hash` is the
  * SHA-256 of the canonical serialization with the
  * hash field itself empty; validation recomputes
- * it fail-closed.
+ * it fail-closed. `market` (v2) records the market
+ * the run was generated for; it is absent on runs
+ * generated before markets existed.
  */
 export interface SwarmtankRunDoc {
   contentHash: string;
   decisions: SwarmtankDecision[];
   format: string;
   input: SwarmtankInput;
+  market?: SwarmtankMarket | null;
   personas: SwarmtankPersona[];
   preset: number;
   seed: string;
@@ -5037,17 +5357,44 @@ export interface SwarmtankInput {
   valueProposition?: string;
 }
 /**
+ * The market a run was generated for. `custom` records a
+ * Custom-assumptions run (a territory with no researched profile):
+ * the user supplied the assumptions explicitly and the run is
+ * labelled custom, never as researched.
+ */
+export interface SwarmtankMarket {
+  custom?: boolean;
+  customAssumptions?: MarketAssumption[] | null;
+  profileId?: string | null;
+  profileVersion?: number | null;
+  territoryCode?: string | null;
+  territoryName?: string | null;
+}
+/**
+ * One gap, stated as an editable assumption. Assumptions are never
+ * presented as evidence.
+ */
+export interface MarketAssumption {
+  editable: boolean;
+  field: string;
+  rationale: string;
+  value: string;
+}
+/**
  * One synthetic buyer. Every surface rendering a
  * persona must label it simulated; the `synthetic`
  * field is always true and is part of the stored
  * record so no consumer can render it unlabeled
- * by accident.
+ * by accident. `language` is the market's primary
+ * business language for this persona (v2); it is
+ * absent on runs generated before markets existed.
  */
 export interface SwarmtankPersona {
   approximateBudget: number;
   companySize: string;
   expectedImplementationEffort: string;
   id: string;
+  language?: string | null;
   name: string;
   needs: string[];
   priceSensitivity: number;
@@ -5177,13 +5524,16 @@ export interface ScenarioMetrics {
  * persona must label it simulated; the `synthetic`
  * field is always true and is part of the stored
  * record so no consumer can render it unlabeled
- * by accident.
+ * by accident. `language` is the market's primary
+ * business language for this persona (v2); it is
+ * absent on runs generated before markets existed.
  */
 export interface SwarmtankPersona {
   approximateBudget: number;
   companySize: string;
   expectedImplementationEffort: string;
   id: string;
+  language?: string | null;
   name: string;
   needs: string[];
   priceSensitivity: number;
@@ -5363,6 +5713,35 @@ export interface ArtifactRecord {
   type: string;
   validationStatus: string;
   version: number;
+}
+/**
+ * `swarmtank-territories` request: the list is static data, so the
+ * request carries only the contract version.
+ */
+export interface TerritoriesRequest {
+  contractVersion?: number;
+}
+/**
+ * `swarmtank-territories` response: the full CLDR territory list.
+ */
+export interface TerritoriesResponse {
+  cldrVersion: string;
+  contractVersion: number;
+  territories: Territory[];
+}
+/**
+ * One CLDR territory (country or territory).
+ */
+export interface Territory {
+  code: string;
+  name: string;
+}
+/**
+ * One CLDR territory (country or territory).
+ */
+export interface Territory {
+  code: string;
+  name: string;
 }
 /**
  * A durable Forge-compatible concept: one approved

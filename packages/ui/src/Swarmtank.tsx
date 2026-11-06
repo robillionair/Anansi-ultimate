@@ -19,6 +19,7 @@ import type {
   CountedItem,
   SwarmtankDecision,
   SwarmtankInput,
+  SwarmtankMarket,
   SwarmtankPersona,
   SwarmtankReport,
   SwarmtankRunDoc,
@@ -27,6 +28,7 @@ import type {
   SwarmtankSource,
 } from '@anansi/contracts';
 import { SwarmtankArena } from './SwarmtankArena';
+import { SwarmtankMarketSelector } from './SwarmtankMarket.tsx';
 import SwarmtankScenarioControls from './SwarmtankScenarioControls';
 import SwarmtankComparison from './SwarmtankComparison';
 import {
@@ -157,25 +159,93 @@ function parseSource(value: unknown): SwarmtankSource | null {
   };
 }
 
+// Parse a run's market selection (v2). Shape and bounds only, no
+// profile lookup in the browser: the server validated the profile
+// and territory when the run was saved. A market that does not parse
+// never renders.
+function parseMarket(value: unknown): SwarmtankMarket | null {
+  if (!isRecord(value)) return null;
+  const keys = Object.keys(value);
+  const allowed = [
+    'profileId',
+    'profileVersion',
+    'territoryCode',
+    'territoryName',
+    'custom',
+    'customAssumptions',
+  ];
+  if (!keys.every(key => allowed.includes(key))) return null;
+  if (value.custom !== undefined && typeof value.custom !== 'boolean') return null;
+  const profileId =
+    value.profileId === undefined || value.profileId === null
+      ? undefined
+      : textField(value.profileId, 32, false);
+  const territoryCode =
+    value.territoryCode === undefined || value.territoryCode === null
+      ? undefined
+      : textField(value.territoryCode, 8, false);
+  const territoryName =
+    value.territoryName === undefined || value.territoryName === null
+      ? undefined
+      : textField(value.territoryName, 120, false);
+  const profileVersion =
+    value.profileVersion === undefined || value.profileVersion === null
+      ? undefined
+      : numberIn(value.profileVersion, 1, Number.MAX_SAFE_INTEGER);
+  if (profileId === null || territoryCode === null || territoryName === null || profileVersion === null) {
+    return null;
+  }
+  if (profileId !== undefined && profileVersion === undefined) return null;
+  if (value.custom === true && profileId !== undefined) return null;
+  if (value.custom === true && territoryCode === undefined) return null;
+  let customAssumptions: SwarmtankMarket['customAssumptions'];
+  if (value.customAssumptions !== undefined && value.customAssumptions !== null) {
+    if (!Array.isArray(value.customAssumptions)) return null;
+    const parsed: NonNullable<SwarmtankMarket['customAssumptions']> = [];
+    for (const raw of value.customAssumptions) {
+      if (!isRecord(raw)) return null;
+      if (!exactKeys(raw, ['field', 'value', 'rationale', 'editable'])) return null;
+      const field = textField(raw.field, 120, false);
+      const text = textField(raw.value, 3000, false);
+      const rationale = textField(raw.rationale, 3000, false);
+      if (field === null || text === null || rationale === null || typeof raw.editable !== 'boolean') {
+        return null;
+      }
+      parsed.push({ field, value: text, rationale, editable: raw.editable });
+    }
+    customAssumptions = parsed;
+  }
+  return {
+    profileId,
+    profileVersion,
+    territoryCode,
+    territoryName,
+    custom: value.custom === true,
+    customAssumptions,
+  };
+}
+
 function parsePersona(value: unknown, index: number): SwarmtankPersona | null {
   if (!isRecord(value)) return null;
-  if (
-    !exactKeys(value, [
-      'id',
-      'name',
-      'role',
-      'companySize',
-      'approximateBudget',
-      'needs',
-      'priorities',
-      'skepticism',
-      'priceSensitivity',
-      'purchaseConstraints',
-      'requiredTrustSignals',
-      'expectedImplementationEffort',
-      'synthetic',
-    ])
-  ) {
+  const required = [
+    'id',
+    'name',
+    'role',
+    'companySize',
+    'approximateBudget',
+    'needs',
+    'priorities',
+    'skepticism',
+    'priceSensitivity',
+    'purchaseConstraints',
+    'requiredTrustSignals',
+    'expectedImplementationEffort',
+    'synthetic',
+  ];
+  // `language` is optional (v2 markets); runs generated before markets
+  // existed do not carry it.
+  const expected = value.language === undefined ? required : [...required, 'language'];
+  if (!exactKeys(value, expected)) {
     return null;
   }
   if (value.id !== `persona-${String(index + 1).padStart(3, '0')}`) return null;
@@ -190,6 +260,8 @@ function parsePersona(value: unknown, index: number): SwarmtankPersona | null {
   const effort = textField(value.expectedImplementationEffort, 500, false);
   const skepticism = numberIn(value.skepticism, 0, 1);
   const priceSensitivity = numberIn(value.priceSensitivity, 0, 1);
+  const language =
+    value.language === undefined ? undefined : textField(value.language, 10, false);
   if (
     name === null ||
     role === null ||
@@ -202,6 +274,7 @@ function parsePersona(value: unknown, index: number): SwarmtankPersona | null {
     effort === null ||
     skepticism === null ||
     priceSensitivity === null ||
+    language === null ||
     value.synthetic !== true
   ) {
     return null;
@@ -220,6 +293,7 @@ function parsePersona(value: unknown, index: number): SwarmtankPersona | null {
     requiredTrustSignals: signals,
     expectedImplementationEffort: effort,
     synthetic: true,
+    language,
   };
 }
 
@@ -291,7 +365,7 @@ export function parseSwarmtankRunBody(body: string): SwarmtankRunDoc | null {
   ];
   if (
     !required.every(key => keys.includes(key)) ||
-    !keys.every(key => required.includes(key) || key === 'source')
+    !keys.every(key => required.includes(key) || key === 'source' || key === 'market')
   ) {
     return null;
   }
@@ -312,6 +386,12 @@ export function parseSwarmtankRunBody(body: string): SwarmtankRunDoc | null {
     const parsedSource = parseSource(parsed.source);
     if (parsedSource === null) return null;
     source = parsedSource;
+  }
+  let market: SwarmtankMarket | undefined;
+  if (parsed.market !== undefined && parsed.market !== null) {
+    const parsedMarket = parseMarket(parsed.market);
+    if (parsedMarket === null) return null;
+    market = parsedMarket;
   }
   if (!Array.isArray(parsed.personas) || parsed.personas.length !== parsed.preset) {
     return null;
@@ -340,6 +420,7 @@ export function parseSwarmtankRunBody(body: string): SwarmtankRunDoc | null {
     personas,
     decisions,
     source,
+    market,
     contentHash: parsed.contentHash,
   };
 }
@@ -802,6 +883,17 @@ export function SwarmtankReportView({
         research.
       </p>
       <p>
+        Market:{' '}
+        {run.market?.territoryName
+          ? run.market.custom
+            ? `${run.market.territoryName} (${run.market.territoryCode}) — Custom assumptions`
+            : `${run.market.territoryName} — researched profile${run.market.profileVersion ? ` v${run.market.profileVersion}` : ''}`
+          : 'Unspecified'}
+        {run.market?.customAssumptions && run.market.customAssumptions.length > 0
+          ? ` — ${run.market.customAssumptions.length} custom assumption(s) recorded`
+          : ''}
+      </p>
+      <p>
         Conversion rate: {report.conversionRate}% ({report.converts} of{' '}
         {report.total} convert, {report.confused} confused, {report.rejects}{' '}
         reject).
@@ -988,6 +1080,7 @@ export function SwarmtankPanel({
   const [preset, setPreset] = useState(20);
   const [seed, setSeed] = useState('');
   const [source, setSource] = useState<SwarmtankSource | undefined>(undefined);
+  const [market, setMarket] = useState<SwarmtankMarket | null>(null);
   const [preview, setPreview] = useState<SwarmtankPersona[] | null>(null);
   const [previewBatches, setPreviewBatches] = useState(0);
   const [savedRun, setSavedRun] = useState<SwarmtankRunDoc | null>(null);
@@ -1084,6 +1177,7 @@ export function SwarmtankPanel({
         preset,
         seed: seed.trim() === '' ? undefined : seed,
         source,
+        market: market ?? undefined,
       });
       setPreview(response.personas);
       setPreviewBatches(response.batches.length);
@@ -1108,6 +1202,7 @@ export function SwarmtankPanel({
         preset,
         seed: seed.trim() === '' ? undefined : seed,
         source,
+        market: market ?? undefined,
       });
       const doc = parseSwarmtankRunBody(response.body);
       if (doc === null) {
@@ -1199,6 +1294,7 @@ export function SwarmtankPanel({
         preset: savedRun.preset,
         seed: savedRun.seed,
         source: savedRun.source,
+        market: savedRun.market ?? undefined,
       });
       const doc = parseSwarmtankRunBody(response.body);
       if (doc === null) {
@@ -1486,6 +1582,7 @@ export function SwarmtankPanel({
         deterministic backend operations over seeded archetypes.
       </p>
       <h3>SwarmTank input</h3>
+      <SwarmtankMarketSelector client={client} value={market} onChange={setMarket} />
       <label>
         Product description{' '}
         <textarea

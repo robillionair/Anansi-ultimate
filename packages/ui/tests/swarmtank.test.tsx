@@ -108,6 +108,134 @@ test('a valid run body parses with all twenty personas', () => {
   assert.equal(parsed.personas.length, 20);
   assert.equal(parsed.decisions.length, 20);
   assert.ok(parsed.personas.every(item => item.synthetic === true));
+  // A run generated before markets existed has no market.
+  assert.equal(parsed.market, undefined);
+});
+
+test('a run body with a researched market parses and keeps the market', () => {
+  const doc = validDoc();
+  (doc.personas[0] as unknown as Record<string, unknown>).language = 'et';
+  (doc as unknown as Record<string, unknown>).market = {
+    profileId: 'EE',
+    profileVersion: 1,
+    territoryCode: 'EE',
+    territoryName: 'Estonia',
+    custom: false,
+  };
+  const parsed = parseSwarmtankRunBody(JSON.stringify(doc));
+  assert.ok(parsed !== null);
+  assert.equal(parsed.market?.profileId, 'EE');
+  assert.equal(parsed.market?.territoryName, 'Estonia');
+  assert.equal(parsed.market?.custom, false);
+  assert.equal(parsed.personas[0].language, 'et');
+  // The report view labels the researched market.
+  const html = renderToStaticMarkup(
+    React.createElement(SwarmtankReportView, {
+      report: validReport(),
+      run: parsed,
+      runKey: 'test-v1',
+      selectedPersonaId: null,
+      onSelectPersona: () => {},
+      search: '',
+      decisionFilter: 'All',
+      onSearchChange: () => {},
+      onFilterChange: () => {},
+      onExport: () => {},
+      exportDisabled: false,
+      scenario: null,
+      onScenarioChange: () => {},
+      onScenarioReset: () => {},
+      onScenarioRerun: () => {},
+      rerunDisabled: false,
+      branchSaved: false,
+      onSaveBranch: () => {},
+      saveBranchDisabled: true,
+      onExportComparisonJson: () => {},
+      onExportComparisonMarkdown: () => {},
+    }),
+  );
+  assert.ok(html.includes('Estonia'));
+  assert.ok(html.includes('researched profile v1'));
+});
+
+test('a run body with a custom market parses and is labelled custom', () => {
+  const doc = validDoc();
+  (doc as unknown as Record<string, unknown>).market = {
+    territoryCode: 'FR',
+    territoryName: 'France',
+    custom: true,
+    customAssumptions: [
+      { field: 'business_language', value: 'French', rationale: 'User-supplied.', editable: true },
+    ],
+  };
+  const parsed = parseSwarmtankRunBody(JSON.stringify(doc));
+  assert.ok(parsed !== null);
+  assert.equal(parsed.market?.custom, true);
+  assert.equal(parsed.market?.profileId, undefined);
+  const html = renderToStaticMarkup(
+    React.createElement(SwarmtankReportView, {
+      report: validReport(),
+      run: parsed,
+      runKey: 'test-v1',
+      selectedPersonaId: null,
+      onSelectPersona: () => {},
+      search: '',
+      decisionFilter: 'All',
+      onSearchChange: () => {},
+      onFilterChange: () => {},
+      onExport: () => {},
+      exportDisabled: false,
+      scenario: null,
+      onScenarioChange: () => {},
+      onScenarioReset: () => {},
+      onScenarioRerun: () => {},
+      rerunDisabled: false,
+      branchSaved: false,
+      onSaveBranch: () => {},
+      saveBranchDisabled: true,
+      onExportComparisonJson: () => {},
+      onExportComparisonMarkdown: () => {},
+    }),
+  );
+  assert.ok(html.includes('Custom assumptions'));
+  assert.ok(html.includes('1 custom assumption(s) recorded'));
+});
+
+test('tampered market selections fail closed', () => {
+  const cases: Array<(doc: Record<string, unknown>) => void> = [
+    doc => {
+      // A custom run must not name a researched profile.
+      (doc as Record<string, unknown>).market = {
+        profileId: 'EE',
+        profileVersion: 1,
+        territoryCode: 'EE',
+        territoryName: 'Estonia',
+        custom: true,
+      };
+    },
+    doc => {
+      // A researched profile must carry its version.
+      (doc as Record<string, unknown>).market = {
+        profileId: 'EE',
+        territoryCode: 'EE',
+        territoryName: 'Estonia',
+        custom: false,
+      };
+    },
+    doc => {
+      // Unknown market fields are refused.
+      (doc as Record<string, unknown>).market = { territoryCode: 'EE', invented: true };
+    },
+    doc => {
+      // A persona language must be a short string.
+      (doc.personas as Array<Record<string, unknown>>)[0].language = 42;
+    },
+  ];
+  for (const mutate of cases) {
+    const raw = JSON.parse(JSON.stringify(validDoc())) as Record<string, unknown>;
+    mutate(raw);
+    assert.equal(parseSwarmtankRunBody(JSON.stringify(raw)), null);
+  }
 });
 
 test('tampered run bodies fail closed', () => {

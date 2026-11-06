@@ -8614,6 +8614,740 @@
     "title": "ListRelationshipsRequest",
     "type": "object"
   },
+  "MarketAssumption": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "description": "One gap, stated as an editable assumption. Assumptions are never\npresented as evidence.",
+    "properties": {
+      "editable": {
+        "type": "boolean"
+      },
+      "field": {
+        "type": "string"
+      },
+      "rationale": {
+        "type": "string"
+      },
+      "value": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "field",
+      "value",
+      "rationale",
+      "editable"
+    ],
+    "title": "MarketAssumption",
+    "type": "object"
+  },
+  "MarketEvidence": {
+    "$defs": {
+      "MarketSource": {
+        "additionalProperties": false,
+        "description": "The source of one evidence-backed input.",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "url"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "description": "One evidence-backed input. `source` and `date` are required: an input\nwithout them is an assumption, not evidence.",
+    "properties": {
+      "date": {
+        "type": "string"
+      },
+      "field": {
+        "type": "string"
+      },
+      "source": {
+        "$ref": "#/$defs/MarketSource"
+      },
+      "value": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "field",
+      "value",
+      "source",
+      "date"
+    ],
+    "title": "MarketEvidence",
+    "type": "object"
+  },
+  "MarketLanguage": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "description": "A language spoken in the market, with its role there.",
+    "properties": {
+      "code": {
+        "type": "string"
+      },
+      "name": {
+        "type": "string"
+      },
+      "role": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "code",
+      "name",
+      "role"
+    ],
+    "title": "MarketLanguage",
+    "type": "object"
+  },
+  "MarketProfile": {
+    "$defs": {
+      "MarketAssumption": {
+        "additionalProperties": false,
+        "description": "One gap, stated as an editable assumption. Assumptions are never\npresented as evidence.",
+        "properties": {
+          "editable": {
+            "type": "boolean"
+          },
+          "field": {
+            "type": "string"
+          },
+          "rationale": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "field",
+          "value",
+          "rationale",
+          "editable"
+        ],
+        "type": "object"
+      },
+      "MarketEvidence": {
+        "additionalProperties": false,
+        "description": "One evidence-backed input. `source` and `date` are required: an input\nwithout them is an assumption, not evidence.",
+        "properties": {
+          "date": {
+            "type": "string"
+          },
+          "field": {
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/$defs/MarketSource"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "field",
+          "value",
+          "source",
+          "date"
+        ],
+        "type": "object"
+      },
+      "MarketLanguage": {
+        "additionalProperties": false,
+        "description": "A language spoken in the market, with its role there.",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "name",
+          "role"
+        ],
+        "type": "object"
+      },
+      "MarketSegment": {
+        "additionalProperties": false,
+        "description": "One buyer segment in the market. `roles` name buyer-role archetypes\n(see `swarmtank::ARCHETYPES`); `budget_multiplier` scales the\narchetype's base budget for this market.",
+        "properties": {
+          "budgetMultiplier": {
+            "format": "double",
+            "type": "number"
+          },
+          "buyingAuthority": {
+            "type": "string"
+          },
+          "companySize": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "languages": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "roles": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "companySize",
+          "roles",
+          "buyingAuthority",
+          "languages",
+          "budgetMultiplier"
+        ],
+        "type": "object"
+      },
+      "MarketSource": {
+        "additionalProperties": false,
+        "description": "The source of one evidence-backed input.",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "url"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "description": "One versioned market profile (data file).",
+    "properties": {
+      "assumptions": {
+        "items": {
+          "$ref": "#/$defs/MarketAssumption"
+        },
+        "type": "array"
+      },
+      "cldrVersion": {
+        "type": "string"
+      },
+      "currency": {
+        "type": "string"
+      },
+      "evidence": {
+        "items": {
+          "$ref": "#/$defs/MarketEvidence"
+        },
+        "type": "array"
+      },
+      "format": {
+        "type": "string"
+      },
+      "id": {
+        "type": "string"
+      },
+      "languages": {
+        "items": {
+          "$ref": "#/$defs/MarketLanguage"
+        },
+        "type": "array"
+      },
+      "name": {
+        "type": "string"
+      },
+      "profileVersion": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "segments": {
+        "items": {
+          "$ref": "#/$defs/MarketSegment"
+        },
+        "type": "array"
+      },
+      "subdivision": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "territoryCode": {
+        "type": "string"
+      },
+      "version": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "format",
+      "version",
+      "id",
+      "territoryCode",
+      "name",
+      "cldrVersion",
+      "profileVersion",
+      "currency",
+      "languages",
+      "evidence",
+      "assumptions",
+      "segments"
+    ],
+    "title": "MarketProfile",
+    "type": "object"
+  },
+  "MarketProfileRequest": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "description": "`swarmtank-market` request: one researched profile by id.",
+    "properties": {
+      "contractVersion": {
+        "default": 1,
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "profileId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "profileId"
+    ],
+    "title": "MarketProfileRequest",
+    "type": "object"
+  },
+  "MarketProfileResponse": {
+    "$defs": {
+      "MarketAssumption": {
+        "additionalProperties": false,
+        "description": "One gap, stated as an editable assumption. Assumptions are never\npresented as evidence.",
+        "properties": {
+          "editable": {
+            "type": "boolean"
+          },
+          "field": {
+            "type": "string"
+          },
+          "rationale": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "field",
+          "value",
+          "rationale",
+          "editable"
+        ],
+        "type": "object"
+      },
+      "MarketEvidence": {
+        "additionalProperties": false,
+        "description": "One evidence-backed input. `source` and `date` are required: an input\nwithout them is an assumption, not evidence.",
+        "properties": {
+          "date": {
+            "type": "string"
+          },
+          "field": {
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/$defs/MarketSource"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "field",
+          "value",
+          "source",
+          "date"
+        ],
+        "type": "object"
+      },
+      "MarketLanguage": {
+        "additionalProperties": false,
+        "description": "A language spoken in the market, with its role there.",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "name",
+          "role"
+        ],
+        "type": "object"
+      },
+      "MarketProfile": {
+        "additionalProperties": false,
+        "description": "One versioned market profile (data file).",
+        "properties": {
+          "assumptions": {
+            "items": {
+              "$ref": "#/$defs/MarketAssumption"
+            },
+            "type": "array"
+          },
+          "cldrVersion": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/$defs/MarketEvidence"
+            },
+            "type": "array"
+          },
+          "format": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "languages": {
+            "items": {
+              "$ref": "#/$defs/MarketLanguage"
+            },
+            "type": "array"
+          },
+          "name": {
+            "type": "string"
+          },
+          "profileVersion": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "segments": {
+            "items": {
+              "$ref": "#/$defs/MarketSegment"
+            },
+            "type": "array"
+          },
+          "subdivision": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "territoryCode": {
+            "type": "string"
+          },
+          "version": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "format",
+          "version",
+          "id",
+          "territoryCode",
+          "name",
+          "cldrVersion",
+          "profileVersion",
+          "currency",
+          "languages",
+          "evidence",
+          "assumptions",
+          "segments"
+        ],
+        "type": "object"
+      },
+      "MarketSegment": {
+        "additionalProperties": false,
+        "description": "One buyer segment in the market. `roles` name buyer-role archetypes\n(see `swarmtank::ARCHETYPES`); `budget_multiplier` scales the\narchetype's base budget for this market.",
+        "properties": {
+          "budgetMultiplier": {
+            "format": "double",
+            "type": "number"
+          },
+          "buyingAuthority": {
+            "type": "string"
+          },
+          "companySize": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "languages": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "roles": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "companySize",
+          "roles",
+          "buyingAuthority",
+          "languages",
+          "budgetMultiplier"
+        ],
+        "type": "object"
+      },
+      "MarketSource": {
+        "additionalProperties": false,
+        "description": "The source of one evidence-backed input.",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "url"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "description": "`swarmtank-market` response. `researched` is false (and `profile`\nis None) when no researched profile exists for the id: the caller\nopens the Custom assumptions state. That is not an error.",
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "profile": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/MarketProfile"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "researched": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "researched"
+    ],
+    "title": "MarketProfileResponse",
+    "type": "object"
+  },
+  "MarketProfileSummary": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "description": "One researched profile, summarized for the selector.",
+    "properties": {
+      "id": {
+        "type": "string"
+      },
+      "name": {
+        "type": "string"
+      },
+      "profileVersion": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "subdivision": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "territoryCode": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "id",
+      "name",
+      "territoryCode",
+      "profileVersion"
+    ],
+    "title": "MarketProfileSummary",
+    "type": "object"
+  },
+  "MarketProfilesResponse": {
+    "$defs": {
+      "MarketProfileSummary": {
+        "description": "One researched profile, summarized for the selector.",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "profileVersion": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "subdivision": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "territoryCode": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "territoryCode",
+          "profileVersion"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "description": "`swarmtank-markets` response: a summary of every researched profile,\nso the selector can show which territories have a researched profile\n(and which subdivisions) without hardcoding profile ids. Adding a\nregion is a data file; the selector picks it up from this list.",
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "profiles": {
+        "items": {
+          "$ref": "#/$defs/MarketProfileSummary"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "profiles"
+    ],
+    "title": "MarketProfilesResponse",
+    "type": "object"
+  },
+  "MarketSegment": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "description": "One buyer segment in the market. `roles` name buyer-role archetypes\n(see `swarmtank::ARCHETYPES`); `budget_multiplier` scales the\narchetype's base budget for this market.",
+    "properties": {
+      "budgetMultiplier": {
+        "format": "double",
+        "type": "number"
+      },
+      "buyingAuthority": {
+        "type": "string"
+      },
+      "companySize": {
+        "type": "string"
+      },
+      "id": {
+        "type": "string"
+      },
+      "label": {
+        "type": "string"
+      },
+      "languages": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "roles": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "id",
+      "label",
+      "companySize",
+      "roles",
+      "buyingAuthority",
+      "languages",
+      "budgetMultiplier"
+    ],
+    "title": "MarketSegment",
+    "type": "object"
+  },
+  "MarketSource": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "description": "The source of one evidence-backed input.",
+    "properties": {
+      "name": {
+        "type": "string"
+      },
+      "url": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "name",
+      "url"
+    ],
+    "title": "MarketSource",
+    "type": "object"
+  },
   "McpListRequest": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "properties": {
@@ -17802,6 +18536,31 @@
   },
   "SwarmtankEvaluateRequest": {
     "$defs": {
+      "MarketAssumption": {
+        "additionalProperties": false,
+        "description": "One gap, stated as an editable assumption. Assumptions are never\npresented as evidence.",
+        "properties": {
+          "editable": {
+            "type": "boolean"
+          },
+          "field": {
+            "type": "string"
+          },
+          "rationale": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "field",
+          "value",
+          "rationale",
+          "editable"
+        ],
+        "type": "object"
+      },
       "SwarmtankInput": {
         "additionalProperties": false,
         "description": "A SwarmTank run input: manual fields, or fields\ncopied from a saved experiment / Forge concept.\n`pricing` is display text; `price_amount` is the\noptional numeric monthly price the decision engine\ncompares against budgets. A missing numeric price\nis never invented from the text.",
@@ -17846,6 +18605,52 @@
         ],
         "type": "object"
       },
+      "SwarmtankMarket": {
+        "additionalProperties": false,
+        "description": "The market a run was generated for. `custom` records a\nCustom-assumptions run (a territory with no researched profile):\nthe user supplied the assumptions explicitly and the run is\nlabelled custom, never as researched.",
+        "properties": {
+          "custom": {
+            "default": false,
+            "type": "boolean"
+          },
+          "customAssumptions": {
+            "items": {
+              "$ref": "#/$defs/MarketAssumption"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "profileId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "profileVersion": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "territoryCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "territoryName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
       "SwarmtankSource": {
         "additionalProperties": false,
         "description": "The import source pin: an exact experiment or\nconcept version, never a floating \"latest\".",
@@ -17886,6 +18691,17 @@
       },
       "input": {
         "$ref": "#/$defs/SwarmtankInput"
+      },
+      "market": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/SwarmtankMarket"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
       },
       "preset": {
         "format": "uint32",
@@ -18186,10 +19002,85 @@
     "title": "SwarmtankInput",
     "type": "object"
   },
+  "SwarmtankMarket": {
+    "$defs": {
+      "MarketAssumption": {
+        "additionalProperties": false,
+        "description": "One gap, stated as an editable assumption. Assumptions are never\npresented as evidence.",
+        "properties": {
+          "editable": {
+            "type": "boolean"
+          },
+          "field": {
+            "type": "string"
+          },
+          "rationale": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "field",
+          "value",
+          "rationale",
+          "editable"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "description": "The market a run was generated for. `custom` records a\nCustom-assumptions run (a territory with no researched profile):\nthe user supplied the assumptions explicitly and the run is\nlabelled custom, never as researched.",
+    "properties": {
+      "custom": {
+        "default": false,
+        "type": "boolean"
+      },
+      "customAssumptions": {
+        "items": {
+          "$ref": "#/$defs/MarketAssumption"
+        },
+        "type": [
+          "array",
+          "null"
+        ]
+      },
+      "profileId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "profileVersion": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "territoryCode": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "territoryName": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "title": "SwarmtankMarket",
+    "type": "object"
+  },
   "SwarmtankPersona": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
-    "description": "One synthetic buyer. Every surface rendering a\npersona must label it simulated; the `synthetic`\nfield is always true and is part of the stored\nrecord so no consumer can render it unlabeled\nby accident.",
+    "description": "One synthetic buyer. Every surface rendering a\npersona must label it simulated; the `synthetic`\nfield is always true and is part of the stored\nrecord so no consumer can render it unlabeled\nby accident. `language` is the market's primary\nbusiness language for this persona (v2); it is\nabsent on runs generated before markets existed.",
     "properties": {
       "approximateBudget": {
         "format": "double",
@@ -18203,6 +19094,12 @@
       },
       "id": {
         "type": "string"
+      },
+      "language": {
+        "type": [
+          "string",
+          "null"
+        ]
       },
       "name": {
         "type": "string"
@@ -18266,6 +19163,31 @@
   },
   "SwarmtankPersonasRequest": {
     "$defs": {
+      "MarketAssumption": {
+        "additionalProperties": false,
+        "description": "One gap, stated as an editable assumption. Assumptions are never\npresented as evidence.",
+        "properties": {
+          "editable": {
+            "type": "boolean"
+          },
+          "field": {
+            "type": "string"
+          },
+          "rationale": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "field",
+          "value",
+          "rationale",
+          "editable"
+        ],
+        "type": "object"
+      },
       "SwarmtankInput": {
         "additionalProperties": false,
         "description": "A SwarmTank run input: manual fields, or fields\ncopied from a saved experiment / Forge concept.\n`pricing` is display text; `price_amount` is the\noptional numeric monthly price the decision engine\ncompares against budgets. A missing numeric price\nis never invented from the text.",
@@ -18310,6 +19232,52 @@
         ],
         "type": "object"
       },
+      "SwarmtankMarket": {
+        "additionalProperties": false,
+        "description": "The market a run was generated for. `custom` records a\nCustom-assumptions run (a territory with no researched profile):\nthe user supplied the assumptions explicitly and the run is\nlabelled custom, never as researched.",
+        "properties": {
+          "custom": {
+            "default": false,
+            "type": "boolean"
+          },
+          "customAssumptions": {
+            "items": {
+              "$ref": "#/$defs/MarketAssumption"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "profileId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "profileVersion": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "territoryCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "territoryName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
       "SwarmtankSource": {
         "additionalProperties": false,
         "description": "The import source pin: an exact experiment or\nconcept version, never a floating \"latest\".",
@@ -18350,6 +19318,17 @@
       },
       "input": {
         "$ref": "#/$defs/SwarmtankInput"
+      },
+      "market": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/SwarmtankMarket"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
       },
       "preset": {
         "format": "uint32",
@@ -18413,7 +19392,7 @@
       },
       "SwarmtankPersona": {
         "additionalProperties": false,
-        "description": "One synthetic buyer. Every surface rendering a\npersona must label it simulated; the `synthetic`\nfield is always true and is part of the stored\nrecord so no consumer can render it unlabeled\nby accident.",
+        "description": "One synthetic buyer. Every surface rendering a\npersona must label it simulated; the `synthetic`\nfield is always true and is part of the stored\nrecord so no consumer can render it unlabeled\nby accident. `language` is the market's primary\nbusiness language for this persona (v2); it is\nabsent on runs generated before markets existed.",
         "properties": {
           "approximateBudget": {
             "format": "double",
@@ -18427,6 +19406,12 @@
           },
           "id": {
             "type": "string"
+          },
+          "language": {
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "name": {
             "type": "string"
@@ -18938,6 +19923,31 @@
   },
   "SwarmtankRunDoc": {
     "$defs": {
+      "MarketAssumption": {
+        "additionalProperties": false,
+        "description": "One gap, stated as an editable assumption. Assumptions are never\npresented as evidence.",
+        "properties": {
+          "editable": {
+            "type": "boolean"
+          },
+          "field": {
+            "type": "string"
+          },
+          "rationale": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "field",
+          "value",
+          "rationale",
+          "editable"
+        ],
+        "type": "object"
+      },
       "SwarmtankDecision": {
         "additionalProperties": false,
         "description": "One decision. `key_objection` is required for\nConfused/Reject and null for Convert.",
@@ -19024,9 +20034,55 @@
         ],
         "type": "object"
       },
+      "SwarmtankMarket": {
+        "additionalProperties": false,
+        "description": "The market a run was generated for. `custom` records a\nCustom-assumptions run (a territory with no researched profile):\nthe user supplied the assumptions explicitly and the run is\nlabelled custom, never as researched.",
+        "properties": {
+          "custom": {
+            "default": false,
+            "type": "boolean"
+          },
+          "customAssumptions": {
+            "items": {
+              "$ref": "#/$defs/MarketAssumption"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "profileId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "profileVersion": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "territoryCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "territoryName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
       "SwarmtankPersona": {
         "additionalProperties": false,
-        "description": "One synthetic buyer. Every surface rendering a\npersona must label it simulated; the `synthetic`\nfield is always true and is part of the stored\nrecord so no consumer can render it unlabeled\nby accident.",
+        "description": "One synthetic buyer. Every surface rendering a\npersona must label it simulated; the `synthetic`\nfield is always true and is part of the stored\nrecord so no consumer can render it unlabeled\nby accident. `language` is the market's primary\nbusiness language for this persona (v2); it is\nabsent on runs generated before markets existed.",
         "properties": {
           "approximateBudget": {
             "format": "double",
@@ -19040,6 +20096,12 @@
           },
           "id": {
             "type": "string"
+          },
+          "language": {
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "name": {
             "type": "string"
@@ -19130,7 +20192,7 @@
     },
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
-    "description": "The stored run document. `content_hash` is the\nSHA-256 of the canonical serialization with the\nhash field itself empty; validation recomputes\nit fail-closed.",
+    "description": "The stored run document. `content_hash` is the\nSHA-256 of the canonical serialization with the\nhash field itself empty; validation recomputes\nit fail-closed. `market` (v2) records the market\nthe run was generated for; it is absent on runs\ngenerated before markets existed.",
     "properties": {
       "contentHash": {
         "type": "string"
@@ -19146,6 +20208,16 @@
       },
       "input": {
         "$ref": "#/$defs/SwarmtankInput"
+      },
+      "market": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/SwarmtankMarket"
+          },
+          {
+            "type": "null"
+          }
+        ]
       },
       "personas": {
         "items": {
@@ -19561,7 +20633,7 @@
       },
       "SwarmtankPersona": {
         "additionalProperties": false,
-        "description": "One synthetic buyer. Every surface rendering a\npersona must label it simulated; the `synthetic`\nfield is always true and is part of the stored\nrecord so no consumer can render it unlabeled\nby accident.",
+        "description": "One synthetic buyer. Every surface rendering a\npersona must label it simulated; the `synthetic`\nfield is always true and is part of the stored\nrecord so no consumer can render it unlabeled\nby accident. `language` is the market's primary\nbusiness language for this persona (v2); it is\nabsent on runs generated before markets existed.",
         "properties": {
           "approximateBudget": {
             "format": "double",
@@ -19575,6 +20647,12 @@
           },
           "id": {
             "type": "string"
+          },
+          "language": {
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "name": {
             "type": "string"
@@ -20323,6 +21401,88 @@
       "alreadyApplied"
     ],
     "title": "SwarmtankTransferResponse",
+    "type": "object"
+  },
+  "TerritoriesRequest": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "description": "`swarmtank-territories` request: the list is static data, so the\nrequest carries only the contract version.",
+    "properties": {
+      "contractVersion": {
+        "default": 1,
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "title": "TerritoriesRequest",
+    "type": "object"
+  },
+  "TerritoriesResponse": {
+    "$defs": {
+      "Territory": {
+        "additionalProperties": false,
+        "description": "One CLDR territory (country or territory).",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "name"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "description": "`swarmtank-territories` response: the full CLDR territory list.",
+    "properties": {
+      "cldrVersion": {
+        "type": "string"
+      },
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "territories": {
+        "items": {
+          "$ref": "#/$defs/Territory"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "cldrVersion",
+      "territories"
+    ],
+    "title": "TerritoriesResponse",
+    "type": "object"
+  },
+  "Territory": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "description": "One CLDR territory (country or territory).",
+    "properties": {
+      "code": {
+        "type": "string"
+      },
+      "name": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "code",
+      "name"
+    ],
+    "title": "Territory",
     "type": "object"
   },
   "TransferConceptDoc": {

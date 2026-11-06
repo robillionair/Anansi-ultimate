@@ -827,6 +827,9 @@ impl Core {
             | "swarmtank-report"
             | "swarmtank-transfer-to-forge"
             | "swarmtank-scenario"
+            | "swarmtank-territories"
+            | "swarmtank-market"
+            | "swarmtank-markets"
             | "somnia-evaluate"
             | "somnia-save-evaluation"
             | "ideas-generate-start"
@@ -871,8 +874,16 @@ impl Core {
                 // root alone does not isolate them). The catalog
                 // needs no workspace; every other provider
                 // operation names one and an unknown id is refused
-                // before any provider state is touched.
-                let workspace = if operation == "providers-catalog" {
+                // before any provider state is touched. The
+                // SwarmTank market list is static data, like the
+                // catalog: it needs no workspace either.
+                let workspace = if matches!(
+                    operation,
+                    "providers-catalog"
+                        | "swarmtank-territories"
+                        | "swarmtank-market"
+                        | "swarmtank-markets"
+                ) {
                     root_fingerprint.clone()
                 } else {
                     let workspace_id = value

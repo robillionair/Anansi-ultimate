@@ -68,6 +68,11 @@ use anansi_core::swarmtank::{
     SwarmtankScenarioResponse, SwarmtankSource, SwarmtankTransferRequest,
     SwarmtankTransferResponse,
 };
+use anansi_core::swarmtank_market::{
+    MarketAssumption, MarketEvidence, MarketLanguage, MarketProfile, MarketProfileRequest,
+    MarketProfileResponse, MarketProfileSummary, MarketProfilesResponse, MarketSegment,
+    MarketSource, SwarmtankMarket, TerritoriesRequest, TerritoriesResponse, Territory,
+};
 use anansi_core::transfer::{TransferConceptDoc, TransferRequest, TransferResponse};
 use anansi_core::workspace::{
     CreateWorkspaceRequest, OpenWorkspaceRequest, UpdateSettingsRequest, WorkspaceDetails,
@@ -135,6 +140,20 @@ fn main() {
         "SwarmtankReportResponse":schemars::schema_for!(SwarmtankReportResponse),
         "SwarmtankTransferRequest":schemars::schema_for!(SwarmtankTransferRequest),
         "SwarmtankTransferResponse":schemars::schema_for!(SwarmtankTransferResponse),
+        "Territory":schemars::schema_for!(Territory),
+        "TerritoriesRequest":schemars::schema_for!(TerritoriesRequest),
+        "TerritoriesResponse":schemars::schema_for!(TerritoriesResponse),
+        "MarketLanguage":schemars::schema_for!(MarketLanguage),
+        "MarketSource":schemars::schema_for!(MarketSource),
+        "MarketEvidence":schemars::schema_for!(MarketEvidence),
+        "MarketAssumption":schemars::schema_for!(MarketAssumption),
+        "MarketSegment":schemars::schema_for!(MarketSegment),
+        "MarketProfile":schemars::schema_for!(MarketProfile),
+        "MarketProfileRequest":schemars::schema_for!(MarketProfileRequest),
+        "MarketProfileResponse":schemars::schema_for!(MarketProfileResponse),
+        "MarketProfileSummary":schemars::schema_for!(MarketProfileSummary),
+        "MarketProfilesResponse":schemars::schema_for!(MarketProfilesResponse),
+        "SwarmtankMarket":schemars::schema_for!(SwarmtankMarket),
         "ScenarioTrustSignals":schemars::schema_for!(ScenarioTrustSignals),
         "SwarmtankScenario":schemars::schema_for!(SwarmtankScenario),
         "ScenarioTransition":schemars::schema_for!(ScenarioTransition),

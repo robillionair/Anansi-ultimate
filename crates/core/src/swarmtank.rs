@@ -141,7 +141,9 @@ pub struct SwarmtankSource {
 /// persona must label it simulated; the `synthetic`
 /// field is always true and is part of the stored
 /// record so no consumer can render it unlabeled
-/// by accident.
+/// by accident. `language` is the market's primary
+/// business language for this persona (v2); it is
+/// absent on runs generated before markets existed.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SwarmtankPersona {
@@ -158,6 +160,8 @@ pub struct SwarmtankPersona {
     pub required_trust_signals: Vec<String>,
     pub expected_implementation_effort: String,
     pub synthetic: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub language: Option<String>,
 }
 
 /// One decision. `key_objection` is required for
@@ -177,7 +181,9 @@ pub struct SwarmtankDecision {
 /// The stored run document. `content_hash` is the
 /// SHA-256 of the canonical serialization with the
 /// hash field itself empty; validation recomputes
-/// it fail-closed.
+/// it fail-closed. `market` (v2) records the market
+/// the run was generated for; it is absent on runs
+/// generated before markets existed.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SwarmtankRunDoc {
@@ -190,6 +196,8 @@ pub struct SwarmtankRunDoc {
     pub decisions: Vec<SwarmtankDecision>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<SwarmtankSource>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub market: Option<crate::swarmtank_market::SwarmtankMarket>,
     pub content_hash: String,
 }
 
@@ -255,6 +263,8 @@ pub struct SwarmtankPersonasRequest {
     pub seed: Option<String>,
     #[serde(default)]
     pub source: Option<SwarmtankSource>,
+    #[serde(default)]
+    pub market: Option<crate::swarmtank_market::SwarmtankMarket>,
 }
 
 #[derive(Debug, Serialize, JsonSchema)]
@@ -287,6 +297,8 @@ pub struct SwarmtankEvaluateRequest {
     pub seed: Option<String>,
     #[serde(default)]
     pub source: Option<SwarmtankSource>,
+    #[serde(default)]
+    pub market: Option<crate::swarmtank_market::SwarmtankMarket>,
 }
 
 #[derive(Debug, Serialize, JsonSchema)]
@@ -768,6 +780,12 @@ fn validate_persona(persona: &SwarmtankPersona) -> Result<(), String> {
 /// Generate a population in validated batches of
 /// `BATCH_SIZE`. The same seed + preset always
 /// yields the same personas in the same order.
+/// True when `role` names a buyer-role archetype. Used by the market
+/// profile validator so a profile cannot name a role that does not exist.
+pub fn archetype_role_exists(role: &str) -> bool {
+    ARCHETYPES.iter().any(|a| a.role == role)
+}
+
 pub fn generate_personas(
     seed: &str,
     preset: u32,
@@ -816,6 +834,120 @@ pub fn generate_personas(
                 required_trust_signals: window(archetype.signals_pool, signals_start, 2),
                 expected_implementation_effort: archetype.effort.to_string(),
                 synthetic: true,
+                language: None,
+            };
+            validate_persona(&persona)?;
+            batch.push(persona);
+        }
+        batches.push(SwarmtankBatchInfo {
+            index: batch_index as u32,
+            count: batch.len() as u32,
+        });
+        personas.extend(batch);
+    }
+    Ok((personas, batches))
+}
+
+/// Generate personas shaped by a market profile (v2 Checkpoint 1).
+///
+/// The profile's segments decide the archetype mix (round-robin across
+/// segments, then across the roles in each segment), the segment's
+/// `budget_multiplier` scales the archetype's base budget, the segment's
+/// `company_size` replaces the archetype's, and the segment's first
+/// language becomes the persona's language. The archetype's role,
+/// skepticism, price sensitivity, needs, priorities, constraints and
+/// trust signals are unchanged: geography shapes which buyers appear
+/// and what they can spend, never their personality.
+///
+/// A selection with no researched profile (a Custom-assumptions run, or
+/// no market at all) falls back to the unshaped `generate_personas`:
+/// the standard archetype mix, with no language set. The run doc still
+/// records the market selection, so the run is labelled custom.
+pub fn generate_personas_for_market(
+    seed: &str,
+    preset: u32,
+    market: &crate::swarmtank_market::SwarmtankMarket,
+) -> Result<(Vec<SwarmtankPersona>, Vec<SwarmtankBatchInfo>), String> {
+    let profile = market
+        .profile_id
+        .as_deref()
+        .and_then(crate::swarmtank_market::get_market_profile);
+    let Some(profile) = profile else {
+        return generate_personas(seed, preset);
+    };
+    if !PRESETS.contains(&preset) {
+        return Err("preset must be 20, 50, or 100".to_string());
+    }
+    // One (archetype, segment) pair per role in each segment, in segment
+    // order; the population cycles through them round-robin, then a
+    // seeded shuffle so populations are not striped.
+    let mut pairs: Vec<(usize, usize)> = Vec::new();
+    for (segment_index, segment) in profile.segments.iter().enumerate() {
+        for role in &segment.roles {
+            if let Some(archetype_index) = ARCHETYPES.iter().position(|a| a.role == *role) {
+                pairs.push((archetype_index, segment_index));
+            }
+        }
+    }
+    if pairs.is_empty() {
+        return Err("market profile has no usable segments".to_string());
+    }
+    let mut rng = Seeded::new(seed);
+    let mut order: Vec<usize> = (0..preset as usize).map(|i| i % pairs.len()).collect();
+    for i in (1..order.len()).rev() {
+        let j = (rng.next_f64() * (i + 1) as f64) as usize;
+        order.swap(i, j);
+    }
+    let mut personas = Vec::with_capacity(preset as usize);
+    let mut batches = Vec::new();
+    for (batch_index, chunk) in order.chunks(BATCH_SIZE).enumerate() {
+        let mut batch = Vec::with_capacity(chunk.len());
+        for (offset, &pair_index) in chunk.iter().enumerate() {
+            let global_index = batch_index * BATCH_SIZE + offset;
+            let (archetype_index, segment_index) = pairs[pair_index];
+            let archetype = &ARCHETYPES[archetype_index];
+            let segment = &profile.segments[segment_index];
+            let skepticism = round2(rng.range(archetype.skepticism.0, archetype.skepticism.1));
+            let price_sensitivity =
+                round2(rng.range(archetype.price_sensitivity.0, archetype.price_sensitivity.1));
+            let budget = (archetype.base_budget
+                * segment.budget_multiplier
+                * rng.range(0.8, 1.2))
+            .round();
+            let first = FIRST_NAMES[(rng.next_f64() * FIRST_NAMES.len() as f64) as usize];
+            let last = LAST_NAMES[(rng.next_f64() * LAST_NAMES.len() as f64) as usize];
+            let needs_start = (rng.next_f64() * archetype.needs_pool.len() as f64) as usize;
+            let priorities_start =
+                (rng.next_f64() * archetype.priorities_pool.len() as f64) as usize;
+            let constraints_start =
+                (rng.next_f64() * archetype.constraints_pool.len() as f64) as usize;
+            let signals_start = (rng.next_f64() * archetype.signals_pool.len() as f64) as usize;
+            let language = segment
+                .languages
+                .first()
+                .cloned()
+                .or_else(|| {
+                    profile
+                        .languages
+                        .iter()
+                        .find(|l| l.role == "business")
+                        .map(|l| l.code.clone())
+                });
+            let persona = SwarmtankPersona {
+                id: format!("persona-{:03}", global_index + 1),
+                name: format!("{first} {last}"),
+                role: archetype.role.to_string(),
+                company_size: segment.company_size.to_string(),
+                approximate_budget: budget,
+                needs: window(archetype.needs_pool, needs_start, 3),
+                priorities: window(archetype.priorities_pool, priorities_start, 2),
+                skepticism,
+                price_sensitivity,
+                purchase_constraints: window(archetype.constraints_pool, constraints_start, 2),
+                required_trust_signals: window(archetype.signals_pool, signals_start, 2),
+                expected_implementation_effort: archetype.effort.to_string(),
+                synthetic: true,
+                language,
             };
             validate_persona(&persona)?;
             batch.push(persona);
@@ -2172,7 +2304,14 @@ fn personas_op(value: Value, scope: &CallerScope) -> Result<Value, CommandError>
         return Err(invalid("The source kind must be experiment or concept."));
     }
     let seed = resolve_seed(req.seed)?;
-    let (personas, batches) = generate_personas(&seed, req.preset).map_err(|e| invalid(&e))?;
+    if let Some(market) = &req.market {
+        crate::swarmtank_market::validate_market(market).map_err(|e| invalid(&e))?;
+    }
+    let (personas, batches) = match &req.market {
+        Some(market) => generate_personas_for_market(&seed, req.preset, market),
+        None => generate_personas(&seed, req.preset),
+    }
+    .map_err(|e| invalid(&e))?;
     serde_json::to_value(SwarmtankPersonasResponse {
         contract_version: 1,
         personas,
@@ -2196,9 +2335,16 @@ fn evaluate_op(value: Value, scope: &CallerScope) -> Result<Value, CommandError>
         require_workspace_and_project(scope, &req.workspace_id, &req.project_id)?;
     validate_input(&req.input).map_err(|e| invalid(&e))?;
     let seed = resolve_seed(req.seed)?;
+    if let Some(market) = &req.market {
+        crate::swarmtank_market::validate_market(market).map_err(|e| invalid(&e))?;
+    }
     // Regenerate server-side from the seed: the
     // client preview is never trusted for storage.
-    let (personas, _) = generate_personas(&seed, req.preset).map_err(|e| invalid(&e))?;
+    let (personas, _) = match &req.market {
+        Some(market) => generate_personas_for_market(&seed, req.preset, market),
+        None => generate_personas(&seed, req.preset),
+    }
+    .map_err(|e| invalid(&e))?;
     let decisions = evaluate_population(&personas, &req.input);
     let mut doc = SwarmtankRunDoc {
         format: "anansi-swarmtank-run".to_string(),
@@ -2209,6 +2355,7 @@ fn evaluate_op(value: Value, scope: &CallerScope) -> Result<Value, CommandError>
         personas,
         decisions,
         source: req.source.clone(),
+        market: req.market.clone(),
         content_hash: String::new(),
     };
     doc.content_hash = canonical_hash(&doc);
@@ -2409,6 +2556,7 @@ fn transfer_op(value: Value, scope: &CallerScope) -> Result<Value, CommandError>
                 personas: branch_doc.personas.clone(),
                 decisions: branch_doc.decisions.clone(),
                 source: None,
+                market: None,
                 content_hash: String::new(),
             };
             let scenario_report = derive_report(&scenario_run);
@@ -2580,6 +2728,7 @@ fn scenario_op(value: Value, scope: &CallerScope) -> Result<Value, CommandError>
         personas: branch.personas.clone(),
         decisions: branch.decisions.clone(),
         source: None,
+        market: None,
         content_hash: String::new(),
     };
     let report = derive_report(&scenario_run);
@@ -2605,8 +2754,74 @@ pub fn swarmtank_command(
         "swarmtank-report" => report_op(value, scope),
         "swarmtank-transfer-to-forge" => transfer_op(value, scope),
         "swarmtank-scenario" => scenario_op(value, scope),
+        "swarmtank-territories" => territories_op(value),
+        "swarmtank-market" => market_op(value),
+        "swarmtank-markets" => markets_op(value),
         _ => Err(invalid("Use a supported SwarmTank operation.")),
     }
+}
+
+/// `swarmtank-territories`: the versioned CLDR territory list. No
+/// workspace or project is needed: the list is static data.
+fn territories_op(value: Value) -> Result<Value, CommandError> {
+    let req: crate::swarmtank_market::TerritoriesRequest =
+        serde_json::from_value(value).map_err(|_| invalid("Use a supported SwarmTank request."))?;
+    if req.contract_version != 1 {
+        return Err(CommandError::new(
+            ErrorCode::UnsupportedContract,
+            "Use contract version 1.",
+        ));
+    }
+    let territories =
+        crate::swarmtank_market::list_territories().map_err(|e| invalid(&e))?;
+    serde_json::to_value(crate::swarmtank_market::TerritoriesResponse {
+        contract_version: 1,
+        cldr_version: crate::swarmtank_market::CLDR_VERSION.to_string(),
+        territories,
+    })
+    .map_err(|_| crate::storage::unavailable())
+}
+
+/// `swarmtank-markets`: a summary of every researched profile, so the
+/// selector can show which territories have one (and which
+/// subdivisions) without hardcoding profile ids.
+fn markets_op(value: Value) -> Result<Value, CommandError> {
+    let req: crate::swarmtank_market::TerritoriesRequest =
+        serde_json::from_value(value).map_err(|_| invalid("Use a supported SwarmTank request."))?;
+    if req.contract_version != 1 {
+        return Err(CommandError::new(
+            ErrorCode::UnsupportedContract,
+            "Use contract version 1.",
+        ));
+    }
+    let profiles = crate::swarmtank_market::list_market_profile_summaries()
+        .map_err(|e| invalid(&e))?;
+    serde_json::to_value(crate::swarmtank_market::MarketProfilesResponse {
+        contract_version: 1,
+        profiles,
+    })
+    .map_err(|_| crate::storage::unavailable())
+}
+
+/// `swarmtank-market`: one researched profile by id. A missing profile
+/// is not an error — `researched` is false and the caller opens the
+/// Custom assumptions state.
+fn market_op(value: Value) -> Result<Value, CommandError> {
+    let req: crate::swarmtank_market::MarketProfileRequest =
+        serde_json::from_value(value).map_err(|_| invalid("Use a supported SwarmTank request."))?;
+    if req.contract_version != 1 {
+        return Err(CommandError::new(
+            ErrorCode::UnsupportedContract,
+            "Use contract version 1.",
+        ));
+    }
+    let profile = crate::swarmtank_market::get_market_profile(&req.profile_id);
+    serde_json::to_value(crate::swarmtank_market::MarketProfileResponse {
+        contract_version: 1,
+        researched: profile.is_some(),
+        profile,
+    })
+    .map_err(|_| crate::storage::unavailable())
 }
 
 // ---------------------------------------------------------------------------
@@ -2645,6 +2860,7 @@ mod tests {
             personas,
             decisions,
             source: None,
+            market: None,
             content_hash: String::new(),
         };
         doc.content_hash = canonical_hash(&doc);
@@ -2666,6 +2882,133 @@ mod tests {
             serde_json::to_string(&first).unwrap(),
             serde_json::to_string(&other).unwrap()
         );
+    }
+
+    #[test]
+    fn market_shapes_personas_without_changing_personality() {
+        use crate::swarmtank_market::SwarmtankMarket;
+        // AC-M5: personas for a market use the profile's roles, company
+        // sizes, budget scaling and language; the archetype's skepticism
+        // and price sensitivity ranges are unchanged.
+        let market = SwarmtankMarket {
+            profile_id: Some("EE".to_string()),
+            profile_version: Some(1),
+            territory_code: Some("EE".to_string()),
+            territory_name: Some("Estonia".to_string()),
+            custom: false,
+            custom_assumptions: None,
+        };
+        let (personas, _) = generate_personas_for_market("seed-m", 20, &market).unwrap();
+        assert_eq!(personas.len(), 20);
+        let profile = crate::swarmtank_market::get_market_profile("EE").unwrap();
+        let allowed_roles: Vec<&str> = profile
+            .segments
+            .iter()
+            .flat_map(|s| s.roles.iter().map(|r| r.as_str()))
+            .collect();
+        let allowed_sizes: Vec<&str> = profile
+            .segments
+            .iter()
+            .map(|s| s.company_size.as_str())
+            .collect();
+        for persona in &personas {
+            assert!(
+                allowed_roles.contains(&persona.role.as_str()),
+                "role {} is not in the EE profile",
+                persona.role
+            );
+            assert!(
+                allowed_sizes.contains(&persona.company_size.as_str()),
+                "company size {} is not in the EE profile",
+                persona.company_size
+            );
+            // Language comes from the market (et or en for EE).
+            assert!(
+                matches!(persona.language.as_deref(), Some("et") | Some("en")),
+                "unexpected language {:?}",
+                persona.language
+            );
+            assert!(persona.synthetic);
+        }
+        // Deterministic for the same seed + market.
+        let (again, _) = generate_personas_for_market("seed-m", 20, &market).unwrap();
+        assert_eq!(
+            serde_json::to_string(&personas).unwrap(),
+            serde_json::to_string(&again).unwrap()
+        );
+        // A different market gives a different population.
+        let us = SwarmtankMarket {
+            profile_id: Some("US".to_string()),
+            profile_version: Some(1),
+            territory_code: Some("US".to_string()),
+            territory_name: Some("United States".to_string()),
+            custom: false,
+            custom_assumptions: None,
+        };
+        let (us_personas, _) = generate_personas_for_market("seed-m", 20, &us).unwrap();
+        assert_ne!(
+            serde_json::to_string(&personas).unwrap(),
+            serde_json::to_string(&us_personas).unwrap()
+        );
+        // No market (and a Custom-assumptions run) fall back to the
+        // unshaped mix with no language set.
+        let (plain, _) = generate_personas("seed-m", 20).unwrap();
+        assert!(plain.iter().all(|p| p.language.is_none()));
+        let custom = SwarmtankMarket {
+            profile_id: None,
+            profile_version: None,
+            territory_code: Some("FR".to_string()),
+            territory_name: Some("France".to_string()),
+            custom: true,
+            custom_assumptions: Some(vec![]),
+        };
+        let (custom_personas, _) =
+            generate_personas_for_market("seed-m", 20, &custom).unwrap();
+        assert_eq!(
+            serde_json::to_string(&plain).unwrap(),
+            serde_json::to_string(&custom_personas).unwrap()
+        );
+    }
+
+    #[test]
+    fn market_validation_rejects_unknown_profiles_and_territories() {
+        use crate::swarmtank_market::{SwarmtankMarket, validate_market};
+        let unknown_profile = SwarmtankMarket {
+            profile_id: Some("XX".to_string()),
+            profile_version: Some(1),
+            territory_code: Some("XX".to_string()),
+            territory_name: None,
+            custom: false,
+            custom_assumptions: None,
+        };
+        assert!(validate_market(&unknown_profile).is_err());
+        let unknown_territory = SwarmtankMarket {
+            profile_id: None,
+            profile_version: None,
+            territory_code: Some("ZZ".to_string()),
+            territory_name: None,
+            custom: true,
+            custom_assumptions: Some(vec![]),
+        };
+        assert!(validate_market(&unknown_territory).is_err());
+        let custom_with_profile = SwarmtankMarket {
+            profile_id: Some("EE".to_string()),
+            profile_version: Some(1),
+            territory_code: Some("EE".to_string()),
+            territory_name: Some("Estonia".to_string()),
+            custom: true,
+            custom_assumptions: None,
+        };
+        assert!(validate_market(&custom_with_profile).is_err());
+        let custom_without_territory = SwarmtankMarket {
+            profile_id: None,
+            profile_version: None,
+            territory_code: None,
+            territory_name: None,
+            custom: true,
+            custom_assumptions: Some(vec![]),
+        };
+        assert!(validate_market(&custom_without_territory).is_err());
     }
 
     #[test]
@@ -2857,6 +3200,7 @@ mod tests {
             required_trust_signals: vec![],
             expected_implementation_effort: effort.to_string(),
             synthetic: true,
+            language: None,
         }
     }
 
