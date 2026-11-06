@@ -97,7 +97,7 @@ function walkSpecJson(): string {
   });
 }
 
-type Session = {
+export type Session = {
   cleanup: () => Promise<void>;
   collider: ReturnType<Page['locator']>;
   artifacts: ReturnType<Page['locator']>;
@@ -110,6 +110,7 @@ type Session = {
   storageRoot: string;
   pairingRoot: string;
   pairingToken: string;
+  restartApi: () => Promise<void>;
   call: (group: string, operation: string, input: Record<string, unknown>) => Promise<{ status: number; body: Record<string, any> }>;
   pairAndOpen: (ws: string) => Promise<void>;
   openWorkspace: (ws: string) => Promise<void>;
@@ -166,6 +167,27 @@ export async function startSession(page: Page, reducedMotion: boolean): Promise<
         }
       });
     });
+  }
+
+  // Kill the harness-owned API child and confirm it exits, then start
+  // the platform-correct executable against the same storage and
+  // pairing roots. The harness owns the child and its pairing, so no
+  // port lookup (`ss` does not exist on Windows) and no spec-side
+  // respawn are needed: `call` reads the closure `pairing` and
+  // re-points at the fresh API automatically.
+  async function restartApi() {
+    if (child && child.exitCode === null && child.signalCode === null) {
+      const exited = new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => reject(Error('API did not exit after SIGKILL')), 10000);
+        child!.once('exit', () => {
+          clearTimeout(timer);
+          resolve();
+        });
+      });
+      child.kill('SIGKILL');
+      await exited;
+    }
+    await startApi();
   }
 
   async function call(group: string, operation: string, input: Record<string, unknown>) {
@@ -229,11 +251,27 @@ export async function startSession(page: Page, reducedMotion: boolean): Promise<
 
   return {
     cleanup: async () => {
-      if (child && child.exitCode === null) {
-        const ended = new Promise((resolve) => child!.once('exit', resolve));
+      // A signal-killed child keeps exitCode null after it exits, so
+      // exitCode alone cannot tell "still running" from "already
+      // dead" (a restart test SIGKILLs the API, then cleanup waited
+      // forever on an 'exit' event that had already fired).
+      if (child && child.exitCode === null && child.signalCode === null) {
         child.kill();
-        await ended;
+        await Promise.race([
+          new Promise((resolve) => child!.once('exit', resolve)),
+          new Promise((resolve) =>
+            setTimeout(() => {
+              child!.kill('SIGKILL');
+              resolve(null);
+            }, 10000),
+          ),
+        ]);
       }
+      // The browser can hold an idle keep-alive connection to the fake
+      // provider server; server.close() alone waits for it forever
+      // (this hung a long-running restart test at cleanup). Drop idle
+      // connections first so close() can call back.
+      fake.closeAllConnections();
       await new Promise<void>(r => fake.close(() => r()));
     },
     collider,
@@ -254,7 +292,12 @@ export async function startSession(page: Page, reducedMotion: boolean): Promise<
     projectId,
     storageRoot: path.join(root, 'storage'),
     pairingRoot: path.join(root, 'pairing'),
-    pairingToken: pairing.token,
+    // A getter, not a snapshot: after restartApi the pairing (and its
+    // token) belong to the fresh API child.
+    get pairingToken() {
+      return pairing.token;
+    },
+    restartApi,
     call,
     pairAndOpen,
     openWorkspace,

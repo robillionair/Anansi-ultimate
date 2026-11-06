@@ -4156,6 +4156,92 @@
     "title": "DiscoveredRuntime",
     "type": "object"
   },
+  "DocumentProvenance": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "description": "Exact-source provenance stored on a published `document` memory.\n`media_type` is derived from the kind, never trusted from the client.",
+    "properties": {
+      "bom": {
+        "type": "boolean"
+      },
+      "fileName": {
+        "type": "string"
+      },
+      "mediaType": {
+        "type": "string"
+      },
+      "rawBytes": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "rawHash": {
+        "type": "string"
+      },
+      "textChars": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "textHash": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "fileName",
+      "mediaType",
+      "rawHash",
+      "textHash",
+      "rawBytes",
+      "textChars",
+      "bom"
+    ],
+    "title": "DocumentProvenance",
+    "type": "object"
+  },
+  "DocumentSource": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "description": "The exact-source record for one beam/document text. Mirrors\n`ColliderDocumentSource` field for field; ingestion builds this from\nthe staged upload, the collider builds it from the picked file.",
+    "properties": {
+      "bom": {
+        "type": "boolean"
+      },
+      "kind": {
+        "type": "string"
+      },
+      "label": {
+        "type": "string"
+      },
+      "rawBytes": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "rawHash": {
+        "type": "string"
+      },
+      "textChars": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "textHash": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "label",
+      "kind",
+      "bom",
+      "rawBytes",
+      "rawHash",
+      "textHash",
+      "textChars"
+    ],
+    "title": "DocumentSource",
+    "type": "object"
+  },
   "EnqueueExportRequest": {
     "$defs": {
       "ExportSelection": {
@@ -4226,8 +4312,63 @@
               "ids"
             ],
             "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Local document import (M13 Slice 1). The durable job-spec enum\nalready carries a `Backup` variant; `Ingestion` is the same idea:\nthe job row durably records the staged upload's identity, so no\nsecond staging table is needed. `upload_id` is the job id itself.",
+            "properties": {
+              "expectedBytes": {
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "expectedHash": {
+                "type": "string"
+              },
+              "fileName": {
+                "type": "string"
+              },
+              "format": {
+                "type": "string"
+              },
+              "kind": {
+                "const": "ingestion",
+                "type": "string"
+              },
+              "privacy": {
+                "$ref": "#/$defs/Privacy"
+              },
+              "projectId": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "uploadId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "uploadId",
+              "fileName",
+              "format",
+              "expectedBytes",
+              "expectedHash",
+              "privacy"
+            ],
+            "type": "object"
           }
         ]
+      },
+      "Privacy": {
+        "enum": [
+          "sealed",
+          "private",
+          "standard",
+          "public"
+        ],
+        "type": "string"
       }
     },
     "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -7300,6 +7441,373 @@
     "title": "IndexEmbeddingsResponse",
     "type": "object"
   },
+  "IngestionBegin": {
+    "$defs": {
+      "Privacy": {
+        "enum": [
+          "sealed",
+          "private",
+          "standard",
+          "public"
+        ],
+        "type": "string"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "bytes": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "fileName": {
+        "type": "string"
+      },
+      "privacy": {
+        "$ref": "#/$defs/Privacy"
+      },
+      "projectId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "sha256": {
+        "type": "string"
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "workspaceId",
+      "fileName",
+      "bytes",
+      "sha256",
+      "privacy"
+    ],
+    "title": "IngestionBegin",
+    "type": "object"
+  },
+  "IngestionPart": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "bytes": {
+        "items": {
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": "array"
+      },
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "finish": {
+        "type": "boolean"
+      },
+      "id": {
+        "type": "string"
+      },
+      "offset": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "workspaceId",
+      "id",
+      "offset",
+      "bytes",
+      "finish"
+    ],
+    "title": "IngestionPart",
+    "type": "object"
+  },
+  "IngestionStatus": {
+    "$defs": {
+      "ExportSelection": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "workspace",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "application": {
+                "type": "boolean"
+              },
+              "kind": {
+                "const": "backup",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "application"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "kind": {
+                "const": "project",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "id"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "ids": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "kind": {
+                "const": "records",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "ids"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Local document import (M13 Slice 1). The durable job-spec enum\nalready carries a `Backup` variant; `Ingestion` is the same idea:\nthe job row durably records the staged upload's identity, so no\nsecond staging table is needed. `upload_id` is the job id itself.",
+            "properties": {
+              "expectedBytes": {
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "expectedHash": {
+                "type": "string"
+              },
+              "fileName": {
+                "type": "string"
+              },
+              "format": {
+                "type": "string"
+              },
+              "kind": {
+                "const": "ingestion",
+                "type": "string"
+              },
+              "privacy": {
+                "$ref": "#/$defs/Privacy"
+              },
+              "projectId": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "uploadId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "uploadId",
+              "fileName",
+              "format",
+              "expectedBytes",
+              "expectedHash",
+              "privacy"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "Job": {
+        "additionalProperties": false,
+        "properties": {
+          "artifactBytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "artifactHash": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "artifactId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "checkpoint": {
+            "type": "string"
+          },
+          "checkpointVersion": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "log": {
+            "type": "string"
+          },
+          "maxBytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxRecords": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "progress": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "selection": {
+            "$ref": "#/$defs/ExportSelection"
+          },
+          "state": {
+            "$ref": "#/$defs/JobState"
+          },
+          "updatedAt": {
+            "type": "string"
+          },
+          "version": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "workspaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "workspaceId",
+          "state",
+          "version",
+          "checkpointVersion",
+          "checkpoint",
+          "selection",
+          "progress",
+          "maxRecords",
+          "maxBytes",
+          "createdAt",
+          "updatedAt",
+          "log"
+        ],
+        "type": "object"
+      },
+      "JobState": {
+        "enum": [
+          "Queued",
+          "Running",
+          "Paused",
+          "Completed",
+          "Failed",
+          "Cancelled"
+        ],
+        "type": "string"
+      },
+      "Privacy": {
+        "enum": [
+          "sealed",
+          "private",
+          "standard",
+          "public"
+        ],
+        "type": "string"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "id": {
+        "type": "string"
+      },
+      "job": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/Job"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "received": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "id",
+      "received"
+    ],
+    "title": "IngestionStatus",
+    "type": "object"
+  },
   "Job": {
     "$defs": {
       "ExportSelection": {
@@ -7370,6 +7878,52 @@
               "ids"
             ],
             "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Local document import (M13 Slice 1). The durable job-spec enum\nalready carries a `Backup` variant; `Ingestion` is the same idea:\nthe job row durably records the staged upload's identity, so no\nsecond staging table is needed. `upload_id` is the job id itself.",
+            "properties": {
+              "expectedBytes": {
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "expectedHash": {
+                "type": "string"
+              },
+              "fileName": {
+                "type": "string"
+              },
+              "format": {
+                "type": "string"
+              },
+              "kind": {
+                "const": "ingestion",
+                "type": "string"
+              },
+              "privacy": {
+                "$ref": "#/$defs/Privacy"
+              },
+              "projectId": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "uploadId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "uploadId",
+              "fileName",
+              "format",
+              "expectedBytes",
+              "expectedHash",
+              "privacy"
+            ],
+            "type": "object"
           }
         ]
       },
@@ -7381,6 +7935,15 @@
           "Completed",
           "Failed",
           "Cancelled"
+        ],
+        "type": "string"
+      },
+      "Privacy": {
+        "enum": [
+          "sealed",
+          "private",
+          "standard",
+          "public"
         ],
         "type": "string"
       }
@@ -7546,6 +8109,52 @@
               "ids"
             ],
             "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Local document import (M13 Slice 1). The durable job-spec enum\nalready carries a `Backup` variant; `Ingestion` is the same idea:\nthe job row durably records the staged upload's identity, so no\nsecond staging table is needed. `upload_id` is the job id itself.",
+            "properties": {
+              "expectedBytes": {
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "expectedHash": {
+                "type": "string"
+              },
+              "fileName": {
+                "type": "string"
+              },
+              "format": {
+                "type": "string"
+              },
+              "kind": {
+                "const": "ingestion",
+                "type": "string"
+              },
+              "privacy": {
+                "$ref": "#/$defs/Privacy"
+              },
+              "projectId": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "uploadId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "uploadId",
+              "fileName",
+              "format",
+              "expectedBytes",
+              "expectedHash",
+              "privacy"
+            ],
+            "type": "object"
           }
         ]
       },
@@ -7649,6 +8258,15 @@
           "Cancelled"
         ],
         "type": "string"
+      },
+      "Privacy": {
+        "enum": [
+          "sealed",
+          "private",
+          "standard",
+          "public"
+        ],
+        "type": "string"
       }
     },
     "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -7739,6 +8357,52 @@
             "required": [
               "kind",
               "ids"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Local document import (M13 Slice 1). The durable job-spec enum\nalready carries a `Backup` variant; `Ingestion` is the same idea:\nthe job row durably records the staged upload's identity, so no\nsecond staging table is needed. `upload_id` is the job id itself.",
+            "properties": {
+              "expectedBytes": {
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "expectedHash": {
+                "type": "string"
+              },
+              "fileName": {
+                "type": "string"
+              },
+              "format": {
+                "type": "string"
+              },
+              "kind": {
+                "const": "ingestion",
+                "type": "string"
+              },
+              "privacy": {
+                "$ref": "#/$defs/Privacy"
+              },
+              "projectId": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "uploadId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "uploadId",
+              "fileName",
+              "format",
+              "expectedBytes",
+              "expectedHash",
+              "privacy"
             ],
             "type": "object"
           }
@@ -7842,6 +8506,15 @@
           "Completed",
           "Failed",
           "Cancelled"
+        ],
+        "type": "string"
+      },
+      "Privacy": {
+        "enum": [
+          "sealed",
+          "private",
+          "standard",
+          "public"
         ],
         "type": "string"
       }
@@ -9462,6 +10135,47 @@
   },
   "MemoryDetails": {
     "$defs": {
+      "DocumentProvenance": {
+        "additionalProperties": false,
+        "description": "Exact-source provenance stored on a published `document` memory.\n`media_type` is derived from the kind, never trusted from the client.",
+        "properties": {
+          "bom": {
+            "type": "boolean"
+          },
+          "fileName": {
+            "type": "string"
+          },
+          "mediaType": {
+            "type": "string"
+          },
+          "rawBytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "rawHash": {
+            "type": "string"
+          },
+          "textChars": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "textHash": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "fileName",
+          "mediaType",
+          "rawHash",
+          "textHash",
+          "rawBytes",
+          "textChars",
+          "bom"
+        ],
+        "type": "object"
+      },
       "MemoryMetadata": {
         "additionalProperties": false,
         "properties": {
@@ -9492,6 +10206,17 @@
           },
           "createdAt": {
             "type": "string"
+          },
+          "document": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/DocumentProvenance"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Exact-source provenance for imported documents (`document_import`\nrecords only). Absent for every other record, including all\npre-ingestion rows, which parse with `None`."
           },
           "dueDate": {
             "default": null,
@@ -9782,6 +10507,47 @@
   },
   "MemoryList": {
     "$defs": {
+      "DocumentProvenance": {
+        "additionalProperties": false,
+        "description": "Exact-source provenance stored on a published `document` memory.\n`media_type` is derived from the kind, never trusted from the client.",
+        "properties": {
+          "bom": {
+            "type": "boolean"
+          },
+          "fileName": {
+            "type": "string"
+          },
+          "mediaType": {
+            "type": "string"
+          },
+          "rawBytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "rawHash": {
+            "type": "string"
+          },
+          "textChars": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "textHash": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "fileName",
+          "mediaType",
+          "rawHash",
+          "textHash",
+          "rawBytes",
+          "textChars",
+          "bom"
+        ],
+        "type": "object"
+      },
       "MemoryMetadata": {
         "additionalProperties": false,
         "properties": {
@@ -9812,6 +10578,17 @@
           },
           "createdAt": {
             "type": "string"
+          },
+          "document": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/DocumentProvenance"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Exact-source provenance for imported documents (`document_import`\nrecords only). Absent for every other record, including all\npre-ingestion rows, which parse with `None`."
           },
           "dueDate": {
             "default": null,
@@ -10096,6 +10873,47 @@
   },
   "MemoryMetadata": {
     "$defs": {
+      "DocumentProvenance": {
+        "additionalProperties": false,
+        "description": "Exact-source provenance stored on a published `document` memory.\n`media_type` is derived from the kind, never trusted from the client.",
+        "properties": {
+          "bom": {
+            "type": "boolean"
+          },
+          "fileName": {
+            "type": "string"
+          },
+          "mediaType": {
+            "type": "string"
+          },
+          "rawBytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "rawHash": {
+            "type": "string"
+          },
+          "textChars": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "textHash": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "fileName",
+          "mediaType",
+          "rawHash",
+          "textHash",
+          "rawBytes",
+          "textChars",
+          "bom"
+        ],
+        "type": "object"
+      },
       "MemoryState": {
         "enum": [
           "proposed",
@@ -10147,6 +10965,17 @@
       },
       "createdAt": {
         "type": "string"
+      },
+      "document": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/DocumentProvenance"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "Exact-source provenance for imported documents (`document_import`\nrecords only). Absent for every other record, including all\npre-ingestion rows, which parse with `None`."
       },
       "dueDate": {
         "default": null,
@@ -10338,6 +11167,47 @@
   },
   "MemoryWriteRequest": {
     "$defs": {
+      "DocumentProvenance": {
+        "additionalProperties": false,
+        "description": "Exact-source provenance stored on a published `document` memory.\n`media_type` is derived from the kind, never trusted from the client.",
+        "properties": {
+          "bom": {
+            "type": "boolean"
+          },
+          "fileName": {
+            "type": "string"
+          },
+          "mediaType": {
+            "type": "string"
+          },
+          "rawBytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "rawHash": {
+            "type": "string"
+          },
+          "textChars": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "textHash": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "fileName",
+          "mediaType",
+          "rawHash",
+          "textHash",
+          "rawBytes",
+          "textChars",
+          "bom"
+        ],
+        "type": "object"
+      },
       "LifecycleChange": {
         "additionalProperties": false,
         "properties": {
@@ -10468,6 +11338,18 @@
         "minimum": 0,
         "type": "integer"
       },
+      "document": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/DocumentProvenance"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "description": "Exact-source provenance for an imported document. Accepted only\nwith kind `document` on create; refused on revise."
+      },
       "draft": {
         "$ref": "#/$defs/MemoryDraft"
       },
@@ -10497,6 +11379,14 @@
           {
             "type": "null"
           }
+        ]
+      },
+      "provenance": {
+        "default": null,
+        "description": "Only `document_import` is accepted, only together with `document`\nand kind `document`, only on create. Provenance is verified\nagainst the body (see `validate_import`), never trusted.",
+        "type": [
+          "string",
+          "null"
         ]
       },
       "restoreArchive": {
@@ -20080,6 +20970,52 @@
               "ids"
             ],
             "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Local document import (M13 Slice 1). The durable job-spec enum\nalready carries a `Backup` variant; `Ingestion` is the same idea:\nthe job row durably records the staged upload's identity, so no\nsecond staging table is needed. `upload_id` is the job id itself.",
+            "properties": {
+              "expectedBytes": {
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "expectedHash": {
+                "type": "string"
+              },
+              "fileName": {
+                "type": "string"
+              },
+              "format": {
+                "type": "string"
+              },
+              "kind": {
+                "const": "ingestion",
+                "type": "string"
+              },
+              "privacy": {
+                "$ref": "#/$defs/Privacy"
+              },
+              "projectId": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "uploadId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "uploadId",
+              "fileName",
+              "format",
+              "expectedBytes",
+              "expectedHash",
+              "privacy"
+            ],
+            "type": "object"
           }
         ]
       },
@@ -20181,6 +21117,15 @@
           "Completed",
           "Failed",
           "Cancelled"
+        ],
+        "type": "string"
+      },
+      "Privacy": {
+        "enum": [
+          "sealed",
+          "private",
+          "standard",
+          "public"
         ],
         "type": "string"
       }

@@ -89,6 +89,8 @@ pub fn command_path(path: &str) -> bool {
             | "/v1/mcp/prompts-get"
             | "/v1/jobs/upload-begin"
             | "/v1/jobs/upload-part"
+            | "/v1/jobs/ingest-begin"
+            | "/v1/jobs/ingest-part"
             | "/v1/memories/read"
             | "/v1/memories/revise"
             | "/v1/memories/list"

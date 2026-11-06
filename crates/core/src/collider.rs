@@ -524,68 +524,31 @@ const MAX_BEAM_CHARS: usize = 8_000;
 /// Largest accepted document file, in bytes. A beam
 /// holds at most 8,000 characters, so 64 KiB bounds
 /// the request payload while leaving ample room for
-/// multi-byte UTF-8 text.
-const MAX_DOCUMENT_BYTES: u64 = 65_536;
-const MAX_LABEL_CHARS: usize = 255;
-
+/// multi-byte UTF-8 text. (Shared rules live in
+/// `crate::document`; these constants stay for the
+/// collider-local beam checks below.)
 /// Validate one beam's document provenance against the
-/// exact submitted beam text. Every field is recomputed
-/// here — nothing about the record is trusted — so a
-/// forged, stale (edited-beam) or inconsistent record
-/// refuses. The label must be a basename whose
-/// extension matches the kind; the raw hash covers the
-/// original file bytes (a stripped BOM included), the
-/// text hash covers the submitted text bytes, and both
-/// counts must match the beam exactly.
+/// exact submitted beam text. The shared rules live in
+/// `crate::document` (same checks, same messages); this
+/// wrapper keeps the collider's contract type and call sites
+/// unchanged. Every field is recomputed — nothing about the
+/// record is trusted — so a forged, stale (edited-beam) or
+/// inconsistent record refuses. The label must be a basename
+/// whose extension matches the kind; the raw hash covers the
+/// original file bytes (a stripped BOM included), the text
+/// hash covers the submitted text bytes, and both counts must
+/// match the beam exactly.
 pub fn validate_document_source(source: &ColliderDocumentSource, beam: &str) -> Result<(), String> {
-    if source.kind != "txt" && source.kind != "md" {
-        return Err(format!(
-            "document kind must be txt or md, got {}",
-            source.kind
-        ));
-    }
-    let label_chars = source.label.chars().count();
-    if label_chars == 0 || label_chars > MAX_LABEL_CHARS {
-        return Err("document label must be 1 to 255 characters.".to_string());
-    }
-    if source.label.contains('/') || source.label.contains('\\') || source.label.contains('\0') {
-        return Err("document label must be a file name, not a path.".to_string());
-    }
-    let suffix = source
-        .label
-        .rsplit('.')
-        .next()
-        .unwrap_or("")
-        .to_ascii_lowercase();
-    if (source.kind == "txt" && suffix != "txt") || (source.kind == "md" && suffix != "md") {
-        return Err("document label extension must match its kind.".to_string());
-    }
-    if source.raw_bytes > MAX_DOCUMENT_BYTES {
-        return Err(format!(
-            "document file must be at most {MAX_DOCUMENT_BYTES} bytes, got {}",
-            source.raw_bytes
-        ));
-    }
-    let beam_bytes = beam.as_bytes();
-    let beam_chars = beam.chars().count() as u64;
-    if source.text_chars != beam_chars || beam_chars > MAX_BEAM_CHARS as u64 {
-        return Err("document text length must match the submitted beam.".to_string());
-    }
-    if crate::content::hash(beam_bytes) != source.text_hash {
-        return Err("document text hash must match the submitted beam.".to_string());
-    }
-    let mut raw: Vec<u8> = Vec::with_capacity(beam_bytes.len() + 3);
-    if source.bom {
-        raw.extend_from_slice(&[0xEF, 0xBB, 0xBF]);
-    }
-    raw.extend_from_slice(beam_bytes);
-    if crate::content::hash(&raw) != source.raw_hash {
-        return Err("document file hash must match the submitted beam.".to_string());
-    }
-    if source.raw_bytes != raw.len() as u64 {
-        return Err("document file size must match the submitted beam.".to_string());
-    }
-    Ok(())
+    crate::document::validate_document_source(
+        &source.label,
+        &source.kind,
+        source.bom,
+        source.raw_bytes,
+        &source.raw_hash,
+        &source.text_hash,
+        source.text_chars,
+        beam,
+    )
 }
 
 /// Validate one beam's URL provenance against the exact

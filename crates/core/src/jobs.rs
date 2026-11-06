@@ -1,6 +1,8 @@
 //! Durable export job state and lease fencing. Payloads and logs never contain source text.
 use crate::{
     CommandError, ErrorCode, content,
+    document::DocumentSource,
+    privacy::Privacy,
     storage::{Storage, unavailable},
     workspace::validate_id,
 };
@@ -27,14 +29,73 @@ pub enum JobState {
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum ExportSelection {
     Workspace,
-    Backup { application: bool },
-    Project { id: String },
-    Records { ids: Vec<String> },
+    Backup {
+        application: bool,
+    },
+    Project {
+        id: String,
+    },
+    Records {
+        ids: Vec<String>,
+    },
+    /// Local document import (M13 Slice 1). The durable job-spec enum
+    /// already carries a `Backup` variant; `Ingestion` is the same idea:
+    /// the job row durably records the staged upload's identity, so no
+    /// second staging table is needed. `upload_id` is the job id itself.
+    #[serde(rename_all = "camelCase")]
+    Ingestion {
+        upload_id: String,
+        file_name: String,
+        format: String,
+        expected_bytes: u64,
+        expected_hash: String,
+        privacy: Privacy,
+        project_id: Option<String>,
+    },
 }
 impl ExportSelection {
     pub(crate) fn validate(&self) -> Result<(), CommandError> {
         match self {
             Self::Workspace | Self::Backup { .. } => Ok(()),
+            Self::Ingestion {
+                upload_id,
+                file_name,
+                format,
+                expected_bytes,
+                expected_hash,
+                privacy,
+                project_id,
+            } => {
+                validate_id(upload_id)?;
+                if file_name.chars().count() == 0
+                    || file_name.chars().count() > crate::document::MAX_LABEL_CHARS
+                    || file_name.contains(['/', '\\', '\0'])
+                {
+                    return Err(invalid());
+                }
+                // The kind must be the one the file-name extension names;
+                // a forged selection cannot smuggle another kind past the
+                // worker, which re-validates the staged bytes anyway.
+                if DocumentSource::kind_for_label(file_name).map_err(|_| invalid())? != *format {
+                    return Err(invalid());
+                }
+                if *expected_bytes == 0
+                    || *expected_bytes > crate::document::MAX_DOCUMENT_BYTES
+                    || expected_hash.len() != 64
+                    || !expected_hash
+                        .bytes()
+                        .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
+                {
+                    return Err(invalid());
+                }
+                if *privacy == Privacy::Sealed {
+                    return Err(invalid());
+                }
+                if let Some(pid) = project_id {
+                    validate_id(pid)?;
+                }
+                Ok(())
+            }
             Self::Project { id } => validate_id(id),
             Self::Records { ids } => {
                 if ids.is_empty() || ids.len() > MAX_RECORDS as usize {
@@ -115,7 +176,11 @@ fn state_name(state: &JobState) -> &'static str {
     }
 }
 
-fn read(connection: &Connection, workspace: &str, id: &str) -> Result<Job, CommandError> {
+pub(crate) fn read(
+    connection: &Connection,
+    workspace: &str,
+    id: &str,
+) -> Result<Job, CommandError> {
     type JobRow = (
         String,
         u32,
@@ -173,6 +238,17 @@ fn read(connection: &Connection, workspace: &str, id: &str) -> Result<Job, Comma
 pub struct JobLease {
     pub job: Job,
     pub(crate) owner: String,
+}
+
+/// Best-effort removal of one ingestion job's staged upload file.
+/// Never fails the caller; the upload-begin sweep removes leftovers.
+fn discard_ingestion_staging(storage: &Storage, workspace: &str, selection: &ExportSelection) {
+    if let ExportSelection::Ingestion { upload_id, .. } = selection
+        && let Ok(directory) = crate::export::directory(storage, workspace)
+    {
+        let path = directory.join(format!("{upload_id}.upload"));
+        let _ = crate::storage::reject_links(&path).map(|_| std::fs::remove_file(&path));
+    }
 }
 
 impl Storage {
@@ -281,9 +357,28 @@ impl Storage {
             (JobAction::Retry, JobState::Failed | JobState::Cancelled) => JobState::Queued,
             _ => return Err(invalid()),
         };
+        // An ingestion job whose upload has not finished cannot be queued:
+        // the worker would find no staged bytes. Resume waits until the
+        // upload completes (checkpoint `staged`); the Documents UI offers
+        // "Resume upload" for the in-flight case instead.
+        if matches!(action, JobAction::Resume)
+            && matches!(job.selection, ExportSelection::Ingestion { .. })
+            && job.checkpoint != "staged"
+        {
+            return Err(CommandError::new(
+                ErrorCode::InvalidRequest,
+                "This import's upload is incomplete; resume the upload instead of the job.",
+            ));
+        }
         tx.execute("UPDATE jobs SET state=?1,version=version+1,owner=NULL,lease_until=NULL,updated_at=?2,log=?3 WHERE workspace_id=?4 AND id=?5",params![state_name(&next),now(),match next { JobState::Queued=>"Export queued explicitly",JobState::Paused=>"Export paused explicitly",_=>"Export cancelled explicitly" },workspace,id]).map_err(|_| unavailable())?;
         let result = read(&tx, workspace, id)?;
         tx.commit().map_err(|_| unavailable())?;
+        // Cancelling an import abandons its staged bytes. Best effort and
+        // after the commit: a failed delete never blocks the cancellation,
+        // and the upload-begin sweep removes any leftover later.
+        if matches!(next, JobState::Cancelled) {
+            discard_ingestion_staging(self, workspace, &job.selection);
+        }
         Ok(result)
     }
 
@@ -300,7 +395,12 @@ impl Storage {
             return Ok(None);
         };
         let owner = content::random_id()?;
-        tx.execute("UPDATE jobs SET state='Running',version=version+1,checkpoint_version=checkpoint_version+1,checkpoint='snapshot',progress=0,owner=?1,lease_until=?2,updated_at=?3,log='Export snapshot started' WHERE workspace_id=?4 AND id=?5",params![owner,Utc::now().timestamp()+LEASE_SECONDS,now(),workspace,id]).map_err(|_| unavailable())?;
+        // Ingestion jobs keep their checkpoint and progress: the
+        // checkpoint is the upload's durable state (`staged` proves the
+        // upload finished, so an interrupted job can Resume), and
+        // progress is the upload percent. Export jobs reset both to
+        // the snapshot scratch values.
+        tx.execute("UPDATE jobs SET state='Running',version=version+1,checkpoint_version=checkpoint_version+1,checkpoint=CASE WHEN json_extract(selection,'$.kind')='ingestion' THEN checkpoint ELSE 'snapshot' END,progress=CASE WHEN json_extract(selection,'$.kind')='ingestion' THEN progress ELSE 0 END,owner=?1,lease_until=?2,updated_at=?3,log=CASE WHEN json_extract(selection,'$.kind')='ingestion' THEN 'Document import started' ELSE 'Export snapshot started' END WHERE workspace_id=?4 AND id=?5",params![owner,Utc::now().timestamp()+LEASE_SECONDS,now(),workspace,id]).map_err(|_| unavailable())?;
         let job = read(&tx, &workspace, &id)?;
         tx.commit().map_err(|_| unavailable())?;
         Ok(Some(JobLease { job, owner }))
@@ -429,10 +529,10 @@ impl crate::Core {
                     }
                 };
                 while let Ok(Some(lease)) = storage.claim_export() {
-                    let result = if matches!(lease.job.selection, ExportSelection::Backup { .. }) {
-                        storage.execute_backup(&lease)
-                    } else {
-                        storage.execute_export(&lease)
+                    let result = match &lease.job.selection {
+                        ExportSelection::Backup { .. } => storage.execute_backup(&lease),
+                        ExportSelection::Ingestion { .. } => storage.execute_ingestion(&lease),
+                        _ => storage.execute_export(&lease),
                     };
                     if result.is_err() {
                         let _ = storage.fail_export(&lease);
@@ -459,6 +559,9 @@ impl crate::Core {
         let storage = self.storage()?;
         if matches!(command, "upload-begin" | "upload-part") {
             return self.upload_operation(command, input);
+        }
+        if matches!(command, "ingest-begin" | "ingest-part") {
+            return self.ingestion_operation(command, input);
         }
         if matches!(
             command,

@@ -1,5 +1,6 @@
 use crate::{
     CommandError, Core, ErrorCode, content,
+    document::{DocumentProvenance, JobPublishGuard},
     lifecycle::{LifecycleChange, MemoryState},
     privacy::Privacy,
     storage::{Storage, unavailable},
@@ -132,6 +133,11 @@ pub struct MemoryMetadata {
     pub restored_from: Option<String>,
     pub privacy: Privacy,
     pub provenance: String,
+    /// Exact-source provenance for imported documents (`document_import`
+    /// records only). Absent for every other record, including all
+    /// pre-ingestion rows, which parse with `None`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub document: Option<DocumentProvenance>,
     pub source_references: Vec<String>,
     pub generator_model: Option<String>,
     pub validation_status: String,
@@ -215,6 +221,18 @@ pub struct MemoryWriteRequest {
     pub restore_revision: Option<String>,
     #[serde(default)]
     pub confirm_privacy_change: bool,
+    /// Only `document_import` is accepted, only together with `document`
+    /// and kind `document`, only on create. Provenance is verified
+    /// against the body (see `validate_import`), never trusted.
+    #[serde(default)]
+    pub provenance: Option<String>,
+    /// Exact-source provenance for an imported document. Accepted only
+    /// with kind `document` on create; refused on revise.
+    #[serde(default)]
+    pub document: Option<DocumentProvenance>,
+    /// Internal-only ingestion publish guard. Never deserialized.
+    #[serde(skip)]
+    pub job_guard: Option<JobPublishGuard>,
 }
 fn invalid() -> CommandError {
     CommandError::new(
@@ -285,6 +303,49 @@ pub(crate) fn validate(draft: &MemoryDraft) -> Result<(), CommandError> {
 fn id(value: &str) -> Result<(), CommandError> {
     crate::workspace::validate_id(value).map_err(|_| invalid())
 }
+/// Provenance and document-record rules for `MemoryWriteRequest`.
+/// Provenance is verified against the submitted body, never trusted:
+/// `document_import` is the only accepted provenance value, it requires
+/// the document record and kind `document`, only on create, the title
+/// must be the file name, the media type must match the kind, and both
+/// hashes/counts must recompute against the body.
+fn validate_import(r: &MemoryWriteRequest) -> Result<(), CommandError> {
+    if r.provenance.is_none() && r.document.is_none() {
+        return Ok(());
+    }
+    if r.id.is_some() {
+        return Err(invalid());
+    }
+    if r.provenance.as_deref() != Some("document_import") {
+        return Err(invalid());
+    }
+    let doc = r.document.as_ref().ok_or_else(invalid)?;
+    if r.kind.as_deref() != Some("document") {
+        return Err(invalid());
+    }
+    if doc.file_name != r.draft.title {
+        return Err(invalid());
+    }
+    let kind = match doc.media_type.as_str() {
+        "text/plain" => "txt",
+        "text/markdown" => "md",
+        _ => return Err(invalid()),
+    };
+    if doc.media_type != DocumentProvenance::media_type_for(kind) {
+        return Err(invalid());
+    }
+    crate::document::validate_document_source(
+        &doc.file_name,
+        kind,
+        doc.bom,
+        doc.raw_bytes,
+        &doc.raw_hash,
+        &doc.text_hash,
+        doc.text_chars,
+        &r.draft.body,
+    )
+    .map_err(|_| invalid())
+}
 impl Core {
     pub fn memory_command(&self, operation: &str, value: Value) -> Result<Value, CommandError> {
         match operation {
@@ -292,6 +353,7 @@ impl Core {
                 let r: MemoryWriteRequest = input(value)?;
                 id(&r.workspace_id)?;
                 validate(&r.draft)?;
+                validate_import(&r)?;
                 if operation == "create" {
                     if r.id.is_some() || r.expected_revision.is_some() {
                         return Err(invalid());
@@ -387,6 +449,60 @@ fn metadata(
     }
     Ok((meta, hash))
 }
+
+/// Ingestion publish guard (see `JobPublishGuard` in `document.rs`).
+/// Verifies the job is still Running under this lease, then looks for an
+/// existing current-revision `document` memory with the same title and
+/// text hash. Returns that record's details when one exists, so the
+/// caller publishes nothing. The caller runs this twice: once before
+/// writing the content file (cheap path, no orphan) and once inside the
+/// publish transaction (authoritative; the transaction serializes
+/// concurrent publishers and cancellations).
+fn guard_check(
+    connection: &Connection,
+    root: &std::path::Path,
+    workspace: &str,
+    guard: &JobPublishGuard,
+) -> Result<Option<MemoryDetails>, CommandError> {
+    let row: Option<(String, String)> = connection
+        .query_row(
+            "SELECT state, owner FROM jobs WHERE workspace_id=?1 AND id=?2",
+            params![workspace, guard.job_id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .optional()
+        .map_err(|_| unavailable())?;
+    let Some((state, owner)) = row else {
+        return Err(unavailable());
+    };
+    if state != "Running" || owner != guard.owner {
+        return Err(CommandError::new(
+            ErrorCode::RevisionConflict,
+            "The import job was cancelled or its lease expired; nothing was published.",
+        ));
+    }
+    let (Some(title), Some(text_hash)) = (&guard.dedup_title, &guard.dedup_text_hash) else {
+        return Ok(None);
+    };
+    let found: Option<(String, String)> = connection
+        .query_row(
+            "SELECT m.id, m.current_revision FROM memories m JOIN memory_revisions r ON r.workspace_id=m.workspace_id AND r.memory_id=m.id AND r.id=m.current_revision WHERE m.workspace_id=?1 AND json_extract(r.metadata,'$.kind')='document' AND json_extract(r.metadata,'$.title')=?2 AND r.body_hash=?3",
+            params![workspace, title, text_hash],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .optional()
+        .map_err(|_| unavailable())?;
+    let Some((id, revision)) = found else {
+        return Ok(None);
+    };
+    let (meta, hash) = metadata(connection, workspace, &id, Some(&revision))?;
+    let body = content::read(root, workspace, &id, &meta.revision_id, &hash)?;
+    Ok(Some(MemoryDetails {
+        contract_version: 1,
+        memory: meta,
+        body,
+    }))
+}
 impl Core {
     pub fn rebuild_search_index(&self, workspace_id: &str) -> Result<u32, CommandError> {
         id(workspace_id)?;
@@ -402,6 +518,7 @@ impl Storage {
         // The public core validates inputs before any storage access. Check again for direct callers.
         id(&r.workspace_id)?;
         validate(&r.draft)?;
+        validate_import(&r)?;
         if r.kind
             .as_deref()
             .is_some_and(|k| !crate::entities::is_valid_kind(k))
@@ -545,7 +662,15 @@ impl Storage {
             provenance: old
                 .as_ref()
                 .map(|m| m.provenance.clone())
-                .unwrap_or_else(|| "user_authored".into()),
+                .unwrap_or_else(|| {
+                    r.provenance
+                        .clone()
+                        .unwrap_or_else(|| "user_authored".into())
+                }),
+            document: old
+                .as_ref()
+                .and_then(|m| m.document.clone())
+                .or_else(|| r.document.clone()),
             source_references: r.draft.source_references,
             generator_model: old.as_ref().and_then(|m| m.generator_model.clone()),
             validation_status: old
@@ -602,6 +727,18 @@ impl Storage {
         {
             return Err(crate::lifecycle::invalid());
         }
+        // Ingestion guard, cheap path: refuse a cancelled/expired job and
+        // return an existing duplicate before writing any content file.
+        // The authoritative check runs again inside the publish
+        // transaction below. The guard is create-only.
+        if let Some(guard) = &r.job_guard {
+            if old.is_some() {
+                return Err(invalid());
+            }
+            if let Some(existing) = guard_check(&connection, &self.root, &r.workspace_id, guard)? {
+                return Ok(existing);
+            }
+        }
         #[cfg(test)]
         fault("before_file");
         let hash = content::write(
@@ -618,6 +755,25 @@ impl Storage {
         let tx = connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(|_| unavailable())?;
+        // Ingestion guard, authoritative path: the lease and dedup are
+        // re-verified under the publication lock. A duplicate found here
+        // (or a cancelled lease) means the content file just written is
+        // an orphan; remove it before returning.
+        if let Some(guard) = &r.job_guard {
+            match guard_check(&tx, &self.root, &r.workspace_id, guard) {
+                Ok(Some(existing)) => {
+                    drop(tx);
+                    let _ = content::remove(&self.root, &r.workspace_id, &record, &revision);
+                    return Ok(existing);
+                }
+                Ok(None) => {}
+                Err(error) => {
+                    drop(tx);
+                    let _ = content::remove(&self.root, &r.workspace_id, &record, &revision);
+                    return Err(error);
+                }
+            }
+        }
         if let Some(previous) = &old {
             let (latest, _) = metadata(&tx, &r.workspace_id, &record, None)?;
             if latest.revision_id != previous.revision_id {
