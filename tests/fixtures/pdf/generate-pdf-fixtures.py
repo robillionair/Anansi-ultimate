@@ -14,6 +14,7 @@ Reference check (not part of the app): `pdftotext` (poppler) is used
 by the author to cross-check the normal fixtures' expected text.
 """
 
+import base64
 import hashlib
 import json
 import os
@@ -142,6 +143,150 @@ def text_lines(lines, y_start=720, size=12, leading=16):
         parts.append(b"(" + line.encode("latin-1").replace(b"\\", b"\\\\").replace(b"(", b"\\(").replace(b")", b"\\)") + b") Tj")
     parts.append(b"ET")
     return b"\n".join(parts)
+
+
+def lzw_encode(data: bytes) -> bytes:
+    """PDF LZWDecode encoder, TIFF early-change (EarlyChange=1, the
+    PDF default), MSB-first bit packing, min code size 8.
+
+    Dictionary starts with the 256 single-byte entries; clear=256,
+    EOD=257, first free code 258. Code width starts at 9 bits and
+    grows to 12; with early change the width increases when the next
+    code to assign reaches 2**width - 1. When the table fills (4096
+    codes) a clear code is emitted and the dictionary resets. The
+    module's weezl decoder (with_tiff_size_switch) is the reference
+    for this encoding; the LZW fixtures' tests round-trip through it.
+    """
+    CLEAR, EOD = 256, 257
+    out_bits = []  # (code, width) pairs, packed MSB-first below
+
+    def emit(code, width):
+        out_bits.append((code, width))
+
+    dictionary = {bytes([b]): b for b in range(256)}
+    next_code = 258
+    width = 9
+    emit(CLEAR, width)
+    current = b""
+    for byte in data:
+        candidate = current + bytes([byte])
+        if candidate in dictionary:
+            current = candidate
+            continue
+        emit(dictionary[current], width)
+        if next_code < 4096:
+            dictionary[candidate] = next_code
+            next_code += 1
+            # Width bump: increase the code size when the entry just
+            # added reaches (1 << width) - 1. The decoder (weezl,
+            # TIFF early-change) bumps when it DERIVES an entry with
+            # code >= (1 << width) - 2, and it derives each entry
+            # one code AFTER the encoder adds it, so the encoder's
+            # threshold is one higher — otherwise the widths desync
+            # at the first bump (verified: bumping at -2 fails
+            # weezl with InvalidCode at ~32k 'A's; bumping at -1
+            # decodes cleanly).
+            if next_code == (1 << width) and width < 12:
+                width += 1
+        else:
+            emit(CLEAR, width)
+            dictionary = {bytes([b]): b for b in range(256)}
+            next_code = 258
+            width = 9
+        current = bytes([byte])
+    if current:
+        emit(dictionary[current], width)
+    emit(EOD, width)
+    # Pack MSB-first.
+    acc, nbits, out = 0, 0, bytearray()
+    for code, w in out_bits:
+        acc = (acc << w) | code
+        nbits += w
+        while nbits >= 8:
+            nbits -= 8
+            out.append((acc >> nbits) & 0xFF)
+    if nbits:
+        out.append((acc << (8 - nbits)) & 0xFF)
+    return bytes(out)
+
+
+def a85_encode(data: bytes) -> bytes:
+    """ASCII85 (Adobe variant without the <~ prefix): the bytes the
+    /ASCII85Decode filter expects, ending with ~>."""
+    return base64.a85encode(data, adobe=True)[2:]
+
+
+class Pdf15:
+    """Minimal PDF 1.5 writer: normal objects, compressed objects
+    (in one /ObjStm), and a cross-reference stream. Object 0 is
+    free; the /Pages tree is object 2 by convention."""
+
+    def __init__(self):
+        self.normal = {}      # id -> bytes (full object body)
+        self.compressed = {}  # id -> bytes (object body, no wrapper)
+
+    def add_normal(self, body: bytes) -> int:
+        obj_id = max(list(self.normal) + list(self.compressed), default=0) + 1
+        self.normal[obj_id] = body
+        return obj_id
+
+    def add_compressed(self, body: bytes) -> int:
+        obj_id = max(list(self.normal) + list(self.compressed), default=0) + 1
+        self.compressed[obj_id] = body
+        return obj_id
+
+    def build(self, root_id: int, xref_stream_size: int = 0) -> bytes:
+        # Object stream (id = next free) holding the compressed objects.
+        objstm_id = None
+        if self.compressed:
+            objstm_id = max(list(self.normal) + list(self.compressed), default=0) + 1
+            index_parts, bodies, offset = [], bytearray(), 0
+            for obj_id in sorted(self.compressed):
+                body = self.compressed[obj_id]
+                index_parts.append(str(obj_id).encode() + b" " + str(offset).encode() + b" ")
+                bodies += body
+                offset += len(body)
+            index = b"".join(index_parts)
+            raw = index + bytes(bodies)
+            comp = zlib.compress(raw)
+            self.normal[objstm_id] = (
+                b"<< /Type /ObjStm /N " + str(len(self.compressed)).encode()
+                + b" /First " + str(len(index)).encode()
+                + b" /Filter /FlateDecode /Length " + str(len(comp)).encode()
+                + b" >>\nstream\n" + comp + b"\nendstream"
+            )
+        # Layout: header, then normal objects in id order.
+        out = bytearray(b"%PDF-1.5\n%\xe2\xe3\xcf\xd3\n")
+        offsets = {}
+        for obj_id in sorted(self.normal):
+            offsets[obj_id] = len(out)
+            out += str(obj_id).encode() + b" 0 obj\n" + self.normal[obj_id] + b"\nendobj\n"
+        # Cross-reference stream: object ids 0..size-1, W=[1 4 2].
+        size = xref_stream_size or (max(list(self.normal) + list(self.compressed), default=0) + 1)
+        xref_id = max(list(self.normal), default=0) + 1
+        entries = bytearray()
+        for obj_id in range(size):
+            if obj_id == 0:
+                entries += bytes([0]) + (0).to_bytes(4, "big") + (65535).to_bytes(2, "big")
+            elif obj_id in self.compressed:
+                idx = sorted(self.compressed).index(obj_id)
+                entries += bytes([2]) + objstm_id.to_bytes(4, "big") + idx.to_bytes(2, "big")
+            elif obj_id in offsets:
+                entries += bytes([1]) + offsets[obj_id].to_bytes(4, "big") + (0).to_bytes(2, "big")
+            else:
+                entries += bytes([0]) + (0).to_bytes(4, "big") + (0).to_bytes(2, "big")
+        comp = zlib.compress(bytes(entries))
+        xref_pos = len(out)
+        out += (
+            str(xref_id).encode() + b" 0 obj\n"
+            b"<< /Type /XRef /Size " + str(size).encode()
+            + b" /W [1 4 2] /Index [0 " + str(size).encode() + b"]"
+            + b" /Root " + str(root_id).encode() + b" 0 R"
+            + b" /Filter /FlateDecode /Length " + str(len(comp)).encode()
+            + b" >>\nstream\n" + comp + b"\nendstream\nendobj\n"
+        )
+        out += b"startxref\n" + str(xref_pos).encode() + b"\n%%EOF\n"
+        return bytes(out)
 
 
 def write(name: str, data: bytes):
@@ -328,6 +473,254 @@ def encrypted_pdf():
     return pdf.build(root, extra_trailer=trailer), ["Secret harbor ledger.\nDo not file under bramblewick."]
 
 
+def object_stream_ok():
+    """PDF 1.5: the font and the /Pages tree live inside a compressed
+    object stream; the content stream is a normal object; the xref is
+    a stream. A bounded extractor must import this (the object
+    stream decodes to a few hundred bytes)."""
+    pdf = Pdf15()
+    # Reserve id 2 for the /Pages tree (a compressed object) BEFORE
+    # adding any normal object, so no normal object collides with it.
+    pdf.compressed[2] = b""
+    font_id = pdf.add_normal(font_object())
+    content = text_lines(["Harbor Ledger", "The object-stream shipment cleared customs."])
+    content_id = pdf.add_normal(pdf_stream_raw(b"<<", content))
+    page_id = pdf.add_normal(
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+        b"/Resources << /Font << /F1 " + str(font_id).encode() + b" 0 R >> >> "
+        b"/Contents " + str(content_id).encode() + b" 0 R >>"
+    )
+    # The /Pages tree is a compressed object (id 2, reserved above).
+    pdf.compressed[2] = (
+        b"<< /Type /Pages /Kids [" + str(page_id).encode() + b" 0 R] /Count 1 >>"
+    )
+    root = pdf.add_normal(b"<< /Type /Catalog /Pages 2 0 R >>")
+    return pdf.build(root), ["Harbor Ledger\nThe object-stream shipment cleared customs."]
+
+
+def object_stream_bomb():
+    """Classic-xref PDF with one unreferenced /ObjStm whose FlateDecode
+    data expands to ~20 MB (a single 20 MB string object inside it).
+    lopdf decompresses every ObjStm at load, so the bomb detonates in
+    Document::load_mem itself — the pre-load scan must refuse it first."""
+    pdf = Pdf()
+    pdf.reserve_page_tree()
+    font_id = pdf.add(font_object())
+    root = page_objects(pdf, [(text_lines(["Harbor Ledger", "Small page."]), b"")])
+    index = b"99 0 "
+    body = b"(" + b"A" * 20_000_000 + b")"
+    raw = index + body
+    comp = zlib.compress(raw)
+    objstm = pdf.add(
+        b"<< /Type /ObjStm /N 1 /First " + str(len(index)).encode()
+        + b" /Filter /FlateDecode /Length " + str(len(comp)).encode()
+        + b" >>\nstream\n" + comp + b"\nendstream"
+    )
+    _ = objstm
+    return pdf.build(root), []
+
+
+def xref_stream_ok():
+    """PDF 1.5 with a cross-reference stream and all objects normal
+    (no object stream). A bounded extractor must import this."""
+    pdf = Pdf15()
+    root = page_objects_15(pdf, [(text_lines(["Harbor Ledger", "The xref-stream shipment cleared customs."]), b"")])
+    return pdf.build(root), ["Harbor Ledger\nThe xref-stream shipment cleared customs."]
+
+
+def xref_stream_bomb():
+    """PDF 1.5 whose xref stream decodes to ~21 MB (3,000,000 entries
+    x 7 bytes, mostly free). The pre-load scan must refuse it before
+    lopdf parses the reference table."""
+    pdf = Pdf15()
+    root = page_objects_15(pdf, [(text_lines(["Harbor Ledger", "Small page."]), b"")])
+    return pdf.build(root, xref_stream_size=3_000_000), []
+
+
+def chained_filter_ok():
+    """Content stream with /Filter [/ASCII85Decode /FlateDecode]: the
+    ASCII85 layer wraps the Flate layer. Must import."""
+    pdf = Pdf()
+    pdf.reserve_page_tree()
+    font_id = pdf.add(font_object())
+    content = text_lines(["Harbor Ledger", "The chained-filter shipment cleared customs."])
+    data = a85_encode(zlib.compress(content))
+    content_id = pdf.add(
+        b"<< /Filter [/ASCII85Decode /FlateDecode] /Length " + str(len(data)).encode()
+        + b" >>\nstream\n" + data + b"\nendstream"
+    )
+    page_id = pdf.add(
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+        b"/Resources << /Font << /F1 " + str(font_id).encode() + b" 0 R >> >> "
+        b"/Contents " + str(content_id).encode() + b" 0 R >>"
+    )
+    pdf.objects[2] = b"<< /Type /Pages /Kids [" + str(page_id).encode() + b" 0 R] /Count 1 >>"
+    root = pdf.add(b"<< /Type /Catalog /Pages 2 0 R >>")
+    return pdf.build(root), ["Harbor Ledger\nThe chained-filter shipment cleared customs."]
+
+
+def chained_filter_bomb():
+    """Content stream with /Filter [/FlateDecode /FlateDecode] whose
+    final decoded size is ~20 MB. The cumulative budget must count
+    both stages: the inner Flate expansion is what trips it."""
+    pdf = Pdf()
+    pdf.reserve_page_tree()
+    font_id = pdf.add(font_object())
+    huge = b"BT /F1 12 Tf 72 720 Td (" + b"A" * 20_000_000 + b") Tj ET"
+    data = zlib.compress(zlib.compress(huge))
+    content_id = pdf.add(
+        b"<< /Filter [/FlateDecode /FlateDecode] /Length " + str(len(data)).encode()
+        + b" >>\nstream\n" + data + b"\nendstream"
+    )
+    page_id = pdf.add(
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+        b"/Resources << /Font << /F1 " + str(font_id).encode() + b" 0 R >> >> "
+        b"/Contents " + str(content_id).encode() + b" 0 R >>"
+    )
+    pdf.objects[2] = b"<< /Type /Pages /Kids [" + str(page_id).encode() + b" 0 R] /Count 1 >>"
+    root = pdf.add(b"<< /Type /Catalog /Pages 2 0 R >>")
+    return pdf.build(root), []
+
+
+def lzw_ok():
+    """Content stream with /Filter /LZWDecode (TIFF early-change).
+    Must import; this also validates the fixture generator's LZW
+    encoder against the module's weezl decoder."""
+    pdf = Pdf()
+    pdf.reserve_page_tree()
+    font_id = pdf.add(font_object())
+    content = text_lines(["Harbor Ledger", "The lzw shipment cleared customs."])
+    data = lzw_encode(content)
+    content_id = pdf.add(
+        b"<< /Filter /LZWDecode /Length " + str(len(data)).encode()
+        + b" >>\nstream\n" + data + b"\nendstream"
+    )
+    page_id = pdf.add(
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+        b"/Resources << /Font << /F1 " + str(font_id).encode() + b" 0 R >> >> "
+        b"/Contents " + str(content_id).encode() + b" 0 R >>"
+    )
+    pdf.objects[2] = b"<< /Type /Pages /Kids [" + str(page_id).encode() + b" 0 R] /Count 1 >>"
+    root = pdf.add(b"<< /Type /Catalog /Pages 2 0 R >>")
+    return pdf.build(root), ["Harbor Ledger\nThe lzw shipment cleared customs."]
+
+
+def lzw_bomb():
+    """Content stream with /Filter /LZWDecode expanding to ~20 MB.
+    The capped weezl path must refuse it (Bomb), not decode it."""
+    pdf = Pdf()
+    pdf.reserve_page_tree()
+    font_id = pdf.add(font_object())
+    huge = b"BT /F1 12 Tf 72 720 Td (" + b"A" * 20_000_000 + b") Tj ET"
+    data = lzw_encode(huge)
+    content_id = pdf.add(
+        b"<< /Filter /LZWDecode /Length " + str(len(data)).encode()
+        + b" >>\nstream\n" + data + b"\nendstream"
+    )
+    page_id = pdf.add(
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+        b"/Resources << /Font << /F1 " + str(font_id).encode() + b" 0 R >> >> "
+        b"/Contents " + str(content_id).encode() + b" 0 R >>"
+    )
+    pdf.objects[2] = b"<< /Type /Pages /Kids [" + str(page_id).encode() + b" 0 R] /Count 1 >>"
+    root = pdf.add(b"<< /Type /Catalog /Pages 2 0 R >>")
+    return pdf.build(root), []
+
+
+def nested_form_ok():
+    """Page -> Form /Fm1 -> Form /Fm2 -> text. The pre-scan must walk
+    forms recursively; pdf-extract must surface the innermost text."""
+    pdf = Pdf()
+    pdf.reserve_page_tree()
+    font_id = pdf.add(font_object())
+    inner_text = text_lines(["Harbor Ledger", "The nested-form shipment cleared customs."])
+    inner_id = pdf.add(pdf.stream(
+        b"<< /Type /XObject /Subtype /Form /BBox [0 0 612 792] "
+        b"/Resources << /Font << /F1 " + str(font_id).encode() + b" 0 R >> >>",
+        inner_text,
+    ))
+    outer_id = pdf.add(pdf.stream(
+        b"<< /Type /XObject /Subtype /Form /BBox [0 0 612 792] "
+        b"/Resources << /XObject << /Fm2 " + str(inner_id).encode() + b" 0 R >> >>",
+        b"q /Fm2 Do Q",
+    ))
+    content_id = pdf.add(pdf.stream(b"<<", b"q /Fm1 Do Q"))
+    page_id = pdf.add(
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+        b"/Resources << /Font << /F1 " + str(font_id).encode() + b" 0 R >> "
+        b"/XObject << /Fm1 " + str(outer_id).encode() + b" 0 R >> >> "
+        b"/Contents " + str(content_id).encode() + b" 0 R >>"
+    )
+    pdf.objects[2] = b"<< /Type /Pages /Kids [" + str(page_id).encode() + b" 0 R] /Count 1 >>"
+    root = pdf.add(b"<< /Type /Catalog /Pages 2 0 R >>")
+    return pdf.build(root), ["Harbor Ledger\nThe nested-form shipment cleared customs."]
+
+
+def nested_form_bomb():
+    """Page -> Form /Fm1 -> Form /Fm2, where /Fm2's content stream is
+    a FlateDecode bomb (~20 MB). The recursive pre-scan must find it
+    and refuse it; a one-level walk would miss it."""
+    pdf = Pdf()
+    pdf.reserve_page_tree()
+    font_id = pdf.add(font_object())
+    huge = b"BT /F1 12 Tf 72 720 Td (" + b"A" * 20_000_000 + b") Tj ET"
+    inner_id = pdf.add(pdf.stream(
+        b"<< /Type /XObject /Subtype /Form /BBox [0 0 612 792] "
+        b"/Resources << /Font << /F1 " + str(font_id).encode() + b" 0 R >> >>",
+        huge,
+    ))
+    outer_id = pdf.add(pdf.stream(
+        b"<< /Type /XObject /Subtype /Form /BBox [0 0 612 792] "
+        b"/Resources << /XObject << /Fm2 " + str(inner_id).encode() + b" 0 R >> >>",
+        b"q /Fm2 Do Q",
+    ))
+    content_id = pdf.add(pdf.stream(b"<<", b"q /Fm1 Do Q"))
+    page_id = pdf.add(
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+        b"/Resources << /Font << /F1 " + str(font_id).encode() + b" 0 R >> "
+        b"/XObject << /Fm1 " + str(outer_id).encode() + b" 0 R >> >> "
+        b"/Contents " + str(content_id).encode() + b" 0 R >>"
+    )
+    pdf.objects[2] = b"<< /Type /Pages /Kids [" + str(page_id).encode() + b" 0 R] /Count 1 >>"
+    root = pdf.add(b"<< /Type /Catalog /Pages 2 0 R >>")
+    return pdf.build(root), []
+
+
+def pdf_stream_raw(dictionary: bytes, data: bytes) -> bytes:
+    """A FlateDecode stream object body (used by the Pdf15 builder,
+    whose stream() helper lives on Pdf)."""
+    comp = zlib.compress(data)
+    return (
+        dictionary + b" /Filter /FlateDecode /Length " + str(len(comp)).encode()
+        + b" >>\nstream\n" + comp + b"\nendstream"
+    )
+
+
+def page_objects_15(pdf: Pdf15, pages):
+    """Like page_objects but for the Pdf15 builder (object 2 is the
+    /Pages tree; ids are assigned by add_normal)."""
+    pdf.normal[2] = b"<< /Type /Pages >>"
+    font_id = pdf.add_normal(font_object())
+    page_ids = []
+    for content, extra_resources in pages:
+        content_id = pdf.add_normal(pdf_stream_raw(b"<<", content))
+        resources = b"<< /Font << /F1 " + str(font_id).encode() + b" 0 R >>"
+        if extra_resources:
+            resources += b" " + extra_resources
+        resources += b" >>"
+        page_id = pdf.add_normal(
+            b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+            b"/Resources " + resources
+            + b" /Contents " + str(content_id).encode() + b" 0 R >>"
+        )
+        page_ids.append(page_id)
+    kids = b" ".join(str(p).encode() + b" 0 R" for p in page_ids)
+    pdf.normal[2] = (
+        b"<< /Type /Pages /Kids [" + kids + b"] /Count " + str(len(page_ids)).encode() + b" >>"
+    )
+    return pdf.add_normal(b"<< /Type /Catalog /Pages 2 0 R >>")
+
+
 def main():
     manifest = {"fixtures": {}}
 
@@ -402,6 +795,46 @@ def main():
     add("encrypted-user.pdf", enc, enc_pages, "refused: encrypted",
         "R=2 RC4, user password 'secret'; no password entry in this slice. "
         "Expected text shown only for the pdftotext -upw cross-check.")
+    # --- module fixtures (adversarial compressed structures) ---
+    os_ok, os_ok_pages = object_stream_ok()
+    add("object-stream-ok.pdf", os_ok, os_ok_pages, "imported",
+        "PDF 1.5: font + /Pages tree inside a compressed object stream; "
+        "xref is a stream. Must import (object stream decodes to ~300 B).")
+    os_bomb, _ = object_stream_bomb()
+    add("object-stream-bomb.pdf", os_bomb, [], "refused: extraction bound",
+        "Unreferenced /ObjStm expanding to ~20 MB; lopdf decompresses "
+        "every ObjStm at load, so the pre-load scan must refuse it first.")
+    xs_ok, xs_ok_pages = xref_stream_ok()
+    add("xref-stream-ok.pdf", xs_ok, xs_ok_pages, "imported",
+        "PDF 1.5 with a cross-reference stream, all objects normal. "
+        "Must import.")
+    xs_bomb, _ = xref_stream_bomb()
+    add("xref-stream-bomb.pdf", xs_bomb, [], "refused: extraction bound",
+        "Xref stream decoding to ~21 MB (3,000,000 entries x 7 B). "
+        "Pre-load scan must refuse it before lopdf parses the xref.")
+    cf_ok, cf_ok_pages = chained_filter_ok()
+    add("chained-filter-ok.pdf", cf_ok, cf_ok_pages, "imported",
+        "Content stream /Filter [/ASCII85Decode /FlateDecode]. Must import.")
+    cf_bomb, _ = chained_filter_bomb()
+    add("chained-filter-bomb.pdf", cf_bomb, [], "refused: extraction bound",
+        "Content stream /Filter [/FlateDecode /FlateDecode] expanding to "
+        "~20 MB; the cumulative budget must count both stages.")
+    lzw, lzw_pages = lzw_ok()
+    add("lzw-ok.pdf", lzw, lzw_pages, "imported",
+        "Content stream /Filter /LZWDecode (TIFF early-change). Must import; "
+        "validates the generator's LZW encoder against weezl.")
+    lzwb, _ = lzw_bomb()
+    add("lzw-bomb.pdf", lzwb, [], "refused: extraction bound",
+        "LZW content stream expanding to ~20 MB; the capped weezl path "
+        "must refuse it.")
+    nf_ok, nf_ok_pages = nested_form_ok()
+    add("nested-form-ok.pdf", nf_ok, nf_ok_pages, "imported",
+        "Page -> Form /Fm1 -> Form /Fm2 -> text. Must import; the "
+        "pre-scan walks forms recursively.")
+    nf_bomb, _ = nested_form_bomb()
+    add("nested-form-bomb.pdf", nf_bomb, [], "refused: extraction bound",
+        "Bomb inside the second-level form /Fm2; a one-level form walk "
+        "would miss it.")
     with open(os.path.join(OUT, "MANIFEST.json"), "w") as f:
         json.dump(manifest, f, indent=2)
     print("MANIFEST.json written")

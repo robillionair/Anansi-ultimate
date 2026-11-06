@@ -215,6 +215,96 @@
       ],
       "expected_outcome": "refused: encrypted",
       "notes": "R=2 RC4, user password 'secret'; no password entry in this slice. Expected text shown only for the pdftotext -upw cross-check."
+    },
+    "object-stream-ok.pdf": {
+      "sha256": "a2f66c62a489ed8880d582a88d3f60faf74a190c7c367351e08b045370b510ae",
+      "bytes": 796,
+      "pages": 1,
+      "expected_pages": [
+        "Harbor Ledger\nThe object-stream shipment cleared customs."
+      ],
+      "expected_outcome": "imported",
+      "notes": "PDF 1.5: font + /Pages tree inside a compressed object stream; xref is a stream. Must import (object stream decodes to ~300 B)."
+    },
+    "object-stream-bomb.pdf": {
+      "sha256": "6eddca566f019e87c83dfc37c27a359ca0ef87091373fa9cdd4d61ddc657aa0c",
+      "bytes": 20392,
+      "pages": 0,
+      "expected_pages": [],
+      "expected_outcome": "refused: extraction bound",
+      "notes": "Unreferenced /ObjStm expanding to ~20 MB; lopdf decompresses every ObjStm at load, so the pre-load scan must refuse it first."
+    },
+    "xref-stream-ok.pdf": {
+      "sha256": "43598bff1dbc86c5962c34396523726a9b19335fc31d1062cc38a8270f92d97d",
+      "bytes": 696,
+      "pages": 1,
+      "expected_pages": [
+        "Harbor Ledger\nThe xref-stream shipment cleared customs."
+      ],
+      "expected_outcome": "imported",
+      "notes": "PDF 1.5 with a cross-reference stream, all objects normal. Must import."
+    },
+    "xref-stream-bomb.pdf": {
+      "sha256": "389318385f11b957f5a68e6b9224a2a3c5e31c425c2d3317e95bd53c37d39109",
+      "bytes": 21092,
+      "pages": 0,
+      "expected_pages": [],
+      "expected_outcome": "refused: extraction bound",
+      "notes": "Xref stream decoding to ~21 MB (3,000,000 entries x 7 B). Pre-load scan must refuse it before lopdf parses the xref."
+    },
+    "chained-filter-ok.pdf": {
+      "sha256": "a2a4c611ea60985d51e06667102a728e3c5690ffcd03ab2fd303bdbf515e1e54",
+      "bytes": 765,
+      "pages": 1,
+      "expected_pages": [
+        "Harbor Ledger\nThe chained-filter shipment cleared customs."
+      ],
+      "expected_outcome": "imported",
+      "notes": "Content stream /Filter [/ASCII85Decode /FlateDecode]. Must import."
+    },
+    "chained-filter-bomb.pdf": {
+      "sha256": "c6a818c3f87a1962de41dbebdd37de9b8db17a4c5456f0737bc991b2936a1c5c",
+      "bytes": 846,
+      "pages": 0,
+      "expected_pages": [],
+      "expected_outcome": "refused: extraction bound",
+      "notes": "Content stream /Filter [/FlateDecode /FlateDecode] expanding to ~20 MB; the cumulative budget must count both stages."
+    },
+    "lzw-ok.pdf": {
+      "sha256": "267468b1ab0c776e92d34415478acb21b0a1188591f80f5226a4200259eca9e1",
+      "bytes": 708,
+      "pages": 1,
+      "expected_pages": [
+        "Harbor Ledger\nThe lzw shipment cleared customs."
+      ],
+      "expected_outcome": "imported",
+      "notes": "Content stream /Filter /LZWDecode (TIFF early-change). Must import; validates the generator's LZW encoder against weezl."
+    },
+    "lzw-bomb.pdf": {
+      "sha256": "58cf4bbec856060daf5c2994334fd444a44be5560e19a4691ac7348e07575b4c",
+      "bytes": 16003,
+      "pages": 0,
+      "expected_pages": [],
+      "expected_outcome": "refused: extraction bound",
+      "notes": "LZW content stream expanding to ~20 MB; the capped weezl path must refuse it."
+    },
+    "nested-form-ok.pdf": {
+      "sha256": "77047a8669d32f93d0b71ce1ca409c887809859f43d48dac85dbb39b4369a1c7",
+      "bytes": 1145,
+      "pages": 1,
+      "expected_pages": [
+        "Harbor Ledger\nThe nested-form shipment cleared customs."
+      ],
+      "expected_outcome": "imported",
+      "notes": "Page -> Form /Fm1 -> Form /Fm2 -> text. Must import; the pre-scan walks forms recursively."
+    },
+    "nested-form-bomb.pdf": {
+      "sha256": "49ed78dfd993cceb6d84cb19bb98e66c19ab5dccb9c99e2c17c93d4d523bdd97",
+      "bytes": 20541,
+      "pages": 0,
+      "expected_pages": [],
+      "expected_outcome": "refused: extraction bound",
+      "notes": "Bomb inside the second-level form /Fm2; a one-level form walk would miss it."
     }
   }
 }
