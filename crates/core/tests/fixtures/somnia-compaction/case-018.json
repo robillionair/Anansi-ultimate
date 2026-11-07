@@ -1,0 +1,26 @@
+{
+  "category": "missing-facts",
+  "id": "case-018",
+  "missingFact": "the harbour customs fee is",
+  "questions": [
+    {
+      "abstain": true,
+      "expectedAnswer": null,
+      "id": "q1",
+      "neededRecordIds": [],
+      "text": "What is the harbour customs fee?"
+    }
+  ],
+  "records": [
+    {
+      "id": "r1",
+      "key": "harbor.customs-fee",
+      "kind": "fact",
+      "privacy": "standard",
+      "revision": 1,
+      "source": "ledger",
+      "text": "The harbor customs fee is $40.",
+      "trust": "trusted"
+    }
+  ]
+}

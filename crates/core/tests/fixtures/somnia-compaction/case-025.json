@@ -1,0 +1,38 @@
+{
+  "category": "unicode",
+  "id": "case-025",
+  "questions": [
+    {
+      "abstain": false,
+      "expectedAnswer": "Zürich 8, Zurich 9.",
+      "id": "q1",
+      "neededRecordIds": [
+        "r1",
+        "r2"
+      ],
+      "text": "When do the Zürich café and the Zurich cafe open?"
+    }
+  ],
+  "records": [
+    {
+      "id": "r1",
+      "key": "cafe.hours",
+      "kind": "fact",
+      "privacy": "standard",
+      "revision": 1,
+      "source": "Zürich café",
+      "text": "The Zürich café opens at 8.",
+      "trust": "trusted"
+    },
+    {
+      "id": "r2",
+      "key": "cafe.hours",
+      "kind": "fact",
+      "privacy": "standard",
+      "revision": 1,
+      "source": "Zurich cafe",
+      "text": "The Zurich cafe opens at 9.",
+      "trust": "trusted"
+    }
+  ]
+}

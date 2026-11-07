@@ -1,0 +1,169 @@
+{
+  "benchmark": "anansi-somnia-compaction",
+  "caseCount": 40,
+  "files": [
+    {
+      "file": "case-001.json",
+      "sha256": "82b9113e08e454c99e71636b28a0aea3a470d0fbb06cacaa890b409a6f5dd4ec"
+    },
+    {
+      "file": "case-002.json",
+      "sha256": "ab7bcf7808c2f01926765bc26f95846d15051b3d832e1410b83c7777d88961f3"
+    },
+    {
+      "file": "case-003.json",
+      "sha256": "338277a8c34bef0711a9d988bbbeee57e2cb5ffd4d61edcea463f83a0f9687ba"
+    },
+    {
+      "file": "case-004.json",
+      "sha256": "ac78ad6135fd12eed568be5bd8d267f196f7cef34c49d3d03cd94bbe6e418db4"
+    },
+    {
+      "file": "case-005.json",
+      "sha256": "662a17398aaf3ebf9d8b77076463d9b42672fcc5ff950b3bd9f1cfd46f3b1805"
+    },
+    {
+      "file": "case-006.json",
+      "sha256": "310ab9c529603d98fc3e30f32062a0f45f7d4f13fb9645ce5c27264e5cc38725"
+    },
+    {
+      "file": "case-007.json",
+      "sha256": "5ae5f4dcd91cb809c875388be405d2ec6d68ed8b9425204c6ba57135f9d46f97"
+    },
+    {
+      "file": "case-008.json",
+      "sha256": "49fe1b43f2f002b8b5a27fae3b2aa934a6cb88f70d8af20a7baa3a708c822324"
+    },
+    {
+      "file": "case-009.json",
+      "sha256": "a044d91d0d186e19a9570fe66ce0acca5982e6a1e6844deff813ce382e2ecc36"
+    },
+    {
+      "file": "case-010.json",
+      "sha256": "3cd8e34d6f0ba77c6eebe766fb76ac70289c9006b6abfa4dc4945bcf92fd8edb"
+    },
+    {
+      "file": "case-011.json",
+      "sha256": "bfa0d3aacea926c984f743b262a3aca8302b0d57f872c31db5e7481e63a5d4da"
+    },
+    {
+      "file": "case-012.json",
+      "sha256": "760c31b973504ef3912dfd931354f18a2f91a78d266b6db4a626f4b509c396ae"
+    },
+    {
+      "file": "case-013.json",
+      "sha256": "0349e89eef37052c3bc0466e0e0e36ee67df1f7af623c1dbda396cb0911f359a"
+    },
+    {
+      "file": "case-014.json",
+      "sha256": "ed0e861f22f288a798ae78123902d0545c6748f866deea23d1dd78802c91834c"
+    },
+    {
+      "file": "case-015.json",
+      "sha256": "b58361452b9e1f5b9d2d2f54e31e000d76417c570db11c083eaddd1ef08e2ab4"
+    },
+    {
+      "file": "case-016.json",
+      "sha256": "3a120d205691f7d2a919c90995349a1e3d3c844a6b50265dba5f85c879068d95"
+    },
+    {
+      "file": "case-017.json",
+      "sha256": "04fc10af7baaa71b8b4a483b62e15c6758096303fb59f57b0a0e2629d942e3a3"
+    },
+    {
+      "file": "case-018.json",
+      "sha256": "a5ec03628c79476279b5d293898a33e8fcb6913c30ac2f04081039e5e248d142"
+    },
+    {
+      "file": "case-019.json",
+      "sha256": "47ef60e398ffe1af3dd053acdb65b2a94da27c4fb651a06f550c015d93e6def5"
+    },
+    {
+      "file": "case-020.json",
+      "sha256": "195b9c10c546a99b37ffe992c3f795a3cdca858dd534d9d9ba24f0365d91bffb"
+    },
+    {
+      "file": "case-021.json",
+      "sha256": "d9bf1b4bd331b27aed6391375433a050d612160f898d86e2ed2bc46fa22d3a65"
+    },
+    {
+      "file": "case-022.json",
+      "sha256": "e280939db58a6200622d5c53a882ded2426ad18943f2f056a1e3ca5e88d62646"
+    },
+    {
+      "file": "case-023.json",
+      "sha256": "aa40ca82877cf4ceb23fa308917c7a87b6cebe073a1339da045fee72dde38772"
+    },
+    {
+      "file": "case-024.json",
+      "sha256": "a34ffc85aad530197f461ab55be9004d6f74ef02d6c153ad50395922d28663cf"
+    },
+    {
+      "file": "case-025.json",
+      "sha256": "f5dfaa1747c197adb71cbbb1c1fa6dfa1d0a55e78977c2df422b1b189ab463f6"
+    },
+    {
+      "file": "case-026.json",
+      "sha256": "82b3071256264465c8945132ae2fdadbbf37115c4df6982689eb964cf870b266"
+    },
+    {
+      "file": "case-027.json",
+      "sha256": "3b66b54502cf12b3463594e3fcba4634a38f8a8a27ea62012153bdb86c894c7c"
+    },
+    {
+      "file": "case-028.json",
+      "sha256": "a97fffb6a5729fa65769e134298dab901e86676c84eedb453dc13575604c72cb"
+    },
+    {
+      "file": "case-029.json",
+      "sha256": "4c304abe4f917061c25223bf199af91c48716afcf3c40a50a7b457d5d67fa124"
+    },
+    {
+      "file": "case-030.json",
+      "sha256": "3c00403040d4def2bdfef9f66e065aaf199b28fd1636bce543ea0c363608ba1e"
+    },
+    {
+      "file": "case-031.json",
+      "sha256": "7ec24b575fc482255db463cdddd4f2e7055054735f8c0c6703de7943a8122ae8"
+    },
+    {
+      "file": "case-032.json",
+      "sha256": "ffe674b2cb4dc017bdf63c2927f8a048ad6f5ae931dc8b067795a6190d5e198f"
+    },
+    {
+      "file": "case-033.json",
+      "sha256": "433ffad404026b5314b23bb6c494555a25569b74151a0e8c645d0fa69baac0d2"
+    },
+    {
+      "file": "case-034.json",
+      "sha256": "aab066b0e9384c2562d92a64420b42988e17bd951948deb89bdff2019aab7024"
+    },
+    {
+      "file": "case-035.json",
+      "sha256": "761ee47aa24233afe416a51be223289e99aa5164971ecd3cd0108386b8b1bf85"
+    },
+    {
+      "file": "case-036.json",
+      "sha256": "4dd5f35623adde2b903fbe26ee19845886cb4a66e9c19fe419d9c6c87007ef72"
+    },
+    {
+      "file": "case-037.json",
+      "sha256": "677d9b83d7e982af33ccae55a931df87ae99c9257f3a2913d1906cc6851e1729"
+    },
+    {
+      "file": "case-038.json",
+      "sha256": "e7fb017434f07b0e50f1844d89992587979b6146f6d71aebba6bb499839be01b"
+    },
+    {
+      "file": "case-039.json",
+      "sha256": "789de47a5fd04d21770b82f1090541a202b534319d35d7b2108a853131bf6118"
+    },
+    {
+      "file": "case-040.json",
+      "sha256": "2c6165638de114509ae16dcd2687a3a5c7595672ed667f525ad0e6d019f9049f"
+    }
+  ],
+  "generatorVersion": 1,
+  "seed": "somnia-compaction-bench-v1",
+  "version": 1
+}

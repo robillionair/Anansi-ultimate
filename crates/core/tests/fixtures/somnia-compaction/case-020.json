@@ -1,0 +1,26 @@
+{
+  "category": "missing-facts",
+  "id": "case-020",
+  "missingFact": "the customs fee is $",
+  "questions": [
+    {
+      "abstain": true,
+      "expectedAnswer": null,
+      "id": "q1",
+      "neededRecordIds": [],
+      "text": "What is the customs fee?"
+    }
+  ],
+  "records": [
+    {
+      "id": "r1",
+      "key": "harbor.customs-fee",
+      "kind": "uncertainty",
+      "privacy": "standard",
+      "revision": 1,
+      "source": "ledger",
+      "text": "The customs fee may change in June; no figure is confirmed.",
+      "trust": "trusted"
+    }
+  ]
+}

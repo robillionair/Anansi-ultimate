@@ -1,0 +1,32 @@
+{
+  "category": "broken-rows",
+  "expectedQuarantineRefs": [
+    "r2"
+  ],
+  "id": "case-033",
+  "inputFormat": "json",
+  "questions": [
+    {
+      "abstain": false,
+      "expectedAnswer": "The customs fee is $40.",
+      "id": "q1",
+      "neededRecordIds": [
+        "r1"
+      ],
+      "text": "What is the customs fee?"
+    }
+  ],
+  "rawInput": "{\"format\": \"anansi-somnia-compaction-input\", \"version\": 1, \"records\": [{\"id\": \"r1\", \"key\": \"harbor.customs-fee\", \"source\": \"ledger\", \"revision\": 1, \"kind\": \"fact\", \"trust\": \"trusted\", \"privacy\": \"standard\", \"text\": \"The customs fee is $40.\"}, {\"id\": \"r2\", \"key\": \"harbor.customs-fee\", \"source\": \"ledger\", \"revision\": 1, \"kind\": \"fact\", \"trust\": \"trusted\", \"privacy\": \"sealed\", \"text\": \"Sealed fee.\"}]}",
+  "records": [
+    {
+      "id": "r1",
+      "key": "harbor.customs-fee",
+      "kind": "fact",
+      "privacy": "standard",
+      "revision": 1,
+      "source": "ledger",
+      "text": "The customs fee is $40.",
+      "trust": "trusted"
+    }
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "category": "deletions",
+  "forbiddenRetained": [
+    "r1"
+  ],
+  "id": "case-011",
+  "questions": [
+    {
+      "abstain": false,
+      "expectedAnswer": "Müller",
+      "id": "q1",
+      "neededRecordIds": [
+        "r2"
+      ],
+      "text": "Who was the lighthouse keeper before the post was removed?"
+    }
+  ],
+  "records": [
+    {
+      "id": "r1",
+      "key": "lighthouse.keeper",
+      "kind": "fact",
+      "privacy": "standard",
+      "revision": 1,
+      "source": "ledger",
+      "text": "The lighthouse keeper is Müller.",
+      "trust": "trusted"
+    },
+    {
+      "id": "r2",
+      "key": "lighthouse.keeper",
+      "kind": "deletion",
+      "privacy": "standard",
+      "revision": 2,
+      "source": "ledger",
+      "text": "The lighthouse keeper post (Müller) was removed.",
+      "trust": "trusted"
+    }
+  ]
+}

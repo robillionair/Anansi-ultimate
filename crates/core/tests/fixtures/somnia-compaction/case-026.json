@@ -1,0 +1,38 @@
+{
+  "category": "unicode",
+  "id": "case-026",
+  "questions": [
+    {
+      "abstain": false,
+      "expectedAnswer": "田中 names 田中; the ledger names Søren.",
+      "id": "q1",
+      "neededRecordIds": [
+        "r1",
+        "r2"
+      ],
+      "text": "Who do 田中 and the ledger each name as keeper?"
+    }
+  ],
+  "records": [
+    {
+      "id": "r1",
+      "key": "lighthouse.keeper",
+      "kind": "fact",
+      "privacy": "standard",
+      "revision": 1,
+      "source": "田中",
+      "text": "The lighthouse keeper is 田中.",
+      "trust": "trusted"
+    },
+    {
+      "id": "r2",
+      "key": "lighthouse.keeper",
+      "kind": "fact",
+      "privacy": "standard",
+      "revision": 1,
+      "source": "ledger",
+      "text": "The lighthouse keeper is Søren.",
+      "trust": "trusted"
+    }
+  ]
+}

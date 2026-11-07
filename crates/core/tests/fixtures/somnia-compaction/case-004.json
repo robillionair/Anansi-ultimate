@@ -1,0 +1,55 @@
+{
+  "category": "updates",
+  "forbiddenRetained": [
+    "r1",
+    "r2"
+  ],
+  "id": "case-004",
+  "questions": [
+    {
+      "abstain": false,
+      "expectedAnswer": "Until 18:00.",
+      "id": "q1",
+      "neededRecordIds": [
+        "r3"
+      ],
+      "text": "Until when are berths open now?"
+    }
+  ],
+  "records": [
+    {
+      "id": "r1",
+      "key": "harbor.berth-hours",
+      "kind": "fact",
+      "privacy": "standard",
+      "revision": 1,
+      "source": "ledger",
+      "text": "Berths are open until noon.",
+      "trust": "trusted"
+    },
+    {
+      "id": "r2",
+      "key": "harbor.berth-hours",
+      "kind": "fact",
+      "privacy": "standard",
+      "revision": 2,
+      "source": "ledger",
+      "text": "Berths are open until 14:00.",
+      "trust": "trusted"
+    },
+    {
+      "id": "r3",
+      "key": "harbor.berth-hours",
+      "kind": "fact",
+      "privacy": "standard",
+      "revision": 3,
+      "source": "ledger",
+      "supersedes": [
+        "r1",
+        "r2"
+      ],
+      "text": "Berths are open until 18:00.",
+      "trust": "trusted"
+    }
+  ]
+}

@@ -1,0 +1,59 @@
+{
+  "category": "deletions",
+  "forbiddenRetained": [
+    "r1"
+  ],
+  "id": "case-010",
+  "questions": [
+    {
+      "abstain": false,
+      "expectedAnswer": "Until noon.",
+      "id": "q1",
+      "neededRecordIds": [
+        "r3"
+      ],
+      "text": "Until when are berths open?"
+    },
+    {
+      "abstain": false,
+      "expectedAnswer": "No — it was repealed.",
+      "id": "q2",
+      "neededRecordIds": [
+        "r2"
+      ],
+      "text": "Is the customs fee still charged?"
+    }
+  ],
+  "records": [
+    {
+      "id": "r1",
+      "key": "harbor.customs-fee",
+      "kind": "fact",
+      "privacy": "standard",
+      "revision": 1,
+      "source": "ledger",
+      "text": "The customs fee is $40.",
+      "trust": "trusted"
+    },
+    {
+      "id": "r2",
+      "key": "harbor.customs-fee",
+      "kind": "deletion",
+      "privacy": "standard",
+      "revision": 2,
+      "source": "ledger",
+      "text": "The customs fee was repealed.",
+      "trust": "trusted"
+    },
+    {
+      "id": "r3",
+      "key": "harbor.berth-hours",
+      "kind": "fact",
+      "privacy": "standard",
+      "revision": 1,
+      "source": "ledger",
+      "text": "Berths are open until noon.",
+      "trust": "trusted"
+    }
+  ]
+}
