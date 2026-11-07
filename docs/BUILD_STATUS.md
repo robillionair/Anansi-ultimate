@@ -1931,3 +1931,59 @@ Verification on Windows covers TypeScript, the production web build, the UI and 
 The SwarmTank cinematic pass adds a suspended holographic core, segmented perimeter lighting, a layered arena deck, and a dedicated instrument frame. Windows browser inspection confirmed that the visual effects leave the decision legend and controls readable. Focused scene and arena tests passed 26/26, and the four SwarmTank browser workflows passed. See the [LARP SwarmTank handoff](handoffs/larp-swarmtank.md).
 
 The LARP SwarmTank matrix pass adds selectable, paginated persona cards and illuminated wiring over the connected 3D persona network. The focused Windows browser battery passed all four workflows, including the existing Projects arena and its fallback.
+
+## SOMNIA model comparison & OpenRouter reasoning fix
+
+The project SOMNIA panel supports explicitly reviewed original and proposed prompts, two requests to one selected model via the existing provider gates, disclosure and measured token usage, and private project artifact saving. Enhanced resilience verified on Windows:
+- Mid-flight cancellation stops the model comparison cleanly before the candidate dispatch, setting cancelled status without issuing further provider requests.
+- Switching projects unmounts the comparison panel cleanly without cross-project state pollution or phantom background saves.
+- Duplicate save attempts are guarded via concurrent operation locks, and saved comparisons register strictly as private artifacts.
+- Displayed token metrics belong strictly to the completed active comparison.
+- OpenRouter reasoning disable is explicit, provider-specific, and defaults off.
+
+Verification: unit and component tests in `crates/providers/src/providers/openai.rs` (61/61 PASS), contract drift check 0 drift, UI suite 327/327 PASS, browser spec `tests/e2e/somnia-model-comparison.spec.ts` 2/2 PASS.
+
+## LARP SOMNIA replay chamber
+
+Scene 09 hosts the existing SOMNIA controls and shows real replay state, findings, and model usage in a motion-aware SVG chamber and 3D filament field. Windows browser coverage verifies the chamber, active evaluation state, motion pause/resume, camera orbit/zoom/reset, and no-WebGL fallback. Zero provider calls on scene entry or offline replay. UI and contracts passed 327/327; browser spec `tests/e2e/larp-somnia.spec.ts` 2/2 PASS.
+
+## SwarmTank v2 qualification & integration
+
+Delivery `anansi-swarmtank-v2-2026-11-06.zip` (SHA-256 `3e4a063d7100fc410912be1a3e9363d506d7fe3d7e0eb3b1bc64afb6322ea2b9`, bundle SHA-256 `01f7087962a80c7b17efdf4ccddca10cc1cb5ed14e73a736befbf39caa7590ec`, tip `bb1cc6e6dc779499105c27db70666cb2605f3e13`) verified independently:
+- Market selection: CLDR searchable territories, Estonia researched profile v1 with source/date citations, France custom assumptions.
+- AI simulation: synthetic provider dispatch, malformed model output recorded & handled, budget exhaustion terminates cleanly, mid-run cancellation saves completed rounds.
+- Timeline playback: configurable horizon and step size, coarsening warning, scheduled competitor launch, price-change what-if branch comparison.
+- Scenario branching, Forge revision transfer, and backup/restore round-trip verified.
+- Suite: 17/17 tests PASS across `swarmtank-market.spec.ts`, `swarmtank-ai.spec.ts`, `swarmtank-ai-timeline.spec.ts`, `swarmtank-scenario.spec.ts`, and `swarmtank-arena.spec.ts`.
+
+## M13 PDF Document Ingestion integration
+
+Qualified standalone bounded PDF text extraction merged into document ingestion:
+- Bounded extraction (64 KiB sequential, page indexing, Unicode pre-scan, defense against decompression bombs, LZW bombs, and malicious xref streams).
+- Provenance tracking, page navigation, keyword search identifying matching pages, Ask ANANSI grounded citation with Page N (line M).
+- Failure modes: rejected, scanned, encrypted, and malformed PDFs fail safely and publish zero documents.
+- Suite: 14/14 tests PASS across `documents-pdf.spec.ts` (5/5) and `documents-ingestion.spec.ts` (9/9).
+
+## 2026-11-07 — Verified Windows preview integration checkpoint
+
+Unified integration branch `codex/windows-preview-integration` established at commit `ca6717bdb4736b59f5d7f3f6486734c288b8c918`:
+- Combines SwarmTank v2 (`bb1cc6e6d`), qualified M13 PDF text ingestion (`79a332bb1`), LARP scene 09 SOMNIA filament chamber, SOMNIA model comparison, OpenRouter reasoning fix, and cancellation/project-switch resilience.
+- Quality gates:
+  - TypeScript (`tsc --noEmit`): 0 errors
+  - Contract check (`node scripts/contracts.mjs --check`): 0 drift
+  - Documentation integrity (`node scripts/validate-docs.mjs`): 320 files PASS
+  - UI suite (`npm run test:ui`): 327 passed, 0 failed
+  - Rust workspace library suite (`cargo test --lib`): 305 passed, 0 failed (anansi-core 243, anansi-providers 61, anansi-desktop 1)
+  - Playwright browser suite under lease: 37/37 tests PASS
+    - SwarmTank v2: 17/17 PASS
+    - LARP Scenes 08 & 09 / SOMNIA Replay & Compare: 6/6 PASS
+    - Document & PDF Ingestion: 14/14 PASS
+- Native Desktop Application Verification:
+  - Built Windows native desktop preview candidate `anansi-desktop.exe` (SHA-256 `91d8c6e8dc3ee6bd5540203453c57044fa82ae571c435e7fff17f818b03ce36c`, size 38,019,072 bytes).
+  - Executed automated WebView2 CDP acceptance test (`scripts/verify-desktop.mjs`): PASS. Verified native startup, Windows platform detection, capability boundary shell rejection (`plugin:shell|execute` denied), contract error parity (`UNSUPPORTED_CONTRACT`), live status refresh, and full-page rendering snapshot.
+- Environment & Demarcation:
+  - Desktop demo at `E:/Anansi/previews/larp-cinematic` and other worktrees completely undisturbed.
+  - Test leases respected (`scripts/with-application-test-lease.mjs`).
+  - Working tree `E:/Anansi/worktrees/larp-swarmtank` preserved at `E:/Anansi/scratch/larp-swarmtank-working-tree-preserved.tar`.
+  - Zero paid inference, remote CI, or unapproved network requests.
+
