@@ -1,3 +1,4 @@
+import { SomniaModelCompare, type SomniaModelActivity } from './SomniaModelCompare';
 import { useEffect, useState } from 'react';
 import type {
   ArtifactRecord,
@@ -1211,6 +1212,12 @@ export function SomniaResultsView({
 // Panel
 // ---------------------------------------------------------------------------
 
+export type SomniaActivity = {
+  phase: 'idle' | 'review' | 'running' | 'complete';
+  scenarioCount: number;
+  metrics?: SomniaEvaluationDoc['metrics'];
+};
+
 export function SomniaPanel({
   client,
   workspaceId,
@@ -1219,7 +1226,11 @@ export function SomniaPanel({
   onSaved,
   notify,
   busy,
+  onActivity,
+  onModelActivity,
 }: {
+  onActivity?: (activity: SomniaActivity) => void;
+  onModelActivity?: (activity: SomniaModelActivity) => void;
   client: Client;
   workspaceId: string;
   projectId: string;
@@ -1238,6 +1249,7 @@ export function SomniaPanel({
   const [savedArtifactId, setSavedArtifactId] = useState<string | null>(null);
   const [viewing, setViewing] = useState<SomniaEvaluationDoc | null>(null);
   const [running, setRunning] = useState(false);
+  const [replayRunning, setReplayRunning] = useState(false);
   const [nightmareSeed, setNightmareSeed] = useState('somnia-nightmare-seed');
   const [nightmareCount, setNightmareCount] = useState(10);
   const [reviewed, setReviewed] = useState<string[]>([]);
@@ -1300,8 +1312,20 @@ export function SomniaPanel({
     setViewing(null);
   }
 
+  useEffect(() => {
+    const visible = evaluation ?? viewing;
+    onActivity?.({
+      phase: replayRunning ? 'running' : visible ? 'complete' : previewInput ? 'review' : 'idle',
+      scenarioCount: previewInput?.scenarios.length ?? 0,
+      metrics: replayRunning ? undefined : visible?.metrics,
+    });
+  }, [evaluation, viewing, onActivity, previewInput, replayRunning]);
+
   async function doRun() {
     if (previewInput === null) return;
+    setEvaluation(null);
+    setViewing(null);
+    setReplayRunning(true);
     setRunning(true);
     try {
       const response = await client.evaluateSomnia(workspaceId, {
@@ -1314,6 +1338,7 @@ export function SomniaPanel({
     } catch (error) {
       notify(error instanceof Error ? error.message : 'Evaluation failed.', true);
     } finally {
+      setReplayRunning(false);
       setRunning(false);
     }
   }
@@ -1520,7 +1545,7 @@ export function SomniaPanel({
       <p className="help">
         Isolated, manual, data-only replay. Supply synthetic or redacted
         input, preview exactly what will be evaluated, approve the run
-        explicitly, and save the result explicitly. Nothing here scans
+        explicitly, and save the result explicitly. Offline replay never scans
         your memories, calls a model, runs a real tool, or changes any
         memory, policy, project, or permission. Results are reference
         replay outcomes, not proof that a real agent improved.
@@ -1877,6 +1902,7 @@ export function SomniaPanel({
           </div>
         )}
       </section>
+      <SomniaModelCompare key={workspaceId + ":" + projectId} client={client} workspaceId={workspaceId} projectId={projectId} onSaved={onSaved} busy={busy} onActivity={onModelActivity} />
       <section aria-label="Saved SOMNIA evaluations">
         <h4>Saved evaluations</h4>
         {saved.length === 0 ? (

@@ -146,7 +146,6 @@
 .larp-matrix-wires g[data-active="true"] .wire-filament{stroke:#ff91cf;stroke-width:1.5}
 @keyframes swarm-signal{to{stroke-dashoffset:-40.4}}
 .larp-swarm-matrix[data-static="true"] .wire-signal{animation:none}
-.larp-matrix-wires .wire-recorded{fill:none;vector-effect:non-scaling-stroke;stroke:#f5c542;stroke-width:3;opacity:.9}
 @media(prefers-reduced-motion:reduce){.larp-swarm-matrix .wire-signal{animation:none}}
 .larp-matrix-card-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));grid-template-rows:repeat(3,minmax(0,1fr));align-items:center;gap:8px clamp(9px,2.3vw,34px);padding:8px clamp(8px,2vw,30px)}
 .larp-swarmtank .larp-matrix-card{position:relative;min-width:0;min-height:0;pointer-events:auto;display:grid;gap:4px;text-align:left;border:1px solid #775977a6;background:linear-gradient(135deg,#1a192bf5,#101320f7 65%,#1b1223fa);box-shadow:0 9px 20px #030306a8,inset 0 1px #f6d4ee22;padding:8px 9px;color:#ebeff8;border-radius:3px;--card-state:#8de7b0}
@@ -168,3 +167,66 @@
 @media(max-width:1000px),(max-height:740px){.larp-matrix-card-grid{gap:5px 12px;padding:5px 10px}.larp-swarmtank .larp-matrix-card{padding:4px;gap:2px}.larp-matrix-card small,.larp-card-state>span{display:none}.larp-card-state{padding-top:2px}.larp-swarm-viewport{flex-basis:220px}}
 .larp-swarm-matrix>header,.larp-swarm-matrix>footer{margin:0}
 .larp-matrix-card span{margin-left:0}
+
+/* SOMNIA replay chamber */
+.larp-mode-dock{grid-template-columns:repeat(9,minmax(0,1fr))}
+.larp-hud[data-view="9"]{--larp-accent:#bcabff;grid-template-columns:minmax(0,1fr);grid-template-areas:"top" "center" "dock" "bottom"}
+.larp-hud[data-view="9"] :is(.larp-rail-left,.larp-rail-right){display:none}
+.larp-hud[data-view="9"] .larp-scene-footnote{margin-top:auto}
+.larp-hud[data-view="9"] .larp-centerpiece{background:radial-gradient(ellipse at 39% 50%,#1b142b,#04050b 73%)}
+.larp-hud[data-view="9"] .larp-scene-title h3{color:#e5d9ff}
+.larp-somnia .larp-swarm-console{border-color:#4f426d;background:#10101b}
+.larp-somnia .larp-swarm-console>header{background:linear-gradient(108deg,#25203c,#10101b);border-color:#4f426d}
+.larp-somnia .larp-swarm-console pre{overflow:auto;max-height:230px;overflow-wrap:anywhere}
+.larp-somnia .larp-swarm-console fieldset{min-width:0}
+.larp-somnia-project{margin-bottom:12px}
+.larp-somnia-project select{display:block;width:100%}
+.larp-somnia-chamber{grid-area:arena;position:relative;min-height:300px;overflow:hidden;isolation:isolate;display:grid;grid-template-rows:auto 1fr auto auto;border:1px solid #625283;background:radial-gradient(ellipse at 50% 47%,#180d32,#060610 70%);box-shadow:inset 0 0 32px #9979f51b;color:#e3d8fa}
+.larp-somnia-chamber::after{content:"";position:absolute;inset:6px;border:1px solid #9f87d22a;pointer-events:none}
+.somnia-optics{position:absolute;inset:0;width:100%;height:100%;z-index:-1;pointer-events:none}
+.somnia-chamber-caption,.somnia-chamber-controls{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:15px 18px;color:#c4b2ec;font-size:10px;letter-spacing:.13em;background:linear-gradient(90deg,#100d1de8,#150d24a0)}
+.somnia-chamber-caption{grid-row:1;border-bottom:1px solid #8171b33d}
+.somnia-chamber-caption span:last-child{color:#a4fff5;text-shadow:0 0 12px #6bf2df}
+.somnia-chamber-readout{grid-row:3;justify-self:center;text-align:center;background:#100d1de9;border:1px solid #8d73c68c;box-shadow:0 0 20px #9d72ee25;padding:8px 16px;margin:0 8px 12px;font-size:11px}
+.somnia-chamber-readout span{color:#bea0ff;font-size:9px;letter-spacing:.14em}
+.somnia-chamber-readout p{margin:4px 0}
+.somnia-chamber-controls{grid-row:4;border-top:1px solid #8171b33d;flex-wrap:wrap}
+.somnia-chamber-controls>div{display:flex;gap:5px}
+.larp-somnia button[aria-pressed="true"]{background:#322153;border-color:#a184e3;color:#efe5ff}
+.somnia-core,.somnia-orbit,.somnia-starfield{transform-origin:50% 50%}
+.somnia-orbit{animation:somnia-orbit 38s linear infinite}
+.somnia-starfield{animation:somnia-orbit 150s linear infinite}
+.somnia-core{animation:somnia-breathe 6s ease-in-out infinite}
+.somnia-trace{stroke-dasharray:2 98;stroke-dashoffset:0;opacity:.24}
+.larp-somnia-chamber[data-active="true"] .somnia-trace{animation:somnia-signal 2s linear infinite;opacity:1}
+.larp-somnia-chamber[data-active="true"] .somnia-core{animation-duration:1.5s;filter:drop-shadow(0 0 14px #a3e9f8)}
+@keyframes somnia-orbit{to{transform:rotate(360deg)}}
+@keyframes somnia-breathe{50%{transform:scale(1.065);opacity:.78}}
+@keyframes somnia-signal{to{stroke-dashoffset:-100}}
+.larp-somnia-chamber[data-paused="true"] :is(.somnia-orbit,.somnia-starfield,.somnia-core,.somnia-trace),
+[data-reduced-motion="true"] .larp-somnia-chamber :is(.somnia-orbit,.somnia-starfield,.somnia-core,.somnia-trace){animation-play-state:paused}
+@media(prefers-reduced-motion:reduce){.larp-somnia-chamber :is(.somnia-orbit,.somnia-starfield,.somnia-core,.somnia-trace){animation:none}}
+
+/* Reference-inspired green filament field and low-profile instrument bank. */
+.larp-hud[data-view="9"]{--larp-accent:#a8e4af}
+.larp-hud[data-view="9"] .larp-centerpiece{background:radial-gradient(ellipse at 42% 48%,#102318,#030705 78%)}
+.larp-hud[data-view="9"] .larp-scene-title h3{color:#e1f4dc}
+.larp-somnia .larp-swarm-console{background:#0b130e;border-color:#314b38}
+.larp-somnia .larp-swarm-console>header{background:linear-gradient(108deg,#172d1e,#0a120d);border-color:#314b38}
+.larp-somnia-chamber{grid-template-rows:auto 1fr auto auto auto;border-color:#54755a;background:#020604;box-shadow:inset 0 0 30px #76dd8a24;color:#deefde}
+.larp-somnia-chamber::after{border-color:#90c49b30}
+.somnia-filament-canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;z-index:-1;outline-offset:-3px}
+.somnia-chamber-caption,.somnia-chamber-controls{background:linear-gradient(90deg,#060d09f5,#0b170dec);color:#afcbb0;border-color:#537c575c;padding:9px 13px}
+.somnia-chamber-caption span:last-child{color:#adffb5;text-shadow:0 0 11px #63ff8b}
+.somnia-chamber-readout{border-color:#699875;background:#06110aed;box-shadow:0 0 20px #72d88428}
+.somnia-chamber-readout span{color:#a1dfab}
+.somnia-instrument-bank{grid-row:4;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;background:#040905ed;padding:6px 8px}
+.somnia-instrument-bank>div{display:grid;gap:3px;min-width:0;border:1px solid #3c5841;background:linear-gradient(135deg,#0b180f,#060b08);padding:7px 9px}
+.somnia-instrument-bank span{color:#91d39a;font-size:8px;letter-spacing:.12em}
+.somnia-instrument-bank strong{font-size:clamp(13px,2vw,24px);line-height:1.1;color:#effbe9;font-weight:500}
+.somnia-instrument-bank>div:nth-child(2) strong{color:#eaa18e}
+.somnia-instrument-bank small{color:#b3c6b1;font-size:9px}
+.somnia-chamber-controls{grid-row:5}
+.larp-somnia button[aria-pressed="true"]{background:#1a3922;border-color:#75b882;color:#e9fbe8}
+.somnia-filament-canvas{z-index:0}
+.somnia-chamber-caption,.somnia-chamber-readout,.somnia-instrument-bank,.somnia-chamber-controls{position:relative;z-index:1}

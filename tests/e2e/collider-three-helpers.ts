@@ -136,6 +136,14 @@ export async function startSession(page: Page, reducedMotion: boolean): Promise<
         : body.includes('product architect')
           ? walkSpecJson()
           : collisionJson();
+      if (JSON.parse(body).stream === false) {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({
+          model: 'llama-x', message: { role: 'assistant', content: 'synthetic replay answer' },
+          done: true, prompt_eval_count: 12, eval_count: 4,
+        }));
+        return;
+      }
       const third = Math.ceil(text.length / 3);
       const chunks = [text.slice(0, third), text.slice(third, third * 2), text.slice(third * 2)];
       res.writeHead(200, { 'content-type': 'application/x-ndjson' });

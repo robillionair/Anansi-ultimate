@@ -113,12 +113,12 @@ impl ProviderAdapter for OpenAiCompatibleAdapter {
         if let Some(h) = bearer_header(auth) {
             headers.push(h);
         }
-        Ok(json_request(
-            endpoint,
-            "/chat/completions",
-            headers,
-            build_openai_body(request, stream),
-        ))
+        let mut body = build_openai_body(request, stream);
+        if self.provider == "openrouter" && request.disable_open_router_reasoning {
+            body["reasoning"] = serde_json::json!({"enabled": false});
+            body["provider"] = serde_json::json!({"require_parameters": true});
+        }
+        Ok(json_request(endpoint, "/chat/completions", headers, body))
     }
 
     fn parse_response(
@@ -236,6 +236,27 @@ mod tests {
         let body: serde_json::Value = serde_json::from_slice(&http.body).unwrap();
         assert_eq!(body["model"], "gpt-x");
         assert_eq!(body["messages"][0]["content"], "hello");
+    }
+
+    #[test]
+    fn openrouter_reasoning_disable_is_explicit_and_provider_specific() {
+        let mut request =
+            CompletionRequest::new("model", vec![ChatMessage::new(Role::User, "hello")]);
+        let openrouter = OpenAiCompatibleAdapter::new("openrouter");
+        let openai = OpenAiCompatibleAdapter::new("openai");
+        let auth = AuthMaterial::None;
+        let body = |adapter: &OpenAiCompatibleAdapter, request: &CompletionRequest| {
+            let http = adapter
+                .build_request(&endpoint(), &auth, request, false)
+                .unwrap();
+            serde_json::from_slice::<serde_json::Value>(&http.body).unwrap()
+        };
+        assert!(body(&openrouter, &request).get("reasoning").is_none());
+        request.disable_open_router_reasoning = true;
+        let routed = body(&openrouter, &request);
+        assert_eq!(routed["reasoning"]["enabled"], false);
+        assert_eq!(routed["provider"]["require_parameters"], true);
+        assert!(body(&openai, &request).get("reasoning").is_none());
     }
 
     #[test]

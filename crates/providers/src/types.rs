@@ -153,6 +153,9 @@ pub struct CompletionRequest {
     pub messages: Vec<ChatMessage>,
     pub max_output_tokens: Option<u32>,
     pub temperature: Option<f32>,
+    /// Ask OpenRouter to omit reasoning and reserve output for answer text.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub disable_open_router_reasoning: bool,
     /// The caller asserts this content must never leave the local machine
     /// (compiled from local-only memories). The router and gates enforce
     /// it; it is never silently dropped (§17).
@@ -172,6 +175,7 @@ impl CompletionRequest {
             messages,
             max_output_tokens: None,
             temperature: None,
+            disable_open_router_reasoning: false,
             local_only: false,
             explicit_cloud_authorization: false,
         }
