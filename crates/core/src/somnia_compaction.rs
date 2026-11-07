@@ -46,6 +46,10 @@ pub const RECORD_KINDS: [&str; 4] = ["fact", "instruction", "uncertainty", "dele
 pub const TRUST_VALUES: [&str; 2] = ["trusted", "unverified"];
 pub const PRIVACY_VALUES: [&str; 3] = ["standard", "private", "public"];
 
+/// Identity of a record for exact-duplicate grouping: everything
+/// except the id (key, source, revision, kind, trust, privacy, text).
+type DuplicateKey = (String, String, u32, String, String, String, String);
+
 fn chars(s: &str) -> usize {
     s.chars().count()
 }
@@ -501,10 +505,7 @@ fn compact_inner(
     let mut excluded_ids: HashSet<String> = HashSet::new();
     let mut deduped: Vec<SomniaCompactionRecord> = Vec::new();
     {
-        let mut groups: BTreeMap<
-            (String, String, u32, String, String, String, String),
-            Vec<SomniaCompactionRecord>,
-        > = BTreeMap::new();
+        let mut groups: BTreeMap<DuplicateKey, Vec<SomniaCompactionRecord>> = BTreeMap::new();
         for record in &sorted {
             groups
                 .entry((
