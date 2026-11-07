@@ -27,6 +27,7 @@ pub mod mcp_server;
 pub mod memory;
 pub mod opportunities;
 pub mod pipeline;
+pub mod pdf;
 pub mod privacy;
 pub mod provider_credentials;
 pub mod provider_dispatch;

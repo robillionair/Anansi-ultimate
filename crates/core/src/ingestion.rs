@@ -1,4 +1,4 @@
-//! Local document ingestion (M13 Slice 1): TXT/Markdown only.
+//! Local document ingestion (M13): TXT/Markdown and text-layer PDF.
 //!
 //! The upload mechanics mirror the bounded backup upload
 //! (`backup_upload.rs`): the client declares bytes + SHA-256, sends
@@ -7,6 +7,16 @@
 //! identity is the job row itself (selection `Ingestion`, checkpoint
 //! `uploading:<received>` / `staged` / `published` / `discarded`), so
 //! no second staging table exists and no schema migration was needed.
+//!
+//! The text step is per-kind. TXT/Markdown is decoded as UTF-8 (one
+//! leading BOM stripped and recorded, 1–8,000 chars, 64 KiB raw).
+//! PDF is text-extracted by the bounded extractor
+//! (`crate::pdf::extract_pdf_text`): raw file at most 1 MiB, the
+//! decode budget (16 MiB) and text caps (8,000 chars/page, 32,000
+//! total) enforced during extraction, and the per-page provenance
+//! stored on the published document. A refused PDF fails the job
+//! with the extractor's honest message; no partial import is ever
+//! published.
 //!
 //! States: the job is created **Paused** while the upload is in flight
 //! (the worker only claims Queued jobs), moves to Queued when the
@@ -17,8 +27,8 @@
 use crate::{
     CommandError, Core, content,
     document::{
-        DocumentProvenance, DocumentSource, MAX_ACTIVE_UPLOADS, MAX_DOCUMENT_BYTES,
-        MAX_DOCUMENT_CHARS, MAX_UPLOAD_PART_BYTES,
+        DocumentProvenance, DocumentSource, MAX_ACTIVE_UPLOADS, MAX_UPLOAD_PART_BYTES,
+        max_bytes_for_kind,
     },
     jobs::{ExportSelection, Job, conflict, invalid},
     memory::{MemoryDraft, MemoryWriteRequest},
@@ -164,10 +174,11 @@ impl Storage {
                 "Document file name must be 1 to 255 characters and a file name, not a path.",
             ));
         }
-        if r.bytes == 0 || r.bytes > MAX_DOCUMENT_BYTES {
-            return Err(bad(
-                "Document file must be 1 to 65536 bytes. Larger files are refused before upload.",
-            ));
+        if r.bytes == 0 || r.bytes > max_bytes_for_kind(kind) {
+            return Err(bad(&format!(
+                "Document file must be 1 to {} bytes. Larger files are refused before upload.",
+                max_bytes_for_kind(kind)
+            )));
         }
         if r.sha256.len() != 64
             || !r
@@ -352,7 +363,7 @@ impl Storage {
         // fails here with the staging message).
         let path = staged_path(self, &lease.job.workspace_id, &lease.job.id)?;
         crate::storage::reject_links(&path).map_err(|_| invalid())?;
-        let bytes = match crate::snapshots::limited(&path, MAX_DOCUMENT_BYTES) {
+        let bytes = match crate::snapshots::limited(&path, max_bytes_for_kind(&kind)) {
             Ok(bytes) => bytes,
             Err(_) => {
                 let _ =
@@ -367,27 +378,50 @@ impl Storage {
             );
             return Ok(());
         }
-        let text = match String::from_utf8(bytes.clone()) {
-            Ok(text) => text,
-            Err(_) => {
+        // The text step is per-kind. TXT/Markdown is decoded as UTF-8
+        // (one leading BOM stripped and recorded). PDF is text-extracted
+        // by the bounded extractor: the decode budget (16 MiB) and the
+        // text caps (8,000 chars/page, 32,000 total) are enforced there,
+        // and a refusal fails the job with the extractor's honest
+        // message — no partial import is ever published.
+        let (text, bom, pages) = if kind == "pdf" {
+            match crate::pdf::extract_pdf_text(&bytes) {
+                Ok(extracted) => (
+                    extracted.body,
+                    false,
+                    Some(extracted.page_provenance),
+                ),
+                Err(error) => {
+                    let _ = self.fail_ingestion(lease, &error.message());
+                    return Ok(());
+                }
+            }
+        } else {
+            let text = match String::from_utf8(bytes.clone()) {
+                Ok(text) => text,
+                Err(_) => {
+                    let _ = self.fail_ingestion(
+                        lease,
+                        "Document is not valid UTF-8. Only UTF-8 text files can be imported.",
+                    );
+                    return Ok(());
+                }
+            };
+            let (bom, text) = match text.strip_prefix('\u{feff}') {
+                Some(rest) => (true, rest.to_string()),
+                None => (false, text),
+            };
+            if text.trim().is_empty()
+                || text.chars().count() as u64 > crate::document::max_chars_for_kind(&kind)
+            {
                 let _ = self.fail_ingestion(
                     lease,
-                    "Document is not valid UTF-8. Only UTF-8 text files can be imported.",
+                    "Document text must be 1 to 8000 characters and not empty or whitespace-only.",
                 );
                 return Ok(());
             }
+            (text, bom, None)
         };
-        let (bom, text) = match text.strip_prefix('\u{feff}') {
-            Some(rest) => (true, rest.to_string()),
-            None => (false, text),
-        };
-        if text.trim().is_empty() || text.chars().count() as u64 > MAX_DOCUMENT_CHARS {
-            let _ = self.fail_ingestion(
-                lease,
-                "Document text must be 1 to 8000 characters and not empty or whitespace-only.",
-            );
-            return Ok(());
-        }
         let text_hash = content::hash(text.as_bytes());
         let source = DocumentSource {
             label: file_name.clone(),
@@ -448,6 +482,7 @@ impl Storage {
                 raw_bytes: expected_bytes,
                 text_chars: source.text_chars,
                 bom,
+                pages,
             }),
             job_guard: Some(crate::document::JobPublishGuard {
                 job_id: lease.job.id.clone(),
@@ -517,12 +552,17 @@ impl Core {
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(|_| unavailable())?;
         let job = crate::jobs::read(&tx, &r.workspace_id, &r.id)?;
-        let (expected_bytes, expected_hash) = match &job.selection {
+        let (expected_bytes, expected_hash, kind) = match &job.selection {
             ExportSelection::Ingestion {
                 expected_bytes,
                 expected_hash,
+                format,
                 ..
-            } => (*expected_bytes, expected_hash.clone()),
+            } => (
+                *expected_bytes,
+                expected_hash.clone(),
+                format.clone(),
+            ),
             _ => return Err(invalid()),
         };
         if job.state != crate::jobs::JobState::Paused {
@@ -561,9 +601,10 @@ impl Core {
                 return Err(invalid());
             }
             // Verify the complete upload before the job may run: the
-            // staged bytes must hash to the declared value.
-            let staged =
-                crate::snapshots::limited(&path, MAX_DOCUMENT_BYTES).map_err(|_| invalid())?;
+            // staged bytes must hash to the declared value. The read
+            // cap is per-kind (a PDF may be up to 1 MiB).
+            let staged = crate::snapshots::limited(&path, max_bytes_for_kind(&kind))
+                .map_err(|_| invalid())?;
             if staged.len() as u64 != expected_bytes || content::hash(&staged) != expected_hash {
                 let failed = tx
                     .execute(
@@ -772,6 +813,138 @@ mod tests {
     }
 
     #[test]
+    fn pdf_happy_path_publishes_document_with_page_provenance() {
+        let (_temp, core, ws) = setup();
+        let bytes = include_bytes!("../../../tests/fixtures/pdf/normal-3page.pdf");
+        let sha = content::hash(bytes);
+        let opened = begin(&core, &ws, "normal-3page.pdf", bytes, &sha, "private");
+        let id = opened["id"].as_str().unwrap().to_string();
+        let done = part(&core, &ws, &id, 0, bytes, true).unwrap();
+        assert_eq!(done["job"]["state"], "Queued");
+        let job = wait_for_terminal(&core, &ws, &id);
+        assert_eq!(job.state, crate::jobs::JobState::Completed);
+        let memory_id = job.artifact_id.clone().unwrap();
+        let read = core
+            .memory_command(
+                "read",
+                json!({"contractVersion":1,"workspaceId":ws,"id":memory_id}),
+            )
+            .unwrap();
+        // The stored body is the three pages joined by form feed.
+        let body = read["body"].as_str().unwrap();
+        assert!(body.contains("Harbor Ledger"));
+        assert!(body.contains("Second page"));
+        assert!(body.contains("Third page"));
+        assert_eq!(body.matches('\x0c').count(), 2);
+        let doc = &read["memory"]["document"];
+        assert_eq!(doc["fileName"], "normal-3page.pdf");
+        assert_eq!(doc["mediaType"], "application/pdf");
+        assert_eq!(doc["rawHash"], sha);
+        assert_eq!(doc["bom"], false);
+        // Page provenance: three pages, contiguous, covering the body.
+        let pages = doc["pages"].as_array().unwrap();
+        assert_eq!(pages.len(), 3);
+        assert_eq!(pages[0]["page"], 1);
+        assert_eq!(pages[1]["page"], 2);
+        assert_eq!(pages[2]["page"], 3);
+        assert_eq!(pages[0]["startChar"], 0);
+        let total: u64 = pages
+            .iter()
+            .map(|p| p["chars"].as_u64().unwrap())
+            .sum();
+        assert_eq!(total + 2 * 3, body.chars().count() as u64);
+        // Each page hash is the SHA-256 of that page's text.
+        let page_texts: Vec<&str> = body.split("\n\x0c\n").collect();
+        assert_eq!(page_texts.len(), 3);
+        for (page, text) in page_texts.iter().enumerate() {
+            assert_eq!(
+                pages[page]["hash"],
+                content::hash(text.as_bytes()),
+                "page {} hash must match its text",
+                page + 1
+            );
+        }
+        // Full-body search finds a term that lives only on page 2.
+        let found = core
+            .memory_command(
+                "list",
+                json!({"contractVersion":1,"workspaceId":ws,"kind":"document","query":"aurora","fullBody":true}),
+            )
+            .unwrap();
+        assert_eq!(found["memories"].as_array().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn pdf_begin_uses_the_pdf_raw_limit() {
+        let (_temp, core, ws) = setup();
+        let sha = content::hash(b"declared");
+        // A PDF between the TXT/Markdown cap (64 KiB) and the PDF cap
+        // (1 MiB) is accepted at begin: the selection validator must
+        // use the per-kind limit, not the 64 KiB text cap.
+        assert!(core
+            .job_command(
+                "ingest-begin",
+                json!({"contractVersion":1,"workspaceId":ws,"fileName":"big.pdf","bytes":100_000,"sha256":sha,"privacy":"private"}),
+            )
+            .is_ok());
+        // Over the 1 MiB PDF cap it still refuses before any upload.
+        assert!(core
+            .job_command(
+                "ingest-begin",
+                json!({"contractVersion":1,"workspaceId":ws,"fileName":"huge.pdf","bytes":1_048_577,"sha256":sha,"privacy":"private"}),
+            )
+            .is_err());
+    }
+
+    #[test]
+    fn pdf_refusals_publish_nothing() {
+        let (_temp, core, ws) = setup();
+        // (fixture, a substring the job log must carry)
+        let cases: [(&str, &[u8], &str); 4] = [
+            (
+                "encrypted-user.pdf",
+                include_bytes!("../../../tests/fixtures/pdf/encrypted-user.pdf"),
+                "password-protected",
+            ),
+            (
+                "scanned-image.pdf",
+                include_bytes!("../../../tests/fixtures/pdf/scanned-image.pdf"),
+                "no readable text",
+            ),
+            (
+                "decompression-bomb.pdf",
+                include_bytes!("../../../tests/fixtures/pdf/decompression-bomb.pdf"),
+                "decode budget",
+            ),
+            (
+                "malformed-truncated.pdf",
+                include_bytes!("../../../tests/fixtures/pdf/malformed-truncated.pdf"),
+                "could not be parsed",
+            ),
+        ];
+        for (name, bytes, expected) in cases {
+            let sha = content::hash(bytes);
+            let opened = begin(&core, &ws, name, bytes, &sha, "private");
+            let id = opened["id"].as_str().unwrap().to_string();
+            part(&core, &ws, &id, 0, bytes, true).unwrap();
+            let job = wait_for_terminal(&core, &ws, &id);
+            assert_eq!(job.state, crate::jobs::JobState::Failed, "{name} must fail");
+            assert!(
+                job.log.contains(expected),
+                "{name} log {job:?} must mention {expected}"
+            );
+        }
+        assert_eq!(
+            list_documents(&core, &ws)["memories"]
+                .as_array()
+                .unwrap()
+                .len(),
+            0,
+            "refused PDFs must publish no document"
+        );
+    }
+
+    #[test]
     fn duplicate_import_completes_with_the_same_record() {
         let (_temp, core, ws) = setup();
         let bytes = b"Same file twice.";
@@ -913,7 +1086,7 @@ mod tests {
         let error = core
             .job_command(
                 "ingest-begin",
-                json!({"contractVersion":1,"workspaceId":ws,"fileName":"report.pdf","bytes":5,"sha256":sha,"privacy":"private"}),
+                json!({"contractVersion":1,"workspaceId":ws,"fileName":"report.docx","bytes":5,"sha256":sha,"privacy":"private"}),
             )
             .unwrap_err();
         assert!(error.message.contains("not supported"));

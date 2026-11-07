@@ -1,21 +1,28 @@
 /**
- * Document import helpers (M13 Slice 1). The browser file pick is the
+ * Document import helpers (M13). The browser file pick is the
  * only picker: no filesystem path is ever read, sent or stored, only
- * the picked file's basename. Bytes are decoded locally with the
- * shared strict decoder (`documentInput.ts`) before any network
- * traffic, so refusals (format, size, encoding, empty) happen before
- * an upload begins. Uploads go through the bounded chunked path
- * (`jobs/ingest-begin` + `jobs/ingest-part`) with the client-computed
- * SHA-256 declared up front; the server re-verifies it at finish.
+ * the picked file's basename. TXT/Markdown bytes are decoded locally
+ * with the shared strict decoder (`documentInput.ts`) before any
+ * network traffic, so refusals (format, size, encoding, empty)
+ * happen before an upload begins. A PDF is never decoded in the
+ * browser — it is binary, and the server extracts its text layer
+ * with the bounded extractor — so for `.pdf` only the raw bytes and
+ * SHA-256 are computed here and the text is extracted server-side.
+ * Uploads go through the bounded chunked path (`jobs/ingest-begin`
+ * + `jobs/ingest-part`) with the client-computed SHA-256 declared up
+ * front; the server re-verifies it at finish.
  */
 import { decodeDocumentBytes } from './documentInput.ts';
 import type { Client, Job, Privacy } from '@anansi/contracts';
+
+/** Largest accepted PDF file, in bytes (mirrors the backend). */
+export const MAX_PDF_BYTES = 1_048_576;
 
 export type PendingDocument = {
   fileName: string;
   bytes: Uint8Array;
   text: string;
-  kind: 'txt' | 'md';
+  kind: 'txt' | 'md' | 'pdf';
   bom: boolean;
   textChars: number;
   rawBytes: number;
@@ -38,6 +45,26 @@ function sha256Hex(data: Uint8Array): Promise<string> {
 /** Decode a picked file locally. Throws with the refusal reason. */
 export async function prepareDocument(file: File): Promise<PendingDocument> {
   const bytes = new Uint8Array(await file.arrayBuffer());
+  // A PDF is never decoded in the browser: its text layer is
+  // extracted server-side by the bounded extractor. Only the raw
+  // bytes and SHA-256 are computed here; the text count is unknown
+  // until the import runs.
+  if (file.name.toLowerCase().endsWith('.pdf')) {
+    if (bytes.length === 0 || bytes.length > MAX_PDF_BYTES) {
+      throw Error(`The file must be 1 to ${MAX_PDF_BYTES} bytes.`);
+    }
+    return {
+      fileName: file.name,
+      bytes,
+      text: '',
+      kind: 'pdf',
+      bom: false,
+      textChars: 0,
+      rawBytes: bytes.length,
+      rawHash: await sha256Hex(bytes),
+      textHash: '',
+    };
+  }
   const decoded = await decodeDocumentBytes(bytes, file.name);
   return {
     fileName: file.name,

@@ -80,7 +80,7 @@ impl ExportSelection {
                     return Err(invalid());
                 }
                 if *expected_bytes == 0
-                    || *expected_bytes > crate::document::MAX_DOCUMENT_BYTES
+                    || *expected_bytes > crate::document::max_bytes_for_kind(format)
                     || expected_hash.len() != 64
                     || !expected_hash
                         .bytes()

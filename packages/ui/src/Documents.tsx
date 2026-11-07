@@ -11,13 +11,53 @@ import {
 } from './documents.ts';
 import type { PendingDocument } from './documents.ts';
 
-const SUPPORTED_NOTE = 'Only .txt and .md files can be imported in this slice. PDF, DOCX and other formats are tracked as follow-up work.';
+const SUPPORTED_NOTE = 'Only .txt, .md and text-layer .pdf files can be imported in this slice. DOCX and other formats are tracked as follow-up work.';
 
 function formatRefusal(fileName: string, message: string): string {
-  if (!message.includes('Only .txt and .md')) return message;
+  if (!message.includes('Only .txt and .md') && !message.includes('Only .txt, .md')) return message;
   const dot = fileName.lastIndexOf('.');
   const suffix = dot > 0 ? fileName.slice(dot + 1).toUpperCase() : 'This';
   return `${suffix} files are not supported yet. ${SUPPORTED_NOTE}`;
+}
+
+/**
+ * Plain-text reader for an imported PDF. The stored body is the
+ * pages joined by a form feed, so the reader splits on it and shows
+ * one page at a time. A PDF body is never passed through the
+ * Markdown renderer: its text is extracted plain text, and Markdown
+ * markup in it (a `#` line, `**bold**`) is content, not formatting.
+ */
+function PdfReader({
+  body,
+  page,
+  onPage,
+}: {
+  body: string;
+  page: number;
+  onPage: (page: number) => void;
+}) {
+  const pages = body.split('\x0c');
+  const current = Math.min(Math.max(page, 0), pages.length - 1);
+  return (
+    <div>
+      <p>
+        Page {current + 1} of {pages.length}
+      </p>
+      <div className="actions">
+        <button disabled={current === 0} className="secondary" onClick={() => onPage(current - 1)}>
+          Previous page
+        </button>
+        <button
+          disabled={current >= pages.length - 1}
+          className="secondary"
+          onClick={() => onPage(current + 1)}
+        >
+          Next page
+        </button>
+      </div>
+      <pre>{pages[current]}</pre>
+    </div>
+  );
 }
 
 export function Documents({
@@ -34,6 +74,7 @@ export function Documents({
   const [next, setNext] = useState<number | null>(null);
   const [current, setCurrent] = useState<MemoryDetails | null>(null);
   const [showSource, setShowSource] = useState(false);
+  const [page, setPage] = useState(0);
   const [pending, setPending] = useState<PendingDocument | null>(null);
   const [privacy, setPrivacy] = useState<Privacy>('private');
   const [projectId, setProjectId] = useState('');
@@ -43,6 +84,7 @@ export function Documents({
   const [resumable, setResumable] = useState<Job[]>([]);
   const [query, setQuery] = useState('');
   const [searchResults, setSearchResults] = useState<MemoryMetadata[] | null>(null);
+  const [searchPages, setSearchPages] = useState<Record<string, number>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -106,6 +148,7 @@ export function Documents({
     const result = await client.readMemory(workspaceId, id);
     setCurrent(result);
     setShowSource(false);
+    setPage(0);
   }
 
   useEffect(() => {
@@ -186,6 +229,7 @@ export function Documents({
   async function search() {
     if (!query.trim()) {
       setSearchResults(null);
+      setSearchPages({});
       return;
     }
     await run(async () => {
@@ -197,6 +241,24 @@ export function Documents({
         fullBody: true,
       });
       setSearchResults(result.memories);
+      // The page of the first match is computed client-side from the
+      // body: a PDF body is pages joined by a form feed, so the page
+      // is the count of form feeds before the first match plus one.
+      // TXT/Markdown bodies have no form feed, so they report page 1.
+      const pages: Record<string, number> = {};
+      const needle = query.trim().toLowerCase();
+      for (const record of result.memories) {
+        try {
+          const details = await client.readMemory(workspaceId, record.id);
+          const at = details.body.toLowerCase().indexOf(needle);
+          if (at >= 0) {
+            pages[record.id] = details.body.slice(0, at).split('\x0c').length;
+          }
+        } catch {
+          // A result whose body cannot be read keeps no page label.
+        }
+      }
+      setSearchPages(pages);
     });
   }
 
@@ -205,10 +267,11 @@ export function Documents({
     <section className="card documents" aria-labelledby="documents-title" aria-busy={busy}>
       <h2 id="documents-title">Your documents</h2>
       <p>
-        Import a local text or Markdown file as a document record. Imports are asynchronous,
-        resumable and cancellable, run as persistent jobs, and stay in this workspace. Private
-        is the default; Sealed import is refused until an encrypted vault path exists. Only
-        .txt and .md files are supported in this slice.
+        Import a local text, Markdown or text-layer PDF file as a document record. Imports are
+        asynchronous, resumable and cancellable, run as persistent jobs, and stay in this
+        workspace. Private is the default; Sealed import is refused until an encrypted vault
+        path exists. Only .txt, .md and .pdf files are supported in this slice; a PDF's text
+        is extracted on the server (scanned or image-only PDFs need OCR, a separate slice).
       </p>
       {error && (
         <p role="alert" className="error">
@@ -222,13 +285,13 @@ export function Documents({
       )}
       <div className="actions">
         <label className="file-label" htmlFor="document-file">
-          Choose a .txt or .md file
+          Choose a .txt, .md or .pdf file
         </label>
         <input
           id="document-file"
           ref={fileRef}
           type="file"
-          accept=".txt,.md,text/plain,text/markdown"
+          accept=".txt,.md,.pdf,text/plain,text/markdown,application/pdf"
           disabled={busy}
           onChange={event => void pick(event.target.files?.[0])}
         />
@@ -237,7 +300,10 @@ export function Documents({
         <section aria-label="Review import">
           <h3>Review import</h3>
           <p>
-            {pending.fileName} · {pending.rawBytes} bytes · {pending.textChars} characters
+            {pending.fileName} · {pending.rawBytes} bytes ·{' '}
+            {pending.kind === 'pdf'
+              ? 'PDF — text extracted on the server during import'
+              : `${pending.textChars} characters`}
             {pending.bom ? ' · UTF-8 BOM (stripped and recorded)' : ''} · {pending.kind}
           </p>
           <p className="help">
@@ -353,6 +419,7 @@ export function Documents({
             onClick={() => {
               setQuery('');
               setSearchResults(null);
+              setSearchPages({});
             }}
           >
             Clear
@@ -368,6 +435,7 @@ export function Documents({
                 <span>
                   {' '}
                   · {result.privacy}
+                  {searchPages[result.id] !== undefined ? ` · Page ${searchPages[result.id]}` : ''}
                 </span>
               </li>
             ))}
@@ -422,13 +490,24 @@ export function Documents({
               <p>
                 {doc.rawBytes} bytes · {doc.textChars} characters
                 {doc.bom ? ' · UTF-8 BOM recorded' : ' · No BOM'}
+                {doc.pages ? ` · ${doc.pages.length} pages` : ''}
               </p>
+              {doc.pages && (
+                <p>
+                  Pages:{' '}
+                  {doc.pages
+                    .map(entry => `Page ${entry.page}: ${entry.chars} characters`)
+                    .join(' · ')}
+                </p>
+              )}
             </details>
           )}
           <div className="actions">
-            <button disabled={busy} className="secondary" onClick={() => setShowSource(value => !value)}>
-              {showSource ? 'Show rendered text' : 'View source'}
-            </button>
+            {doc?.mediaType !== 'application/pdf' && (
+              <button disabled={busy} className="secondary" onClick={() => setShowSource(value => !value)}>
+                {showSource ? 'Show rendered text' : 'View source'}
+              </button>
+            )}
             <button disabled={busy} className="secondary" onClick={() => onNavigate('ask')}>
               Ask about this document
             </button>
@@ -436,7 +515,13 @@ export function Documents({
               Open jobs
             </button>
           </div>
-          {showSource ? <pre>{current.body}</pre> : <div>{renderMarkdown(current.body)}</div>}
+          {doc?.mediaType === 'application/pdf' ? (
+            <PdfReader body={current.body} page={page} onPage={setPage} />
+          ) : showSource ? (
+            <pre>{current.body}</pre>
+          ) : (
+            <div>{renderMarkdown(current.body)}</div>
+          )}
         </section>
       )}
     </section>

@@ -139,9 +139,6 @@ pub fn chunk_markdown_sections(
     // Preserve every section byte beyond the first bounded chunk. Source line
     // offsets follow consumed newlines; splits inside a line retain that line.
     let mut complete = Vec::new();
-    let mut heading: Option<String> = None;
-    let mut section = String::new();
-    let mut start_line = 1u32;
     let append =
         |text: &str, heading: &Option<String>, line: u32, output: &mut Vec<ContextChunk>| {
             let mut rest = text.trim_end_matches('\n');
@@ -162,6 +159,37 @@ pub fn chunk_markdown_sections(
                 rest = &rest[piece.len()..];
             }
         };
+    // A PDF body is pages joined by a form feed on its own line
+    // (`\n\x0c\n`, the extractor's page separator). The form feed
+    // marks a page boundary, and the citation names the page
+    // ("Page N") with the line counted inside that page — so Ask
+    // cites "Page N (line M)" through the existing citation fields,
+    // with no contract or UI change. TXT/Markdown bodies never
+    // contain a form feed, so they keep the Markdown-heading
+    // chunking below. A `#` line in a PDF body is extracted text,
+    // not a heading, so the heading rule is skipped for paginated
+    // bodies entirely.
+    if body.contains('\x0c') {
+        let mut page = 1u32;
+        let mut section = String::new();
+        for line in body.lines() {
+            if line == "\x0c" {
+                let heading = Some(format!("Page {page}"));
+                append(&section, &heading, 1, &mut complete);
+                section.clear();
+                page += 1;
+            } else {
+                section.push_str(line);
+                section.push('\n');
+            }
+        }
+        let heading = Some(format!("Page {page}"));
+        append(&section, &heading, 1, &mut complete);
+        return complete;
+    }
+    let mut heading: Option<String> = None;
+    let mut section = String::new();
+    let mut start_line = 1u32;
     for (index, line) in body.lines().enumerate() {
         if line.trim_start().starts_with('#') {
             append(&section, &heading, start_line, &mut complete);
@@ -453,4 +481,52 @@ pub(crate) fn compile_context_with_query_and_proofs(
         lexical_only: hybrid_res.lexical_only,
         fallback_reason: hybrid_res.fallback_reason,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pdf_body_chunks_by_page_with_line_inside_page() {
+        // A PDF body is pages joined by a form feed on its own line.
+        // Each chunk names its page and counts its line inside it.
+        let body = "Alpha one.\nAlpha two.\n\x0c\nBeta one.\nBeta two.\nBeta three.\n\x0c\nGamma one.";
+        let chunks = chunk_markdown_sections("m1", "report.pdf", "document", body);
+        assert_eq!(chunks.len(), 3);
+        assert_eq!(chunks[0].section_heading.as_deref(), Some("Page 1"));
+        assert_eq!(chunks[0].line_number, Some(1));
+        assert!(chunks[0].content.contains("Alpha one."));
+        assert_eq!(chunks[1].section_heading.as_deref(), Some("Page 2"));
+        assert_eq!(chunks[1].line_number, Some(1));
+        assert!(chunks[1].content.contains("Beta one."));
+        assert_eq!(chunks[2].section_heading.as_deref(), Some("Page 3"));
+        assert_eq!(chunks[2].line_number, Some(1));
+        assert!(chunks[2].content.contains("Gamma one."));
+        // No chunk carries the form feed itself.
+        assert!(chunks.iter().all(|c| !c.content.contains('\x0c')));
+    }
+
+    #[test]
+    fn pdf_body_hash_line_is_text_not_heading() {
+        // A `#` line in a PDF body is extracted text, not a heading:
+        // the page heading survives it.
+        let body = "# not a heading\ntext here.\n\x0c\nSecond page.";
+        let chunks = chunk_markdown_sections("m1", "report.pdf", "document", body);
+        assert_eq!(chunks.len(), 2);
+        assert_eq!(chunks[0].section_heading.as_deref(), Some("Page 1"));
+        assert!(chunks[0].content.contains("# not a heading"));
+        assert_eq!(chunks[1].section_heading.as_deref(), Some("Page 2"));
+    }
+
+    #[test]
+    fn markdown_body_keeps_heading_chunking() {
+        // No form feed: the existing Markdown-heading behaviour is
+        // unchanged (a regression guard for TXT/Markdown Ask).
+        let body = "# Guide\nFirst line.\nSecond line.\n\n# Next\nThird line.";
+        let chunks = chunk_markdown_sections("m1", "guide.md", "document", body);
+        assert_eq!(chunks[0].section_heading.as_deref(), Some("# Guide"));
+        assert_eq!(chunks[0].line_number, Some(2));
+        assert_eq!(chunks[1].section_heading.as_deref(), Some("# Next"));
+    }
 }

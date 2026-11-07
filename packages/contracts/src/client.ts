@@ -242,7 +242,8 @@ function client(call:Call):Client {
     ingestBegin:async(workspaceId,fileName,bytes,sha256,privacy,projectId=null)=>decode(await call('jobs/ingest-begin',{workspaceId,fileName,bytes,sha256,privacy,projectId}),validIngestionStatus),
     ingestPart:async(workspaceId,id,offset,bytes,finish)=>decode(await call('jobs/ingest-part',{workspaceId,id,offset,bytes:Array.from(bytes),finish}),validIngestionStatus),
     ingestDocument:async(workspaceId,bytes,fileName,privacy,projectId=null)=>{
-      if(bytes.length>65536||bytes.length<1)throw Error('Choose a document up to 64 KiB.');
+      const maxBytes=fileName.toLowerCase().endsWith('.pdf')?1048576:65536;
+      if(bytes.length>maxBytes||bytes.length<1)throw Error(`Choose a document up to ${maxBytes===1048576?'1 MiB':'64 KiB'}.`);
       const sha256=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',Uint8Array.from(bytes)))).map(b=>b.toString(16).padStart(2,'0')).join('');
       const opened=decode(await call('jobs/ingest-begin',{workspaceId,fileName,bytes:bytes.length,sha256,privacy,projectId}),validIngestionStatus);
       let result=opened;
