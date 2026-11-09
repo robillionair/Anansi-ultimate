@@ -1949,3 +1949,544 @@ fn status_is_readable_by_a_browser_and_shows_no_secrets() {
         "status must never carry secret material"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Connect AI verification repair: reproduction tests for the two
+// acceptance findings (docs/handoffs/connect-ai-verification-repair-design.md).
+// Each test asserts the FIXED behaviour; on the delivered tip
+// 88737ef09 they FAIL — that failure is the reproduction, recorded
+// before the fix. AC-V1..V12.
+
+/// Dispatch to an explicitly chosen provider+model (ChooseModel).
+fn dispatch_chosen(
+    core: &Core,
+    session_id: &str,
+    ws: &str,
+    provider: &str,
+    model: &str,
+) -> Result<Value, CommandError> {
+    core.ai_command(
+        "providers-dispatch",
+        stamped(
+            session_id,
+            json!({
+                "workspaceId": ws, "mode": "chooseModel", "zeroCostLock": true,
+                "chosen": [provider, model],
+                "request": {
+                    "model": model,
+                    "messages": [{ "role": "user",
+                                   "segments": [{ "text": "hello", "privacy": "standard" }] }]
+                }
+            }),
+        ),
+    )
+}
+
+/// (provider, reference) pairs from a status response's orphan list.
+fn orphan_pairs(status: &Value) -> Vec<(String, String)> {
+    status["orphanedCredentials"]
+        .as_array()
+        .map(|a| {
+            a.iter()
+                .map(|o| {
+                    (
+                        o["provider"].as_str().unwrap_or("").to_string(),
+                        o["reference"].as_str().unwrap_or("").to_string(),
+                    )
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn credential_status(core: &Core, ws: &str, reference: &str) -> bool {
+    credential_op(
+        core,
+        None,
+        "providers-credential-status",
+        ws,
+        reference,
+    )
+    .unwrap()["present"]
+        .as_bool()
+        .unwrap()
+}
+
+#[test]
+fn verified_does_not_survive_endpoint_change() {
+    // AC-V1: a dispatch verifies the connection; changing the
+    // endpoint must clear it, while usage and budget survive.
+    let (_dir, core, ws) = core();
+    let fake_old = start_fake_ollama();
+    let fake_new = start_fake_ollama();
+    let mut config = ollama_config(&fake_old.base_url, "free");
+    config["budget"] = json!({ "maxRequests": 5, "maxTotalTokens": 100000 });
+    configure(&core, &ws, config).unwrap();
+    dispatch(&core, "browser-1", &ws, json!({}), "hello").unwrap();
+    assert_eq!(
+        provider_status(&core, None, &ws).unwrap()["providers"][0]["connectionVerified"],
+        true,
+        "dispatch verifies the connection it used"
+    );
+
+    configure_add(
+        &core,
+        &ws,
+        provider_entry("ollama", &fake_new.base_url, None, "llama-x", "free"),
+    )
+    .unwrap();
+    let status = provider_status(&core, None, &ws).unwrap();
+    assert_eq!(
+        status_entry(&status, "ollama")["connectionVerified"],
+        false,
+        "AC-V1: a changed endpoint must not inherit the old connection's verification"
+    );
+    assert_eq!(status["budget"]["maxRequests"], 5);
+    assert_eq!(usage(&core, &ws)["totalRequests"], 1, "usage is preserved");
+    assert_eq!(fake_new.hits.load(Ordering::SeqCst), 0, "no call to the new endpoint yet");
+}
+
+#[test]
+fn verified_does_not_survive_new_reference_rotation() {
+    // AC-V2: rotating to a NEW reference and saving clears it.
+    let _lock = credential_prompt_lock();
+    credential_env_once();
+    let (_dir, core, ws) = core();
+    let fake_b = start_fake_openai();
+    let reference = credential_reference(&core, None, &ws, "openai").unwrap()["reference"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    credential_op(&core, None, "providers-credential-set", &ws, &reference).unwrap();
+    configure_add(
+        &core,
+        &ws,
+        provider_entry("openai", &fake_b.base_url, Some(&reference), "gpt-x", "free"),
+    )
+    .unwrap();
+    dispatch_chosen(&core, "browser-1", &ws, "openai", "gpt-x").unwrap();
+    assert_eq!(
+        provider_status(&core, None, &ws).unwrap()["providers"][0]["connectionVerified"],
+        true
+    );
+
+    let reference2 = credential_reference(&core, None, &ws, "openai").unwrap()["reference"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert_ne!(reference2, reference, "rotation mints a fresh reference");
+    credential_op(&core, None, "providers-credential-set", &ws, &reference2).unwrap();
+    configure_add(
+        &core,
+        &ws,
+        provider_entry("openai", &fake_b.base_url, Some(&reference2), "gpt-x", "free"),
+    )
+    .unwrap();
+    assert_eq!(
+        provider_status(&core, None, &ws).unwrap()["providers"][0]["connectionVerified"],
+        false,
+        "AC-V2: a rotated credential must not inherit verification"
+    );
+    assert_eq!(usage(&core, &ws)["totalRequests"], 1, "usage is preserved");
+}
+
+#[test]
+fn verified_does_not_survive_rotation_under_same_reference() {
+    // AC-V3: rotating the key UNDER THE SAME reference clears it —
+    // the fingerprint cannot see this change, so the set op must
+    // invalidate explicitly.
+    let _lock = credential_prompt_lock();
+    credential_env_once();
+    let (_dir, core, ws) = core();
+    let fake_b = start_fake_openai();
+    let reference = credential_reference(&core, None, &ws, "openai").unwrap()["reference"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    credential_op(&core, None, "providers-credential-set", &ws, &reference).unwrap();
+    configure_add(
+        &core,
+        &ws,
+        provider_entry("openai", &fake_b.base_url, Some(&reference), "gpt-x", "free"),
+    )
+    .unwrap();
+    dispatch_chosen(&core, "browser-1", &ws, "openai", "gpt-x").unwrap();
+    assert_eq!(
+        provider_status(&core, None, &ws).unwrap()["providers"][0]["connectionVerified"],
+        true
+    );
+
+    // Same reference, new key (rotation).
+    credential_op(&core, None, "providers-credential-set", &ws, &reference).unwrap();
+    assert_eq!(
+        provider_status(&core, None, &ws).unwrap()["providers"][0]["connectionVerified"],
+        false,
+        "AC-V3: rotation under the same reference must clear verification"
+    );
+    assert!(credential_status(&core, &ws, &reference), "the rotated key is stored");
+    // And the new connection verifies again on its next success.
+    dispatch_chosen(&core, "browser-1", &ws, "openai", "gpt-x").unwrap();
+    assert_eq!(
+        provider_status(&core, None, &ws).unwrap()["providers"][0]["connectionVerified"],
+        true
+    );
+    assert_eq!(usage(&core, &ws)["totalRequests"], 2);
+}
+
+#[test]
+fn delayed_success_never_verifies_new_connection() {
+    // AC-V4 (unary): a slow dispatch starts under the old
+    // connection; the endpoint changes mid-flight; the old
+    // dispatch then succeeds. It must never verify the new one.
+    let (_dir, core, ws) = core();
+    let fake_old = start_fake_ollama();
+    let fake_new = start_fake_ollama();
+    let mut config = ollama_config(&fake_old.base_url, "free");
+    config["budget"] = json!({ "maxRequests": 5 });
+    configure(&core, &ws, config).unwrap();
+    let core = Arc::new(core);
+    let slow_core = core.clone();
+    let slow_ws = ws.clone();
+    let slow = std::thread::spawn(move || {
+        slow_core.ai_command(
+            "providers-dispatch",
+            stamped(
+                "owner",
+                json!({ "workspaceId": slow_ws, "request": chat("slow-unary"), "mode": "auto" }),
+            ),
+        )
+    });
+    let wait_start = Instant::now();
+    while !fake_old.slow_in_flight.load(Ordering::SeqCst) {
+        assert!(
+            wait_start.elapsed() < Duration::from_secs(10),
+            "slow dispatch never reached the server"
+        );
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    // Change the endpoint while the old request is in flight.
+    configure_add(
+        &core,
+        &ws,
+        provider_entry("ollama", &fake_new.base_url, None, "llama-x", "free"),
+    )
+    .unwrap();
+    let out = slow.join().unwrap().unwrap();
+    assert_eq!(out["response"]["text"], "core reply", "the old dispatch succeeds");
+    let status = provider_status(&core, None, &ws).unwrap();
+    assert_eq!(
+        status_entry(&status, "ollama")["connectionVerified"],
+        false,
+        "AC-V4: a delayed success from the old connection must never verify the new one"
+    );
+    assert_eq!(
+        usage(&core, &ws)["totalRequests"],
+        1,
+        "the late request still counts as usage"
+    );
+    assert_eq!(status["budget"]["maxRequests"], 5);
+    assert_eq!(fake_new.hits.load(Ordering::SeqCst), 0, "the new endpoint was never called");
+}
+
+#[test]
+fn delayed_stream_success_never_verifies_new_connection() {
+    // AC-V4 (stream): a gated stream starts under the old
+    // connection; the endpoint changes; the stream then
+    // completes. Same binding as the unary case.
+    let (_dir, core, ws) = core();
+    let fake_old = start_fake_ollama();
+    let fake_new = start_fake_ollama();
+    configure(&core, &ws, ollama_config(&fake_old.base_url, "free")).unwrap();
+    let started = core
+        .ai_command(
+            "providers-stream-start",
+            stamped(
+                "owner",
+                json!({ "workspaceId": ws, "request": chat("gated stream"), "mode": "auto" }),
+            ),
+        )
+        .unwrap();
+    let run = json!({
+        "workspaceId": ws,
+        "runId": started["runId"],
+        "capability": started["capability"]
+    });
+    // Confirm the stream is flowing before changing anything.
+    let poll = core
+        .ai_command("providers-stream-poll", stamped("owner", run.clone()))
+        .unwrap();
+    assert!(
+        poll["events"].as_array().unwrap().iter().any(|e| e["kind"] == "token"),
+        "stream produces tokens before the change: {poll}"
+    );
+    configure_add(
+        &core,
+        &ws,
+        provider_entry("ollama", &fake_new.base_url, None, "llama-x", "free"),
+    )
+    .unwrap();
+    fake_old.release.store(true, Ordering::SeqCst);
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let done = loop {
+        let p = core
+            .ai_command("providers-stream-poll", stamped("owner", run.clone()))
+            .unwrap();
+        if p["done"].as_bool().unwrap() {
+            break p;
+        }
+        assert!(Instant::now() < deadline, "gated stream never completed");
+        std::thread::sleep(Duration::from_millis(20));
+    };
+    assert!(
+        done["events"].as_array().unwrap().iter().any(|e| e["kind"] == "completed"),
+        "stream completed: {done}"
+    );
+    assert_eq!(
+        provider_status(&core, None, &ws).unwrap()["providers"][0]["connectionVerified"],
+        false,
+        "AC-V4: a stream completing after a change must never verify the new connection"
+    );
+    assert_eq!(usage(&core, &ws)["totalRequests"], 1, "the stream still counts as usage");
+}
+
+#[test]
+fn unchanged_provider_keeps_verification_when_other_changes() {
+    // AC-V5: changing B clears B only; A stays verified.
+    let _lock = credential_prompt_lock();
+    credential_env_once();
+    let (_dir, core, ws) = core();
+    let fake_a = start_fake_ollama();
+    let fake_b = start_fake_openai();
+    let fake_b2 = start_fake_openai();
+    configure(&core, &ws, ollama_config(&fake_a.base_url, "free")).unwrap();
+    let reference = credential_reference(&core, None, &ws, "openai").unwrap()["reference"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    credential_op(&core, None, "providers-credential-set", &ws, &reference).unwrap();
+    configure_add(
+        &core,
+        &ws,
+        provider_entry("openai", &fake_b.base_url, Some(&reference), "gpt-x", "free"),
+    )
+    .unwrap();
+    dispatch(&core, "browser-1", &ws, json!({}), "hello").unwrap();
+    dispatch_chosen(&core, "browser-1", &ws, "openai", "gpt-x").unwrap();
+    let status = provider_status(&core, None, &ws).unwrap();
+    assert_eq!(status_entry(&status, "ollama")["connectionVerified"], true);
+    assert_eq!(status_entry(&status, "openai")["connectionVerified"], true);
+
+    configure_add(
+        &core,
+        &ws,
+        provider_entry("openai", &fake_b2.base_url, Some(&reference), "gpt-x", "free"),
+    )
+    .unwrap();
+    let status = provider_status(&core, None, &ws).unwrap();
+    assert_eq!(
+        status_entry(&status, "ollama")["connectionVerified"],
+        true,
+        "AC-V5: changing B must not clear A"
+    );
+    assert_eq!(
+        status_entry(&status, "openai")["connectionVerified"],
+        false,
+        "AC-V5: B's own change clears B"
+    );
+    assert_eq!(usage(&core, &ws)["totalRequests"], 2);
+}
+
+#[test]
+fn orphaned_credential_listed_and_survives_restart() {
+    // AC-V7: mint + store a key, save nothing — the status lists
+    // it as orphaned, and it is still listed after a restart.
+    let _lock = credential_prompt_lock();
+    credential_env_once();
+    let (dir, core, ws) = core();
+    let reference = credential_reference(&core, None, &ws, "openai").unwrap()["reference"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    credential_op(&core, None, "providers-credential-set", &ws, &reference).unwrap();
+    assert!(credential_status(&core, &ws, &reference), "key stored");
+    let status = provider_status(&core, None, &ws).unwrap();
+    assert_eq!(
+        orphan_pairs(&status),
+        vec![("openai".to_string(), reference.clone())],
+        "AC-V7: an unused stored key must be listed as orphaned"
+    );
+    assert!(
+        !serde_json::to_string(&status).unwrap().contains("sk-fake"),
+        "orphan listing carries labels only, never secrets"
+    );
+
+    // Restart: a fresh Core over the same root still lists it
+    // (the minted-reference ledger is persisted).
+    drop(core);
+    let core2 = Core::with_storage_root(dir.path().to_path_buf());
+    let status = provider_status(&core2, None, &ws).unwrap();
+    assert_eq!(
+        orphan_pairs(&status),
+        vec![("openai".to_string(), reference.clone())],
+        "AC-V7: the orphan survives a restart"
+    );
+    assert!(credential_status(&core2, &ws, &reference), "key still stored after restart");
+}
+
+#[test]
+fn orphaned_credential_removed_through_guarded_op() {
+    // AC-V6/V7: removing an orphaned key deletes it and clears
+    // the listing; setup made zero inference calls throughout.
+    let _lock = credential_prompt_lock();
+    credential_env_once();
+    let (_dir, core, ws) = core();
+    let fake_b = start_fake_openai();
+    let reference = credential_reference(&core, None, &ws, "openai").unwrap()["reference"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    credential_op(&core, None, "providers-credential-set", &ws, &reference).unwrap();
+    assert_eq!(orphan_pairs(&provider_status(&core, None, &ws).unwrap()).len(), 1);
+    let removed = credential_op(&core, None, "providers-credential-remove", &ws, &reference).unwrap();
+    assert_eq!(removed["removed"], true);
+    assert!(!credential_status(&core, &ws, &reference), "AC-V6: discard removes the unused key");
+    assert_eq!(
+        orphan_pairs(&provider_status(&core, None, &ws).unwrap()),
+        Vec::<(String, String)>::new(),
+        "orphan listing clears after removal"
+    );
+    assert_eq!(fake_b.hits.load(Ordering::SeqCst), 0, "AC-V11: setup made zero inference calls");
+}
+
+#[test]
+fn referenced_credential_cannot_be_removed() {
+    // AC-V8: a key referenced by a saved connection is protected
+    // — removal is refused and the key stays stored.
+    let _lock = credential_prompt_lock();
+    credential_env_once();
+    let (_dir, core, ws) = core();
+    let fake_b = start_fake_openai();
+    let reference = credential_reference(&core, None, &ws, "openai").unwrap()["reference"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    credential_op(&core, None, "providers-credential-set", &ws, &reference).unwrap();
+    configure_add(
+        &core,
+        &ws,
+        provider_entry("openai", &fake_b.base_url, Some(&reference), "gpt-x", "free"),
+    )
+    .unwrap();
+    assert_eq!(
+        orphan_pairs(&provider_status(&core, None, &ws).unwrap()),
+        Vec::<(String, String)>::new(),
+        "a referenced key is never an orphan"
+    );
+    let err = credential_op(&core, None, "providers-credential-remove", &ws, &reference)
+        .unwrap_err();
+    assert_eq!(err.code, ErrorCode::InvalidRequest, "{}", err.message);
+    assert!(err.message.contains("in use"), "{}", err.message);
+    assert!(
+        credential_status(&core, &ws, &reference),
+        "AC-V8: the protected key stays stored"
+    );
+    // And the saved connection still dispatches afterwards.
+    dispatch_chosen(&core, "browser-1", &ws, "openai", "gpt-x").unwrap();
+}
+
+#[test]
+fn failed_save_leaves_key_orphaned_and_removable() {
+    // AC-V9 (backend half): a save that fails persistence leaves
+    // the draft's stored key orphaned — listed, removable — while
+    // the existing connections stay usable.
+    let _lock = credential_prompt_lock();
+    credential_env_once();
+    let (dir, core, ws) = core();
+    let fake_a = start_fake_ollama();
+    configure(&core, &ws, ollama_config(&fake_a.base_url, "free")).unwrap();
+    let reference = credential_reference(&core, None, &ws, "openai").unwrap()["reference"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    credential_op(&core, None, "providers-credential-set", &ws, &reference).unwrap();
+
+    // Break persistence, then attempt the save.
+    let config_dir = dir.path().join("provider-config");
+    let planted = config_dir.join("provider-config");
+    std::fs::remove_dir_all(&config_dir).unwrap();
+    std::fs::write(&planted, b"not a directory").unwrap();
+    let fake_b = start_fake_openai();
+    let err = configure_add(
+        &core,
+        &ws,
+        provider_entry("openai", &fake_b.base_url, Some(&reference), "gpt-x", "unknown"),
+    )
+    .unwrap_err();
+    assert_eq!(err.code, ErrorCode::StorageUnavailable, "{}", err.message);
+    // Existing connection still usable.
+    dispatch(&core, "browser-1", &ws, json!({}), "hello").unwrap();
+    // The draft's key is orphaned (never saved) and removable.
+    assert_eq!(
+        orphan_pairs(&provider_status(&core, None, &ws).unwrap()),
+        vec![("openai".to_string(), reference.clone())],
+        "AC-V9: a failed save leaves the draft key orphaned, not lost"
+    );
+    credential_op(&core, None, "providers-credential-remove", &ws, &reference).unwrap();
+    assert!(!credential_status(&core, &ws, &reference));
+    // Clean retry succeeds once persistence is restored.
+    std::fs::remove_file(&planted).unwrap();
+    configure_add(
+        &core,
+        &ws,
+        provider_entry("openai", &fake_b.base_url, Some(&reference), "gpt-x", "unknown"),
+    )
+    .unwrap();
+}
+
+#[test]
+fn browser_cannot_set_or_remove_credentials() {
+    // AC-V12: a paired browser (no grant) is refused on both
+    // credential writes; nothing is stored or deleted, and the
+    // refusal is recorded for the host.
+    let _lock = credential_prompt_lock();
+    credential_env_once();
+    let (_dir, core, ws) = core();
+    let reference = credential_reference(&core, None, &ws, "openai").unwrap()["reference"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    credential_op(&core, None, "providers-credential-set", &ws, &reference).unwrap();
+    let set_err = credential_op(
+        &core,
+        Some("browser-1"),
+        "providers-credential-set",
+        &ws,
+        &reference,
+    )
+    .unwrap_err();
+    assert_eq!(set_err.code, ErrorCode::Forbidden, "{}", set_err.message);
+    let remove_err = credential_op(
+        &core,
+        Some("browser-1"),
+        "providers-credential-remove",
+        &ws,
+        &reference,
+    )
+    .unwrap_err();
+    assert_eq!(remove_err.code, ErrorCode::Forbidden, "{}", remove_err.message);
+    assert!(
+        credential_status(&core, &ws, &reference),
+        "the browser refusal deleted nothing"
+    );
+    // The refusal is recorded in the host's approval queue.
+    let access = core
+        .ai_command(
+            "providers-session-access",
+            json!({ "workspaceId": ws }),
+        )
+        .unwrap();
+    assert!(
+        access["pending"].as_array().unwrap().iter().any(|p| p["session"] == "browser-1"),
+        "browser refusal recorded: {access}"
+    );
+}
