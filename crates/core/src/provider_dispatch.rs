@@ -69,8 +69,10 @@ use anansi_providers::error::{ProviderError, ProviderErrorCode};
 use anansi_providers::gates::{Budget, PaidInferencePermit, QuotaLedger, ZeroCostLock};
 use anansi_providers::http::CancellationToken;
 use anansi_providers::routing::{DisclosureRecord, RoutingMode, RoutingRequest};
+use anansi_providers::config::ProviderConfig;
 use anansi_providers::runtime::{LocalityConfig, ProviderRuntime, RuntimeConfig, RuntimeProvider};
-use anansi_providers::types::{CompletionRequest, CostClass, StreamEvent, Usage};
+use anansi_providers::secrets::CredentialRef;
+use anansi_providers::types::{CompletionRequest, CostClass, ModelInfo, StreamEvent, Usage};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -266,11 +268,24 @@ pub struct ProviderStatusEntry {
     pub credential_reference: Option<String>,
     /// A credential exists in the OS store for the reference.
     pub credential_stored: bool,
-    /// A dispatch has succeeded for this provider since the app
-    /// started. A fresh setup is always false — setup performs
-    /// zero inference calls, and verification happens on the
-    /// first authorized dispatch, outside setup.
+    /// A dispatch has succeeded for THIS saved connection — the
+    /// exact endpoint and credential reference recorded below —
+    /// since the app started. Changing the endpoint, replacing
+    /// the key (even under the same reference), or removing the
+    /// provider clears it until the new connection succeeds.
+    /// Session-scoped: a restart clears it, as the UI states.
     pub connection_verified: bool,
+}
+
+/// A stored credential no saved connection references: a key
+/// minted during setup whose draft was discarded or abandoned.
+/// Labels only — the reference and the provider it was minted
+/// for — never secret material.
+#[derive(Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderStatusOrphanedCredential {
+    pub provider: String,
+    pub reference: String,
 }
 
 #[derive(Debug, Serialize, JsonSchema)]
@@ -278,6 +293,7 @@ pub struct ProviderStatusEntry {
 pub struct ProviderStatusResponse {
     pub contract_version: u8,
     pub providers: Vec<ProviderStatusEntry>,
+    pub orphaned_credentials: Vec<ProviderStatusOrphanedCredential>,
     pub budget: Budget,
 }
 
@@ -532,6 +548,15 @@ struct StreamRun {
     session: String,
     started: Instant,
     done: bool,
+    /// Verification binding (Connect AI repair): the provider
+    /// that established this stream, and the connection
+    /// fingerprints snapshotted at stream-start. When polling
+    /// observes the terminal Completed event, verification is
+    /// recorded only if the saved connection still matches the
+    /// snapshot — a stream completing after a change verifies
+    /// nothing.
+    verified_provider: String,
+    verified_snapshot: std::collections::HashMap<String, String>,
 }
 
 /// A browser session that attempted an owner operation and was
@@ -559,6 +584,22 @@ struct BackendState {
     runtime: Option<(String, Arc<ProviderRuntime>)>,
     streams: HashMap<String, StreamRun>,
     stream_seq: u64,
+    /// Connection verification (Connect AI repair): provider id
+    /// -> fingerprint of the saved connection whose dispatch
+    /// last succeeded. Bound to the connection, never to the
+    /// provider id alone, and never derived from usage history.
+    /// Session-scoped, in-memory only; a restart clears it.
+    verified: HashMap<String, String>,
+    /// Credential references minted by `providers-credential-
+    /// reference` this session (reference -> provider), backed
+    /// by the persisted ledger file. The keyring cannot be
+    /// enumerated, so this is the only way an abandoned setup
+    /// key can be found again for cleanup.
+    minted_references: HashMap<String, String>,
+    /// Whether `minted_references` has been loaded from disk
+    /// (false until the first load, so an empty ledger is not
+    /// re-read on every status call).
+    minted_loaded: bool,
 }
 
 /// Backend key for a logical workspace that has been validated
@@ -1306,6 +1347,274 @@ fn load_persisted_config_locked(
     install_config_locked(state, config)
 }
 
+/// The identity of a saved connection for verification purposes
+/// (Connect AI repair): the provider, the endpoint, the credential
+/// reference, and the endpoint-security flags. The model list is
+/// deliberately excluded — changing which models are offered does
+/// not change the connection. A key rotated under the same
+/// reference is invisible to this fingerprint, so the credential
+/// set/remove operations invalidate explicitly (see below).
+fn connection_fingerprint(p: &RuntimeProvider) -> String {
+    let reference = p
+        .config
+        .credential
+        .as_ref()
+        .map(|c| c.reference.as_str())
+        .unwrap_or("");
+    fingerprint(&format!(
+        "{}|{}|{}|{}|{}",
+        p.config.provider,
+        p.config.base_url,
+        reference,
+        p.config.custom_endpoint,
+        p.config.allow_insecure_custom
+    ))
+}
+
+fn snapshot_fingerprints(config: &RuntimeConfig) -> HashMap<String, String> {
+    config
+        .providers
+        .iter()
+        .map(|p| (p.config.provider.clone(), connection_fingerprint(p)))
+        .collect()
+}
+
+/// Drop verification for every provider whose saved connection no
+/// longer matches the fingerprint it verified under — changed
+/// endpoint, changed credential reference, or a provider that is
+/// gone. Unchanged providers keep their verification.
+fn invalidate_changed_verifications(state: &mut BackendState, new: &RuntimeConfig) {
+    let new_fps = snapshot_fingerprints(new);
+    state
+        .verified
+        .retain(|provider, fp| new_fps.get(provider).map(|nf| nf == fp).unwrap_or(false));
+}
+
+/// Drop verification for every saved provider using this
+/// credential reference — key rotation (set) or removal. The
+/// caller loads the persisted config first when state has none.
+fn invalidate_verification_for_reference(state: &mut BackendState, reference: &str) {
+    let doomed: Vec<String> = state
+        .config
+        .iter()
+        .flat_map(|c| c.providers.iter())
+        .filter(|p| {
+            p.config
+                .credential
+                .as_ref()
+                .map(|cr| cr.reference == reference)
+                .unwrap_or(false)
+        })
+        .map(|p| p.config.provider.clone())
+        .collect();
+    for id in doomed {
+        state.verified.remove(&id);
+    }
+}
+
+/// Record verification for the provider that actually served a
+/// dispatch — but only when the saved connection still matches
+/// the fingerprint snapshotted in phase 1. A delayed success
+/// from the old connection finds a changed fingerprint and
+/// records nothing. Usage and budgets are untouched: the runtime
+/// settles the ledger independently.
+fn record_verification_if_unchanged(
+    state: &mut BackendState,
+    provider: &str,
+    snapshot: &HashMap<String, String>,
+) {
+    let Some(config) = &state.config else {
+        return;
+    };
+    let Some(p) = config
+        .providers
+        .iter()
+        .find(|p| p.config.provider == provider)
+    else {
+        return;
+    };
+    let current = connection_fingerprint(p);
+    if snapshot.get(provider).map(|s| *s == current).unwrap_or(false) {
+        state.verified.insert(provider.to_string(), current);
+    }
+}
+
+/// Whether any saved connection references this credential.
+/// The caller loads the persisted config first when state has
+/// none; a removal decision must never rest on stale state.
+fn referenced_credential(state: &BackendState, reference: &str) -> bool {
+    state
+        .config
+        .iter()
+        .flat_map(|c| c.providers.iter())
+        .any(|p| {
+            p.config
+                .credential
+                .as_ref()
+                .map(|cr| cr.reference == reference)
+                .unwrap_or(false)
+        })
+}
+
+/// Path of the minted-reference ledger: the references this
+/// backend minted for the workspace, mapped to the provider each
+/// was minted for. Labels only — never secrets. Beside the
+/// provider-config file, same sanitization, same atomic write.
+fn minted_file_path(root: &std::path::Path, workspace_id: &str) -> std::path::PathBuf {
+    let safe: String = workspace_id
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || matches!(c, '-' | '_') {
+                c
+            } else {
+                '-'
+            }
+        })
+        .collect();
+    root.join("provider-config").join(format!("{safe}.minted.json"))
+}
+
+/// Read the minted-reference ledger: missing file means no
+/// references were ever minted. A corrupt file fails closed
+/// (StorageUnavailable) rather than silently dropping orphans.
+fn load_minted_file(
+    root: &std::path::Path,
+    workspace_id: &str,
+) -> Result<HashMap<String, String>, CommandError> {
+    let path = minted_file_path(root, workspace_id);
+    if !path.exists() {
+        return Ok(HashMap::new());
+    }
+    crate::storage::reject_links(&path).map_err(|_| crate::storage::unavailable())?;
+    let text = std::fs::read_to_string(&path).map_err(|_| crate::storage::unavailable())?;
+    let parsed: serde_json::Value =
+        serde_json::from_str(&text).map_err(|_| crate::storage::unavailable())?;
+    let obj = parsed.as_object().ok_or_else(crate::storage::unavailable)?;
+    let mut out = HashMap::new();
+    for (reference, provider) in obj {
+        let provider = provider.as_str().ok_or_else(crate::storage::unavailable)?;
+        if reference.is_empty()
+            || reference.len() > 128
+            || reference.chars().any(|c| c.is_control() || c.is_whitespace())
+            || provider.is_empty()
+            || provider.len() > 64
+        {
+            return Err(crate::storage::unavailable());
+        }
+        out.insert(reference.clone(), provider.to_string());
+    }
+    Ok(out)
+}
+
+/// Persist the minted-reference ledger atomically (same hardened
+/// pattern as the config file).
+fn persist_minted_file(
+    root: &std::path::Path,
+    workspace_id: &str,
+    minted: &HashMap<String, String>,
+) -> Result<(), CommandError> {
+    let dir = root.join("provider-config");
+    std::fs::create_dir_all(&dir).map_err(|_| crate::storage::unavailable())?;
+    crate::storage::reject_links(&dir).map_err(|_| crate::storage::unavailable())?;
+    crate::storage::private_permissions(&dir, true, false)
+        .map_err(|_| crate::storage::unavailable())?;
+    let path = minted_file_path(root, workspace_id);
+    if path.symlink_metadata().is_ok() {
+        crate::storage::reject_links(&path).map_err(|_| crate::storage::unavailable())?;
+    }
+    let json = serde_json::to_string(minted).unwrap_or_default();
+    persist_text_file_atomic(&dir, &path, &json)
+}
+
+/// Atomically write `text` to `path` inside `dir`: a unique
+/// create-new temporary file (never following a planted file),
+/// fsync before an atomic rename, directory synced afterwards.
+/// Shared by the config file and the minted-reference ledger so
+/// the two persisted artifacts cannot drift apart in handling.
+fn persist_text_file_atomic(
+    dir: &std::path::Path,
+    path: &std::path::Path,
+    text: &str,
+) -> Result<(), CommandError> {
+    let unavailable = || crate::storage::unavailable();
+    let mut tmp = None;
+    for _ in 0..8 {
+        let mut bytes = [0u8; 8];
+        getrandom::fill(&mut bytes).map_err(|_| unavailable())?;
+        let candidate = dir.join(format!(".tmp-{:016x}", u64::from_le_bytes(bytes)));
+        match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&candidate)
+        {
+            Ok(file) => {
+                tmp = Some((candidate, file));
+                break;
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(_) => return Err(unavailable()),
+        }
+    }
+    let Some((tmp_path, mut file)) = tmp else {
+        return Err(unavailable());
+    };
+    let outcome = (|| -> Result<(), CommandError> {
+        use std::io::Write;
+        file.write_all(text.as_bytes()).map_err(|_| unavailable())?;
+        file.sync_all().map_err(|_| unavailable())?;
+        drop(file);
+        crate::storage::private_permissions(&tmp_path, false, false)
+            .map_err(|_| unavailable())?;
+        crate::storage::reject_links(&tmp_path).map_err(|_| unavailable())?;
+        std::fs::rename(&tmp_path, path).map_err(|_| unavailable())?;
+        // Best-effort directory sync for durability of the rename
+        // itself (unsupported on some platforms — the rename is
+        // already atomic there).
+        if let Ok(d) = std::fs::File::open(dir) {
+            let _ = d.sync_all();
+        }
+        Ok(())
+    })();
+    if outcome.is_err() {
+        let _ = std::fs::remove_file(&tmp_path);
+    }
+    outcome
+}
+
+/// Lazy-load the minted-reference ledger into backend state
+/// (first use in this process), inside the caller's
+/// `with_backend` closure. No storage root means no ledger.
+fn load_minted_locked(
+    state: &mut BackendState,
+    scope: &CallerScope,
+) -> Result<(), CommandError> {
+    if state.minted_loaded {
+        return Ok(());
+    }
+    if let (Some(root), Some(wid)) = (&scope.storage_root, &scope.logical_workspace) {
+        state.minted_references = load_minted_file(root, wid)?;
+    }
+    state.minted_loaded = true;
+    Ok(())
+}
+
+/// Drop minted entries that are neither stored in the keyring
+/// nor referenced by a saved connection: a minted-but-never-used
+/// reference, or one whose key was deleted elsewhere. Keeps the
+/// ledger bounded; called before minting a fresh reference.
+fn prune_minted_locked(state: &mut BackendState) {
+    let resolver = shared_resolver();
+    let referenced: std::collections::HashSet<String> = state
+        .config
+        .iter()
+        .flat_map(|c| c.providers.iter())
+        .filter_map(|p| p.config.credential.as_ref().map(|cr| cr.reference.clone()))
+        .collect();
+    state.minted_references.retain(|reference, _| {
+        resolver.exists(reference) || referenced.contains(reference)
+    });
+}
+
 pub fn install_persisted_config(scope: &CallerScope, json: &str) -> Result<bool, CommandError> {
     let config: RuntimeConfig = serde_json::from_str(json).map_err(|_| {
         invalid("The persisted provider configuration is unreadable; reconfigure providers.")
@@ -1371,49 +1680,7 @@ pub fn persist_config_file(
         // replace the target of.
         crate::storage::reject_links(&path).map_err(|_| unavailable())?;
     }
-    // Unique create-new temporary file (a planted file at a
-    // predictable name must never be followed).
-    let mut tmp = None;
-    for _ in 0..8 {
-        let mut bytes = [0u8; 8];
-        getrandom::fill(&mut bytes).map_err(|_| unavailable())?;
-        let candidate = dir.join(format!(".tmp-{:016x}", u64::from_le_bytes(bytes)));
-        match std::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&candidate)
-        {
-            Ok(file) => {
-                tmp = Some((candidate, file));
-                break;
-            }
-            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
-            Err(_) => return Err(unavailable()),
-        }
-    }
-    let Some((tmp_path, mut file)) = tmp else {
-        return Err(unavailable());
-    };
-    let outcome = (|| -> Result<(), CommandError> {
-        use std::io::Write;
-        file.write_all(json.as_bytes()).map_err(|_| unavailable())?;
-        file.sync_all().map_err(|_| unavailable())?;
-        drop(file);
-        crate::storage::private_permissions(&tmp_path, false, false).map_err(|_| unavailable())?;
-        crate::storage::reject_links(&tmp_path).map_err(|_| unavailable())?;
-        std::fs::rename(&tmp_path, &path).map_err(|_| unavailable())?;
-        // Best-effort directory sync for durability of the rename
-        // itself (unsupported on some platforms — the rename is
-        // already atomic there).
-        if let Ok(d) = std::fs::File::open(&dir) {
-            let _ = d.sync_all();
-        }
-        Ok(())
-    })();
-    if outcome.is_err() {
-        let _ = std::fs::remove_file(&tmp_path);
-    }
-    outcome
+    persist_text_file_atomic(&dir, &path, json)
 }
 
 // ---------------------------------------------------------------------------
@@ -1486,6 +1753,10 @@ pub fn providers_command(
                     persist_config_file(root, wid, &serialized)?;
                 }
                 let fp = fingerprint(&serialized);
+                // A changed endpoint or credential clears that
+                // provider's verification (Connect AI repair);
+                // unchanged providers keep theirs.
+                invalidate_changed_verifications(state, &req.config);
                 state.config = Some(req.config);
                 state.runtime = Some((fp, Arc::new(runtime)));
                 Ok(())
@@ -1542,6 +1813,10 @@ pub fn providers_command(
                     persist_config_file(root, wid, &serialized)?;
                 }
                 let fp = fingerprint(&serialized);
+                // A changed endpoint or credential clears that
+                // provider's verification (Connect AI repair);
+                // unchanged providers keep theirs.
+                invalidate_changed_verifications(state, &merged);
                 state.config = Some(merged.clone());
                 state.runtime = Some((fp, Arc::new(runtime)));
                 let providers: Vec<String> = merged
@@ -1621,18 +1896,39 @@ pub fn providers_command(
             // changed after approval is refused here, before any
             // traffic, and a configuration change between two
             // dispatches can never redirect the later one.
-            let (permit, runtime) = with_backend(scope, |state| {
+            let (permit, runtime, snapshot) = with_backend(scope, |state| {
                 enforce_configured_model(state, &req.request)?;
                 if let Some(expected) = &req.expected_target {
                     enforce_expected_target(state, expected, req.chosen.as_ref(), routing.mode)?;
                 }
                 let permit = take_permit(state, scope, &req.permit_id)?;
                 let runtime = runtime_for(state)?;
-                Ok((permit, runtime))
+                // Verification binding (Connect AI repair): the
+                // connection fingerprints as they stand before
+                // the network call. A success records verification
+                // only if the saved connection still matches this
+                // snapshot when the call lands.
+                let snapshot = state
+                    .config
+                    .as_ref()
+                    .map(snapshot_fingerprints)
+                    .unwrap_or_default();
+                Ok((permit, runtime, snapshot))
             })?;
             let outcome = runtime
                 .dispatch(&req.request, routing, permit, &CancellationToken::new())
                 .map_err(to_command_error)?;
+            // The serving provider is the candidate that actually
+            // succeeded (`CompletionResponse.provider`); record
+            // verification only for the connection it used, and
+            // only if that connection is unchanged since phase 1.
+            // Usage and budgets are untouched — the runtime
+            // settles the ledger independently.
+            let served = outcome.response.provider.clone();
+            let _ = with_backend(scope, |state| {
+                record_verification_if_unchanged(state, &served, &snapshot);
+                Ok(())
+            });
             to_value(&ProviderDispatchResponse {
                 contract_version: 1,
                 response: ProviderResponseBody {
@@ -1666,7 +1962,7 @@ pub fn providers_command(
             // registration — if the retained cap filled meanwhile,
             // the just-established stream is cancelled and the
             // start refused rather than exceeding the bound.
-            let (permit, runtime) = with_backend(scope, |state| {
+            let (permit, runtime, snapshot) = with_backend(scope, |state| {
                 enforce_configured_model(state, &req.request)?;
                 if state.streams.len() >= MAX_RETAINED_STREAMS {
                     return Err(invalid(
@@ -1675,13 +1971,24 @@ pub fn providers_command(
                 }
                 let permit = take_permit(state, scope, &req.permit_id)?;
                 let runtime = runtime_for(state)?;
-                Ok((permit, runtime))
+                // Verification binding (Connect AI repair): same
+                // snapshot as unary dispatch, checked when the
+                // stream completes.
+                let snapshot = state
+                    .config
+                    .as_ref()
+                    .map(snapshot_fingerprints)
+                    .unwrap_or_default();
+                Ok((permit, runtime, snapshot))
             })?;
             let cancel = CancellationToken::new();
             let outcome = runtime
                 .dispatch_stream(&req.request, routing, permit, &cancel)
                 .map_err(to_command_error)?;
             let disclosure = outcome.disclosure.clone();
+            // The disclosure names the provider that established
+            // this stream (built from the successful candidate).
+            let verified_provider = disclosure.provider.clone();
             let capability = random_capability("cap-");
             let started = with_backend(scope, |state| {
                 if state.streams.len() >= MAX_RETAINED_STREAMS {
@@ -1701,6 +2008,8 @@ pub fn providers_command(
                         session: scope.session.clone(),
                         started: Instant::now(),
                         done: false,
+                        verified_provider,
+                        verified_snapshot: snapshot,
                     },
                 );
                 Ok(ProviderStreamStartResponse {
@@ -1736,12 +2045,25 @@ pub fn providers_command(
                 }
                 let run = state.streams.get_mut(&req.run_id).expect("checked above");
                 let mut events = Vec::new();
+                // Verification binding (Connect AI repair): set
+                // only when this poll first observes the terminal
+                // Completed event — a cancelled or errored stream
+                // never verifies, and a stream completing after a
+                // configuration change verifies nothing.
+                let mut completed_now = false;
+                let mut verified_provider = String::new();
+                let mut verified_snapshot: HashMap<String, String> = HashMap::new();
                 if !run.done {
                     loop {
                         match run.outcome.events.try_recv() {
                             Ok(event) => {
                                 let terminal =
                                     matches!(event, Ok(StreamEvent::Completed { .. }) | Err(_));
+                                if matches!(&event, Ok(StreamEvent::Completed { .. })) {
+                                    completed_now = true;
+                                    verified_provider = run.verified_provider.clone();
+                                    verified_snapshot = run.verified_snapshot.clone();
+                                }
                                 // D1: the run disclosure is built at stream
                                 // start with usage None, and the settle
                                 // thread records reported usage only in
@@ -1771,6 +2093,9 @@ pub fn providers_command(
                 }
                 let done = run.done;
                 let disclosure = run.outcome.disclosure.clone();
+                if completed_now {
+                    record_verification_if_unchanged(state, &verified_provider, &verified_snapshot);
+                }
                 if done {
                     state.streams.remove(&req.run_id);
                 }
@@ -1839,6 +2164,24 @@ pub fn providers_command(
             if reference.is_empty() {
                 return Err(crate::storage::unavailable());
             }
+            // Record the mint in the persisted ledger (Connect AI
+            // repair): the keyring cannot be enumerated, so
+            // without this record an abandoned setup key could
+            // never be found again for cleanup. A persist failure
+            // fails the mint — nothing was stored yet, so a retry
+            // is safe.
+            with_backend(scope, |state| {
+                load_persisted_config_locked(state, scope)?;
+                load_minted_locked(state, scope)?;
+                prune_minted_locked(state);
+                state
+                    .minted_references
+                    .insert(reference.clone(), req.provider.clone());
+                if let (Some(root), Some(wid)) = (&scope.storage_root, &scope.logical_workspace) {
+                    persist_minted_file(root, wid, &state.minted_references)?;
+                }
+                Ok(())
+            })?;
             to_value(&ProviderCredentialReferenceResponse {
                 contract_version: 1,
                 provider: req.provider,
@@ -1863,6 +2206,16 @@ pub fn providers_command(
             resolver
                 .store_api_key(&req.reference, &key)
                 .map_err(to_command_error)?;
+            // Key rotation under the same reference is invisible
+            // to the connection fingerprint, so invalidate
+            // explicitly (Connect AI repair). Best effort: the key
+            // is already stored; a failure here must not report
+            // the set itself as failed.
+            let _ = with_backend(scope, |state| {
+                load_persisted_config_locked(state, scope)?;
+                invalidate_verification_for_reference(state, &req.reference);
+                Ok(())
+            });
             to_value(&ProviderCredentialSetResponse {
                 contract_version: 1,
                 stored: true,
@@ -1872,9 +2225,38 @@ pub fn providers_command(
             let req: ProviderCredentialRequest = parse(value, "provider credential")?;
             require_contract_v1(req.contract_version)?;
             crate::provider_credentials::validate_reference(&req.reference)?;
-            with_backend(scope, |state| require_owner_recording(state, scope))?;
+            // Guard (Connect AI repair): a credential referenced
+            // by a saved connection must never be deleted — while
+            // editing that provider, or while another setup
+            // overlaps it. The check runs against the persisted
+            // config when state has none, so a restart cannot
+            // bypass it.
+            with_backend(scope, |state| {
+                require_owner_recording(state, scope)?;
+                load_persisted_config_locked(state, scope)?;
+                if referenced_credential(state, &req.reference) {
+                    return Err(invalid(
+                        "This credential is in use by a saved connection. Save the connection under a different credential first, or remove the provider.",
+                    ));
+                }
+                Ok(())
+            })?;
             let resolver = shared_resolver();
             resolver.delete(&req.reference).map_err(to_command_error)?;
+            // The key is gone: drop the ledger entry (best-effort
+            // persist — a stale label for a deleted key is
+            // harmless; it is pruned on the next mint) and
+            // invalidate any verification bound to it.
+            let _ = with_backend(scope, |state| {
+                load_minted_locked(state, scope)?;
+                state.minted_references.remove(&req.reference);
+                if let (Some(root), Some(wid)) = (&scope.storage_root, &scope.logical_workspace) {
+                    let _ = persist_minted_file(root, wid, &state.minted_references);
+                }
+                load_persisted_config_locked(state, scope)?;
+                invalidate_verification_for_reference(state, &req.reference);
+                Ok(())
+            });
             to_value(&ProviderCredentialRemoveResponse {
                 contract_version: 1,
                 removed: true,
@@ -1962,17 +2344,13 @@ pub fn providers_command(
             let req: ProviderWorkspaceRequest = parse(value, "provider status")?;
             require_contract_v1(req.contract_version)?;
             with_backend(scope, |state| {
+                // Lazy-load persisted state: the config (a restart
+                // must not hide saved providers) and the
+                // minted-reference ledger (a restart must not hide
+                // abandoned setup keys).
+                load_persisted_config_locked(state, scope)?;
+                load_minted_locked(state, scope)?;
                 let config = state.config.clone().unwrap_or_default();
-                let ledger = state
-                    .ledger
-                    .lock()
-                    .unwrap_or_else(|poisoned| poisoned.into_inner());
-                let verified: std::collections::HashSet<String> = ledger
-                    .totals_snapshot()
-                    .into_iter()
-                    .filter(|(_, totals)| totals.requests > 0)
-                    .map(|(provider, _)| provider)
-                    .collect();
                 let resolver = shared_resolver();
                 let catalog = anansi_providers::catalog::catalog();
                 let providers = config
@@ -1985,6 +2363,17 @@ pub fn providers_command(
                             .map(|r| resolver.exists(r))
                             .unwrap_or(false);
                         let base_url_host = p.config.validate().map(|e| e.host).unwrap_or_default();
+                        // Verification is bound to THIS saved
+                        // connection (Connect AI repair): the
+                        // stored fingerprint must equal the
+                        // current connection's fingerprint. Usage
+                        // history is never consulted here.
+                        let fingerprint = connection_fingerprint(p);
+                        let connection_verified = state
+                            .verified
+                            .get(&p.config.provider)
+                            .map(|v| *v == fingerprint)
+                            .unwrap_or(false);
                         ProviderStatusEntry {
                             provider: p.config.provider.clone(),
                             display_name: catalog
@@ -2005,13 +2394,37 @@ pub fn providers_command(
                                 .collect(),
                             credential_reference: reference,
                             credential_stored,
-                            connection_verified: verified.contains(&p.config.provider),
+                            connection_verified,
                         }
                     })
                     .collect();
+                // Orphaned credentials (Connect AI repair):
+                // minted references that are stored in the keyring
+                // but no saved connection references — keys left
+                // behind by a discarded or abandoned setup. Labels
+                // only; the keyring cannot be enumerated, so only
+                // references this backend minted can be listed.
+                let referenced: std::collections::HashSet<String> = config
+                    .providers
+                    .iter()
+                    .filter_map(|p| p.config.credential.as_ref().map(|c| c.reference.clone()))
+                    .collect();
+                let mut orphaned_credentials: Vec<ProviderStatusOrphanedCredential> = state
+                    .minted_references
+                    .iter()
+                    .filter(|(reference, _)| {
+                        resolver.exists(reference) && !referenced.contains(*reference)
+                    })
+                    .map(|(reference, provider)| ProviderStatusOrphanedCredential {
+                        provider: provider.clone(),
+                        reference: reference.clone(),
+                    })
+                    .collect();
+                orphaned_credentials.sort_by(|a, b| a.reference.cmp(&b.reference));
                 to_value(&ProviderStatusResponse {
                     contract_version: 1,
                     providers,
+                    orphaned_credentials,
                     budget: config.budget,
                 })
             })
@@ -2050,7 +2463,87 @@ mod tests {
             session: "s1".into(),
             started,
             done: false,
+            verified_provider: "ollama".into(),
+            verified_snapshot: HashMap::new(),
         }
+    }
+
+    #[test]
+    fn minted_ledger_roundtrips_and_fails_closed_on_corruption() {
+        // Connect AI repair: the ledger is the only record of
+        // abandoned setup keys, so its read/write path is tested
+        // directly (the integration restart test shares the
+        // process-wide backend, so it cannot prove the load).
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let mut minted = HashMap::new();
+        minted.insert("openai-0123456789abcdef".to_string(), "openai".to_string());
+        minted.insert("gemini-0123456789abcdef".to_string(), "gemini".to_string());
+        persist_minted_file(root, "ws-main", &minted).unwrap();
+        assert_eq!(load_minted_file(root, "ws-main").unwrap(), minted);
+        assert_eq!(
+            load_minted_file(root, "ws-never-minted").unwrap(),
+            HashMap::new(),
+            "a workspace that never minted has an empty ledger"
+        );
+        let path = minted_file_path(root, "ws-main");
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(!text.contains("sk-"), "ledger holds labels only");
+        std::fs::write(&path, "{not json").unwrap();
+        assert!(
+            load_minted_file(root, "ws-main").is_err(),
+            "a corrupt ledger must fail closed, never silently drop orphans"
+        );
+    }
+
+    #[test]
+    fn connection_fingerprint_ignores_models_but_not_endpoint_or_key() {
+        // The fingerprint binds the connection, not the model
+        // list: an endpoint or credential change clears
+        // verification, a model-list change does not.
+        let base = RuntimeProvider {
+            config: ProviderConfig {
+                provider: "openai".into(),
+                base_url: "https://api.openai.com/v1".into(),
+                credential: Some(CredentialRef::new("openai", "openai-aaaa")),
+                enabled: true,
+                custom_endpoint: false,
+                allow_insecure_custom: false,
+            },
+            locality: LocalityConfig::Cloud,
+            models: vec![ModelInfo {
+                id: "gpt-x".into(),
+                provider: "openai".into(),
+                capabilities: Default::default(),
+                context_window: Some(8192),
+                cost: CostClass::Free,
+                speed: anansi_providers::types::SpeedTier::Balanced,
+                price_input_micro_usd_per_mtok: None,
+                price_output_micro_usd_per_mtok: None,
+            }],
+        };
+        let same = base.clone();
+        let mut model_changed = base.clone();
+        model_changed.models[0].id = "gpt-y".into();
+        let mut endpoint_changed = base.clone();
+        endpoint_changed.config.base_url = "https://other.example/v1".into();
+        let mut credential_changed = base.clone();
+        credential_changed.config.credential =
+            Some(CredentialRef::new("openai", "openai-bbbb"));
+        assert_eq!(connection_fingerprint(&base), connection_fingerprint(&same));
+        assert_eq!(
+            connection_fingerprint(&base),
+            connection_fingerprint(&model_changed),
+            "a model-list change is not a connection change"
+        );
+        assert_ne!(
+            connection_fingerprint(&base),
+            connection_fingerprint(&endpoint_changed)
+        );
+        assert_ne!(
+            connection_fingerprint(&base),
+            connection_fingerprint(&credential_changed)
+        );
     }
 
     #[test]

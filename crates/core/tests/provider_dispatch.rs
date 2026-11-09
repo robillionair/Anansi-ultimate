@@ -1331,14 +1331,25 @@ fn credential_lifecycle_prompt_keyring_resolver_wire() {
         "the key from the native prompt reached the wire via the keyring resolver"
     );
 
-    // Removal is real: status flips and dispatch now fails closed
-    // with zero additional provider traffic.
+    // Removal is real — but a credential a saved connection
+    // references is protected (Connect AI repair): the provider
+    // must leave the saved configuration first. Then removal
+    // succeeds, status flips, and a re-added connection under
+    // the same reference fails closed with zero additional
+    // provider traffic.
+    configure(&core, &ws, json!({ "providers": [] })).unwrap();
     let removed =
         credential_op(&core, None, "providers-credential-remove", &ws, &reference).unwrap();
     assert_eq!(removed["removed"], true);
     let status =
         credential_op(&core, None, "providers-credential-status", &ws, &reference).unwrap();
     assert_eq!(status["present"], false);
+    configure_add(
+        &core,
+        &ws,
+        provider_entry("openai", &fake.base_url, Some(&reference), "gpt-x", "free"),
+    )
+    .unwrap();
     let hits = fake.hits.load(Ordering::SeqCst);
     let err = dispatch_gpt(&core).unwrap_err();
     assert_eq!(err.code, ErrorCode::Unauthorized, "{}", err.message);
@@ -2211,14 +2222,24 @@ fn delayed_stream_success_never_verifies_new_connection() {
         "runId": started["runId"],
         "capability": started["capability"]
     });
-    // Confirm the stream is flowing before changing anything.
-    let poll = core
-        .ai_command("providers-stream-poll", stamped("owner", run.clone()))
-        .unwrap();
-    assert!(
-        poll["events"].as_array().unwrap().iter().any(|e| e["kind"] == "token"),
-        "stream produces tokens before the change: {poll}"
-    );
+    // Confirm the stream is flowing before changing anything
+    // (tokens arrive asynchronously — poll until one lands).
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        let poll = core
+            .ai_command("providers-stream-poll", stamped("owner", run.clone()))
+            .unwrap();
+        if poll["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|e| e["kind"] == "token")
+        {
+            break;
+        }
+        assert!(Instant::now() < deadline, "stream never produced tokens");
+        std::thread::sleep(Duration::from_millis(20));
+    }
     configure_add(
         &core,
         &ws,
@@ -2320,6 +2341,25 @@ fn orphaned_credential_listed_and_survives_restart() {
         "orphan listing carries labels only, never secrets"
     );
 
+    // The ledger is persisted on disk — not just in-memory
+    // state (the in-process "restart" below shares the
+    // process-wide backend, so the file assertion is what
+    // proves the write actually happened).
+    let minted_file = dir
+        .path()
+        .join("provider-config")
+        .join(format!("{ws}.minted.json"));
+    assert!(minted_file.exists(), "minted-reference ledger missing");
+    let minted_text = std::fs::read_to_string(&minted_file).unwrap();
+    assert!(
+        minted_text.contains(&reference),
+        "ledger file must hold the minted reference: {minted_text}"
+    );
+    assert!(
+        !minted_text.contains("sk-fake"),
+        "ledger file must never hold a secret"
+    );
+
     // Restart: a fresh Core over the same root still lists it
     // (the minted-reference ledger is persisted).
     drop(core);
@@ -2410,11 +2450,12 @@ fn failed_save_leaves_key_orphaned_and_removable() {
         .to_string();
     credential_op(&core, None, "providers-credential-set", &ws, &reference).unwrap();
 
-    // Break persistence, then attempt the save.
-    let config_dir = dir.path().join("provider-config");
-    let planted = config_dir.join("provider-config");
-    std::fs::remove_dir_all(&config_dir).unwrap();
-    std::fs::write(&planted, b"not a directory").unwrap();
+    // Break persistence: replace the provider-config directory
+    // with a regular file, so create_dir_all fails (same planting
+    // as configure_add_is_atomic_on_persist_failure).
+    let root = dir.path();
+    std::fs::remove_dir_all(root.join("provider-config")).unwrap();
+    std::fs::write(root.join("provider-config"), b"not a directory").unwrap();
     let fake_b = start_fake_openai();
     let err = configure_add(
         &core,
@@ -2434,7 +2475,7 @@ fn failed_save_leaves_key_orphaned_and_removable() {
     credential_op(&core, None, "providers-credential-remove", &ws, &reference).unwrap();
     assert!(!credential_status(&core, &ws, &reference));
     // Clean retry succeeds once persistence is restored.
-    std::fs::remove_file(&planted).unwrap();
+    std::fs::remove_file(root.join("provider-config")).unwrap();
     configure_add(
         &core,
         &ws,
