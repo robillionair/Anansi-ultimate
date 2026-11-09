@@ -214,8 +214,9 @@ test('provider workflow: rejected authorization, persisted config, dispatch, dis
     await page.locator('#dispatch-prompt').fill('slow count please');
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.locator('.provider-output')).toContainText('tok3');
-    await page.getByRole('button', { name: 'Workspace', exact: true }).click();
-    await expect(page.getByRole('heading', { level: 1, name: 'Providers E2E Workspace' })).toBeVisible();
+    await page.getByRole('button', { name: 'Dashboard', exact: true }).click();
+    await expect(page.getByRole('heading', { level: 1, name: 'Dashboard' })).toBeVisible();
+    await expect(page.getByText('Providers E2E Workspace')).toBeVisible();
     await page.getByRole('button', { name: 'AI Providers', exact: true }).click();
     await expect(page.getByRole('heading', { level: 1, name: 'AI providers' })).toBeVisible();
     const returnedAt = Date.now();
