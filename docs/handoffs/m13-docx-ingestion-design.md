@@ -291,3 +291,10 @@ paid inference, no model downloads.
    RUSTSEC-2026-0459, is pre-existing (via rusqlite), medium
    severity, fix ≥0.39.0 — out of scope, flagged for the
    owner. No new warnings from zip/quick-xml.
+7. **Empty DOCX is refused at integration (§4, AC-D3).** The
+   spike harness returned Ok/0 chars for empty and
+   whitespace-only fixtures; production maps that to
+   `ExtractError::Empty` (a job failure with an honest
+   message), consistent with the PDF no-empty rule and the
+   ingestion non-empty requirement — an empty document is
+   never published.

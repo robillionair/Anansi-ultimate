@@ -1427,7 +1427,12 @@ export interface DiscoveredRuntime {
  * `pages` is present only for PDF documents: one entry per stored page
  * (page number, character range inside the stored body, SHA-256 of the
  * page's text), so a reader, a search hit, and an Ask citation can all
- * name the page a passage came from. TXT/Markdown documents omit it.
+ * name the page a passage came from. `sections` is present only for
+ * DOCX documents: one entry per stored heading section (heading text,
+ * level, character range inside the stored body, SHA-256 of the
+ * section's text), so a reader, a search hit, and an Ask citation can
+ * all name the section a passage came from. TXT/Markdown documents
+ * omit both.
  */
 export interface DocumentProvenance {
   bom: boolean;
@@ -1436,6 +1441,7 @@ export interface DocumentProvenance {
   pages?: PdfPageProvenance[] | null;
   rawBytes: number;
   rawHash: string;
+  sections?: DocxSectionProvenance[] | null;
   textChars: number;
   textHash: string;
 }
@@ -1450,6 +1456,23 @@ export interface PdfPageProvenance {
   chars: number;
   hash: string;
   page: number;
+  startChar: number;
+}
+/**
+ * Section-level provenance for one stored section: the heading
+ * text (plain, without the `# ` body prefix; `None` for leading
+ * paragraphs before the first heading), its level (0 for the
+ * leading section, else 1–3), the character range of that
+ * section's text inside the stored body, and the SHA-256 of the
+ * section's text (via `crate::content::hash`). Serialized into
+ * `DocumentProvenance.sections` (a generated contract), so the
+ * field names are camelCase on the wire.
+ */
+export interface DocxSectionProvenance {
+  chars: number;
+  hash: string;
+  heading?: string | null;
+  level: number;
   startChar: number;
 }
 /**
@@ -3132,7 +3155,12 @@ export interface MemoryMetadata {
  * `pages` is present only for PDF documents: one entry per stored page
  * (page number, character range inside the stored body, SHA-256 of the
  * page's text), so a reader, a search hit, and an Ask citation can all
- * name the page a passage came from. TXT/Markdown documents omit it.
+ * name the page a passage came from. `sections` is present only for
+ * DOCX documents: one entry per stored heading section (heading text,
+ * level, character range inside the stored body, SHA-256 of the
+ * section's text), so a reader, a search hit, and an Ask citation can
+ * all name the section a passage came from. TXT/Markdown documents
+ * omit both.
  */
 export interface DocumentProvenance {
   bom: boolean;
@@ -3141,6 +3169,7 @@ export interface DocumentProvenance {
   pages?: PdfPageProvenance[] | null;
   rawBytes: number;
   rawHash: string;
+  sections?: DocxSectionProvenance[] | null;
   textChars: number;
   textHash: string;
 }
@@ -3155,6 +3184,23 @@ export interface PdfPageProvenance {
   chars: number;
   hash: string;
   page: number;
+  startChar: number;
+}
+/**
+ * Section-level provenance for one stored section: the heading
+ * text (plain, without the `# ` body prefix; `None` for leading
+ * paragraphs before the first heading), its level (0 for the
+ * leading section, else 1–3), the character range of that
+ * section's text inside the stored body, and the SHA-256 of the
+ * section's text (via `crate::content::hash`). Serialized into
+ * `DocumentProvenance.sections` (a generated contract), so the
+ * field names are camelCase on the wire.
+ */
+export interface DocxSectionProvenance {
+  chars: number;
+  hash: string;
+  heading?: string | null;
+  level: number;
   startChar: number;
 }
 export interface MemoryDraft {
@@ -3221,7 +3267,12 @@ export interface MemoryMetadata {
  * `pages` is present only for PDF documents: one entry per stored page
  * (page number, character range inside the stored body, SHA-256 of the
  * page's text), so a reader, a search hit, and an Ask citation can all
- * name the page a passage came from. TXT/Markdown documents omit it.
+ * name the page a passage came from. `sections` is present only for
+ * DOCX documents: one entry per stored heading section (heading text,
+ * level, character range inside the stored body, SHA-256 of the
+ * section's text), so a reader, a search hit, and an Ask citation can
+ * all name the section a passage came from. TXT/Markdown documents
+ * omit both.
  */
 export interface DocumentProvenance {
   bom: boolean;
@@ -3230,6 +3281,7 @@ export interface DocumentProvenance {
   pages?: PdfPageProvenance[] | null;
   rawBytes: number;
   rawHash: string;
+  sections?: DocxSectionProvenance[] | null;
   textChars: number;
   textHash: string;
 }
@@ -3244,6 +3296,23 @@ export interface PdfPageProvenance {
   chars: number;
   hash: string;
   page: number;
+  startChar: number;
+}
+/**
+ * Section-level provenance for one stored section: the heading
+ * text (plain, without the `# ` body prefix; `None` for leading
+ * paragraphs before the first heading), its level (0 for the
+ * leading section, else 1–3), the character range of that
+ * section's text inside the stored body, and the SHA-256 of the
+ * section's text (via `crate::content::hash`). Serialized into
+ * `DocumentProvenance.sections` (a generated contract), so the
+ * field names are camelCase on the wire.
+ */
+export interface DocxSectionProvenance {
+  chars: number;
+  hash: string;
+  heading?: string | null;
+  level: number;
   startChar: number;
 }
 export interface MemoryListRequest {
@@ -3314,7 +3383,12 @@ export interface MemoryMetadata {
  * `pages` is present only for PDF documents: one entry per stored page
  * (page number, character range inside the stored body, SHA-256 of the
  * page's text), so a reader, a search hit, and an Ask citation can all
- * name the page a passage came from. TXT/Markdown documents omit it.
+ * name the page a passage came from. `sections` is present only for
+ * DOCX documents: one entry per stored heading section (heading text,
+ * level, character range inside the stored body, SHA-256 of the
+ * section's text), so a reader, a search hit, and an Ask citation can
+ * all name the section a passage came from. TXT/Markdown documents
+ * omit both.
  */
 export interface DocumentProvenance {
   bom: boolean;
@@ -3323,6 +3397,7 @@ export interface DocumentProvenance {
   pages?: PdfPageProvenance[] | null;
   rawBytes: number;
   rawHash: string;
+  sections?: DocxSectionProvenance[] | null;
   textChars: number;
   textHash: string;
 }
@@ -3337,6 +3412,23 @@ export interface PdfPageProvenance {
   chars: number;
   hash: string;
   page: number;
+  startChar: number;
+}
+/**
+ * Section-level provenance for one stored section: the heading
+ * text (plain, without the `# ` body prefix; `None` for leading
+ * paragraphs before the first heading), its level (0 for the
+ * leading section, else 1–3), the character range of that
+ * section's text inside the stored body, and the SHA-256 of the
+ * section's text (via `crate::content::hash`). Serialized into
+ * `DocumentProvenance.sections` (a generated contract), so the
+ * field names are camelCase on the wire.
+ */
+export interface DocxSectionProvenance {
+  chars: number;
+  hash: string;
+  heading?: string | null;
+  level: number;
   startChar: number;
 }
 export interface MemoryReadRequest {
@@ -3375,7 +3467,12 @@ export interface MemoryWriteRequest {
  * `pages` is present only for PDF documents: one entry per stored page
  * (page number, character range inside the stored body, SHA-256 of the
  * page's text), so a reader, a search hit, and an Ask citation can all
- * name the page a passage came from. TXT/Markdown documents omit it.
+ * name the page a passage came from. `sections` is present only for
+ * DOCX documents: one entry per stored heading section (heading text,
+ * level, character range inside the stored body, SHA-256 of the
+ * section's text), so a reader, a search hit, and an Ask citation can
+ * all name the section a passage came from. TXT/Markdown documents
+ * omit both.
  */
 export interface DocumentProvenance {
   bom: boolean;
@@ -3384,6 +3481,7 @@ export interface DocumentProvenance {
   pages?: PdfPageProvenance[] | null;
   rawBytes: number;
   rawHash: string;
+  sections?: DocxSectionProvenance[] | null;
   textChars: number;
   textHash: string;
 }
@@ -3398,6 +3496,23 @@ export interface PdfPageProvenance {
   chars: number;
   hash: string;
   page: number;
+  startChar: number;
+}
+/**
+ * Section-level provenance for one stored section: the heading
+ * text (plain, without the `# ` body prefix; `None` for leading
+ * paragraphs before the first heading), its level (0 for the
+ * leading section, else 1–3), the character range of that
+ * section's text inside the stored body, and the SHA-256 of the
+ * section's text (via `crate::content::hash`). Serialized into
+ * `DocumentProvenance.sections` (a generated contract), so the
+ * field names are camelCase on the wire.
+ */
+export interface DocxSectionProvenance {
+  chars: number;
+  hash: string;
+  heading?: string | null;
+  level: number;
   startChar: number;
 }
 export interface MemoryDraft {

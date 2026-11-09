@@ -381,15 +381,27 @@ impl Storage {
         // The text step is per-kind. TXT/Markdown is decoded as UTF-8
         // (one leading BOM stripped and recorded). PDF is text-extracted
         // by the bounded extractor: the decode budget (16 MiB) and the
-        // text caps (8,000 chars/page, 32,000 total) are enforced there,
-        // and a refusal fails the job with the extractor's honest
-        // message — no partial import is ever published.
-        let (text, bom, pages) = if kind == "pdf" {
+        // text caps (8,000 chars/page, 32,000 total) are enforced there.
+        // DOCX is text-extracted by its bounded extractor (16 MiB
+        // cumulative inflation, 128 entries, 32,000 chars), which also
+        // returns per-section provenance. Any extractor refusal fails
+        // the job with the extractor's honest message — no partial
+        // import is ever published.
+        let (text, bom, pages, sections) = if kind == "pdf" {
             match crate::pdf::extract_pdf_text(&bytes) {
+                Ok(extracted) => (extracted.body, false, Some(extracted.page_provenance), None),
+                Err(error) => {
+                    let _ = self.fail_ingestion(lease, &error.message());
+                    return Ok(());
+                }
+            }
+        } else if kind == "docx" {
+            match crate::docx::extract_docx_text(&bytes) {
                 Ok(extracted) => (
                     extracted.body,
                     false,
-                    Some(extracted.page_provenance),
+                    None,
+                    Some(extracted.section_provenance),
                 ),
                 Err(error) => {
                     let _ = self.fail_ingestion(lease, &error.message());
@@ -420,7 +432,7 @@ impl Storage {
                 );
                 return Ok(());
             }
-            (text, bom, None)
+            (text, bom, None, None)
         };
         let text_hash = content::hash(text.as_bytes());
         let source = DocumentSource {
@@ -483,6 +495,7 @@ impl Storage {
                 text_chars: source.text_chars,
                 bom,
                 pages,
+                sections,
             }),
             job_guard: Some(crate::document::JobPublishGuard {
                 job_id: lease.job.id.clone(),
@@ -558,11 +571,7 @@ impl Core {
                 expected_hash,
                 format,
                 ..
-            } => (
-                *expected_bytes,
-                expected_hash.clone(),
-                format.clone(),
-            ),
+            } => (*expected_bytes, expected_hash.clone(), format.clone()),
             _ => return Err(invalid()),
         };
         if job.state != crate::jobs::JobState::Paused {
@@ -848,10 +857,7 @@ mod tests {
         assert_eq!(pages[1]["page"], 2);
         assert_eq!(pages[2]["page"], 3);
         assert_eq!(pages[0]["startChar"], 0);
-        let total: u64 = pages
-            .iter()
-            .map(|p| p["chars"].as_u64().unwrap())
-            .sum();
+        let total: u64 = pages.iter().map(|p| p["chars"].as_u64().unwrap()).sum();
         assert_eq!(total + 2 * 3, body.chars().count() as u64);
         // Each page hash is the SHA-256 of that page's text.
         let page_texts: Vec<&str> = body.split("\n\x0c\n").collect();
@@ -872,6 +878,167 @@ mod tests {
             )
             .unwrap();
         assert_eq!(found["memories"].as_array().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn docx_happy_path_publishes_document_with_section_provenance() {
+        let (_temp, core, ws) = setup();
+        let bytes = include_bytes!("../../../tests/fixtures/docx/normal.docx");
+        let sha = content::hash(bytes);
+        let opened = begin(&core, &ws, "normal.docx", bytes, &sha, "private");
+        let id = opened["id"].as_str().unwrap().to_string();
+        let done = part(&core, &ws, &id, 0, bytes, true).unwrap();
+        assert_eq!(done["job"]["state"], "Queued");
+        let job = wait_for_terminal(&core, &ws, &id);
+        assert_eq!(job.state, crate::jobs::JobState::Completed);
+        let memory_id = job.artifact_id.clone().unwrap();
+        let read = core
+            .memory_command(
+                "read",
+                json!({"contractVersion":1,"workspaceId":ws,"id":memory_id}),
+            )
+            .unwrap();
+        // The stored body is paragraphs in order, headings as `#` lines.
+        let body = read["body"].as_str().unwrap();
+        assert!(body.starts_with("# Harbor Ledger\n"));
+        assert!(body.contains("## Manifest"));
+        assert!(body.contains("### Notes"));
+        assert!(!body.contains('\x0c'));
+        let doc = &read["memory"]["document"];
+        assert_eq!(doc["fileName"], "normal.docx");
+        assert_eq!(
+            doc["mediaType"],
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        );
+        assert_eq!(doc["rawHash"], sha);
+        assert_eq!(doc["bom"], false);
+        // Section provenance: four sections, contiguous, covering the body.
+        let sections = doc["sections"].as_array().unwrap();
+        assert_eq!(sections.len(), 4);
+        assert_eq!(sections[0]["heading"], "Harbor Ledger");
+        assert_eq!(sections[0]["level"], 1);
+        assert_eq!(sections[1]["heading"], "Customs");
+        assert_eq!(sections[2]["heading"], "Manifest");
+        assert_eq!(sections[2]["level"], 2);
+        assert_eq!(sections[3]["heading"], "Notes");
+        assert_eq!(sections[3]["level"], 3);
+        assert_eq!(sections[0]["startChar"], 0);
+        let total: u64 = sections.iter().map(|s| s["chars"].as_u64().unwrap()).sum();
+        // Three single-newline separators between four sections.
+        assert_eq!(total + 3, body.chars().count() as u64);
+        // Each section hash is the SHA-256 of that section's text,
+        // sliced from the body by its recorded range.
+        for section in sections {
+            let start = section["startChar"].as_u64().unwrap() as usize;
+            let chars = section["chars"].as_u64().unwrap() as usize;
+            let text: String = body.chars().skip(start).take(chars).collect();
+            assert_eq!(
+                section["hash"],
+                content::hash(text.as_bytes()),
+                "section {:?} hash must match its text",
+                section["heading"]
+            );
+        }
+        // Full-body search finds a term that lives only in one section.
+        let found = core
+            .memory_command(
+                "list",
+                json!({"contractVersion":1,"workspaceId":ws,"kind":"document","query":"Customs","fullBody":true}),
+            )
+            .unwrap();
+        assert_eq!(found["memories"].as_array().unwrap().len(), 1);
+        // The chunker gives the section heading for the Ask citation:
+        // the heading line is stored verbatim (with its `#` prefix),
+        // as for Markdown documents.
+        let chunks =
+            crate::context::chunk_markdown_sections("test", "normal.docx", "document", body);
+        let manifest = chunks
+            .iter()
+            .find(|c| c.section_heading.as_deref() == Some("## Manifest"))
+            .unwrap();
+        assert_eq!(manifest.section_heading.as_deref(), Some("## Manifest"));
+    }
+
+    #[test]
+    fn docx_begin_uses_the_docx_raw_limit() {
+        let (_temp, core, ws) = setup();
+        let sha = content::hash(b"declared");
+        // A DOCX between the TXT/Markdown cap (64 KiB) and the DOCX
+        // cap (1 MiB) is accepted at begin: the selection validator
+        // must use the per-kind limit, not the 64 KiB text cap.
+        assert!(core
+            .job_command(
+                "ingest-begin",
+                json!({"contractVersion":1,"workspaceId":ws,"fileName":"big.docx","bytes":100_000,"sha256":sha,"privacy":"private"}),
+            )
+            .is_ok());
+        // Over the 1 MiB DOCX cap it still refuses before any upload.
+        assert!(core
+            .job_command(
+                "ingest-begin",
+                json!({"contractVersion":1,"workspaceId":ws,"fileName":"huge.docx","bytes":1_048_577,"sha256":sha,"privacy":"private"}),
+            )
+            .is_err());
+    }
+
+    #[test]
+    fn docx_refusals_publish_nothing() {
+        let (_temp, core, ws) = setup();
+        // (fixture, a substring the job log must carry)
+        let cases: [(&str, &[u8], &str); 6] = [
+            (
+                "macro.docx",
+                include_bytes!("../../../tests/fixtures/docx/macro.docx"),
+                "does not support",
+            ),
+            (
+                "altchunk.docx",
+                include_bytes!("../../../tests/fixtures/docx/altchunk.docx"),
+                "does not support",
+            ),
+            (
+                "encrypted-entry.docx",
+                include_bytes!("../../../tests/fixtures/docx/encrypted-entry.docx"),
+                "password-protected",
+            ),
+            (
+                "zip-bomb.docx",
+                include_bytes!("../../../tests/fixtures/docx/zip-bomb.docx"),
+                "could not be parsed",
+            ),
+            (
+                "oversized-text.docx",
+                include_bytes!("../../../tests/fixtures/docx/oversized-text.docx"),
+                "exceeds the limit",
+            ),
+            (
+                "corrupt-bad-xml.docx",
+                include_bytes!("../../../tests/fixtures/docx/corrupt-bad-xml.docx"),
+                "could not be parsed",
+            ),
+        ];
+        for (name, bytes, expected) in cases {
+            let sha = content::hash(bytes);
+            let opened = begin(&core, &ws, name, bytes, &sha, "private");
+            let id = opened["id"].as_str().unwrap().to_string();
+            let done = part(&core, &ws, &id, 0, bytes, true).unwrap();
+            assert_eq!(done["job"]["state"], "Queued");
+            let job = wait_for_terminal(&core, &ws, &id);
+            assert_eq!(job.state, crate::jobs::JobState::Failed, "{name} must fail");
+            assert!(
+                job.log.contains(expected),
+                "{name}: log must contain {expected:?}, got {:?}",
+                job.log
+            );
+            // Nothing was published for the refused file.
+            let listed = core
+                .memory_command(
+                    "list",
+                    json!({"contractVersion":1,"workspaceId":ws,"kind":"document","query":name,"fullBody":true}),
+                )
+                .unwrap();
+            assert_eq!(listed["memories"].as_array().unwrap().len(), 0);
+        }
     }
 
     #[test]
@@ -1082,11 +1249,12 @@ mod tests {
                 json!({"contractVersion":1,"workspaceId":ws,"fileName":"s.txt","bytes":5,"sha256":sha,"privacy":"sealed"}),
             )
             .is_err());
-        // Unsupported format names the follow-up status.
+        // Unsupported format names the follow-up status (DOCX is
+        // supported since the M13 DOCX slice; PPTX still refuses).
         let error = core
             .job_command(
                 "ingest-begin",
-                json!({"contractVersion":1,"workspaceId":ws,"fileName":"report.docx","bytes":5,"sha256":sha,"privacy":"private"}),
+                json!({"contractVersion":1,"workspaceId":ws,"fileName":"report.pptx","bytes":5,"sha256":sha,"privacy":"private"}),
             )
             .unwrap_err();
         assert!(error.message.contains("not supported"));
@@ -1286,22 +1454,21 @@ mod tests {
         // the staging sweep must never abort a begin (the Windows
         // finding: cross-connection reads failed with 503), and the
         // atomic publish guard must still publish exactly one document.
-        let opened: Vec<Result<serde_json::Value, CommandError>> =
-            std::thread::scope(|s| {
-                let mut handles = Vec::new();
-                for _ in 0..8 {
-                    handles.push(s.spawn(|| {
+        let opened: Vec<Result<serde_json::Value, CommandError>> = std::thread::scope(|s| {
+            let mut handles = Vec::new();
+            for _ in 0..8 {
+                handles.push(s.spawn(|| {
                         core.job_command(
                             "ingest-begin",
                             json!({"contractVersion":1,"workspaceId":ws,"fileName":"eight.txt","bytes":bytes.len(),"sha256":sha,"privacy":"private"}),
                         )
                     }));
-                }
-                handles
-                    .into_iter()
-                    .map(|h| h.join().expect("begin thread panicked"))
-                    .collect()
-            });
+            }
+            handles
+                .into_iter()
+                .map(|h| h.join().expect("begin thread panicked"))
+                .collect()
+        });
         assert_eq!(opened.len(), 8);
         let mut ids = Vec::new();
         for result in &opened {

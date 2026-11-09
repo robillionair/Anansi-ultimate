@@ -330,6 +330,7 @@ fn validate_import(r: &MemoryWriteRequest) -> Result<(), CommandError> {
         "text/plain" => "txt",
         "text/markdown" => "md",
         "application/pdf" => "pdf",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document" => "docx",
         _ => return Err(invalid()),
     };
     if doc.media_type != DocumentProvenance::media_type_for(kind) {
