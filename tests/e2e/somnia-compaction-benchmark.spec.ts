@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
+  computeApprovalHash,
   fakeAnswerKey,
   renderHistory,
   resetFakeBehavior,
@@ -115,6 +116,17 @@ test('frozen benchmark reruns through automatic compaction (synthetic by default
       // estimate (prompt chars/4 + 384), so it needs the full budget;
       // the synthetic run keeps the 20k default.
       ...(live ? { provider: 'ollama', model: liveModel, maxTotalTokens: 200000 } : {}),
+      approvalHash: computeApprovalHash({
+        cases: startCases.map(entry => ({
+          caseId: entry.caseId as string,
+          candidateHash: entry.candidateHash as string,
+          questions: entry.questions as Array<{ id: string; text: string; expectedAnswer: string | null }>,
+        })),
+        provider: live ? 'ollama' : '',
+        model: live ? liveModel : '',
+        cloud: false,
+        maxTotalTokens: live ? 200000 : 20000,
+      }),
     });
     expect(started.status).toBe(200);
     expect(started.body.pairsTotal).toBe(50);

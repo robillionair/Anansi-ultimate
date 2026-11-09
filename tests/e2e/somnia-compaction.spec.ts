@@ -156,6 +156,10 @@ test('SOMNIA compaction refuses a start whose approval does not match the review
     const tamperedHash = await session.call('ai', 'somnia-compaction-start', {
       workspaceId: session.workspaceId, projectId: session.projectId,
       cases: [{ ...baseCase, candidateHash: '0'.repeat(64) }],
+      approvalHash: computeApprovalHash({
+        cases: [{ caseId: 'case-001', candidateHash: '0'.repeat(64), questions: baseCase.questions }],
+        provider: '', model: '', cloud: false, maxTotalTokens: 20000,
+      }),
     });
     expect(tamperedHash.status).toBe(400);
     expect(session.fakeHits()).toBe(hitsBefore);
@@ -166,12 +170,20 @@ test('SOMNIA compaction refuses a start whose approval does not match the review
     const edited = await session.call('ai', 'somnia-compaction-start', {
       workspaceId: session.workspaceId, projectId: session.projectId,
       cases: [{ ...baseCase, records: editedRecords }],
+      approvalHash: computeApprovalHash({
+        cases: [{ caseId: 'case-001', candidateHash: candidate.contentHash, questions: baseCase.questions }],
+        provider: '', model: '', cloud: false, maxTotalTokens: 20000,
+      }),
     });
     expect(edited.status).toBe(400);
     expect(session.fakeHits()).toBe(hitsBefore);
     // The untouched approval starts cleanly.
     const ok = await session.call('ai', 'somnia-compaction-start', {
       workspaceId: session.workspaceId, projectId: session.projectId, cases: [baseCase],
+      approvalHash: computeApprovalHash({
+        cases: [{ caseId: 'case-001', candidateHash: candidate.contentHash, questions: baseCase.questions }],
+        provider: '', model: '', cloud: false, maxTotalTokens: 20000,
+      }),
     });
     expect(ok.status).toBe(200);
     expect(ok.body.pairsTotal).toBe(1);
@@ -269,6 +281,14 @@ test('SOMNIA compaction runs are scoped to their project', async ({ page }) => {
         candidateHash: prepared.body.candidate.contentHash,
         questions: [{ id: 'q1', text: 'What is the customs fee now?', expectedAnswer: 'The customs fee is $45.' }],
       }],
+      approvalHash: computeApprovalHash({
+        cases: [{
+          caseId: 'case-001',
+          candidateHash: prepared.body.candidate.contentHash,
+          questions: [{ id: 'q1', text: 'What is the customs fee now?', expectedAnswer: 'The customs fee is $45.' }],
+        }],
+        provider: '', model: '', cloud: false, maxTotalTokens: 20000,
+      }),
     });
     expect(started.status).toBe(200);
     const runId = started.body.runId as string;
@@ -325,6 +345,14 @@ test('SOMNIA compaction refuses a pair when the provider reports a different mod
         candidateHash: prepared.body.candidate.contentHash,
         questions: [{ id: 'q1', text: 'What is the customs fee now?', expectedAnswer: 'The customs fee is $45.' }],
       }],
+      approvalHash: computeApprovalHash({
+        cases: [{
+          caseId: 'case-001',
+          candidateHash: prepared.body.candidate.contentHash,
+          questions: [{ id: 'q1', text: 'What is the customs fee now?', expectedAnswer: 'The customs fee is $45.' }],
+        }],
+        provider: '', model: '', cloud: false, maxTotalTokens: 20000,
+      }),
     });
     expect(started.status).toBe(200);
     const runId = started.body.runId as string;
