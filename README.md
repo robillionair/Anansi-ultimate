@@ -4,6 +4,7 @@ ANANSI Ultimate is a local-first workspace for researching a product idea, build
 
 This README describes the Windows preview integration branch. The verified source checkpoint is `4e4e970af8ad0c406cfae35fc3da55f99662b174`. It also includes Antigravity's focused Windows acceptance checkpoint and Muse's SOMNIA compaction integration. See the [build status ledger](docs/BUILD_STATUS.md) for test details and scope.
 
+- [Who it’s for](#who-its-for)
 - [Screenshots](#screenshots)
 - [What you can do](#what-you-can-do)
 - [Windows preview](#windows-preview)
@@ -12,6 +13,14 @@ This README describes the Windows preview integration branch. The verified sourc
 - [Development and verification](#development-and-verification)
 - [Repository map](#repository-map)
 - [Project roadmap](#project-roadmap)
+
+## Who it’s for
+
+- **Founders and indie builders** can turn research into product concepts, compare ideas, draft specifications, and export prototypes and launch materials for review.
+- **Product and research teams** can keep source documents, assumptions, decisions, and versioned artifacts together, then revisit the evidence behind a recommendation.
+- **Developers and AI practitioners** can inspect what context reaches a model, compare original and compacted histories in SOMNIA, and review generated source before handing it off.
+
+Start with a project and add a few notes or documents. Use **Ask ANANSI** to get a cited answer, **Opportunity Discovery** to explore ideas, **Product Forge** to draft a prototype, and **SwarmTank** to test assumptions against synthetic buyer scenarios. You can reopen the saved inputs and results as the project evolves.
 
 ## Screenshots
 
