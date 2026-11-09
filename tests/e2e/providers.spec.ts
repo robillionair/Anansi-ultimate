@@ -158,8 +158,15 @@ test('provider workflow: rejected authorization, persisted config, dispatch, dis
 
     // 1. Rejected authorization: a browser session cannot
     // configure — the owner boundary is visible, not silent.
-    await page.getByRole('button', { name: 'Save configuration' }).click();
-    await expect(page.getByRole('alert', { name: 'Configuration error' })).toContainText('Owner authorization required');
+    // The guided Connect AI flow refuses the save at review.
+    await page.getByRole('button', { name: 'Ollama (local)', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Step 2 — Endpoint' })).toBeVisible();
+    await page.getByRole('button', { name: 'Continue', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Step 4 — Choose a model' })).toBeVisible();
+    await page.locator('#connect-model-0').fill('llama-free');
+    await page.getByRole('button', { name: 'Review', exact: true }).click();
+    await page.getByRole('button', { name: 'Save connection', exact: true }).click();
+    await expect(page.getByRole('alert', { name: 'Connect AI error' })).toContainText('Owner authorization required');
 
     // 2. The owner (desktop) configuration arrives as the
     // persisted file and survives an API restart.
