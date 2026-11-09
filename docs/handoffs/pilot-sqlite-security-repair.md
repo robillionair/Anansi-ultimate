@@ -99,7 +99,7 @@ no-op).
 | Focused lib filters | storage 3/3, vault 4/4, restore 11/11, snapshots 7/7, search 4/4, docx 9/9, pdf 24/24, ingestion 20/20 |
 | tsc (`pnpm typecheck`) | 0 errors |
 | Contracts (`node scripts/contracts.mjs` re-run) | 0 drift |
-| Docs (`node scripts/validate-docs.mjs`) | 337 PASS (was 336; +1 design doc) |
+| Docs (`node scripts/validate-docs.mjs`) | 338 PASS (was 336; +2 new handoff docs: design + this handoff) |
 | UI (`pnpm test:ui`) | 338/338, unchanged |
 | E2E `documents-docx.spec.ts` | 7/7 |
 | E2E `documents-pdf.spec.ts` | 5/5 |
@@ -145,7 +145,7 @@ node scripts/with-application-test-lease.mjs node_modules/@playwright/test/cli.j
 ```
 
 Expected: audit clean of RUSTSEC-2026-0459, lib 359/359,
-provider-dispatch 22/22, tsc 0, contracts 0 drift, docs 337
+provider-dispatch 22/22, tsc 0, contracts 0 drift, docs 338
 PASS, UI 338/338, DOCX e2e 7/7, PDF e2e 5/5, TXT/MD e2e 9/9,
 Ask e2e 1/1. The reopen check is Linux evidence only; its
 script is in the delivery evidence folder if Windows wants
