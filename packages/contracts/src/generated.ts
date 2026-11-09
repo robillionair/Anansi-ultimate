@@ -4014,6 +4014,10 @@ export interface ProviderCredentialStatusResponse {
   contractVersion: number;
   present: boolean;
 }
+/**
+ * Cost knowledge about a model. `Unknown` is treated as paid everywhere
+ * cost is enforced (decision M5-D5).
+ */
 export type Role = "system" | "user" | "assistant";
 /**
  * Privacy classification of one content segment. Mirrors the classes in
@@ -4026,7 +4030,9 @@ export type PrivacyClass = "public" | "standard" | "private" | "sealed" | "restr
 /**
  * Dispatch and stream-start share one request shape. It carries
  * **no** configuration, locality, cost or credential material:
- * policy is resolved from backend state only.
+ * policy is resolved from backend state only. The one exception is
+ * `expected_target`: a caller-supplied approval binding that phase 1
+ * verifies against backend state and never trusts as configuration.
  */
 export interface ProviderDispatchRequest {
   /**
@@ -4035,6 +4041,11 @@ export interface ProviderDispatchRequest {
    */
   chosen?: [unknown, unknown] | null;
   contractVersion?: number;
+  /**
+   * The approved target this dispatch must still match. Absent
+   * for callers without an approval binding.
+   */
+  expectedTarget?: ExpectedDispatchTarget | null;
   mode?: string | null;
   /**
    * The id of a permit issued by `providers-authorize` to this
@@ -4045,6 +4056,21 @@ export interface ProviderDispatchRequest {
   request: CompletionRequest;
   workspaceId: string;
   zeroCostLock?: boolean;
+}
+/**
+ * The approved target a dispatch must still match, when the caller
+ * bound the dispatch to a reviewed approval (SOMNIA compaction).
+ * It is a binding the server verifies against backend state, never
+ * configuration the caller asserts: the endpoint, locality, and cost
+ * are re-derived from the live configuration in phase 1 and the
+ * dispatch is refused before any traffic when they differ.
+ */
+export interface ExpectedDispatchTarget {
+  cost: CostClass;
+  endpoint: string;
+  locality: string;
+  model: string;
+  provider: string;
 }
 export interface CompletionRequest {
   /**

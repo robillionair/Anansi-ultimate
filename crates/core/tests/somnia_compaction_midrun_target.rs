@@ -305,7 +305,14 @@ fn midrun_endpoint_change_gets_zero_requests() {
     assert_eq!(model, "llama-x");
     assert_eq!(endpoint, fake_a.base_url);
 
-    let hash = approval_hash(&candidate_hash, &provider, &model, &endpoint, &locality, &cost);
+    let hash = approval_hash(
+        &candidate_hash,
+        &provider,
+        &model,
+        &endpoint,
+        &locality,
+        &cost,
+    );
 
     // The pause gate: the run waits for this file after the first arm.
     // It must not exist yet.
@@ -371,7 +378,11 @@ fn midrun_endpoint_change_gets_zero_requests() {
     assert!(finished, "run never reached a terminal status");
     // The zero-traffic claim first: it is the property under test.
     assert_eq!(fake_b.hits(), 0, "replacement endpoint received requests");
-    assert_eq!(fake_a.hits(), 1, "approved endpoint received more than the first arm");
+    assert_eq!(
+        fake_a.hits(),
+        1,
+        "approved endpoint received more than the first arm"
+    );
     let final_poll = poll(&core);
     assert_eq!(final_poll["status"].as_str().unwrap(), "target-changed");
 
@@ -380,7 +391,10 @@ fn midrun_endpoint_change_gets_zero_requests() {
     let pair = &pairs[0];
     assert_eq!(pair["originalReply"].as_str().unwrap(), "core reply");
     assert_eq!(pair["originalScore"].as_str().unwrap(), "correct");
-    assert!(pair["compactedReply"].is_null(), "compacted arm must not have a reply");
+    assert!(
+        pair["compactedReply"].is_null(),
+        "compacted arm must not have a reply"
+    );
     assert_eq!(pair["compactedScore"].as_str().unwrap(), "failed");
     assert!(
         pair["failure"].as_str().unwrap().contains("target"),

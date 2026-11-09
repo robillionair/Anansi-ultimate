@@ -15362,6 +15362,44 @@
         ],
         "type": "object"
       },
+      "CostClass": {
+        "description": "Cost knowledge about a model. `Unknown` is treated as paid everywhere\ncost is enforced (decision M5-D5).",
+        "enum": [
+          "free",
+          "paid",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "ExpectedDispatchTarget": {
+        "additionalProperties": false,
+        "description": "The approved target a dispatch must still match, when the caller\nbound the dispatch to a reviewed approval (SOMNIA compaction).\nIt is a binding the server verifies against backend state, never\nconfiguration the caller asserts: the endpoint, locality, and cost\nare re-derived from the live configuration in phase 1 and the\ndispatch is refused before any traffic when they differ.",
+        "properties": {
+          "cost": {
+            "$ref": "#/$defs/CostClass"
+          },
+          "endpoint": {
+            "type": "string"
+          },
+          "locality": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "model",
+          "endpoint",
+          "locality",
+          "cost"
+        ],
+        "type": "object"
+      },
       "PrivacyClass": {
         "description": "Privacy classification of one content segment. Mirrors the classes in\n`anansi-core` (`crates/core/src/privacy.rs`) plus `Restricted`, which\nMASTER_SPEC §19 uses without defining; see decision M5-D4 in\n`docs/handoffs/M5-requirements-and-acceptance.md`.",
         "enum": [
@@ -15411,7 +15449,7 @@
     },
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
-    "description": "Dispatch and stream-start share one request shape. It carries\n**no** configuration, locality, cost or credential material:\npolicy is resolved from backend state only.",
+    "description": "Dispatch and stream-start share one request shape. It carries\n**no** configuration, locality, cost or credential material:\npolicy is resolved from backend state only. The one exception is\n`expected_target`: a caller-supplied approval binding that phase 1\nverifies against backend state and never trusts as configuration.",
     "properties": {
       "chosen": {
         "maxItems": 2,
@@ -15435,6 +15473,18 @@
         "maximum": 255,
         "minimum": 0,
         "type": "integer"
+      },
+      "expectedTarget": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/ExpectedDispatchTarget"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "description": "The approved target this dispatch must still match. Absent\nfor callers without an approval binding."
       },
       "mode": {
         "type": [

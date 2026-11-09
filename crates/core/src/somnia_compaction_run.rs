@@ -32,7 +32,8 @@ use sha2::{Digest, Sha256};
 
 use crate::artifacts::{ArtifactRecord, ArtifactRegisterRequest};
 use crate::provider_dispatch::{
-    CallerScope, configured_chat_models, configured_model_target, providers_command,
+    CallerScope, catalog_locality, configured_chat_models, configured_model_target,
+    providers_command,
 };
 use crate::readiness::{CommandError, ErrorCode};
 use crate::somnia_compaction::{
@@ -631,21 +632,29 @@ fn check_run_target(
     Ok(())
 }
 
-/// The catalog's locality enum is private; the Debug form is
-/// "Local" / "Cloud" (the same rendering providers-catalog uses).
-fn catalog_locality(provider: &str) -> String {
-    anansi_providers::catalog::catalog()
-        .iter()
-        .find(|e| e.id == provider)
-        .map(|e| {
-            if format!("{:?}", e.locality) == "Local" {
-                "local".to_string()
-            } else {
-                "cloud".to_string()
-            }
-        })
-        .unwrap_or_else(|| "cloud".to_string())
+/// Whether the live configuration still matches the approved target
+/// this run was bound to. Used after a failed arm to decide whether
+/// the run must end (target changed) or may continue (a transient
+/// provider failure). Re-derives the target exactly the way start
+/// did; a removed target fails closed.
+fn approved_target_matches(scope: &CallerScope, config: &RunConfig) -> bool {
+    match resolve_exact_model(
+        scope,
+        &Some(config.provider.clone()),
+        &Some(config.model.clone()),
+    ) {
+        Ok(target) => {
+            target.endpoint == config.endpoint
+                && target.locality == config.locality
+                && target.cost == config.cost
+        }
+        Err(_) => false,
+    }
 }
+
+/// The catalog's locality derivation lives in `provider_dispatch`
+/// (shared with the expected-target check) so the two can never
+/// disagree about what a target's locality is.
 
 /// One resolved comparison target: the exact provider/model plus
 /// the effective endpoint and cost class from the trusted
@@ -880,6 +889,13 @@ struct RunConfig {
     pairs: Vec<ResolvedPair>,
     provider: String,
     model: String,
+    /// The approved target (mid-run design §2 D1): the endpoint,
+    /// locality, and cost class the approval bound. Every dispatch
+    /// carries these as its expected target, so a configuration
+    /// change after approval is refused at the next dispatch.
+    endpoint: String,
+    locality: String,
+    cost: CostClass,
     local_only: bool,
     /// The user explicitly approved cloud transmission for this
     /// comparison (review + approval hash). It is NOT a permit: the
@@ -1089,6 +1105,9 @@ fn start_op(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
         pairs: resolved_pairs,
         provider: provider.clone(),
         model: model.clone(),
+        endpoint: target.endpoint.clone(),
+        locality: target.locality.clone(),
+        cost: target.cost,
         local_only,
         cloud_authorized: cloud_effective,
         max_total_tokens: max_total,
@@ -1247,6 +1266,18 @@ fn dispatch_pair_arm(
         "mode": "chooseModel",
         "zeroCostLock": true,
         "chosen": [config.provider.clone(), config.model.clone()],
+        // The approved target (mid-run design §2 D1): phase 1 of
+        // providers-dispatch verifies it against the live
+        // configuration atomically with acquiring the runtime, so a
+        // configuration change after approval is refused at this
+        // dispatch, before any traffic.
+        "expectedTarget": {
+            "provider": config.provider.clone(),
+            "model": config.model.clone(),
+            "endpoint": config.endpoint.clone(),
+            "locality": config.locality.clone(),
+            "cost": cost_label(config.cost),
+        },
     });
     // OpenRouter reasoning is disabled for compaction comparisons:
     // reasoning tokens would crowd out answer text and the comparison
@@ -1479,12 +1510,25 @@ fn run_compaction(run_id: String, scope: CallerScope, config: RunConfig) {
                 }
             }
         });
-        let failure = match (&original.failure, &compacted.failure) {
+        let mut failure = match (&original.failure, &compacted.failure) {
             (Some(a), Some(b)) => Some(format!("Original arm: {a} Compacted arm: {b}")),
             (Some(a), None) => Some(format!("Original arm: {a}")),
             (None, Some(b)) => Some(format!("Compacted arm: {b}")),
             (None, None) => None,
         };
+        // A failed arm with a changed target ends the run (mid-run
+        // design §2 D4): the pair is recorded below with the original
+        // arm's result preserved, and no further pair is attempted
+        // against the changed target. A failure with the target still
+        // matching keeps the existing behaviour (pair recorded as
+        // failed, run continues).
+        let target_changed = failure.is_some() && !approved_target_matches(&scope, &config);
+        if target_changed {
+            let detail = failure.map(|f| format!("{f} ")).unwrap_or_default();
+            failure = Some(format!(
+                "{detail}The approved provider target changed; review the candidate again before starting a new run."
+            ));
+        }
         let result = CompactionPairResult {
             pair_id: pair.pair_id.clone(),
             case_id: pair.case_id.clone(),
@@ -1514,6 +1558,10 @@ fn run_compaction(run_id: String, scope: CallerScope, config: RunConfig) {
                 run.pairs.push(result);
             }
         });
+        if target_changed {
+            terminal_status = Some("target-changed".to_string());
+            break 'outer;
+        }
     }
     let status = terminal_status.unwrap_or_else(|| "complete".to_string());
     with_compaction_runs(|map| {
