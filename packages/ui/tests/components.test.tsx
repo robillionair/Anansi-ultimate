@@ -242,28 +242,28 @@ test('vault view exposes native and paired-browser controls plus encrypted backu
   assert.doesNotMatch(browserHtml, /type="password"/);
 });
 
-import {Providers, DisclosurePanel, deriveLocality} from '../src/Providers';
+import {Providers, DisclosurePanel, deriveLocality, defaultFlowModels} from '../src/Providers';
 
-test('providers screen renders the full workflow: catalog, owner-trust copy, credential reference (never a secret field), zero-cost lock, routing modes, usage',()=>{
+test('providers screen renders the guided Connect AI flow: catalog step, connected list, zero-cost lock, routing modes, usage',()=>{
   const html=renderToStaticMarkup(<Providers client={{providersCatalog:async()=>({contractVersion:1,providers:[]}),providersUsage:async()=>({contractVersion:1,totalRequests:0,totalInputTokens:0,totalOutputTokens:0,totalEstimatedCostMicroUsd:0,reservedRequests:0,reservedTokens:0,reservedEstimatedCostMicroUsd:0,providers:[]}),providersSessionAccess:async()=>({contractVersion:1,pending:[],grants:[]})} as any} workspaceId="ws1"/>);
-  assert.match(html,/Provider catalog/);
-  assert.match(html,/Configure provider/);
+  assert.match(html,/Step 1 — Choose a provider/);
+  assert.match(html,/Connect AI/);
+  assert.match(html,/Pick a provider above to start/);
+  assert.match(html,/Connected providers/);
   assert.match(html,/owner operations/);
-  assert.match(html,/credential reference/i);
   assert.match(html,/operating system keyring/);
-  // The credential input is a reference field, never a password box.
-  assert.match(html,/Credential reference \(OS keyring account\)/);
+  // No password field anywhere: keys are never typed into this page.
   assert.doesNotMatch(html,/type="password"/);
-  assert.match(html,/Locality is derived from the endpoint by the backend/);
   assert.match(html,/Zero-Cost Lock/);
   assert.match(html,/Authorize paid dispatch for this model/);
   assert.match(html,/Usage/);
-  assert.match(html,/Credential setup/);
-  assert.match(html,/Set credential \(native prompt\)/);
-  assert.match(html,/trusted native prompt/);
   assert.match(html,/Browser session access/);
   assert.match(html,/cannot approve itself/);
   for(const m of ['auto','autoFree','private','fast','deep','coding','vision','chooseModel'])assert.match(html,new RegExp(`value="${m}"`),`routing mode ${m}`);
+});
+
+test('connect AI flow starts new models as cost-unknown, never free',()=>{
+  assert.deepEqual(defaultFlowModels(),[{id:'',cost:'unknown'}]);
 });
 
 test('providers locality derivation mirrors the backend rule',()=>{

@@ -4,19 +4,24 @@ import type {
   CompletionRequest,
   DisclosureRecord,
   ProviderCatalogEntry,
+  ProviderStatusResponse,
   ProviderUsageResponse,
-  RuntimeConfig,
+  RuntimeProvider,
 } from '@anansi/contracts';
 
 /**
  * AI Providers — the M5 configuration, credential-reference,
- * authorization, dispatch and disclosure workflow (§§14–19).
+ * authorization, dispatch and disclosure workflow (§§14–19),
+ * plus the guided Connect AI flow: choose a provider, confirm
+ * the endpoint, set the credential in the native prompt, choose
+ * a model, review and save — one provider at a time, without
+ * touching the providers or budget already configured.
  *
  * Trust model, made visible rather than hidden: configuration and
  * paid authorization are OWNER operations (the desktop host, or a
  * browser session the host has granted — the backend enforces
  * this and this screen surfaces its refusals). Secrets are never
- * typed here: the form stores only a credential REFERENCE; the
+ * typed here: the host generates a credential REFERENCE; the
  * secret itself lives in the OS keyring (§15).
  */
 
@@ -57,20 +62,37 @@ interface PermitState {
   model: string;
 }
 
+/** The model rows a fresh Connect AI flow starts with: a new model
+ * is cost-unknown until verified (M5-D5) — never free by default. */
+export function defaultFlowModels(): ModelRow[] {
+  return [{ id: '', cost: 'unknown' }];
+}
+
 export function Providers({ client, workspaceId }: { client: Client; workspaceId: string }) {
   const [catalog, setCatalog] = useState<ProviderCatalogEntry[]>([]);
   const [catalogError, setCatalogError] = useState('');
 
-  // Configure form
+  // Selected provider for dispatch / authorization (set by the
+  // catalog picker and by a successful Connect AI save).
   const [providerId, setProviderId] = useState('ollama');
-  const [baseUrl, setBaseUrl] = useState('http://127.0.0.1:11434');
-  const [credentialRef, setCredentialRef] = useState('');
-  const [models, setModels] = useState<ModelRow[]>([{ id: 'llama3.1', cost: 'free' }]);
-  const [maxRequests, setMaxRequests] = useState('');
-  const [maxTotalTokens, setMaxTotalTokens] = useState('');
-  const [configured, setConfigured] = useState<RuntimeConfig | null>(null);
-  const [configureError, setConfigureError] = useState('');
-  const [configureBusy, setConfigureBusy] = useState(false);
+
+  // Connected providers (backend-owned status: credential stored
+  // vs verified in this session, plus the surviving budget).
+  const [connected, setConnected] = useState<ProviderStatusResponse | null>(null);
+
+  // Guided Connect AI flow (steps 2–5; step 1 is the catalog).
+  const [flowStep, setFlowStep] = useState(0);
+  const [flowProviderId, setFlowProviderId] = useState('');
+  const [flowBaseUrl, setFlowBaseUrl] = useState('');
+  const [flowCustomEndpoint, setFlowCustomEndpoint] = useState(false);
+  const [flowAllowInsecure, setFlowAllowInsecure] = useState(false);
+  const [flowReference, setFlowReference] = useState('');
+  const [flowCredStored, setFlowCredStored] = useState<boolean | null>(null);
+  const [flowModels, setFlowModels] = useState<ModelRow[]>([{ id: '', cost: 'unknown' }]);
+  const [flowError, setFlowError] = useState('');
+  const [flowNotice, setFlowNotice] = useState('');
+  const [flowBusy, setFlowBusy] = useState(false);
+  const [flowDone, setFlowDone] = useState(false);
 
   // Authorize
   const [permit, setPermit] = useState<PermitState | null>(null);
@@ -99,12 +121,6 @@ export function Providers({ client, workspaceId }: { client: Client; workspaceId
   // Usage
   const [usage, setUsage] = useState<ProviderUsageResponse | null>(null);
 
-  // Credential setup (native prompt + keyring, host-side)
-  const [credPresent, setCredPresent] = useState<boolean | null>(null);
-  const [credMessage, setCredMessage] = useState('');
-  const [credError, setCredError] = useState('');
-  const [credBusy, setCredBusy] = useState(false);
-
   // Browser-session access (host approval queue)
   const [access, setAccess] = useState<import('@anansi/contracts').ProviderSessionAccessResponse | null>(null);
   const [accessNote, setAccessNote] = useState('');
@@ -122,6 +138,7 @@ export function Providers({ client, workspaceId }: { client: Client; workspaceId
       });
     void refreshUsage();
     void refreshAccess();
+    void refreshConnected();
     return () => {
       live = false;
     };
@@ -142,54 +159,193 @@ export function Providers({ client, workspaceId }: { client: Client; workspaceId
     };
   }, [client, workspaceId]);
 
+  async function refreshConnected() {
+    try {
+      // No owner check on this op: a paired browser may see the
+      // setup status and is directed to the desktop for keys.
+      setConnected(await client.providersStatus(workspaceId));
+    } catch {
+      setConnected(null);
+    }
+  }
+
+  // --- Guided Connect AI flow -------------------------------------
+
+  const flowEntry = catalog.find((c) => c.id === flowProviderId);
+  const flowNeedsKey = flowProviderId !== '' && flowProviderId !== 'ollama' && flowProviderId !== 'lmstudio';
+  const flowLocality = deriveLocality(flowBaseUrl);
+
+  function startFlow(entry: ProviderCatalogEntry) {
+    setFlowProviderId(entry.id);
+    setFlowBaseUrl(entry.baseUrl ?? '');
+    setFlowCustomEndpoint(false);
+    setFlowAllowInsecure(false);
+    setFlowReference('');
+    setFlowCredStored(null);
+    setFlowModels(defaultFlowModels());
+    setFlowError('');
+    setFlowNotice('');
+    setFlowDone(false);
+    setFlowStep(2);
+  }
+
+  function pickProvider(entry: ProviderCatalogEntry) {
+    setProviderId(entry.id);
+    startFlow(entry);
+  }
+
+  function isOwnerRefusal(e: unknown) {
+    const message = e instanceof Error ? e.message : '';
+    return /owner authorization|Forbidden/i.test(message);
+  }
+
+  async function handleGenerateReference() {
+    setFlowBusy(true);
+    setFlowError('');
+    try {
+      const issued = await client.providersCredentialReference(workspaceId, flowProviderId);
+      setFlowReference(issued.reference);
+      setFlowCredStored(false);
+      setFlowNotice('Reference created on the host. The key itself is entered in the native prompt, never here.');
+    } catch (e) {
+      setFlowError(
+        isOwnerRefusal(e)
+          ? 'This needs the desktop app: browsers cannot create credential references. Ask the host to open AI Providers on the desktop.'
+          : e instanceof Error ? e.message : 'Could not create a credential reference.',
+      );
+    } finally {
+      setFlowBusy(false);
+    }
+  }
+
+  async function handleFlowCredentialSet() {
+    setFlowBusy(true);
+    setFlowError('');
+    setFlowNotice('');
+    try {
+      await client.providersCredentialSet(workspaceId, flowProviderId, flowReference.trim());
+      setFlowCredStored(true);
+      setFlowNotice('Stored in the OS credential store under this reference.');
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Credential setup failed.';
+      setFlowError(
+        isOwnerRefusal(e)
+          ? 'Set this credential in the desktop app — browsers cannot enter API keys.'
+          : /cancelled/i.test(message)
+            ? 'Credential entry was cancelled. Nothing was changed — try again.'
+            : message,
+      );
+    } finally {
+      setFlowBusy(false);
+    }
+  }
+
+  async function handleFlowCredentialRemove() {
+    setFlowBusy(true);
+    setFlowError('');
+    setFlowNotice('');
+    try {
+      await client.providersCredentialRemove(workspaceId, flowProviderId, flowReference.trim());
+      setFlowCredStored(false);
+      setFlowNotice('Credential removed from the OS credential store.');
+    } catch (e) {
+      setFlowError(
+        isOwnerRefusal(e)
+          ? 'Remove this credential in the desktop app — browsers cannot manage API keys.'
+          : e instanceof Error ? e.message : 'Credential removal failed.',
+      );
+    } finally {
+      setFlowBusy(false);
+    }
+  }
+
+  async function handleFlowCredentialStatus() {
+    setFlowBusy(true);
+    setFlowError('');
+    try {
+      const status = await client.providersCredentialStatus(workspaceId, flowProviderId, flowReference.trim());
+      setFlowCredStored(status.present);
+    } catch (e) {
+      setFlowError(
+        isOwnerRefusal(e)
+          ? 'Check this credential in the desktop app.'
+          : e instanceof Error ? e.message : 'Credential status check failed.',
+      );
+    } finally {
+      setFlowBusy(false);
+    }
+  }
+
+  function flowProviderEntry(): RuntimeProvider {
+    return {
+      config: {
+        provider: flowProviderId,
+        baseUrl: flowBaseUrl.trim(),
+        credential: flowReference.trim()
+          ? { provider: flowProviderId, reference: flowReference.trim() }
+          : null,
+        enabled: true,
+        customEndpoint: flowCustomEndpoint,
+        allowInsecureCustom: flowAllowInsecure,
+      },
+      locality: flowLocality,
+      models: flowModels
+        .filter((m) => m.id.trim())
+        .map((m) => ({
+          id: m.id.trim(),
+          provider: flowProviderId,
+          capabilities: {
+            chat: true,
+            streaming: true,
+            vision: false,
+            coding: true,
+            deepReasoning: false,
+            embeddings: false,
+          },
+          contextWindow: 8192,
+          cost: m.cost,
+          speed: 'balanced' as const,
+        })),
+    };
+  }
+
+  async function handleFlowSave() {
+    setFlowBusy(true);
+    setFlowError('');
+    try {
+      const saved = await client.providersConfigureAdd(workspaceId, flowProviderEntry());
+      setProviderId(flowProviderId);
+      const first = flowModels.find((m) => m.id.trim());
+      if (first) setModel(first.id.trim());
+      setFlowDone(true);
+      setFlowNotice(
+        `Saved ${flowProviderId} (${saved.updated ? 'updated' : 'added'}). ` +
+          'Your other providers and budget are unchanged.',
+      );
+      await refreshConnected();
+      await refreshUsage();
+    } catch (e) {
+      setFlowError(
+        (e instanceof Error ? e.message : 'Saving failed.') +
+          ' Your existing connections are still usable — review the step and try again.',
+      );
+    } finally {
+      setFlowBusy(false);
+    }
+  }
+
+  function flowCanContinue() {
+    if (flowStep === 2) return flowBaseUrl.trim().length > 0;
+    if (flowStep === 3) return !flowNeedsKey || flowReference.trim().length > 0;
+    if (flowStep === 4) return flowModels.some((m) => m.id.trim());
+    return true;
+  }
+
   async function refreshUsage() {
     try {
       setUsage(await client.providersUsage(workspaceId));
     } catch {
       setUsage(null);
-    }
-  }
-
-  async function refreshCredStatus() {
-    if (!credentialRef.trim()) {
-      setCredPresent(null);
-      return;
-    }
-    try {
-      const status = await client.providersCredentialStatus(workspaceId, providerId, credentialRef.trim());
-      setCredPresent(status.present);
-    } catch {
-      setCredPresent(null);
-    }
-  }
-
-  async function handleCredentialSet() {
-    setCredBusy(true);
-    setCredError('');
-    setCredMessage('');
-    try {
-      await client.providersCredentialSet(workspaceId, providerId, credentialRef.trim());
-      setCredPresent(true);
-      setCredMessage('Stored in the OS credential store under this reference.');
-    } catch (e) {
-      setCredError(e instanceof Error ? e.message : 'Credential setup failed.');
-    } finally {
-      setCredBusy(false);
-    }
-  }
-
-  async function handleCredentialRemove() {
-    setCredBusy(true);
-    setCredError('');
-    setCredMessage('');
-    try {
-      await client.providersCredentialRemove(workspaceId, providerId, credentialRef.trim());
-      setCredPresent(false);
-      setCredMessage('Credential removed from the OS credential store.');
-    } catch (e) {
-      setCredError(e instanceof Error ? e.message : 'Credential removal failed.');
-    } finally {
-      setCredBusy(false);
     }
   }
 
@@ -226,65 +382,6 @@ export function Providers({ client, workspaceId }: { client: Client; workspaceId
       setAccessNote(e instanceof Error ? e.message : 'Revocation failed.');
     } finally {
       setAccessBusy(false);
-    }
-  }
-
-  function pickProvider(entry: ProviderCatalogEntry) {
-    setProviderId(entry.id);
-    if (entry.baseUrl) setBaseUrl(entry.baseUrl);
-  }
-
-  async function handleConfigure(event: React.FormEvent) {
-    event.preventDefault();
-    setConfigureBusy(true);
-    setConfigureError('');
-    try {
-      const budget: RuntimeConfig['budget'] = {};
-      if (maxRequests.trim()) budget.maxRequests = Number(maxRequests);
-      if (maxTotalTokens.trim()) budget.maxTotalTokens = Number(maxTotalTokens);
-      const config: RuntimeConfig = {
-        providers: [
-          {
-            config: {
-              provider: providerId,
-              baseUrl: baseUrl.trim(),
-              credential: credentialRef.trim()
-                ? { provider: providerId, reference: credentialRef.trim() }
-                : null,
-              enabled: true,
-            },
-            locality: deriveLocality(baseUrl),
-            models: models
-              .filter((m) => m.id.trim())
-              .map((m) => ({
-                id: m.id.trim(),
-                provider: providerId,
-                capabilities: {
-                  chat: true,
-                  streaming: true,
-                  vision: false,
-                  coding: true,
-                  deepReasoning: false,
-                  embeddings: false,
-                },
-                contextWindow: 8192,
-                cost: m.cost,
-                speed: 'balanced' as const,
-              })),
-          },
-        ],
-        ...(Object.keys(budget).length ? { budget } : {}),
-      };
-      await client.providersConfigure(workspaceId, config);
-      setConfigured(config);
-      const first = config.providers[0]?.models[0];
-      if (first) setModel(first.id);
-      setPermit(null);
-      await refreshUsage();
-    } catch (e) {
-      setConfigureError(e instanceof Error ? e.message : 'Configuration failed.');
-    } finally {
-      setConfigureBusy(false);
     }
   }
 
@@ -450,13 +547,14 @@ export function Providers({ client, workspaceId }: { client: Client; workspaceId
     await watchRun(run.runId, run.capability, output);
   }
 
-  const locality = deriveLocality(baseUrl);
   const selectedEntry = catalog.find((c) => c.id === providerId);
+  const flowSelectedEntry = catalog.find((c) => c.id === flowProviderId);
+  const guidedProviders = ['ollama', 'openai', 'openrouter', 'anthropic', 'gemini'];
 
   return (
     <div className="providers-view" aria-label="AI Providers">
       <section className="card" aria-labelledby="providers-catalog-title">
-        <h2 id="providers-catalog-title">Provider catalog</h2>
+        <h2 id="providers-catalog-title">Step 1 — Choose a provider</h2>
         <p>
           Built-in provider connections (MASTER_SPEC §14). Configuration and paid authorization are
           owner operations: in the desktop app you are the owner; a browser session must first be
@@ -477,6 +575,7 @@ export function Providers({ client, workspaceId }: { client: Client; workspaceId
               </button>{' '}
               <span>
                 {entry.locality} · {entry.status}
+                {guidedProviders.includes(entry.id) ? ' · Connect AI' : ''}
                 {entry.id === providerId ? ' · selected' : ''}
               </span>
             </li>
@@ -489,100 +588,206 @@ export function Providers({ client, workspaceId }: { client: Client; workspaceId
         )}
       </section>
 
-      <section className="card" aria-labelledby="providers-configure-title" aria-busy={configureBusy}>
-        <h2 id="providers-configure-title">Configure provider</h2>
-        <form onSubmit={handleConfigure}>
-          <fieldset disabled={configureBusy}>
-            <label htmlFor="provider-id">Provider</label>
-            <input id="provider-id" value={providerId} onChange={(e) => setProviderId(e.target.value)} required autoComplete="off" />
-            <label htmlFor="provider-base-url">Base URL</label>
-            <input id="provider-base-url" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} required autoComplete="off" spellCheck={false} />
-            <p className="help">
-              Locality is derived from the endpoint by the backend: this URL is{' '}
-              <strong>{locality}</strong>. A configuration claiming otherwise is rejected.
+      <section className="card" aria-labelledby="providers-connect-title">
+        <h2 id="providers-connect-title">Connect AI</h2>
+        {flowStep === 0 && (
+          <p>
+            Pick a provider above to start. Connecting adds one provider at a time and never
+            replaces the providers or budget you already configured.
+          </p>
+        )}
+        {flowStep > 0 && flowSelectedEntry && (
+          <>
+            <p role="status">
+              Step {flowStep} of 5 — {flowSelectedEntry.displayName}
+              {flowDone ? ' — connected.' : ''}
             </p>
-            <label htmlFor="provider-credential">Credential reference (OS keyring account)</label>
-            <input id="provider-credential" value={credentialRef} onChange={(e) => setCredentialRef(e.target.value)} autoComplete="off" spellCheck={false} placeholder="Leave empty for keyless local providers" />
-            <p className="help">
-              Approved credential setup: paste the API key into the OS keyring under this account
-              name using the operating system's credential prompt; ANANSI stores only the
-              reference and resolves the secret inside the backend at dispatch time.
-            </p>
-            {models.map((row, i) => (
-              <div key={i} className="model-row">
-                <label htmlFor={`provider-model-${i}`}>Model</label>
-                <input
-                  id={`provider-model-${i}`}
-                  value={row.id}
-                  onChange={(e) =>
-                    setModels(models.map((m, j) => (j === i ? { ...m, id: e.target.value } : m)))
-                  }
-                  autoComplete="off"
-                />
-                <label htmlFor={`provider-model-cost-${i}`}>Cost class</label>
-                <select
-                  id={`provider-model-cost-${i}`}
-                  value={row.cost}
-                  onChange={(e) =>
-                    setModels(
-                      models.map((m, j) =>
-                        j === i ? { ...m, cost: e.target.value as ModelRow['cost'] } : m,
-                      ),
-                    )
-                  }
-                >
-                  <option value="free">free</option>
-                  <option value="paid">paid</option>
-                  <option value="unknown">unknown</option>
-                </select>
+            {flowStep === 2 && (
+              <div>
+                <h3>Step 2 — Endpoint</h3>
+                <label htmlFor="connect-base-url">Base URL</label>
+                <input id="connect-base-url" value={flowBaseUrl} onChange={(e) => setFlowBaseUrl(e.target.value)} required autoComplete="off" spellCheck={false} disabled={flowBusy} />
+                <p className="help">
+                  Locality is derived from the endpoint by the backend: this URL is{' '}
+                  <strong>{flowLocality}</strong>. A configuration claiming otherwise is rejected.
+                </p>
+                <details>
+                  <summary>Advanced settings — custom endpoint</summary>
+                  <label htmlFor="connect-custom">
+                    <input id="connect-custom" type="checkbox" checked={flowCustomEndpoint} onChange={(e) => setFlowCustomEndpoint(e.target.checked)} disabled={flowBusy} />{' '}
+                    Custom endpoint (a non-catalog base URL)
+                  </label>
+                  <label htmlFor="connect-insecure">
+                    <input id="connect-insecure" type="checkbox" checked={flowAllowInsecure} onChange={(e) => setFlowAllowInsecure(e.target.checked)} disabled={flowBusy || !flowCustomEndpoint} />{' '}
+                    Allow a plaintext (http) custom endpoint — only for an internal gateway, and never with a credential
+                  </label>
+                </details>
+                <div className="actions">
+                  <button type="button" className="secondary" disabled={flowBusy} onClick={() => setFlowStep(0)}>Back to providers</button>
+                  <button type="button" disabled={flowBusy || !flowCanContinue()} onClick={() => setFlowStep(flowNeedsKey ? 3 : 4)}>Continue</button>
+                </div>
               </div>
-            ))}
-            <button
-              type="button"
-              className="secondary"
-              onClick={() => setModels([...models, { id: '', cost: 'free' }])}
-            >
-              Add model
-            </button>
-            <label htmlFor="provider-budget-requests">Budget — max requests (optional)</label>
-            <input id="provider-budget-requests" value={maxRequests} onChange={(e) => setMaxRequests(e.target.value)} inputMode="numeric" autoComplete="off" />
-            <label htmlFor="provider-budget-tokens">Budget — max total tokens (optional)</label>
-            <input id="provider-budget-tokens" value={maxTotalTokens} onChange={(e) => setMaxTotalTokens(e.target.value)} inputMode="numeric" autoComplete="off" />
-          </fieldset>
-          {configureError && <p className="error" role="alert" aria-label="Configuration error">{configureError}</p>}
-          {configured && !configureError && (
-            <p role="status">Configured. The setup is saved for this workspace and survives restarts.</p>
-          )}
-          <button type="submit" disabled={configureBusy}>Save configuration</button>
-        </form>
+            )}
+            {flowStep === 3 && (
+              <div>
+                <h3 id="providers-credential-title">Credential setup</h3>
+                <p>
+                  Approved setup for <strong>{flowProviderId}</strong>. Setting a credential opens
+                  the trusted native prompt on this computer: the key moves from the prompt into the
+                  operating system credential store and is never typed into, or sent through, this
+                  page. In a paired browser this is an owner operation and is refused — set
+                  credentials in the desktop app.
+                </p>
+                <label htmlFor="connect-credential">Credential reference (OS keyring account)</label>
+                <input id="connect-credential" value={flowReference} readOnly autoComplete="off" spellCheck={false} placeholder="Generate a reference first" />
+                <p className="help">
+                  The reference is generated on the host; ANANSI stores only the reference and
+                  resolves the secret inside the backend at dispatch time.
+                </p>
+                <div className="actions">
+                  <button type="button" className="secondary" disabled={flowBusy} onClick={() => void handleGenerateReference()}>
+                    Generate reference
+                  </button>
+                  <button type="button" disabled={flowBusy || !flowReference.trim()} onClick={() => void handleFlowCredentialSet()}>
+                    Set credential (native prompt)
+                  </button>
+                  <button type="button" className="secondary" disabled={flowBusy || !flowReference.trim()} onClick={() => void handleFlowCredentialRemove()}>
+                    Remove credential
+                  </button>
+                  <button type="button" className="secondary" disabled={flowBusy || !flowReference.trim()} onClick={() => void handleFlowCredentialStatus()}>
+                    Check status
+                  </button>
+                </div>
+                {flowCredStored !== null && (
+                  <p role="status">Credential for this reference: {flowCredStored ? 'present in the OS store' : 'not present'}.</p>
+                )}
+                <div className="actions">
+                  <button type="button" className="secondary" disabled={flowBusy} onClick={() => setFlowStep(2)}>Back</button>
+                  <button type="button" disabled={flowBusy || !flowCanContinue()} onClick={() => setFlowStep(4)}>Continue</button>
+                  <button type="button" className="secondary" disabled={flowBusy} onClick={() => setFlowStep(4)}>Continue without a credential</button>
+                </div>
+              </div>
+            )}
+            {flowStep === 4 && (
+              <div>
+                <h3>Step 4 — Choose a model</h3>
+                <p className="help">
+                  Enter the model id exactly as the provider names it. A new model is cost{' '}
+                  <strong>unknown</strong> until verified — unknown is treated as paid, so
+                  Zero-Cost Lock blocks it until it is verified free or a paid permit is issued.
+                  ANANSI never assumes an unverified model is free.
+                </p>
+                {flowModels.map((row, i) => (
+                  <div key={i} className="model-row">
+                    <label htmlFor={`connect-model-${i}`}>Model</label>
+                    <input
+                      id={`connect-model-${i}`}
+                      value={row.id}
+                      onChange={(e) =>
+                        setFlowModels(flowModels.map((m, j) => (j === i ? { ...m, id: e.target.value } : m)))
+                      }
+                      autoComplete="off"
+                      disabled={flowBusy}
+                    />
+                    <label htmlFor={`connect-model-cost-${i}`}>Cost class</label>
+                    <select
+                      id={`connect-model-cost-${i}`}
+                      value={row.cost}
+                      disabled={flowBusy}
+                      onChange={(e) =>
+                        setFlowModels(
+                          flowModels.map((m, j) =>
+                            j === i ? { ...m, cost: e.target.value as ModelRow['cost'] } : m,
+                          ),
+                        )
+                      }
+                    >
+                      <option value="free">free</option>
+                      <option value="paid">paid</option>
+                      <option value="unknown">unknown</option>
+                    </select>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  className="secondary"
+                  disabled={flowBusy}
+                  onClick={() => setFlowModels([...flowModels, { id: '', cost: 'unknown' }])}
+                >
+                  Add model
+                </button>
+                <div className="actions">
+                  <button type="button" className="secondary" disabled={flowBusy} onClick={() => setFlowStep(flowNeedsKey ? 3 : 2)}>Back</button>
+                  <button type="button" disabled={flowBusy || !flowCanContinue()} onClick={() => setFlowStep(5)}>Review</button>
+                </div>
+              </div>
+            )}
+            {flowStep === 5 && (
+              <div>
+                <h3>Step 5 — Review and save</h3>
+                <dl>
+                  <div><dt>Provider</dt><dd>{flowSelectedEntry.displayName} ({flowProviderId})</dd></div>
+                  <div><dt>Endpoint</dt><dd>{flowBaseUrl} ({flowLocality})</dd></div>
+                  <div><dt>Credential</dt><dd>{flowReference.trim() ? `${flowReference.trim()} — ${flowCredStored ? 'stored in the OS store' : 'not stored yet'}` : 'none (keyless)'}</dd></div>
+                  <div><dt>Models</dt><dd>{flowModels.filter((m) => m.id.trim()).map((m) => `${m.id.trim()} (${m.cost})`).join(', ')}</dd></div>
+                </dl>
+                <p className="help">
+                  Saving adds or updates this one provider. Your existing budget and other
+                  providers are unchanged, and setup makes no inference calls — the connection is
+                  verified on your first authorized use.
+                </p>
+                <div className="actions">
+                  <button type="button" className="secondary" disabled={flowBusy} onClick={() => setFlowStep(4)}>Back</button>
+                  <button type="button" disabled={flowBusy || flowDone} onClick={() => void handleFlowSave()}>Save connection</button>
+                  {flowDone && (
+                    <button type="button" className="secondary" onClick={() => { setFlowStep(0); setFlowDone(false); }}>
+                      Connect another provider
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+            {flowError && <p className="error" role="alert" aria-label="Connect AI error">{flowError}</p>}
+            {flowNotice && <p role="status">{flowNotice}</p>}
+          </>
+        )}
       </section>
 
-      <section className="card" aria-labelledby="providers-credential-title">
-        <h2 id="providers-credential-title">Credential setup</h2>
+      <section className="card" aria-labelledby="providers-connected-title">
+        <h2 id="providers-connected-title">Connected providers</h2>
         <p>
-          Approved setup for <strong>{providerId}</strong> under the reference{' '}
-          <strong>{credentialRef.trim() || '(set a reference in the configure form)'}</strong>.
-          Setting a credential opens the trusted native prompt on this computer: the key moves
-          from the prompt into the operating system credential store and is never typed into, or
-          sent through, this page. In a paired browser this is an owner operation and is refused —
-          set credentials in the desktop app.
+          What this workspace has configured. Credential stored means a key is in the operating
+          system store; connection verified means a dispatch has succeeded for that provider in
+          this app session. A fresh setup is always unverified until its first authorized use.
         </p>
-        <div className="actions">
-          <button type="button" disabled={credBusy || !credentialRef.trim()} onClick={() => void handleCredentialSet()}>
-            Set credential (native prompt)
-          </button>
-          <button type="button" className="secondary" disabled={credBusy || !credentialRef.trim()} onClick={() => void handleCredentialRemove()}>
-            Remove credential
-          </button>
-          <button type="button" className="secondary" disabled={credBusy || !credentialRef.trim()} onClick={() => void refreshCredStatus()}>
-            Check status
-          </button>
-        </div>
-        {credPresent !== null && (
-          <p role="status">Credential for this reference: {credPresent ? 'present in the OS store' : 'not present'}.</p>
+        {!connected ? (
+          <p>No provider status available.</p>
+        ) : connected.providers.length === 0 ? (
+          <p>No providers connected yet.</p>
+        ) : (
+          <ul>
+            {connected.providers.map((p) => (
+              <li key={p.provider}>
+                <strong>{p.displayName}</strong> — {p.baseUrlHost} ({p.locality})
+                {p.enabled ? '' : ' · disabled'}
+                <br />
+                Models: {p.models.map((m) => `${m.id} (${m.cost})`).join(', ')}
+                <br />
+                Credential: {p.credentialReference ? `${p.credentialReference} — ${p.credentialStored ? 'stored' : 'not stored'}` : 'none (keyless)'}
+                <br />
+                Connection: {p.connectionVerified ? 'verified in this session' : 'not yet verified'}
+              </li>
+            ))}
+          </ul>
         )}
-        {credMessage && <p role="status">{credMessage}</p>}
-        {credError && <p className="error" role="alert" aria-label="Credential error">{credError}</p>}
+        {connected && (
+          <p className="help">
+            Budget: {connected.budget.maxRequests != null ? `max ${connected.budget.maxRequests} requests` : 'no request cap'}
+            {connected.budget.maxTotalTokens != null ? `, max ${connected.budget.maxTotalTokens} tokens` : ', no token cap'}
+            {connected.budget.maxEstimatedCostMicroUsd != null ? `, cost cap ${connected.budget.maxEstimatedCostMicroUsd} µUSD` : ''}.
+          </p>
+        )}
+        <button type="button" className="secondary" onClick={() => void refreshConnected()}>Refresh connected providers</button>
       </section>
 
       <section className="card" aria-labelledby="providers-dispatch-title">
