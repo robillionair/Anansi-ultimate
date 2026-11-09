@@ -6,7 +6,7 @@ import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
 import {assertPortsFree} from './verify-ports.mjs';
 await assertPortsFree([19323]);
 const fixture=fs.mkdtempSync(path.join(os.tmpdir(),'anansi-vault-manual-'));
-const env={...process.env,ANANSI_STORAGE_ROOT:path.join(fixture,'storage')};
+const env={...process.env,ANANSI_STORAGE_ROOT:path.join(fixture,'storage'),WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS:'--remote-debugging-port=19323'};
 delete env.ANANSI_VAULT_TEST_PROVIDER;
 const child=spawn(path.resolve('target/debug/anansi-desktop.exe'),[],{env,stdio:'ignore'});
 let browser;

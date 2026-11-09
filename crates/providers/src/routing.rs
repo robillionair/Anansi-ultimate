@@ -12,7 +12,7 @@
 use crate::config::ProviderConfig;
 use crate::error::{ProviderError, ProviderErrorCode};
 use crate::gates::{TargetLocality, ZeroCostLock};
-use crate::types::{CapabilitySet, CostClass, ModelInfo, Usage};
+use crate::types::{CapabilitySet, CostClass, ModelInfo, PrivacyClass, Usage};
 use serde::{Deserialize, Serialize};
 
 /// User-facing routing modes, verbatim from MASTER_SPEC §17.
@@ -224,6 +224,11 @@ pub struct DisclosureRecord {
     pub message_count: usize,
     pub segment_count: usize,
     pub redaction_count: usize,
+    /// The strongest privacy class among the dispatched segments
+    /// (the caller's label, as the gate saw it). Older disclosures
+    /// without the field read as Standard.
+    #[serde(default)]
+    pub strongest_privacy: PrivacyClass,
     pub estimated_input_tokens: u64,
     pub cost_class: CostClass,
     pub usage: Option<Usage>,

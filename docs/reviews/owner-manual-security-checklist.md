@@ -81,7 +81,42 @@ This checklist defines the manual verification procedure to be executed by the r
 
 ---
 
-## 4. Acceptance Certification Record
+## 4. Milestone 8 & Milestone 13 — Interactive Win32 Common File Dialog (#32770) from Collider
+
+### Prerequisites
+- Build `anansi-desktop.exe` (`cargo build --release -p anansi-desktop`).
+- Prepare a test folder with a Unicode file: `proov-küljendus-2026.md` (e.g. Estonian UTF-8 text with diacritics).
+- Launch `anansi-desktop.exe` directly on Windows 11.
+
+### Verification Steps
+1. **Interactive File-Picker Opening from Collider**:
+   - Open a workspace and navigate to **Projects** -> Select or create a project (e.g. `Harbor App`).
+   - Scroll to **Product Creation Pipeline** -> **Invent: Open LEXI-COLLIDER**.
+   - Under **Beam A**, click **Choose File** (`#collider-document-a`).
+   - [ ] **Check 4.1**: Verify that the genuine Win32 Common Item Dialog (`IFileDialog`, Window Class `#32770`, Title "Open") opens modally over the application window.
+
+2. **File Filters Verification**:
+   - In the Open dialog, click the file type filter dropdown at the bottom right.
+   - [ ] **Check 4.2**: Verify that the filter options reflect `.txt` and `.md` (`Text / Markdown Files (*.txt; *.md)` and `All Files (*.*)`).
+
+3. **Cancel Action**:
+   - Click the **Cancel** button (or press `Escape`).
+   - [ ] **Check 4.3**: Verify that the dialog closes cleanly, Beam A text remains empty/unmodified, and zero error alerts appear in the UI.
+
+4. **Unicode Filename Selection**:
+   - Click **Choose File** again.
+   - Navigate to `proov-küljendus-2026.md` and click **Open**.
+   - [ ] **Check 4.4**: Verify that Beam A text populates with the decoded UTF-8 contents.
+   - [ ] **Check 4.5**: Verify that the attribution label reads: `Document: proov-küljendus-2026.md · Markdown · <bytes> bytes · <characters> characters · Text SHA-256: <hash>...`.
+
+5. **Same-Name Reselection After Modifying File Contents**:
+   - Modify the contents of `proov-küljendus-2026.md` on disk (e.g. add new lines).
+   - Click **Choose File** and reselect `proov-küljendus-2026.md`.
+   - [ ] **Check 4.6**: Verify that Beam A text immediately updates to the modified text, character and byte counts update, and the displayed SHA-256 hash reflects the new file hash.
+
+---
+
+## 5. Acceptance Certification Record
 
 | Item | Required Evidence | Verifier | Date | Status |
 |---|---|---|---|---|
@@ -89,5 +124,6 @@ This checklist defines the manual verification procedure to be executed by the r
 | **M2 Recovery Key Rotation** | 24-word phrase recovery re-encryption | Owner | PENDING | Pending Owner Execution |
 | **M5 Win32 CredUI Dialog** | Native OS security prompt, keyring reference storage | Owner | PENDING | Pending Owner Execution |
 | **M5 Zero-Cost Lock** | Zero network traffic on paid models | Owner | PENDING | Pending Owner Execution |
+| **M8/M13 Win32 File Dialog** | Win32 `#32770` dialog, Unicode name, Cancel, same-name reselection | Owner | PENDING | Pending Owner Execution |
 
-*Note: All automated software boundaries for M2 and M5 have passed 100% on Windows NTFS in synthetic test suites. This manual checklist serves as the formal handoff to the Owner for live OS-level credential dialog sign-off.*
+*Note: All automated software boundaries for M2, M5, and M8/M13 have passed 100% on Windows NTFS in synthetic test suites. This manual checklist serves as the formal handoff to the Owner for live OS-level credential dialog and Win32 file picker sign-off.*

@@ -1,5 +1,6 @@
 import { expect, type Page } from '@playwright/test';
 import { spawn, type ChildProcess } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { createServer, type Server } from 'node:http';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -73,22 +74,63 @@ export function fakeAnswerKey(question: string, history: string): string {
   return `${question}\n${history}`;
 }
 
-function extractPrompt(body: string): { question: string; history: string } | null {
-  let parsed: { messages?: Array<{ content?: string }> };
-  try {
-    parsed = JSON.parse(body);
-  } catch {
-    return null;
-  }
-  const content = parsed.messages?.[0]?.content ?? '';
+function extractPromptFromText(content: string): { question: string; history: string } | null {
   const questionMatch = content.match(/\n\nQuestion: ([\s\S]*?)\n\nAnswer with the exact value/);
   if (!questionMatch) return null;
   const history = content.slice('History:\n'.length, content.indexOf('\n\nQuestion: '));
   return { question: questionMatch[1], history };
 }
 
-async function startFake(): Promise<{ server: Server; url: string; hits: () => number }> {
+/** The verbatim-extractor answer for one prompt text. */
+function verbatimReply(promptText: string): string {
+  const prompt = extractPromptFromText(promptText);
+  if (!prompt) return 'UNKNOWN';
+  const expected = behavior.expected.get(fakeAnswerKey(prompt.question, prompt.history));
+  if (expected !== undefined && expected !== null && prompt.history.includes(expected)) {
+    return expected;
+  }
+  return 'UNKNOWN';
+}
+
+/**
+ * Mirrors the approval hash the UI and the server compute over the
+ * reviewed inputs (repair design §2 D2): canonical JSON of
+ * {cases:[{caseId,candidateHash,questions}],provider,model,endpoint,
+ * locality,cost,cloud,maxTotalTokens}, SHA-256 hex — over the RESOLVED
+ * target (never a blank default). The UI (SomniaCompaction.tsx) and the
+ * server (somnia_compaction_run.rs) must produce the identical string
+ * for the same inputs; this mirror is the e2e cross-check.
+ */
+export function computeApprovalHash(input: {
+  cases: Array<{ caseId: string; candidateHash: string; questions: Array<{ id: string; text: string; expectedAnswer: string | null }> }>;
+  provider: string;
+  model: string;
+  endpoint: string;
+  locality: string;
+  cost: string;
+  cloud: boolean;
+  maxTotalTokens: number;
+}): string {
+  const canonical = JSON.stringify({
+    cases: input.cases.map(entry => ({
+      caseId: entry.caseId,
+      candidateHash: entry.candidateHash,
+      questions: entry.questions.map(q => ({ id: q.id, text: q.text, expectedAnswer: q.expectedAnswer })),
+    })),
+    provider: input.provider,
+    model: input.model,
+    endpoint: input.endpoint,
+    locality: input.locality,
+    cost: input.cost,
+    cloud: input.cloud,
+    maxTotalTokens: input.maxTotalTokens,
+  });
+  return createHash('sha256').update(canonical, 'utf8').digest('hex');
+}
+
+async function startFake(): Promise<{ server: Server; url: string; hits: () => number; models: () => string[] }> {
   let hits = 0;
+  const models: string[] = [];
   const server = createServer((req, res) => {
     let body = '';
     req.on('data', c => {
@@ -99,7 +141,8 @@ async function startFake(): Promise<{ server: Server; url: string; hits: () => n
       const callNumber = hits;
       const respond = () => {
         if (res.destroyed || res.writableEnded) return;
-        const parsed = JSON.parse(body || '{}') as { stream?: boolean; model?: string };
+        const parsed = JSON.parse(body || '{}') as { stream?: boolean; model?: string; messages?: Array<{ content?: string }> };
+        if (parsed.model) models.push(parsed.model);
         if (parsed.stream) {
           res.writeHead(200, { 'content-type': 'application/x-ndjson' });
           res.end(
@@ -113,14 +156,7 @@ async function startFake(): Promise<{ server: Server; url: string; hits: () => n
           );
           return;
         }
-        const prompt = extractPrompt(body);
-        let reply = 'UNKNOWN';
-        if (prompt) {
-          const expected = behavior.expected.get(fakeAnswerKey(prompt.question, prompt.history));
-          if (expected !== undefined && expected !== null && prompt.history.includes(expected)) {
-            reply = expected;
-          }
-        }
+        const reply = verbatimReply(parsed.messages?.[0]?.content ?? '');
         // A wrong-model call reports a different model in the same
         // shape the real provider would; the run must refuse the pair.
         const model = behavior.wrongModelCall === callNumber ? 'other-model' : parsed.model;
@@ -141,7 +177,53 @@ async function startFake(): Promise<{ server: Server; url: string; hits: () => n
   });
   await new Promise<void>(r => server.listen(0, '127.0.0.1', r));
   const url = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
-  return { server, url, hits: () => hits };
+  return { server, url, hits: () => hits, models: () => [...models] };
+}
+
+/**
+ * OpenAI-compatible fake for the cloud path: it answers
+ * POST /chat/completions with choices[0].message.content, the shape
+ * the OpenAI-compatible adapter (which serves openrouter) parses.
+ * The endpoint is loopback, so the provider config declares locality
+ * Local (enforce_derived_locality), while the compaction module
+ * derives Cloud from the catalog id 'openrouter' — the same split
+ * the production code has. No real cloud endpoint is contacted.
+ */
+async function startCloudFake(): Promise<{ server: Server; url: string; hits: () => number; models: () => string[] }> {
+  let hits = 0;
+  const models: string[] = [];
+  const server = createServer((req, res) => {
+    let body = '';
+    req.on('data', c => {
+      body += c;
+    });
+    req.on('end', () => {
+      hits += 1;
+      const respond = () => {
+        if (res.destroyed || res.writableEnded) return;
+        const parsed = JSON.parse(body || '{}') as { model?: string; messages?: Array<{ content?: string }> };
+        if (parsed.model) models.push(parsed.model);
+        const content = parsed.messages?.[0]?.content ?? '';
+        const reply = verbatimReply(content);
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(
+          JSON.stringify({
+            id: 'chatcmpl-fake',
+            object: 'chat.completion',
+            created: 0,
+            model: parsed.model ?? 'free-cloud-model',
+            choices: [{ index: 0, message: { role: 'assistant', content: reply }, finish_reason: 'stop' }],
+            usage: { prompt_tokens: 12, completion_tokens: 4, total_tokens: 16 },
+          }),
+        );
+      };
+      if (behavior.delayMs > 0) setTimeout(respond, behavior.delayMs);
+      else respond();
+    });
+  });
+  await new Promise<void>(r => server.listen(0, '127.0.0.1', r));
+  const url = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+  return { server, url, hits: () => hits, models: () => [...models] };
 }
 
 export type CompactionSession = {
@@ -149,10 +231,19 @@ export type CompactionSession = {
   workspaceId: string;
   projectId: string;
   storageRoot: string;
+  /** Path of the installed provider-config file (rewrite + restart to reconfigure). */
+  providerConfigPath: string;
   fakeHits: () => number;
+  /** Models the Ollama fake received, in call order (pinning proof). */
+  fakeModels: () => string[];
+  cloudFakeHits: () => number;
+  /** Models the cloud fake received, in call order (pinning proof). */
+  cloudFakeModels: () => string[];
   restartApi: () => Promise<void>;
   repair: () => Promise<void>;
   call: (group: string, operation: string, input: Record<string, unknown>) => Promise<{ status: number; body: Record<string, any> }>;
+  /** Resolve the comparison target (blank allowed) via the server op. */
+  resolveTarget: (provider?: string, model?: string) => Promise<{ status: number; body: Record<string, any> }>;
   openProject: () => Promise<void>;
   openProjectByTitle: (title: string) => Promise<void>;
   createProject: (title: string) => Promise<string>;
@@ -162,7 +253,15 @@ export type CompactionSession = {
 
 export async function startCompactionSession(
   page: Page,
-  options?: { liveEndpoint?: string; liveModel?: string; alternateModel?: string },
+  options?: {
+    liveEndpoint?: string;
+    liveModel?: string;
+    alternateModel?: string;
+    /** A paid ollama model (cost 'paid') for the free-only refusal tests. */
+    paidModel?: string;
+    /** An openrouter model served by the OpenAI-compatible fake. */
+    cloudModel?: { id: string; cost: 'free' | 'paid' | 'unknown' };
+  },
 ): Promise<CompactionSession> {
   page.setDefaultTimeout(8000);
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'anansi-somnia-compaction-e2e-'));
@@ -170,6 +269,7 @@ export async function startCompactionSession(
   // In live mode the provider config points at the authorized endpoint
   // and the fake is never started; every dispatch is a real model call.
   const fake = live ? null : await startFake();
+  const cloudFake = live || !options?.cloudModel ? null : await startCloudFake();
   let child: ChildProcess | undefined;
   let pairing: { endpoint: string; token: string } = { endpoint: '', token: '' };
 
@@ -224,18 +324,38 @@ export async function startCompactionSession(
   await call('workspaces', 'settings', { id: workspaceId, reducedMotion: true, onboardingComplete: true });
   fs.mkdirSync(path.join(root, 'storage', 'provider-config'), { recursive: true });
   const liveModel = options?.liveModel ?? 'qwen2.5:3b';
+  const ollamaModels: Array<{ id: string; cost: string }> = [
+    { id: live ? liveModel : 'llama-x', cost: 'free' },
+    ...(options?.alternateModel ? [{ id: options.alternateModel, cost: 'free' }] : []),
+    ...(options?.paidModel ? [{ id: options.paidModel, cost: 'paid' }] : []),
+  ];
+  const providers: Array<Record<string, unknown>> = [{
+    config: { provider: 'ollama', baseUrl: live ? options!.liveEndpoint : fake!.url, credential: null, enabled: true },
+    locality: 'local',
+    models: ollamaModels.map(entry => ({
+      id: entry.id, provider: 'ollama',
+      capabilities: { chat: true, streaming: true, vision: false, coding: true, deepReasoning: false, embeddings: false },
+      contextWindow: 8192, cost: entry.cost, speed: 'balanced',
+    })),
+  }];
+  if (options?.cloudModel && cloudFake) {
+    // The endpoint is loopback, so the config must declare Local
+    // (enforce_derived_locality); the compaction module derives
+    // Cloud from the catalog id 'openrouter'.
+    providers.push({
+      config: { provider: 'openrouter', baseUrl: cloudFake.url, credential: null, enabled: true },
+      locality: 'local',
+      models: [{
+        id: options.cloudModel.id, provider: 'openrouter',
+        capabilities: { chat: true, streaming: true, vision: false, coding: true, deepReasoning: false, embeddings: false },
+        contextWindow: 8192, cost: options.cloudModel.cost, speed: 'balanced',
+      }],
+    });
+  }
   fs.writeFileSync(
     path.join(root, 'storage', 'provider-config', `${workspaceId}.json`),
     JSON.stringify({
-      providers: [{
-        config: { provider: 'ollama', baseUrl: live ? options!.liveEndpoint : fake!.url, credential: null, enabled: true },
-        locality: 'local',
-        models: [live ? liveModel : 'llama-x', ...(options?.alternateModel ? [options.alternateModel] : [])].map(id => ({
-          id, provider: 'ollama',
-          capabilities: { chat: true, streaming: true, vision: false, coding: true, deepReasoning: false, embeddings: false },
-          contextWindow: 8192, cost: 'free', speed: 'balanced',
-        })),
-      }],
+      providers,
       budget: { maxRequests: 500, maxTotalTokens: 500000 },
     }),
   );
@@ -276,7 +396,11 @@ export async function startCompactionSession(
     workspaceId,
     projectId,
     storageRoot: path.join(root, 'storage'),
+    providerConfigPath: path.join(root, 'storage', 'provider-config', `${workspaceId}.json`),
     fakeHits: () => (fake ? fake.hits() : 0),
+    fakeModels: () => (fake ? fake.models() : []),
+    cloudFakeHits: () => (cloudFake ? cloudFake.hits() : 0),
+    cloudFakeModels: () => (cloudFake ? cloudFake.models() : []),
     restartApi,
     // A restart mints a fresh pairing token, so the browser must pair
     // again against the current API child before it can open a project.
@@ -285,6 +409,12 @@ export async function startCompactionSession(
       await openProjectByTitle('Harbor App');
     },
     call,
+    resolveTarget: (provider?: string, model?: string) =>
+      call('ai', 'somnia-compaction-resolve-target', {
+        workspaceId, projectId,
+        ...(provider !== undefined ? { provider } : {}),
+        ...(model !== undefined ? { model } : {}),
+      }),
     openProject: () => openProjectByTitle('Harbor App'),
     openProjectByTitle,
     createProject: async (title: string) => {
@@ -310,6 +440,10 @@ export async function startCompactionSession(
       if (fake) {
         fake.server.closeAllConnections();
         await new Promise<void>(r => fake.server.close(() => r()));
+      }
+      if (cloudFake) {
+        cloudFake.server.closeAllConnections();
+        await new Promise<void>(r => cloudFake.server.close(() => r()));
       }
     },
   };

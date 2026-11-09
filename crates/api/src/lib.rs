@@ -147,6 +147,7 @@ pub fn command_path(path: &str) -> bool {
             | "/v1/ai/somnia-evaluate"
             | "/v1/ai/somnia-save-evaluation"
             | "/v1/ai/somnia-compaction-prepare"
+            | "/v1/ai/somnia-compaction-resolve-target"
             | "/v1/ai/somnia-compaction-start"
             | "/v1/ai/somnia-compaction-poll"
             | "/v1/ai/somnia-compaction-cancel"

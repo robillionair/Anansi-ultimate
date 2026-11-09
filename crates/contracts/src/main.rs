@@ -65,8 +65,10 @@ use anansi_core::somnia_compaction_run::{
     CompactionMetrics, CompactionPairResult, CompactionQuestion, CompactionStartCase,
     CompactionUsage, SomniaCompactionCancelRequest, SomniaCompactionCancelResponse,
     SomniaCompactionExperiment, SomniaCompactionPollRequest, SomniaCompactionPollResponse,
-    SomniaCompactionPrepareRequest, SomniaCompactionPrepareResponse, SomniaCompactionSaveRequest,
-    SomniaCompactionSaveResponse, SomniaCompactionStartRequest, SomniaCompactionStartResponse,
+    SomniaCompactionPrepareRequest, SomniaCompactionPrepareResponse,
+    SomniaCompactionResolveTargetRequest, SomniaCompactionResolveTargetResponse,
+    SomniaCompactionSaveRequest, SomniaCompactionSaveResponse, SomniaCompactionStartRequest,
+    SomniaCompactionStartResponse,
 };
 use anansi_core::swarmtank::{
     CountedItem, ScenarioComparison, ScenarioMetrics, ScenarioMetricsPair, ScenarioObjectionDelta,
@@ -82,8 +84,8 @@ use anansi_core::swarmtank_ai::{
     AiAction, AiAgent, AiCaps, AiEvent, AiMemoryWindow, AiRound, AiUsage, BranchChanges,
     SwarmtankAiBranchRequest, SwarmtankAiBranchResponse, SwarmtankAiCancelRequest,
     SwarmtankAiCancelResponse, SwarmtankAiEstimateRequest, SwarmtankAiEstimateResponse,
-    SwarmtankAiEventRequest, SwarmtankAiPollRequest, SwarmtankAiPollResponse,
-    SwarmtankAiRunDoc, SwarmtankAiStartRequest, SwarmtankAiStartResponse,
+    SwarmtankAiEventRequest, SwarmtankAiPollRequest, SwarmtankAiPollResponse, SwarmtankAiRunDoc,
+    SwarmtankAiStartRequest, SwarmtankAiStartResponse,
 };
 use anansi_core::swarmtank_market::{
     MarketAssumption, MarketEvidence, MarketLanguage, MarketProfile, MarketProfileRequest,
@@ -224,6 +226,8 @@ fn main() {
         "CompactionStartCase":schemars::schema_for!(CompactionStartCase),
         "SomniaCompactionPrepareRequest":schemars::schema_for!(SomniaCompactionPrepareRequest),
         "SomniaCompactionPrepareResponse":schemars::schema_for!(SomniaCompactionPrepareResponse),
+        "SomniaCompactionResolveTargetRequest":schemars::schema_for!(SomniaCompactionResolveTargetRequest),
+        "SomniaCompactionResolveTargetResponse":schemars::schema_for!(SomniaCompactionResolveTargetResponse),
         "SomniaCompactionStartRequest":schemars::schema_for!(SomniaCompactionStartRequest),
         "SomniaCompactionStartResponse":schemars::schema_for!(SomniaCompactionStartResponse),
         "CompactionUsage":schemars::schema_for!(CompactionUsage),

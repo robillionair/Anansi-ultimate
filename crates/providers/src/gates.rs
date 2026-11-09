@@ -78,6 +78,34 @@ impl PrivacyGate {
             .filter(|s| s.redacted)
             .count()
     }
+
+    /// The strongest (most restrictive) privacy class among the
+    /// request's segments, for the disclosure: Public < Standard <
+    /// Private < Restricted < Sealed. The dispatcher never
+    /// re-classifies content; this reports what the caller sent, so
+    /// a caller that labels Private content Standard cannot hide it
+    /// from the disclosure — and a caller that labels it Private can
+    /// prove the gate saw the real class.
+    pub fn strongest_privacy(request: &CompletionRequest) -> PrivacyClass {
+        fn rank(class: PrivacyClass) -> u8 {
+            match class {
+                PrivacyClass::Public => 0,
+                PrivacyClass::Standard => 1,
+                PrivacyClass::Private => 2,
+                PrivacyClass::Restricted => 3,
+                PrivacyClass::Sealed => 4,
+            }
+        }
+        let mut strongest = PrivacyClass::Public;
+        for message in &request.messages {
+            for segment in &message.segments {
+                if rank(segment.privacy) > rank(strongest) {
+                    strongest = segment.privacy;
+                }
+            }
+        }
+        strongest
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -522,6 +550,40 @@ mod tests {
         let mut r2 = request_with(PrivacyClass::Private);
         r2.explicit_cloud_authorization = true;
         assert!(PrivacyGate::check(&r2, TargetLocality::Cloud).is_ok());
+    }
+
+    #[test]
+    fn strongest_privacy_reports_the_most_restrictive_segment() {
+        // One segment: its own class.
+        assert_eq!(
+            PrivacyGate::strongest_privacy(&request_with(PrivacyClass::Private)),
+            PrivacyClass::Private
+        );
+        assert_eq!(
+            PrivacyGate::strongest_privacy(&request_with(PrivacyClass::Standard)),
+            PrivacyClass::Standard
+        );
+        // Two segments: the most restrictive wins, in either order.
+        let mut mixed = request_with(PrivacyClass::Private);
+        mixed.messages[0]
+            .segments
+            .push(Segment::classified("y", PrivacyClass::Standard));
+        assert_eq!(
+            PrivacyGate::strongest_privacy(&mixed),
+            PrivacyClass::Private
+        );
+        let mut mixed2 = request_with(PrivacyClass::Standard);
+        mixed2.messages[0]
+            .segments
+            .push(Segment::classified("y", PrivacyClass::Private));
+        assert_eq!(
+            PrivacyGate::strongest_privacy(&mixed2),
+            PrivacyClass::Private
+        );
+        // No segments at all reads as Public, never Standard: the
+        // disclosure must not claim content that was never sent.
+        let empty = CompletionRequest::new("m", vec![]);
+        assert_eq!(PrivacyGate::strongest_privacy(&empty), PrivacyClass::Public);
     }
 
     #[test]

@@ -70,7 +70,7 @@ use anansi_providers::gates::{PaidInferencePermit, QuotaLedger, ZeroCostLock};
 use anansi_providers::http::CancellationToken;
 use anansi_providers::routing::{DisclosureRecord, RoutingMode, RoutingRequest};
 use anansi_providers::runtime::{LocalityConfig, ProviderRuntime, RuntimeConfig};
-use anansi_providers::types::{CompletionRequest, StreamEvent, Usage};
+use anansi_providers::types::{CompletionRequest, CostClass, StreamEvent, Usage};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -225,9 +225,33 @@ pub struct ProviderAuthorizeResponse {
     pub expires_at_ms: u64,
 }
 
+/// The approved target a dispatch must still match, when the caller
+/// bound the dispatch to a reviewed approval (SOMNIA compaction).
+/// It is a binding the server verifies against backend state, never
+/// configuration the caller asserts: the endpoint, locality, and cost
+/// are re-derived from the live configuration in phase 1 and the
+/// dispatch is refused before any traffic when they differ.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ExpectedDispatchTarget {
+    pub provider: String,
+    pub model: String,
+    pub endpoint: String,
+    pub locality: String,
+    pub cost: CostClass,
+}
+
 /// Dispatch and stream-start share one request shape. It carries
 /// **no** configuration, locality, cost or credential material:
-/// policy is resolved from backend state only.
+/// policy is resolved from backend state only. The one exception is
+/// `expected_target`: a caller-supplied approval binding that phase 1
+/// verifies against backend state and never trusts as configuration.
+/// The binding is per-op: on unary dispatch it requires explicit
+/// model selection (`chooseModel` plus a `chosen` that matches the
+/// expected provider/model), because every other routing mode
+/// ignores `chosen` and lets the router pick a different model; on
+/// stream-start the field is refused outright, because streaming
+/// does not enforce the binding.
 #[derive(Debug, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ProviderDispatchRequest {
@@ -243,6 +267,10 @@ pub struct ProviderDispatchRequest {
     /// session. The permit itself (scope, caps, expiry) lives in
     /// backend state; presenting an id never creates authorization.
     pub permit_id: Option<String>,
+    /// The approved target this dispatch must still match. Absent
+    /// for callers without an approval binding.
+    #[serde(default)]
+    pub expected_target: Option<ExpectedDispatchTarget>,
 }
 
 #[derive(Debug, Serialize, JsonSchema)]
@@ -777,6 +805,59 @@ fn enforce_configured_model(
     Ok(())
 }
 
+/// Verify an approval binding against the live configuration, in the
+/// same locked section that acquires the runtime (mid-run design §2
+/// D1–D3). Reads `state.config` directly — it must NOT call
+/// `configured_model_target`, which takes the backend lock itself.
+/// A mismatch refuses before the runtime is acquired and before any
+/// traffic, so a configuration change between two dispatches can
+/// never redirect the later one.
+fn enforce_expected_target(
+    state: &BackendState,
+    expected: &ExpectedDispatchTarget,
+    chosen: Option<&(String, String)>,
+    mode: RoutingMode,
+) -> Result<(), CommandError> {
+    // The router honors `chosen` only in ChooseModel mode; in every
+    // other mode it ignores the field and orders an automatic chain,
+    // so an expected target without explicit selection binds nothing.
+    if mode != RoutingMode::ChooseModel {
+        return Err(invalid(
+            "The expected dispatch target requires explicit model selection (chooseModel); automatic routing is not allowed.",
+        ));
+    }
+    let Some((provider, model)) = chosen else {
+        return Err(invalid(
+            "The expected dispatch target requires a chosen provider and model; automatic routing is not allowed.",
+        ));
+    };
+    if provider != &expected.provider || model != &expected.model {
+        return Err(invalid(
+            "The expected dispatch target does not match the chosen provider and model.",
+        ));
+    }
+    let config = state.config.as_ref().ok_or_else(|| {
+        CommandError::new(
+            ErrorCode::InvalidRequest,
+            "Providers are not configured for this workspace.",
+        )
+    })?;
+    let Some(target) = target_in_config(config, &expected.provider, &expected.model) else {
+        return Err(invalid(
+            "The approved provider target is no longer configured for this workspace; review the candidate again before starting a new run.",
+        ));
+    };
+    if target.endpoint != expected.endpoint
+        || catalog_locality(&expected.provider) != expected.locality
+        || target.cost != expected.cost
+    {
+        return Err(invalid(
+            "The approved provider target changed; review the candidate again before starting a new run.",
+        ));
+    }
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // Shared helpers
 
@@ -976,6 +1057,110 @@ pub fn configured_chat_models(scope: &CallerScope) -> Vec<(String, String)> {
             }
         }
         Ok(out)
+    })
+    .unwrap_or_default()
+}
+
+/// The cost class of one configured chat model, from the trusted
+/// configuration — never from a request. Used by the SOMNIA
+/// compaction free-only gate: a comparison runs free models only,
+/// because one permit authorizes one dispatch chain.
+pub fn configured_model_cost(
+    scope: &CallerScope,
+    provider: &str,
+    model: &str,
+) -> Option<CostClass> {
+    with_backend(scope, |state| {
+        let found = state.config.as_ref().and_then(|config| {
+            config
+                .providers
+                .iter()
+                .filter(|p| p.config.enabled && p.config.provider == provider)
+                .flat_map(|p| p.models.iter())
+                .find(|m| m.id == model && m.capabilities.chat)
+                .map(|m| m.cost)
+        });
+        Ok(found)
+    })
+    .unwrap_or_default()
+}
+
+/// The full trusted target record for one configured chat model:
+/// its cost class and its effective endpoint — the configured
+/// `baseUrl`, or the catalog default when the configuration leaves
+/// it blank. Used by the SOMNIA compaction resolve op: the approval
+/// binds the endpoint (and cost) of the resolved target, so a
+/// configuration change after approval requires a fresh review.
+pub struct ConfiguredModelTarget {
+    pub cost: CostClass,
+    pub endpoint: String,
+}
+
+/// The catalog's locality enum is private; the Debug form is
+/// "Local" / "Cloud" (the same rendering providers-catalog uses).
+/// One derivation, shared by the compaction target resolution and
+/// the expected-target check, so the two can never disagree about
+/// what a target's locality is.
+pub(crate) fn catalog_locality(provider: &str) -> String {
+    anansi_providers::catalog::catalog()
+        .iter()
+        .find(|e| e.id == provider)
+        .map(|e| {
+            if format!("{:?}", e.locality) == "Local" {
+                "local".to_string()
+            } else {
+                "cloud".to_string()
+            }
+        })
+        .unwrap_or_else(|| "cloud".to_string())
+}
+
+/// The cost class and effective endpoint of one configured chat
+/// model, read from an already-held configuration. Shared by
+/// `configured_model_target` (which takes the backend lock) and the
+/// expected-target check (which runs inside the locked phase 1 and
+/// must not re-lock).
+fn target_in_config(
+    config: &RuntimeConfig,
+    provider: &str,
+    model: &str,
+) -> Option<ConfiguredModelTarget> {
+    config
+        .providers
+        .iter()
+        .filter(|p| p.config.enabled && p.config.provider == provider)
+        .find_map(|p| {
+            let m = p
+                .models
+                .iter()
+                .find(|m| m.id == model && m.capabilities.chat)?;
+            let endpoint = p.config.base_url.trim().to_string();
+            let endpoint = if endpoint.is_empty() {
+                anansi_providers::catalog::catalog()
+                    .iter()
+                    .find(|e| e.id == provider)
+                    .and_then(|e| e.base_url.map(|u| u.to_string()))
+                    .unwrap_or_default()
+            } else {
+                endpoint
+            };
+            Some(ConfiguredModelTarget {
+                cost: m.cost,
+                endpoint,
+            })
+        })
+}
+
+pub fn configured_model_target(
+    scope: &CallerScope,
+    provider: &str,
+    model: &str,
+) -> Option<ConfiguredModelTarget> {
+    with_backend(scope, |state| {
+        Ok(state
+            .config
+            .as_ref()
+            .and_then(|config| target_in_config(config, provider, model)))
     })
     .unwrap_or_default()
 }
@@ -1243,8 +1428,19 @@ pub fn providers_command(
             // authorization decisions were taken atomically in
             // phase 1 and the accounting lives behind its own
             // locks inside the runtime.
+            //
+            // When the caller bound this dispatch to a reviewed
+            // approval, phase 1 also verifies the approved target
+            // against the live configuration in this same locked
+            // section, before acquiring the runtime: a target that
+            // changed after approval is refused here, before any
+            // traffic, and a configuration change between two
+            // dispatches can never redirect the later one.
             let (permit, runtime) = with_backend(scope, |state| {
                 enforce_configured_model(state, &req.request)?;
+                if let Some(expected) = &req.expected_target {
+                    enforce_expected_target(state, expected, req.chosen.as_ref(), routing.mode)?;
+                }
                 let permit = take_permit(state, scope, &req.permit_id)?;
                 let runtime = runtime_for(state)?;
                 Ok((permit, runtime))
@@ -1267,6 +1463,17 @@ pub fn providers_command(
             let req: ProviderDispatchRequest = parse(value, "provider dispatch")?;
             require_contract_v1(req.contract_version)?;
             validate_request_bounds(&req.request)?;
+            // Stream-start does not enforce an expected target, so the
+            // field is refused here — before traffic and before the
+            // locked phase — rather than accepted and silently ignored.
+            // No existing caller sends it (collider, forge, ideas,
+            // opportunities); a future approval-bound stream must
+            // enforce it the same way unary dispatch does.
+            if req.expected_target.is_some() {
+                return Err(invalid(
+                    "expectedTarget is not supported on stream-start; use a unary dispatch for an approval-bound target.",
+                ));
+            }
             let routing = routing_request(&req)?;
             // Locked phase: policy resolution (model, cap
             // pre-check, permit, runtime). Unlocked: stream

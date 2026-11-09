@@ -550,6 +550,12 @@ export interface DisclosureRecord {
   routingMode: RoutingMode;
   routingReason: string;
   segmentCount: number;
+  /**
+   * The strongest privacy class among the dispatched segments
+   * (the caller's label, as the gate saw it). Older disclosures
+   * without the field read as Standard.
+   */
+  strongestPrivacy?: "public" | "standard" | "private" | "sealed" | "restricted";
   usage?: Usage | null;
 }
 export interface AttemptRecord {
@@ -756,6 +762,12 @@ export interface DisclosureRecord {
   routingMode: RoutingMode;
   routingReason: string;
   segmentCount: number;
+  /**
+   * The strongest privacy class among the dispatched segments
+   * (the caller's label, as the gate saw it). Older disclosures
+   * without the field read as Standard.
+   */
+  strongestPrivacy?: "public" | "standard" | "private" | "sealed" | "restricted";
   usage?: Usage | null;
 }
 export interface AttemptRecord {
@@ -1043,6 +1055,12 @@ export interface DisclosureRecord {
   routingMode: RoutingMode;
   routingReason: string;
   segmentCount: number;
+  /**
+   * The strongest privacy class among the dispatched segments
+   * (the caller's label, as the gate saw it). Older disclosures
+   * without the field read as Standard.
+   */
+  strongestPrivacy?: "public" | "standard" | "private" | "sealed" | "restricted";
   usage?: Usage | null;
 }
 export interface AttemptRecord {
@@ -1104,6 +1122,11 @@ export interface CompactionMetrics {
 }
 export interface CompactionPairResult {
   caseId: string;
+  /**
+   * The privacy class actually sent for the compacted arm (same
+   * rule as `original_privacy`).
+   */
+  compactedPrivacy?: string | null;
   compactedPrompt: string;
   compactedReply?: string | null;
   compactedScore: string;
@@ -1111,6 +1134,14 @@ export interface CompactionPairResult {
   compactionMicros: number;
   expectedAnswer?: string | null;
   failure?: string | null;
+  /**
+   * The privacy class actually sent for the original arm
+   * (repair design §2 D4). `Some` when it is not the standard
+   * default, `None` when it is — so saved experiments from
+   * before this field serialize identically and their content
+   * hashes still validate (format stays v1).
+   */
+  originalPrivacy?: string | null;
   originalPrompt: string;
   originalReply?: string | null;
   originalScore: string;
@@ -1682,6 +1713,12 @@ export interface DisclosureRecord {
   routingMode: RoutingMode;
   routingReason: string;
   segmentCount: number;
+  /**
+   * The strongest privacy class among the dispatched segments
+   * (the caller's label, as the gate saw it). Older disclosures
+   * without the field read as Standard.
+   */
+  strongestPrivacy?: "public" | "standard" | "private" | "sealed" | "restricted";
   usage?: Usage | null;
 }
 export interface AttemptRecord {
@@ -1980,6 +2017,12 @@ export interface DisclosureRecord {
   routingMode: RoutingMode;
   routingReason: string;
   segmentCount: number;
+  /**
+   * The strongest privacy class among the dispatched segments
+   * (the caller's label, as the gate saw it). Older disclosures
+   * without the field read as Standard.
+   */
+  strongestPrivacy?: "public" | "standard" | "private" | "sealed" | "restricted";
   usage?: Usage | null;
 }
 export interface AttemptRecord {
@@ -2162,6 +2205,12 @@ export interface DisclosureRecord {
   routingMode: RoutingMode;
   routingReason: string;
   segmentCount: number;
+  /**
+   * The strongest privacy class among the dispatched segments
+   * (the caller's label, as the gate saw it). Older disclosures
+   * without the field read as Standard.
+   */
+  strongestPrivacy?: "public" | "standard" | "private" | "sealed" | "restricted";
   usage?: Usage | null;
 }
 export interface AttemptRecord {
@@ -2218,6 +2267,12 @@ export interface DisclosureRecord {
   routingMode: RoutingMode;
   routingReason: string;
   segmentCount: number;
+  /**
+   * The strongest privacy class among the dispatched segments
+   * (the caller's label, as the gate saw it). Older disclosures
+   * without the field read as Standard.
+   */
+  strongestPrivacy?: "public" | "standard" | "private" | "sealed" | "restricted";
   usage?: Usage | null;
 }
 export interface AttemptRecord {
@@ -3436,6 +3491,12 @@ export interface DisclosureRecord {
   routingMode: RoutingMode;
   routingReason: string;
   segmentCount: number;
+  /**
+   * The strongest privacy class among the dispatched segments
+   * (the caller's label, as the gate saw it). Older disclosures
+   * without the field read as Standard.
+   */
+  strongestPrivacy?: "public" | "standard" | "private" | "sealed" | "restricted";
   usage?: Usage | null;
 }
 export interface AttemptRecord {
@@ -3485,6 +3546,12 @@ export interface DisclosureRecord {
   routingMode: RoutingMode;
   routingReason: string;
   segmentCount: number;
+  /**
+   * The strongest privacy class among the dispatched segments
+   * (the caller's label, as the gate saw it). Older disclosures
+   * without the field read as Standard.
+   */
+  strongestPrivacy?: "public" | "standard" | "private" | "sealed" | "restricted";
   usage?: Usage | null;
 }
 export interface AttemptRecord {
@@ -3947,6 +4014,10 @@ export interface ProviderCredentialStatusResponse {
   contractVersion: number;
   present: boolean;
 }
+/**
+ * Cost knowledge about a model. `Unknown` is treated as paid everywhere
+ * cost is enforced (decision M5-D5).
+ */
 export type Role = "system" | "user" | "assistant";
 /**
  * Privacy classification of one content segment. Mirrors the classes in
@@ -3959,7 +4030,15 @@ export type PrivacyClass = "public" | "standard" | "private" | "sealed" | "restr
 /**
  * Dispatch and stream-start share one request shape. It carries
  * **no** configuration, locality, cost or credential material:
- * policy is resolved from backend state only.
+ * policy is resolved from backend state only. The one exception is
+ * `expected_target`: a caller-supplied approval binding that phase 1
+ * verifies against backend state and never trusts as configuration.
+ * The binding is per-op: on unary dispatch it requires explicit
+ * model selection (`chooseModel` plus a `chosen` that matches the
+ * expected provider/model), because every other routing mode
+ * ignores `chosen` and lets the router pick a different model; on
+ * stream-start the field is refused outright, because streaming
+ * does not enforce the binding.
  */
 export interface ProviderDispatchRequest {
   /**
@@ -3968,6 +4047,11 @@ export interface ProviderDispatchRequest {
    */
   chosen?: [unknown, unknown] | null;
   contractVersion?: number;
+  /**
+   * The approved target this dispatch must still match. Absent
+   * for callers without an approval binding.
+   */
+  expectedTarget?: ExpectedDispatchTarget | null;
   mode?: string | null;
   /**
    * The id of a permit issued by `providers-authorize` to this
@@ -3979,7 +4063,26 @@ export interface ProviderDispatchRequest {
   workspaceId: string;
   zeroCostLock?: boolean;
 }
+/**
+ * The approved target a dispatch must still match, when the caller
+ * bound the dispatch to a reviewed approval (SOMNIA compaction).
+ * It is a binding the server verifies against backend state, never
+ * configuration the caller asserts: the endpoint, locality, and cost
+ * are re-derived from the live configuration in phase 1 and the
+ * dispatch is refused before any traffic when they differ.
+ */
+export interface ExpectedDispatchTarget {
+  cost: CostClass;
+  endpoint: string;
+  locality: string;
+  model: string;
+  provider: string;
+}
 export interface CompletionRequest {
+  /**
+   * Ask OpenRouter to omit reasoning and reserve output for answer text.
+   */
+  disableOpenRouterReasoning?: boolean;
   /**
    * Explicit user authorization to send `Private` segments to a cloud
    * provider (ADR-0002: private material requires explicit
@@ -4047,6 +4150,12 @@ export interface DisclosureRecord {
   routingMode: RoutingMode;
   routingReason: string;
   segmentCount: number;
+  /**
+   * The strongest privacy class among the dispatched segments
+   * (the caller's label, as the gate saw it). Older disclosures
+   * without the field read as Standard.
+   */
+  strongestPrivacy?: "public" | "standard" | "private" | "sealed" | "restricted";
   usage?: Usage | null;
 }
 export interface AttemptRecord {
@@ -4107,6 +4216,12 @@ export interface DisclosureRecord {
   routingMode: RoutingMode;
   routingReason: string;
   segmentCount: number;
+  /**
+   * The strongest privacy class among the dispatched segments
+   * (the caller's label, as the gate saw it). Older disclosures
+   * without the field read as Standard.
+   */
+  strongestPrivacy?: "public" | "standard" | "private" | "sealed" | "restricted";
   usage?: Usage | null;
 }
 export interface AttemptRecord {
@@ -4183,6 +4298,12 @@ export interface DisclosureRecord {
   routingMode: RoutingMode;
   routingReason: string;
   segmentCount: number;
+  /**
+   * The strongest privacy class among the dispatched segments
+   * (the caller's label, as the gate saw it). Older disclosures
+   * without the field read as Standard.
+   */
+  strongestPrivacy?: "public" | "standard" | "private" | "sealed" | "restricted";
   usage?: Usage | null;
 }
 export interface AttemptRecord {
@@ -4716,6 +4837,11 @@ export interface CompactionMetrics {
 }
 export interface CompactionPairResult {
   caseId: string;
+  /**
+   * The privacy class actually sent for the compacted arm (same
+   * rule as `original_privacy`).
+   */
+  compactedPrivacy?: string | null;
   compactedPrompt: string;
   compactedReply?: string | null;
   compactedScore: string;
@@ -4723,6 +4849,14 @@ export interface CompactionPairResult {
   compactionMicros: number;
   expectedAnswer?: string | null;
   failure?: string | null;
+  /**
+   * The privacy class actually sent for the original arm
+   * (repair design §2 D4). `Some` when it is not the standard
+   * default, `None` when it is — so saved experiments from
+   * before this field serialize identically and their content
+   * hashes still validate (format stays v1).
+   */
+  originalPrivacy?: string | null;
   originalPrompt: string;
   originalReply?: string | null;
   originalScore: string;
@@ -4746,6 +4880,11 @@ export interface SomniaCompactionPollResponse {
   callsMade: number;
   compactionMicrosTotal: number;
   contractVersion: number;
+  /**
+   * Cost class of the resolved model, from the trusted
+   * configuration: "free", "paid", or "unknown".
+   */
+  cost: string;
   error?: string | null;
   locality: string;
   model: string;
@@ -4760,6 +4899,11 @@ export interface SomniaCompactionPollResponse {
 }
 export interface CompactionPairResult {
   caseId: string;
+  /**
+   * The privacy class actually sent for the compacted arm (same
+   * rule as `original_privacy`).
+   */
+  compactedPrivacy?: string | null;
   compactedPrompt: string;
   compactedReply?: string | null;
   compactedScore: string;
@@ -4767,6 +4911,14 @@ export interface CompactionPairResult {
   compactionMicros: number;
   expectedAnswer?: string | null;
   failure?: string | null;
+  /**
+   * The privacy class actually sent for the original arm
+   * (repair design §2 D4). `Some` when it is not the standard
+   * default, `None` when it is — so saved experiments from
+   * before this field serialize identically and their content
+   * hashes still validate (format stays v1).
+   */
+  originalPrivacy?: string | null;
   originalPrompt: string;
   originalReply?: string | null;
   originalScore: string;
@@ -4927,6 +5079,47 @@ export interface SomniaCompactionRecord {
    */
   trust: string;
 }
+/**
+ * Resolve the comparison target BEFORE approval (repair design §2
+ * D1): the UI sends the raw provider/model (blank allowed) and the
+ * server returns the exact target the run would use, so the review
+ * can show it and the approval can bind it. A read only — it never
+ * dispatches, never uses a permit, and returns no credentials or
+ * configuration beyond the one resolved target.
+ */
+export interface SomniaCompactionResolveTargetRequest {
+  contractVersion: number;
+  model?: string | null;
+  projectId: string;
+  provider?: string | null;
+  workspaceId: string;
+}
+export interface SomniaCompactionResolveTargetResponse {
+  contractVersion: number;
+  /**
+   * Cost class from the trusted configuration: "free", "paid", or
+   * "unknown".
+   */
+  cost: string;
+  /**
+   * The effective endpoint (the configured baseUrl) the run would
+   * call. Bound to the approval: an endpoint change after
+   * approval requires a fresh review.
+   */
+  endpoint: string;
+  /**
+   * Catalog-derived locality: "local" or "cloud".
+   */
+  locality: string;
+  /**
+   * The exact model the run would use.
+   */
+  model: string;
+  /**
+   * The exact provider the run would use.
+   */
+  provider: string;
+}
 export interface SomniaCompactionSaveRequest {
   contractVersion: number;
   experiment: SomniaCompactionExperiment;
@@ -5067,6 +5260,11 @@ export interface CompactionMetrics {
 }
 export interface CompactionPairResult {
   caseId: string;
+  /**
+   * The privacy class actually sent for the compacted arm (same
+   * rule as `original_privacy`).
+   */
+  compactedPrivacy?: string | null;
   compactedPrompt: string;
   compactedReply?: string | null;
   compactedScore: string;
@@ -5074,6 +5272,14 @@ export interface CompactionPairResult {
   compactionMicros: number;
   expectedAnswer?: string | null;
   failure?: string | null;
+  /**
+   * The privacy class actually sent for the original arm
+   * (repair design §2 D4). `Some` when it is not the standard
+   * default, `None` when it is — so saved experiments from
+   * before this field serialize identically and their content
+   * hashes still validate (format stays v1).
+   */
+  originalPrivacy?: string | null;
   originalPrompt: string;
   originalReply?: string | null;
   originalScore: string;
@@ -5117,6 +5323,15 @@ export interface ArtifactRecord {
   version: number;
 }
 export interface SomniaCompactionStartRequest {
+  /**
+   * SHA-256 hex of the canonical approval JSON (design §2 D2):
+   * the reviewed cases (case id, verified candidate hash,
+   * questions), the raw approved provider/model (blank allowed),
+   * the cloud flag, and the approved budget. The server recomputes
+   * it from the request and refuses any mismatch before traffic.
+   * Absent means the run was never approved.
+   */
+  approvalHash?: string | null;
   cases: CompactionStartCase[];
   cloud?: boolean | null;
   contractVersion: number;
@@ -5177,6 +5392,11 @@ export interface SomniaCompactionRecord {
 }
 export interface SomniaCompactionStartResponse {
   contractVersion: number;
+  /**
+   * Cost class of the resolved model, from the trusted
+   * configuration: "free", "paid", or "unknown".
+   */
+  cost: string;
   estimatedCalls: number;
   estimatedTokens: number;
   locality: string;
