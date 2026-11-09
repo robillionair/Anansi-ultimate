@@ -42,5 +42,8 @@ keyring = { version = "=3.6.3", default-features = false }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tempfile = "=3.27.0"
+# Approval-hash mirror for the mid-run target test (same canonical JSON
+# the server hashes; a drift fails the start loudly).
+sha2 = "=0.10.9"
 # Synthetic HTTPS servers: test-only certificates.
 rcgen = "=0.13.2"

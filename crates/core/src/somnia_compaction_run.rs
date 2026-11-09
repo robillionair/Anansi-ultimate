@@ -1360,7 +1360,18 @@ fn dispatch_pair_arm(
 fn run_compaction(run_id: String, scope: CallerScope, config: RunConfig) {
     let key = compaction_run_key(&scope, &run_id);
     let mut terminal_status: Option<String> = None;
-    'outer: for pair in &config.pairs {
+    // Gated test pause (mid-run design §2 D5): after the original arm
+    // of the first pair, wait for the release file named by
+    // ANANSI_SOMNIA_COMPACTION_TEST_PAUSE_AFTER_FIRST_ARM. Inert
+    // unless the variable is set; bounded so a test that never
+    // releases cannot hang the run thread (a timeout cancels the
+    // run, and the existing cancel path below records the pair).
+    let test_pause: Option<std::path::PathBuf> =
+        std::env::var("ANANSI_SOMNIA_COMPACTION_TEST_PAUSE_AFTER_FIRST_ARM")
+            .ok()
+            .filter(|s| !s.is_empty())
+            .map(std::path::PathBuf::from);
+    'outer: for (pair_index, pair) in config.pairs.iter().enumerate() {
         if config.cancel.load(Ordering::SeqCst) {
             terminal_status = Some("cancelled".to_string());
             break 'outer;
@@ -1398,6 +1409,25 @@ fn run_compaction(run_id: String, scope: CallerScope, config: RunConfig) {
                 }
             }
         });
+        if pair_index == 0
+            && let Some(release) = &test_pause
+        {
+            let waited = Instant::now();
+            while !release.exists() {
+                if config.cancel.load(Ordering::SeqCst)
+                    || waited.elapsed() > Duration::from_secs(120)
+                {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            if !release.exists() {
+                // Timeout (no release, no cancel): cancel the run so
+                // the existing cancel path below records the pair
+                // with the original arm preserved and ends the run.
+                config.cancel.store(true, Ordering::SeqCst);
+            }
+        }
         if config.cancel.load(Ordering::SeqCst) {
             // The original arm already dispatched; record the pair as
             // failed rather than silently dropping a paid call, then
