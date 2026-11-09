@@ -69,9 +69,7 @@ use anansi_providers::error::{ProviderError, ProviderErrorCode};
 use anansi_providers::gates::{Budget, PaidInferencePermit, QuotaLedger, ZeroCostLock};
 use anansi_providers::http::CancellationToken;
 use anansi_providers::routing::{DisclosureRecord, RoutingMode, RoutingRequest};
-use anansi_providers::runtime::{
-    LocalityConfig, ProviderRuntime, RuntimeConfig, RuntimeProvider,
-};
+use anansi_providers::runtime::{LocalityConfig, ProviderRuntime, RuntimeConfig, RuntimeProvider};
 use anansi_providers::types::{CompletionRequest, CostClass, StreamEvent, Usage};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -1498,8 +1496,7 @@ pub fn providers_command(
             })
         }
         "providers-configure-add" => {
-            let req: ProviderConfigureAddRequest =
-                parse(value, "provider configuration add")?;
+            let req: ProviderConfigureAddRequest = parse(value, "provider configuration add")?;
             require_contract_v1(req.contract_version)?;
             // The entry is validated as part of the merged config
             // below (bounds, derived locality, runtime build), so
@@ -1515,10 +1512,7 @@ pub fn providers_command(
                 // is on disk rather than overwriting it with a
                 // single-provider config.
                 load_persisted_config_locked(state, scope)?;
-                let mut merged = state
-                    .config
-                    .clone()
-                    .unwrap_or_default();
+                let mut merged = state.config.clone().unwrap_or_default();
                 let updated = if let Some(slot) = merged
                     .providers
                     .iter_mut()
@@ -1985,20 +1979,12 @@ pub fn providers_command(
                     .providers
                     .iter()
                     .map(|p| {
-                        let reference = p
-                            .config
-                            .credential
-                            .as_ref()
-                            .map(|c| c.reference.clone());
+                        let reference = p.config.credential.as_ref().map(|c| c.reference.clone());
                         let credential_stored = reference
                             .as_ref()
                             .map(|r| resolver.exists(r))
                             .unwrap_or(false);
-                        let base_url_host = p
-                            .config
-                            .validate()
-                            .map(|e| e.host)
-                            .unwrap_or_default();
+                        let base_url_host = p.config.validate().map(|e| e.host).unwrap_or_default();
                         ProviderStatusEntry {
                             provider: p.config.provider.clone(),
                             display_name: catalog

@@ -1617,7 +1617,13 @@ fn credential_reference(
 
 /// One provider entry: `provider` id, `base_url`, optional
 /// credential reference, one model with the given cost class.
-fn provider_entry(provider: &str, base_url: &str, reference: Option<&str>, model: &str, cost: &str) -> Value {
+fn provider_entry(
+    provider: &str,
+    base_url: &str,
+    reference: Option<&str>,
+    model: &str,
+    cost: &str,
+) -> Value {
     json!({
         "config": {
             "provider": provider, "baseUrl": base_url,
@@ -1655,7 +1661,11 @@ fn configure_add_preserves_providers_budget_and_accounting() {
     let mut config_a = ollama_config(&fake_a.base_url, "free");
     config_a["budget"] = json!({ "maxRequests": 5, "maxTotalTokens": 100000 });
     configure(&core, &ws, config_a).unwrap();
-    assert_eq!(fake_a.hits.load(Ordering::SeqCst), 0, "configure makes no provider calls");
+    assert_eq!(
+        fake_a.hits.load(Ordering::SeqCst),
+        0,
+        "configure makes no provider calls"
+    );
 
     // One successful dispatch: usage accounting now records A.
     let out = dispatch(&core, "browser-1", &ws, json!({}), "hello").unwrap();
@@ -1675,7 +1685,13 @@ fn configure_add_preserves_providers_budget_and_accounting() {
     let added = configure_add(
         &core,
         &ws,
-        provider_entry("openai", &fake_b.base_url, Some(&reference), "gpt-x", "unknown"),
+        provider_entry(
+            "openai",
+            &fake_b.base_url,
+            Some(&reference),
+            "gpt-x",
+            "unknown",
+        ),
     )
     .unwrap();
     assert_eq!(added["added"], "openai");
@@ -1693,12 +1709,20 @@ fn configure_add_preserves_providers_budget_and_accounting() {
     let b = status_entry(&status, "openai");
     assert_eq!(b["credentialStored"], true);
     assert_eq!(b["connectionVerified"], false, "B never dispatched");
-    assert_eq!(usage(&core, &ws)["totalRequests"], 1, "usage accounting survived the add");
+    assert_eq!(
+        usage(&core, &ws)["totalRequests"],
+        1,
+        "usage accounting survived the add"
+    );
 
     // Setup made zero inference calls: the only hit is the one
     // dispatch above; B's fake server was never contacted.
     assert_eq!(fake_a.hits.load(Ordering::SeqCst), 1);
-    assert_eq!(fake_b.hits.load(Ordering::SeqCst), 0, "setup must not call any provider");
+    assert_eq!(
+        fake_b.hits.load(Ordering::SeqCst),
+        0,
+        "setup must not call any provider"
+    );
 
     // B's model is cost-unknown: under Zero-Cost Lock it is
     // refused without a permit, with zero traffic.
@@ -1730,7 +1754,13 @@ fn configure_add_preserves_providers_budget_and_accounting() {
     let updated = configure_add(
         &core,
         &ws,
-        provider_entry("openai", &fake_b.base_url, Some(&reference), "gpt-y", "unknown"),
+        provider_entry(
+            "openai",
+            &fake_b.base_url,
+            Some(&reference),
+            "gpt-y",
+            "unknown",
+        ),
     )
     .unwrap();
     assert_eq!(updated["updated"], true);
@@ -1759,7 +1789,13 @@ fn configure_add_survives_restart() {
     configure_add(
         &core,
         &ws,
-        provider_entry("openai", &fake_b.base_url, Some(&reference), "gpt-x", "unknown"),
+        provider_entry(
+            "openai",
+            &fake_b.base_url,
+            Some(&reference),
+            "gpt-x",
+            "unknown",
+        ),
     )
     .unwrap();
     // The merged configuration is on disk, references only.
@@ -1769,7 +1805,10 @@ fn configure_add_survives_restart() {
         .join(format!("{ws}.json"));
     assert!(file.exists(), "config file missing");
     let text = std::fs::read_to_string(&file).unwrap();
-    assert!(!text.contains("sk-fake"), "config file must never hold a secret");
+    assert!(
+        !text.contains("sk-fake"),
+        "config file must never hold a secret"
+    );
     assert!(text.contains(&reference), "config file holds the reference");
 
     // Restart: a fresh Core over the same storage root.
@@ -1905,5 +1944,8 @@ fn status_is_readable_by_a_browser_and_shows_no_secrets() {
     assert_eq!(status["providers"][0]["provider"], "ollama");
     assert_eq!(status["providers"][0]["connectionVerified"], false);
     let text = serde_json::to_string(&status).unwrap();
-    assert!(!text.contains("sk-"), "status must never carry secret material");
+    assert!(
+        !text.contains("sk-"),
+        "status must never carry secret material"
+    );
 }
