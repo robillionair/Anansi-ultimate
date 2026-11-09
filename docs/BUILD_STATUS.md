@@ -1987,3 +1987,44 @@ Unified integration branch `codex/windows-preview-integration` established at co
   - Working tree `E:/Anansi/worktrees/larp-swarmtank` preserved at `E:/Anansi/scratch/larp-swarmtank-working-tree-preserved.tar`.
   - Zero paid inference, remote CI, or unapproved network requests.
 
+## 2026-11-09 — Windows preview acceptance gap closure (M7, M8, M2, M12, M13)
+
+Authoritative gap closure executed on branch `codex/windows-preview-acceptance-closure` from starting commit `bf0291670e67a5982b919026abde6ae9b360f2bf`:
+
+1. **M8 Acceptance Closure (LEXI-COLLIDER)**:
+   - Verified that only explicitly reviewed project revisions are sent to providers, stale/superseded selections fail safely, and restored provenance resolves to exact remapped revisions (`tests/e2e/collider-project-context.spec.ts` 1/1 PASS in 46.3s).
+   - Verified picker bounds, 51-member pagination, privacy labels, cross-picker duplicate notices, delayed response cancellation, and failure retries (`tests/e2e/collider-picker-reliability.spec.ts` 5/5 PASS in 1.6m).
+   - Verified document beam inputs with strict UTF-8 validation, CRLF/BOM preservation, hash derivation, and restart/restore roundtrip (`tests/e2e/collider-document-input.spec.ts` 1/1 PASS in 29.3s).
+   - Verified Forge bridge, 3D WebGL layout, hit-test raycasting, reduced motion, and 2D canvas fallback (`tests/e2e/collider-artifacts-forge.spec.ts`, `collider-three-visualization.spec.ts`, `collider-three-visualization-fallback.spec.ts` 4/4 PASS in 1.2m).
+   - Verified frontend component and derivation layers (`packages/ui/tests/collider*.test.ts` 57/57 PASS).
+   - Verified native file-picker behavior on `anansi-desktop.exe` via direct DOM Event/FileList dispatch separately from Playwright synthetic injection (`scripts/verify-desktop-m7-m8.mjs`): Cancel action clean with 0 alerts, Unicode filename (`küljendus-mõte.md`) decoded and attributed, and same-name reselection with altered content cleanly refired and updated beam text and SHA-256.
+
+2. **M7 Native Preview Acceptance Closure (Product Forge)**:
+   - Built and launched native Windows preview candidate `target/debug/anansi-desktop.exe` over WebView2 CDP.
+   - Executed full source package review, revision, reject, and accept loop in `scripts/verify-desktop-m7-m8.mjs` and `tests/e2e/forge-review.spec.ts` (30.6s):
+     - Generated specification and approved version 1.
+     - Generated and saved initial source package `Bean Stock Log`.
+     - Opened source package, saved structured source review (criterion 1 satisfied, criterion 2 needs-changes with note).
+     - Verified saved review pinned package version 1.
+     - Handed findings to revision panel via "Use in revision panel".
+     - Rejected revision once ("Reject revision — save nothing"), proving version count remained 1.
+     - Accepted revision as version 2 ("Accept revision — save as new version"), proving version count incremented to 2.
+     - Verified old source review remained pinned to version 1.
+     - Exported source package (.tar) and inspected export as pure archive data; generated software execution remained strictly disabled.
+     - Full workspace backup and fresh restore verified: restored artifact reopens with remapped IDs and valid references.
+
+3. **M2, M12, M13 Focused Regressions**:
+   - M2 backup and fresh restore: Diagnosed and repaired stale `button(page, 'Workspace')` locator in `scripts/backup-workflow.mjs` (now navigates via Dashboard -> Manage workspace). `tests/e2e/backups.spec.ts` passed 1/1 in 1.4m.
+   - M12 Guided Walk & Launch Studio: `packages/ui/tests/guided-walk.test.tsx` and `packages/ui/tests/launch-studio.test.tsx` passed 28/28.
+   - M13 TXT/Markdown Document Ingestion: `tests/e2e/documents-ingestion.spec.ts` passed 9/9 in 1.9m.
+   - M13 PDF Document Ingestion: `tests/e2e/documents-pdf.spec.ts` passed 5/5 in 1.4m.
+   - M13 MCP Server & Client: `tests/e2e/mcp-server.spec.ts`, `tests/e2e/mcp.spec.ts`, `tests/e2e/mcp-slice4.spec.ts`, and `tests/e2e/mcp-slice5.spec.ts` passed 13/13 in 1.3m.
+
+4. **Owner Manual Security Checklist**:
+   - Authored [docs/reviews/owner-manual-security-checklist.md](reviews/owner-manual-security-checklist.md) formalizing the owner-in-the-loop manual validation boundary for real Win32 CredUI provider-credential prompts and Sealed Vault OS Credential Manager master key encryption.
+
+5. **Demarcation & Handoff**:
+   - Preserved desktop demo at `E:/Anansi/previews/larp-cinematic` and all owner data.
+   - SOMNIA compactor integration left to Muse per handoff assignment.
+
+

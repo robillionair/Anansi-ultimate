@@ -1,15 +1,14 @@
 # ANANSI Ultimate — Approved Development Roadmap
 
-## Current Development Status & Baseline (2026-11-05)
+## Current Development Status & Baseline (2026-11-09)
 
-- **Baseline Tip**: `7e24859e6c042aaa135d632ad7009d20ab3c35e1` on branch `codex/windows-readiness-closure`.
-- **Authoritative Status Ledger**: [docs/evidence/project-status-ledger-2026-11-05.md](evidence/project-status-ledger-2026-11-05.md).
-- **Milestones Complete**: M0 (Foundation), M1 (Desktop & Web Shell), M2 (Local Memory OS), M6 (Opportunity Engine), M9 (SwarmTank 3D), M10 (SOMNIA), M11 (GHOST-PROMPT), M12 (Product Lifecycle & Launch Studio), HOME (Command Dashboard), LARP Mode (7 observatory scenes, animated portrait relief, telemetry bus).
-- **Milestones In Progress**:
-  - **M13 (Integrations & MCP)**: Model Context Protocol (MCP) Integration Slices 1–5 verified on Windows NTFS. Document intelligence, text/Markdown ingestion, and connectors are in progress (AN-025).
-  - **M7 (Product Forge)**: Code generation & packaging verified; sandbox execution (§32 / AN-032) and native desktop acceptance remain open.
-  - **M8 (LEXI-COLLIDER)**: Slices 1–3 verified; Slice 4 context picker review findings remain open.
-  - **M3–M5 (Search, Context, Providers)**: Local search and provider plumbing verified; live model benchmarks and paid cloud credentials remain open.
+- **Baseline Tip**: `bf0291670e67a5982b919026abde6ae9b360f2bf` on branch `codex/windows-preview-acceptance-closure`.
+- **Authoritative Status Ledger**: [docs/evidence/project-status-ledger-2026-11-05.md](evidence/project-status-ledger-2026-11-05.md) and [docs/reviews/owner-manual-security-checklist.md](reviews/owner-manual-security-checklist.md).
+- **Milestones Complete**: M0 (Foundation), M1 (Desktop & Web Shell), M2 (Local Memory OS automated boundaries & recovery), M6 (Opportunity Engine), M7 (Product Forge native preview review loop & data export), M8 (LEXI-COLLIDER local context, 3D visualization & native file-picker), M9 (SwarmTank 3D v2), M10 (SOMNIA), M11 (GHOST-PROMPT), M12 (Product Lifecycle Guided Walk & Launch Studio), HOME (Command Dashboard), LARP Mode (9 observatory scenes, animated portrait relief, telemetry bus).
+- **Milestones In Progress / Open Gates**:
+  - **M13 (Integrations & MCP)**: Model Context Protocol (MCP) Integration Slices 1–5 verified on Windows NTFS. Local document ingestion foundation (TXT, Markdown, bounded PDF text extraction with page-aware search & citations) verified on Windows (AN-025). Broad external connectors and OCR remain planned.
+  - **M2/M5 Owner Security Boundary**: Automated cryptography and provider dispatch verified; real OS Credential Manager and interactive Win32 CredUI prompts reserved for manual owner verification ([docs/reviews/owner-manual-security-checklist.md](reviews/owner-manual-security-checklist.md)).
+  - **M7 Execution Sandbox (§32 / AN-032)**: Generated software execution remains strictly disabled; source packages exported as data only.
   - **M15 (Release Tooling)**: Windows release test harness qualified; production code signing and EV certificates remain open.
 - **Milestone Scheduled Next**: M14 (macOS & ANANSI Core Appliance).
 
