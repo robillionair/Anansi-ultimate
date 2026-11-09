@@ -13,11 +13,11 @@
   `a3a908551`, clippy fix `81893ac37`, handoff `b0febf9e5`).
 - **Implementation commit:** `9b32f6009ecc7b0eb8ac815bff975788f64df119`
   ("SOMNIA compaction Checkpoint 2: wire import → candidate → review
-  → approve → compare → save").
-- **Design:** `docs/handoffs/somnia-compaction-integration-design.md`
-  (AC-I1..I12, committed before code in `e0550b539`).
-- **This handoff:** committed after the implementation commit; the
-  delivery ZIP's MANIFEST records the final tip.
+  → approve → compare → save"), plus `b55efa93a` (e2e: pin the
+  model-mismatch refusal, reset the fake per test).
+- **Final tip:** `b55efa93a6638803ff377cc8c5ad21579f522d7d` (after the
+  handoff commit `f04e2da13`; the delivery ZIP's MANIFEST records
+  this tip).
 
 ## §1 What was built
 
@@ -303,6 +303,7 @@ any fixture change:
 - `scripts/generate-somnia-compaction-benchmark.mjs` (new)
 - `tests/e2e/somnia-compaction.spec.ts` (new, 6 tests),
   `tests/e2e/somnia-compaction-benchmark.spec.ts` (new),
-  `tests/e2e/somnia-compaction-helpers.ts` (new)
+  `tests/e2e/somnia-compaction-helpers.ts` (new) — the mismatch
+  test and per-test fake reset in `b55efa93a`
 - `docs/handoffs/somnia-compaction-integration-design.md`
   (§2 prompt template + §3 caps, committed with the implementation)
