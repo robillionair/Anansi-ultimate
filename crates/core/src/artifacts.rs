@@ -35,7 +35,7 @@ use serde_json::Value;
 
 /// Manual artifact types for this slice, from §9's list of what
 /// a project may contain.
-pub const ARTIFACT_TYPES: [&str; 22] = [
+pub const ARTIFACT_TYPES: [&str; 23] = [
     "research",
     "source",
     "idea",
@@ -82,6 +82,12 @@ pub const ARTIFACT_TYPES: [&str; 22] = [
     // action, evidence reference, model identity and token usage,
     // and restore re-validates the run self-contained.
     "swarmtank-ai-run",
+    // SOMNIA compaction Checkpoint 2: comparison experiments,
+    // registered through the generated path; saving re-validates
+    // the candidate hash, every pair prompt and score, and the
+    // metrics, and restore re-validates the experiment
+    // self-contained.
+    "somnia-compaction-experiment",
 ];
 
 fn invalid(message: &str) -> CommandError {

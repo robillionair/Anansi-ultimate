@@ -39,6 +39,7 @@ pub mod settings;
 pub mod snapshots;
 pub mod somnia;
 pub mod somnia_compaction;
+pub mod somnia_compaction_run;
 pub mod storage;
 pub mod swarmtank;
 pub mod swarmtank_ai;

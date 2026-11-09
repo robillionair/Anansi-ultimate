@@ -1,4 +1,5 @@
 import { SomniaModelCompare, type SomniaModelActivity } from './SomniaModelCompare';
+import { SomniaCompaction } from './SomniaCompaction';
 import { useEffect, useState } from 'react';
 import type {
   ArtifactRecord,
@@ -1903,6 +1904,7 @@ export function SomniaPanel({
         )}
       </section>
       <SomniaModelCompare key={workspaceId + ":" + projectId} client={client} workspaceId={workspaceId} projectId={projectId} onSaved={onSaved} busy={busy} onActivity={onModelActivity} />
+      <SomniaCompaction key={workspaceId + ":" + projectId + ":compaction"} client={client} workspaceId={workspaceId} projectId={projectId} onSaved={onSaved} busy={busy} />
       <section aria-label="Saved SOMNIA evaluations">
         <h4>Saved evaluations</h4>
         {saved.length === 0 ? (

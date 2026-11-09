@@ -1087,6 +1087,101 @@ export interface CommandError {
   code: ErrorCode;
   message: string;
 }
+export interface CompactionMetrics {
+  abstentionsCompacted: number;
+  abstentionsOriginal: number;
+  compactionMicrosTotal: number;
+  correctCompacted: number;
+  correctOriginal: number;
+  failedPairs: number;
+  pairsDone: number;
+  pairsTotal: number;
+  tokensCompacted?: number | null;
+  tokensOriginal?: number | null;
+  tokensReportedCompactedPairs: number;
+  tokensReportedOriginalPairs: number;
+  totalLatencyMs: number;
+}
+export interface CompactionPairResult {
+  caseId: string;
+  compactedPrompt: string;
+  compactedReply?: string | null;
+  compactedScore: string;
+  compactedUsage?: CompactionUsage | null;
+  compactionMicros: number;
+  expectedAnswer?: string | null;
+  failure?: string | null;
+  originalPrompt: string;
+  originalReply?: string | null;
+  originalScore: string;
+  originalUsage?: CompactionUsage | null;
+  pairId: string;
+  question: string;
+  questionId: string;
+}
+export interface CompactionUsage {
+  inputTokens?: number | null;
+  outputTokens?: number | null;
+  totalTokens?: number | null;
+}
+export interface CompactionQuestion {
+  expectedAnswer?: string | null;
+  id: string;
+  text: string;
+}
+export interface CompactionStartCase {
+  candidateHash: string;
+  caseId: string;
+  quarantined: QuarantinedRecord[];
+  questions: CompactionQuestion[];
+  records: SomniaCompactionRecord[];
+}
+export interface QuarantinedRecord {
+  reason: string;
+  recordRef: string;
+}
+export interface CompactionQuestion {
+  expectedAnswer?: string | null;
+  id: string;
+  text: string;
+}
+export interface SomniaCompactionRecord {
+  id: string;
+  key: string;
+  /**
+   * One of `fact | instruction | uncertainty | deletion`.
+   */
+  kind: string;
+  /**
+   * One of `standard | private | public`. `sealed` is refused.
+   */
+  privacy: string;
+  revision: number;
+  /**
+   * The exact source identity, kept verbatim — never normalized
+   * or merged across sources.
+   */
+  source: string;
+  /**
+   * Ids of records (same key and source, lower revision) this
+   * record explicitly replaces. Empty or absent means no
+   * supersession is claimed.
+   */
+  supersedes?: string[];
+  /**
+   * Record content. Data, never an instruction to the compactor.
+   */
+  text: string;
+  /**
+   * One of `trusted | unverified`.
+   */
+  trust: string;
+}
+export interface CompactionUsage {
+  inputTokens?: number | null;
+  outputTokens?: number | null;
+  totalTokens?: number | null;
+}
 export interface CompiledContext {
   citations: GroundedCitation[];
   contractVersion: number;
@@ -4120,6 +4215,10 @@ export interface ProviderWorkspaceRequest {
   contractVersion?: number;
   workspaceId: string;
 }
+export interface QuarantinedRecord {
+  reason: string;
+  recordRef: string;
+}
 export interface ReadArtifactRequest {
   artifactId: string;
   contractVersion: number;
@@ -4371,6 +4470,724 @@ export interface SnapshotRequest {
 export interface SomniaCategoryCount {
   category: string;
   count: number;
+}
+export interface SomniaCompactionCancelRequest {
+  contractVersion: number;
+  projectId: string;
+  runId: string;
+  workspaceId: string;
+}
+export interface SomniaCompactionCancelResponse {
+  contractVersion: number;
+  runId: string;
+  status: string;
+}
+export interface SomniaCompactionCandidate {
+  /**
+   * SHA-256 of the canonical candidate serialization with this
+   * field empty. Recomputed by `validate_candidate`.
+   */
+  contentHash: string;
+  excluded: ExcludedRecord[];
+  format: string;
+  /**
+   * SHA-256 of the canonical input serialization (records in
+   * canonical order), so the candidate is pinned to the exact
+   * history it was built from.
+   */
+  inputHash: string;
+  quarantined: QuarantinedRecord[];
+  retained: RetainedSections;
+  stats: CompactionStats;
+  version: number;
+}
+export interface ExcludedRecord {
+  detail: string;
+  /**
+   * One of `duplicate-exact`, `superseded-by:<id>`,
+   * `superseded-by-deletion:<id>`. There is no other reason.
+   */
+  reason: string;
+  record: SomniaCompactionRecord;
+}
+export interface SomniaCompactionRecord {
+  id: string;
+  key: string;
+  /**
+   * One of `fact | instruction | uncertainty | deletion`.
+   */
+  kind: string;
+  /**
+   * One of `standard | private | public`. `sealed` is refused.
+   */
+  privacy: string;
+  revision: number;
+  /**
+   * The exact source identity, kept verbatim — never normalized
+   * or merged across sources.
+   */
+  source: string;
+  /**
+   * Ids of records (same key and source, lower revision) this
+   * record explicitly replaces. Empty or absent means no
+   * supersession is claimed.
+   */
+  supersedes?: string[];
+  /**
+   * Record content. Data, never an instruction to the compactor.
+   */
+  text: string;
+  /**
+   * One of `trusted | unverified`.
+   */
+  trust: string;
+}
+export interface QuarantinedRecord {
+  reason: string;
+  recordRef: string;
+}
+export interface RetainedSections {
+  conflicts: RetainedRecord[];
+  deletions: RetainedRecord[];
+  trusted: RetainedRecord[];
+  uncertainties: RetainedRecord[];
+  unverified: RetainedRecord[];
+}
+export interface RetainedRecord {
+  /**
+   * Ids of the records this record conflicts with; empty when
+   * the record is not a conflict member.
+   */
+  conflictWith: string[];
+  /**
+   * Human-readable note, e.g. which newer revision exists for
+   * an `older` record, or which records conflict with this one.
+   */
+  detail: string;
+  record: SomniaCompactionRecord;
+  /**
+   * One of `current | older | conflict | deletion | uncertainty`.
+   */
+  status: string;
+}
+export interface CompactionStats {
+  excludedRecords: number;
+  /**
+   * Text chars over retained + excluded records. Quarantined
+   * records are damaged or unparsed, so they contribute no
+   * char count.
+   */
+  inputChars: number;
+  /**
+   * Retained + excluded + quarantined.
+   */
+  inputRecords: number;
+  quarantinedRecords: number;
+  retainedChars: number;
+  retainedRecords: number;
+}
+export interface SomniaCompactionExperiment {
+  candidate: SomniaCompactionCandidate;
+  contentHash: string;
+  format: string;
+  inputHash: string;
+  locality: string;
+  metrics: CompactionMetrics;
+  model: string;
+  pairs: CompactionPairResult[];
+  provider: string;
+  runId: string;
+  version: number;
+}
+export interface SomniaCompactionCandidate {
+  /**
+   * SHA-256 of the canonical candidate serialization with this
+   * field empty. Recomputed by `validate_candidate`.
+   */
+  contentHash: string;
+  excluded: ExcludedRecord[];
+  format: string;
+  /**
+   * SHA-256 of the canonical input serialization (records in
+   * canonical order), so the candidate is pinned to the exact
+   * history it was built from.
+   */
+  inputHash: string;
+  quarantined: QuarantinedRecord[];
+  retained: RetainedSections;
+  stats: CompactionStats;
+  version: number;
+}
+export interface ExcludedRecord {
+  detail: string;
+  /**
+   * One of `duplicate-exact`, `superseded-by:<id>`,
+   * `superseded-by-deletion:<id>`. There is no other reason.
+   */
+  reason: string;
+  record: SomniaCompactionRecord;
+}
+export interface SomniaCompactionRecord {
+  id: string;
+  key: string;
+  /**
+   * One of `fact | instruction | uncertainty | deletion`.
+   */
+  kind: string;
+  /**
+   * One of `standard | private | public`. `sealed` is refused.
+   */
+  privacy: string;
+  revision: number;
+  /**
+   * The exact source identity, kept verbatim — never normalized
+   * or merged across sources.
+   */
+  source: string;
+  /**
+   * Ids of records (same key and source, lower revision) this
+   * record explicitly replaces. Empty or absent means no
+   * supersession is claimed.
+   */
+  supersedes?: string[];
+  /**
+   * Record content. Data, never an instruction to the compactor.
+   */
+  text: string;
+  /**
+   * One of `trusted | unverified`.
+   */
+  trust: string;
+}
+export interface QuarantinedRecord {
+  reason: string;
+  recordRef: string;
+}
+export interface RetainedSections {
+  conflicts: RetainedRecord[];
+  deletions: RetainedRecord[];
+  trusted: RetainedRecord[];
+  uncertainties: RetainedRecord[];
+  unverified: RetainedRecord[];
+}
+export interface RetainedRecord {
+  /**
+   * Ids of the records this record conflicts with; empty when
+   * the record is not a conflict member.
+   */
+  conflictWith: string[];
+  /**
+   * Human-readable note, e.g. which newer revision exists for
+   * an `older` record, or which records conflict with this one.
+   */
+  detail: string;
+  record: SomniaCompactionRecord;
+  /**
+   * One of `current | older | conflict | deletion | uncertainty`.
+   */
+  status: string;
+}
+export interface CompactionStats {
+  excludedRecords: number;
+  /**
+   * Text chars over retained + excluded records. Quarantined
+   * records are damaged or unparsed, so they contribute no
+   * char count.
+   */
+  inputChars: number;
+  /**
+   * Retained + excluded + quarantined.
+   */
+  inputRecords: number;
+  quarantinedRecords: number;
+  retainedChars: number;
+  retainedRecords: number;
+}
+export interface CompactionMetrics {
+  abstentionsCompacted: number;
+  abstentionsOriginal: number;
+  compactionMicrosTotal: number;
+  correctCompacted: number;
+  correctOriginal: number;
+  failedPairs: number;
+  pairsDone: number;
+  pairsTotal: number;
+  tokensCompacted?: number | null;
+  tokensOriginal?: number | null;
+  tokensReportedCompactedPairs: number;
+  tokensReportedOriginalPairs: number;
+  totalLatencyMs: number;
+}
+export interface CompactionPairResult {
+  caseId: string;
+  compactedPrompt: string;
+  compactedReply?: string | null;
+  compactedScore: string;
+  compactedUsage?: CompactionUsage | null;
+  compactionMicros: number;
+  expectedAnswer?: string | null;
+  failure?: string | null;
+  originalPrompt: string;
+  originalReply?: string | null;
+  originalScore: string;
+  originalUsage?: CompactionUsage | null;
+  pairId: string;
+  question: string;
+  questionId: string;
+}
+export interface CompactionUsage {
+  inputTokens?: number | null;
+  outputTokens?: number | null;
+  totalTokens?: number | null;
+}
+export interface SomniaCompactionPollRequest {
+  contractVersion: number;
+  projectId: string;
+  runId: string;
+  workspaceId: string;
+}
+export interface SomniaCompactionPollResponse {
+  callsMade: number;
+  compactionMicrosTotal: number;
+  contractVersion: number;
+  error?: string | null;
+  locality: string;
+  model: string;
+  pairs: CompactionPairResult[];
+  pairsDone: number;
+  pairsTotal: number;
+  provider: string;
+  runId: string;
+  status: string;
+  tokensUsed: number;
+  totalLatencyMs?: number | null;
+}
+export interface CompactionPairResult {
+  caseId: string;
+  compactedPrompt: string;
+  compactedReply?: string | null;
+  compactedScore: string;
+  compactedUsage?: CompactionUsage | null;
+  compactionMicros: number;
+  expectedAnswer?: string | null;
+  failure?: string | null;
+  originalPrompt: string;
+  originalReply?: string | null;
+  originalScore: string;
+  originalUsage?: CompactionUsage | null;
+  pairId: string;
+  question: string;
+  questionId: string;
+}
+export interface CompactionUsage {
+  inputTokens?: number | null;
+  outputTokens?: number | null;
+  totalTokens?: number | null;
+}
+export interface SomniaCompactionPrepareRequest {
+  contractVersion: number;
+  inputFormat: string;
+  inputText: string;
+  projectId: string;
+  workspaceId: string;
+}
+export interface SomniaCompactionPrepareResponse {
+  candidate: SomniaCompactionCandidate;
+  contractVersion: number;
+}
+export interface SomniaCompactionCandidate {
+  /**
+   * SHA-256 of the canonical candidate serialization with this
+   * field empty. Recomputed by `validate_candidate`.
+   */
+  contentHash: string;
+  excluded: ExcludedRecord[];
+  format: string;
+  /**
+   * SHA-256 of the canonical input serialization (records in
+   * canonical order), so the candidate is pinned to the exact
+   * history it was built from.
+   */
+  inputHash: string;
+  quarantined: QuarantinedRecord[];
+  retained: RetainedSections;
+  stats: CompactionStats;
+  version: number;
+}
+export interface ExcludedRecord {
+  detail: string;
+  /**
+   * One of `duplicate-exact`, `superseded-by:<id>`,
+   * `superseded-by-deletion:<id>`. There is no other reason.
+   */
+  reason: string;
+  record: SomniaCompactionRecord;
+}
+export interface SomniaCompactionRecord {
+  id: string;
+  key: string;
+  /**
+   * One of `fact | instruction | uncertainty | deletion`.
+   */
+  kind: string;
+  /**
+   * One of `standard | private | public`. `sealed` is refused.
+   */
+  privacy: string;
+  revision: number;
+  /**
+   * The exact source identity, kept verbatim — never normalized
+   * or merged across sources.
+   */
+  source: string;
+  /**
+   * Ids of records (same key and source, lower revision) this
+   * record explicitly replaces. Empty or absent means no
+   * supersession is claimed.
+   */
+  supersedes?: string[];
+  /**
+   * Record content. Data, never an instruction to the compactor.
+   */
+  text: string;
+  /**
+   * One of `trusted | unverified`.
+   */
+  trust: string;
+}
+export interface QuarantinedRecord {
+  reason: string;
+  recordRef: string;
+}
+export interface RetainedSections {
+  conflicts: RetainedRecord[];
+  deletions: RetainedRecord[];
+  trusted: RetainedRecord[];
+  uncertainties: RetainedRecord[];
+  unverified: RetainedRecord[];
+}
+export interface RetainedRecord {
+  /**
+   * Ids of the records this record conflicts with; empty when
+   * the record is not a conflict member.
+   */
+  conflictWith: string[];
+  /**
+   * Human-readable note, e.g. which newer revision exists for
+   * an `older` record, or which records conflict with this one.
+   */
+  detail: string;
+  record: SomniaCompactionRecord;
+  /**
+   * One of `current | older | conflict | deletion | uncertainty`.
+   */
+  status: string;
+}
+export interface CompactionStats {
+  excludedRecords: number;
+  /**
+   * Text chars over retained + excluded records. Quarantined
+   * records are damaged or unparsed, so they contribute no
+   * char count.
+   */
+  inputChars: number;
+  /**
+   * Retained + excluded + quarantined.
+   */
+  inputRecords: number;
+  quarantinedRecords: number;
+  retainedChars: number;
+  retainedRecords: number;
+}
+export interface SomniaCompactionRecord {
+  id: string;
+  key: string;
+  /**
+   * One of `fact | instruction | uncertainty | deletion`.
+   */
+  kind: string;
+  /**
+   * One of `standard | private | public`. `sealed` is refused.
+   */
+  privacy: string;
+  revision: number;
+  /**
+   * The exact source identity, kept verbatim — never normalized
+   * or merged across sources.
+   */
+  source: string;
+  /**
+   * Ids of records (same key and source, lower revision) this
+   * record explicitly replaces. Empty or absent means no
+   * supersession is claimed.
+   */
+  supersedes?: string[];
+  /**
+   * Record content. Data, never an instruction to the compactor.
+   */
+  text: string;
+  /**
+   * One of `trusted | unverified`.
+   */
+  trust: string;
+}
+export interface SomniaCompactionSaveRequest {
+  contractVersion: number;
+  experiment: SomniaCompactionExperiment;
+  projectId: string;
+  workspaceId: string;
+}
+export interface SomniaCompactionExperiment {
+  candidate: SomniaCompactionCandidate;
+  contentHash: string;
+  format: string;
+  inputHash: string;
+  locality: string;
+  metrics: CompactionMetrics;
+  model: string;
+  pairs: CompactionPairResult[];
+  provider: string;
+  runId: string;
+  version: number;
+}
+export interface SomniaCompactionCandidate {
+  /**
+   * SHA-256 of the canonical candidate serialization with this
+   * field empty. Recomputed by `validate_candidate`.
+   */
+  contentHash: string;
+  excluded: ExcludedRecord[];
+  format: string;
+  /**
+   * SHA-256 of the canonical input serialization (records in
+   * canonical order), so the candidate is pinned to the exact
+   * history it was built from.
+   */
+  inputHash: string;
+  quarantined: QuarantinedRecord[];
+  retained: RetainedSections;
+  stats: CompactionStats;
+  version: number;
+}
+export interface ExcludedRecord {
+  detail: string;
+  /**
+   * One of `duplicate-exact`, `superseded-by:<id>`,
+   * `superseded-by-deletion:<id>`. There is no other reason.
+   */
+  reason: string;
+  record: SomniaCompactionRecord;
+}
+export interface SomniaCompactionRecord {
+  id: string;
+  key: string;
+  /**
+   * One of `fact | instruction | uncertainty | deletion`.
+   */
+  kind: string;
+  /**
+   * One of `standard | private | public`. `sealed` is refused.
+   */
+  privacy: string;
+  revision: number;
+  /**
+   * The exact source identity, kept verbatim — never normalized
+   * or merged across sources.
+   */
+  source: string;
+  /**
+   * Ids of records (same key and source, lower revision) this
+   * record explicitly replaces. Empty or absent means no
+   * supersession is claimed.
+   */
+  supersedes?: string[];
+  /**
+   * Record content. Data, never an instruction to the compactor.
+   */
+  text: string;
+  /**
+   * One of `trusted | unverified`.
+   */
+  trust: string;
+}
+export interface QuarantinedRecord {
+  reason: string;
+  recordRef: string;
+}
+export interface RetainedSections {
+  conflicts: RetainedRecord[];
+  deletions: RetainedRecord[];
+  trusted: RetainedRecord[];
+  uncertainties: RetainedRecord[];
+  unverified: RetainedRecord[];
+}
+export interface RetainedRecord {
+  /**
+   * Ids of the records this record conflicts with; empty when
+   * the record is not a conflict member.
+   */
+  conflictWith: string[];
+  /**
+   * Human-readable note, e.g. which newer revision exists for
+   * an `older` record, or which records conflict with this one.
+   */
+  detail: string;
+  record: SomniaCompactionRecord;
+  /**
+   * One of `current | older | conflict | deletion | uncertainty`.
+   */
+  status: string;
+}
+export interface CompactionStats {
+  excludedRecords: number;
+  /**
+   * Text chars over retained + excluded records. Quarantined
+   * records are damaged or unparsed, so they contribute no
+   * char count.
+   */
+  inputChars: number;
+  /**
+   * Retained + excluded + quarantined.
+   */
+  inputRecords: number;
+  quarantinedRecords: number;
+  retainedChars: number;
+  retainedRecords: number;
+}
+export interface CompactionMetrics {
+  abstentionsCompacted: number;
+  abstentionsOriginal: number;
+  compactionMicrosTotal: number;
+  correctCompacted: number;
+  correctOriginal: number;
+  failedPairs: number;
+  pairsDone: number;
+  pairsTotal: number;
+  tokensCompacted?: number | null;
+  tokensOriginal?: number | null;
+  tokensReportedCompactedPairs: number;
+  tokensReportedOriginalPairs: number;
+  totalLatencyMs: number;
+}
+export interface CompactionPairResult {
+  caseId: string;
+  compactedPrompt: string;
+  compactedReply?: string | null;
+  compactedScore: string;
+  compactedUsage?: CompactionUsage | null;
+  compactionMicros: number;
+  expectedAnswer?: string | null;
+  failure?: string | null;
+  originalPrompt: string;
+  originalReply?: string | null;
+  originalScore: string;
+  originalUsage?: CompactionUsage | null;
+  pairId: string;
+  question: string;
+  questionId: string;
+}
+export interface CompactionUsage {
+  inputTokens?: number | null;
+  outputTokens?: number | null;
+  totalTokens?: number | null;
+}
+export interface SomniaCompactionSaveResponse {
+  artifact: ArtifactRecord;
+  contractVersion: number;
+}
+/**
+ * One artifact version's metadata — the §9 field set.
+ */
+export interface ArtifactRecord {
+  artifactId: string;
+  contentHash: string;
+  /**
+   * Generator/model metadata: `{"kind":"manual"}` in this
+   * slice; generator slices record model provenance here.
+   */
+  generator?: {
+    [k: string]: unknown;
+  };
+  privacy: string;
+  projectId: string;
+  sourceReferences: string[];
+  /**
+   * The §9 timestamp: when this version was registered.
+   */
+  timestamp: string;
+  title: string;
+  type: string;
+  validationStatus: string;
+  version: number;
+}
+export interface SomniaCompactionStartRequest {
+  cases: CompactionStartCase[];
+  cloud?: boolean | null;
+  contractVersion: number;
+  maxTotalTokens?: number | null;
+  model?: string | null;
+  permitId?: string | null;
+  projectId: string;
+  provider?: string | null;
+  workspaceId: string;
+}
+export interface CompactionStartCase {
+  candidateHash: string;
+  caseId: string;
+  quarantined: QuarantinedRecord[];
+  questions: CompactionQuestion[];
+  records: SomniaCompactionRecord[];
+}
+export interface QuarantinedRecord {
+  reason: string;
+  recordRef: string;
+}
+export interface CompactionQuestion {
+  expectedAnswer?: string | null;
+  id: string;
+  text: string;
+}
+export interface SomniaCompactionRecord {
+  id: string;
+  key: string;
+  /**
+   * One of `fact | instruction | uncertainty | deletion`.
+   */
+  kind: string;
+  /**
+   * One of `standard | private | public`. `sealed` is refused.
+   */
+  privacy: string;
+  revision: number;
+  /**
+   * The exact source identity, kept verbatim — never normalized
+   * or merged across sources.
+   */
+  source: string;
+  /**
+   * Ids of records (same key and source, lower revision) this
+   * record explicitly replaces. Empty or absent means no
+   * supersession is claimed.
+   */
+  supersedes?: string[];
+  /**
+   * Record content. Data, never an instruction to the compactor.
+   */
+  text: string;
+  /**
+   * One of `trusted | unverified`.
+   */
+  trust: string;
+}
+export interface SomniaCompactionStartResponse {
+  contractVersion: number;
+  estimatedCalls: number;
+  estimatedTokens: number;
+  locality: string;
+  model: string;
+  pairsTotal: number;
+  provider: string;
+  runId: string;
 }
 export interface SomniaConstraint {
   id: string;

@@ -80,14 +80,25 @@
 ## §2 Deterministic prompt rendering and scoring
 
 - **Rendering (identical for both arms except the record set).**
-  For one benchmark case, the prompt is:
-  - one line per record: `[<id>] <key> (<source>, rev <n>): <text>`
-  - then `Question: <question text>`
-  - The original arm renders all case records; the compacted arm
-    renders only the records the candidate retained, in the same
-    canonical order. The reviewed prompts shown in the UI are
-    exactly the strings dispatched — no hidden additions.
-- **Scoring (exact-match, per pair).**
+  For one benchmark case, the prompt is exactly:
+  ```
+  History:
+  [<id>] <key> (<source>, rev <n>): <text>
+  ...
+
+  Question: <question text>
+
+  Answer with the exact value from the history, or UNKNOWN if the history does not state it.
+  ```
+  The original arm renders all case records; the compacted arm
+  renders only the records the candidate retained, in the same
+  canonical order. The reviewed prompts shown in the UI are
+  exactly the strings dispatched — no hidden additions.
+- **Scoring (exact-match, per pair).** A reply counts as an
+  abstention when, trimmed, it is empty, or equals `UNKNOWN`
+  case-insensitively, or starts with `UNKNOWN` followed by a space
+  or punctuation. Otherwise it is compared exactly (trimmed)
+  against the expected answer.
   - Expected answer is a string: the reply (trimmed) equals it →
     correct. A reply of `UNKNOWN` (or empty) → abstention, counted
     separately, not correct. Any other text → incorrect.
@@ -130,8 +141,9 @@
   `(workspace, project, runId)`. Poll/cancel from a different
   project return not-found, never another project's run.
 - **Caps (server-side, enforced before and during the run):**
-  pairs per run ≤ 40 (the frozen benchmark size), one pair =
-  two dispatches, `maxOutputTokens` 384, `temperature` 0,
+  cases per run ≤ 40, pairs per run ≤ 50 (the frozen benchmark is
+  40 cases with 50 questions), one pair = two dispatches, max
+  calls 100, `maxOutputTokens` 384, `temperature` 0,
   `disable_open_router_reasoning` for OpenRouter, max total
   tokens 200,000. Budget is checked before every dispatch;
   exhaustion ends the run in terminal status

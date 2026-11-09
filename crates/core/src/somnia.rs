@@ -1275,6 +1275,13 @@ pub fn somnia_command(
     match operation {
         "somnia-evaluate" => evaluate_op(value, scope),
         "somnia-save-evaluation" => save_op(value, scope),
+        "somnia-compaction-prepare"
+        | "somnia-compaction-start"
+        | "somnia-compaction-poll"
+        | "somnia-compaction-cancel"
+        | "somnia-compaction-save" => {
+            crate::somnia_compaction_run::somnia_compaction_command(operation, value, scope)
+        }
         _ => Err(invalid("Use a supported SOMNIA operation.")),
     }
 }
