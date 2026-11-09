@@ -1,0 +1,38 @@
+{
+  "category": "look-alikes",
+  "id": "case-023",
+  "questions": [
+    {
+      "abstain": false,
+      "expectedAnswer": "Fee $40; fees total $120.",
+      "id": "q1",
+      "neededRecordIds": [
+        "r1",
+        "r2"
+      ],
+      "text": "What is the harbor fee, and what do the harbor fees total?"
+    }
+  ],
+  "records": [
+    {
+      "id": "r1",
+      "key": "harbor.fee",
+      "kind": "fact",
+      "privacy": "standard",
+      "revision": 1,
+      "source": "ledger",
+      "text": "The harbor fee is $40.",
+      "trust": "trusted"
+    },
+    {
+      "id": "r2",
+      "key": "harbor.fees",
+      "kind": "fact",
+      "privacy": "standard",
+      "revision": 1,
+      "source": "ledger",
+      "text": "The harbor fees total $120.",
+      "trust": "trusted"
+    }
+  ]
+}

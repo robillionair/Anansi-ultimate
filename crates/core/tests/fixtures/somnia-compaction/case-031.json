@@ -1,0 +1,32 @@
+{
+  "category": "broken-rows",
+  "expectedQuarantineRefs": [
+    "line 2"
+  ],
+  "id": "case-031",
+  "inputFormat": "text",
+  "questions": [
+    {
+      "abstain": false,
+      "expectedAnswer": "The customs fee is $40.",
+      "id": "q1",
+      "neededRecordIds": [
+        "r1"
+      ],
+      "text": "What is the customs fee?"
+    }
+  ],
+  "rawInput": "ID=r1 | SRC=ledger | REV=1 | KEY=harbor.customs-fee | KIND=fact | TRUST=trusted | TEXT=The customs fee is $40.\nID=r2 | SRC=ledger | REV=two | KEY=harbor.customs-fee | KIND=fact | TRUST=trusted | TEXT=Bad revision.\n",
+  "records": [
+    {
+      "id": "r1",
+      "key": "harbor.customs-fee",
+      "kind": "fact",
+      "privacy": "standard",
+      "revision": 1,
+      "source": "ledger",
+      "text": "The customs fee is $40.",
+      "trust": "trusted"
+    }
+  ]
+}

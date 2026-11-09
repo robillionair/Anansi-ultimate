@@ -1,0 +1,62 @@
+{
+  "category": "updates",
+  "forbiddenRetained": [
+    "r2"
+  ],
+  "id": "case-006",
+  "questions": [
+    {
+      "abstain": false,
+      "expectedAnswer": "At 14:00.",
+      "id": "q1",
+      "neededRecordIds": [
+        "r3"
+      ],
+      "text": "When does café service end now?"
+    },
+    {
+      "abstain": false,
+      "expectedAnswer": "At noon.",
+      "id": "q2",
+      "neededRecordIds": [
+        "r1"
+      ],
+      "text": "When did café service end originally?"
+    }
+  ],
+  "records": [
+    {
+      "id": "r1",
+      "key": "cafe.hours",
+      "kind": "fact",
+      "privacy": "standard",
+      "revision": 1,
+      "source": "ledger",
+      "text": "Café service ends at noon.",
+      "trust": "trusted"
+    },
+    {
+      "id": "r2",
+      "key": "cafe.hours",
+      "kind": "fact",
+      "privacy": "standard",
+      "revision": 2,
+      "source": "ledger",
+      "text": "Café service ends at 13:00.",
+      "trust": "trusted"
+    },
+    {
+      "id": "r3",
+      "key": "cafe.hours",
+      "kind": "fact",
+      "privacy": "standard",
+      "revision": 3,
+      "source": "ledger",
+      "supersedes": [
+        "r2"
+      ],
+      "text": "Café service ends at 14:00, €30 for the lunch set.",
+      "trust": "trusted"
+    }
+  ]
+}

@@ -1,0 +1,49 @@
+{
+  "category": "conflicts",
+  "id": "case-014",
+  "questions": [
+    {
+      "abstain": false,
+      "expectedAnswer": "$40, $45, and $50.",
+      "id": "q1",
+      "neededRecordIds": [
+        "r1",
+        "r2",
+        "r3"
+      ],
+      "text": "List every reported fee."
+    }
+  ],
+  "records": [
+    {
+      "id": "r1",
+      "key": "harbor.customs-fee",
+      "kind": "fact",
+      "privacy": "standard",
+      "revision": 1,
+      "source": "ledger",
+      "text": "The customs fee is $40.",
+      "trust": "trusted"
+    },
+    {
+      "id": "r2",
+      "key": "harbor.customs-fee",
+      "kind": "fact",
+      "privacy": "standard",
+      "revision": 1,
+      "source": "archive",
+      "text": "The customs fee is $45.",
+      "trust": "trusted"
+    },
+    {
+      "id": "r3",
+      "key": "harbor.customs-fee",
+      "kind": "fact",
+      "privacy": "standard",
+      "revision": 1,
+      "source": "harbor-office",
+      "text": "The customs fee is $50.",
+      "trust": "trusted"
+    }
+  ]
+}
