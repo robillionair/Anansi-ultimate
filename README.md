@@ -2,8 +2,9 @@
 
 ANANSI Ultimate is a local-first workspace for researching a product idea, building a prototype plan, testing assumptions, and preserving the evidence behind each decision. It has a Windows desktop application built with Tauri 2 and a React browser interface paired to a local API. Both interfaces use the same Rust domain logic and generated contracts.
 
-This README describes the Windows preview integration branch. The verified source checkpoint is `4e4e970af8ad0c406cfae35fc3da55f99662b174`. The README records that checkpoint's evidence and the separate SOMNIA compactor handoff. See the [build status ledger](docs/BUILD_STATUS.md) for test details and scope.
+This README describes the Windows preview integration branch. The verified source checkpoint is `4e4e970af8ad0c406cfae35fc3da55f99662b174`. It also includes Antigravity's focused Windows acceptance checkpoint and Muse's SOMNIA compaction integration. See the [build status ledger](docs/BUILD_STATUS.md) for test details and scope.
 
+- [Screenshots](#screenshots)
 - [What you can do](#what-you-can-do)
 - [Windows preview](#windows-preview)
 - [SOMNIA compaction](#somnia-compaction)
@@ -11,6 +12,37 @@ This README describes the Windows preview integration branch. The verified sourc
 - [Development and verification](#development-and-verification)
 - [Repository map](#repository-map)
 - [Project roadmap](#project-roadmap)
+
+## Screenshots
+
+Application captures from Windows review builds using synthetic workspaces. The captures come from several preview checkpoints.
+
+**ANANSI Entity · LARP scene 07**
+The holographic avatar and the grounded Ask ANANSI conversation panel.
+
+![ANANSI Entity holographic portrait beside the Ask ANANSI conversation panel](docs/screenshots/larp-anansi-entity.png)
+
+**Second Brain · LARP scene 01**
+A navigable constellation of sample workspace memories.
+
+![Second Brain memory constellation with eight synthetic memory nodes](docs/screenshots/larp-second-brain.png)
+
+**SwarmTank · LARP scene 08**
+
+The interactive persona matrix with a selected synthetic buyer and scenario controls.
+
+![SwarmTank persona matrix and scenario controls](docs/screenshots/larp-swarmtank.png)
+
+**SOMNIA · LARP scene 09**
+
+The replay chamber during a synthetic model comparison, with the automatic compaction panel visible.
+
+![SOMNIA replay chamber showing an active comparison beside the automatic compaction panel](docs/screenshots/larp-somnia.png)
+
+**LEXI-COLLIDER · Project visualization**
+The reviewed Three.js view of a saved synthetic experiment.
+
+![Three.js Collider scene showing the two beams and the experiment's sections](docs/reviews/evidence/windows-m8-threejs/viz-three-animated.png)
 
 ## What you can do
 
@@ -45,7 +77,7 @@ Choose the deterministic path for repeatable scenario exploration, or explicitly
 4. Approve the comparison. The two arms use the same model through the existing provider and privacy gates.
 5. Inspect both outcomes and their reported token usage, then save the comparison to the project.
 
-The verified comparison flow handles cancellation between dispatches, project changes during requests, duplicate-save attempts, and attribution of token counts to the active comparison. The OpenRouter adapter has an explicit option to disable reasoning for answer-focused runs. The current preview takes prepared comparison inputs. The automatic preparation work is tracked separately under [SOMNIA compaction](#somnia-compaction). [Comparison and provider handoff](docs/handoffs/somnia-model-comparison.md)
+The verified comparison flow handles cancellation between dispatches, project changes during requests, duplicate-save attempts, and attribution of token counts to the active comparison. The OpenRouter adapter has an explicit option to disable reasoning for answer-focused runs. You can supply prepared inputs or generate a compaction candidate from an imported history. [SOMNIA compaction](#somnia-compaction) describes the reviewed-candidate workflow. [Comparison and provider handoff](docs/handoffs/somnia-model-comparison.md)
 
 ### Document ingestion and MCP
 
@@ -96,11 +128,15 @@ The verified preview combines SwarmTank v2, PDF text ingestion, LARP scenes 08 a
 
 The native smoke test checked startup, Windows platform detection, the shell capability boundary, contract error parity, status refresh, and rendering. The browser run covered the listed product workflows. These counts refer to the recorded Windows verification at the source checkpoint above. [Verification ledger](docs/BUILD_STATUS.md)
 
+Antigravity's Windows acceptance checkpoint `20664e187` adds a native Forge source review and revision run, a browser backup and fresh-restore check, focused Collider picker and lineage coverage, and document/PDF and MCP regressions. WebView2 file-event injection covers the application's picker handling. Interactive Windows file-dialog acceptance and the owner-led credential and vault checks are tracked separately. [Acceptance ledger](docs/BUILD_STATUS.md) · [Manual security checklist](docs/reviews/owner-manual-security-checklist.md)
+
 ## SOMNIA compaction
 
 Muse's separate branch, `muse/somnia-compaction`, delivers the Checkpoint 1 compactor through `b0febf9e5f6ddf0e6c0fbd9320f3633345bef9ac`. Its bounded deterministic rules retain explicit deletion evidence, conflicts, uncertainty, and source identities. They separate unverified material and explain exclusions. The Windows rerun passed 23 module tests and all 40 frozen benchmark cases.
 
-Checkpoint 2 is the integration of **import → compact → inspect → approve → compare → save** into the Windows preview. It includes reviewing the exact retained and excluded inputs before dispatch, and testing that changes to those inputs require a new review.
+Checkpoint 2, delivered at `726aa8a07`, integrates **import → compact → inspect → approve → compare → save** into Projects and LARP scene 09. The server binds approval to the exact reviewed candidate and recomputes its hash before dispatch. Both arms use the selected model through the existing provider gates. Saved comparisons are private project artifacts. Entering LARP scene 09 starts no inference.
+
+Muse's Linux verification passed 339 Rust library tests, 335 UI and contract tests, six synthetic workflow tests and the frozen benchmark. The synthetic provider scored both arms 21/50, with zero differing or failed pairs. The merged Windows preview also passed all nine focused browser tests and reproduced the synthetic benchmark. This checks the integration against a fixed oracle. The live-model rerun on automatically compacted inputs remains open. The compaction panel can run through a configured local model. Cloud comparisons require an authorization permit, which the current panel does not supply. [Checkpoint 2 implementation and verification](docs/handoffs/somnia-compaction-integration.md) · [Synthetic per-pair results](docs/evidence/somnia-compaction-checkpoint2-synthetic.json)
 
 | Evidence | Scope |
 | --- | --- |
@@ -108,7 +144,7 @@ Checkpoint 2 is the integration of **import → compact → inspect → approve 
 | **11/48 → 38/48 correct answers** | Separate in-app live-model run on prepared histories using Nemotron 3.5 Super VL. Six paired batches completed and saved. |
 | **64,215 → 10,330 total tokens** | Provider-reported input plus output tokens for the same prepared-history run, an 83.9% reduction for those inputs. |
 
-The live benchmark included 36 synthetic file excerpts with broken OCR, stale exports, malformed rows, and embedded instructions. The preparation step supplied both histories. Checkpoint 2 will establish the evidence for app-generated candidates. [In-app comparison evidence](docs/handoffs/somnia-model-comparison.md) · [SOMNIA milestone plan](plans/08-somnia.md)
+The live benchmark included 36 synthetic file excerpts with broken OCR, stale exports, malformed rows, and embedded instructions. The preparation step supplied both histories. A separate live rerun is required to measure answer quality and token usage for app-generated candidates. [In-app comparison evidence](docs/handoffs/somnia-model-comparison.md) · [SOMNIA milestone plan](plans/08-somnia.md)
 
 ## Run from source
 
@@ -189,6 +225,6 @@ For the focused Windows desktop smoke test, pass the built executable path to `n
 
 ## Project roadmap
 
-The preview carries the desktop and web foundation, local memory and retrieval, model dispatch controls, opportunity discovery, Forge and LEXI-COLLIDER workflows, SwarmTank, SOMNIA, GHOST-PROMPT, the product lifecycle, and the Home and LARP interfaces. Remaining roadmap work includes broader document and connector coverage, release qualification, and the SOMNIA compactor integration described above. The requirements matrix tracks scope and evidence at a finer level than the feature list.
+The preview carries the desktop and web foundation, local memory and retrieval, model dispatch controls, opportunity discovery, Forge and LEXI-COLLIDER workflows, SwarmTank, SOMNIA, GHOST-PROMPT, the product lifecycle, and the Home and LARP interfaces. Remaining roadmap work includes broader document and connector coverage, release qualification, and the live-model qualification of SOMNIA compaction. The requirements matrix tracks scope and evidence at a finer level than the feature list.
 
 Start with the [master specification](docs/MASTER_SPEC.md) for behavior, [roadmap](docs/ROADMAP.md) for sequencing, [requirements matrix](docs/REQUIREMENTS_MATRIX.md) for scope, [architecture](docs/ARCHITECTURE.md) and [decisions](docs/DECISIONS.md) for design, and [build status](docs/BUILD_STATUS.md) for verification.

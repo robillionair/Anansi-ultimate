@@ -1997,7 +1997,7 @@ Authoritative gap closure executed on branch `codex/windows-preview-acceptance-c
    - Verified document beam inputs with strict UTF-8 validation, CRLF/BOM preservation, hash derivation, and restart/restore roundtrip (`tests/e2e/collider-document-input.spec.ts` 1/1 PASS in 29.3s).
    - Verified Forge bridge, 3D WebGL layout, hit-test raycasting, reduced motion, and 2D canvas fallback (`tests/e2e/collider-artifacts-forge.spec.ts`, `collider-three-visualization.spec.ts`, `collider-three-visualization-fallback.spec.ts` 4/4 PASS in 1.2m).
    - Verified frontend component and derivation layers (`packages/ui/tests/collider*.test.ts` 57/57 PASS).
-   - Verified native file-picker behavior on `anansi-desktop.exe` via direct DOM Event/FileList dispatch separately from Playwright synthetic injection (`scripts/verify-desktop-m7-m8.mjs`): Cancel action clean with 0 alerts, Unicode filename (`küljendus-mõte.md`) decoded and attributed, and same-name reselection with altered content cleanly refired and updated beam text and SHA-256.
+   - Verified file-input event handling on `anansi-desktop.exe` with synthetic DOM Event/FileList dispatch (`scripts/verify-desktop-m7-m8.mjs`). Empty selection raised zero alerts, a Unicode filename was attributed correctly, and same-name reselection updated beam text and SHA-256. Interactive Windows file-dialog acceptance remains open.
 
 2. **M7 Native Preview Acceptance Closure (Product Forge)**:
    - Built and launched native Windows preview candidate `target/debug/anansi-desktop.exe` over WebView2 CDP.
@@ -2011,7 +2011,7 @@ Authoritative gap closure executed on branch `codex/windows-preview-acceptance-c
      - Accepted revision as version 2 ("Accept revision — save as new version"), proving version count incremented to 2.
      - Verified old source review remained pinned to version 1.
      - Exported source package (.tar) and inspected export as pure archive data; generated software execution remained strictly disabled.
-     - Full workspace backup and fresh restore verified: restored artifact reopens with remapped IDs and valid references.
+     - The browser source-review spec separately verified full workspace backup and fresh restore, including reopening with remapped IDs and valid references.
 
 3. **M2, M12, M13 Focused Regressions**:
    - M2 backup and fresh restore: Diagnosed and repaired stale `button(page, 'Workspace')` locator in `scripts/backup-workflow.mjs` (now navigates via Dashboard -> Manage workspace). `tests/e2e/backups.spec.ts` passed 1/1 in 1.4m.
@@ -2028,3 +2028,11 @@ Authoritative gap closure executed on branch `codex/windows-preview-acceptance-c
    - SOMNIA compactor integration left to Muse per handoff assignment.
 
 
+
+## 2026-11-09 — SOMNIA compaction merged into the Windows preview
+
+The preview combines the Windows acceptance checkpoint `20664e187` and Muse's SOMNIA Checkpoint 2 delivery `726aa8a07` at merge `ad29bb5ae`. The generated contract outputs were regenerated from the combined Rust schemas. Routing repair `0aef92a54` pins both arms to the requested model using the exact-model route. The browser regression configures a second model that automatic routing would otherwise try first.
+
+Windows verification on the combined tree passed TypeScript, generated contract drift, the web and API builds, 335 UI/contract tests and 9 focused browser tests under the shared lease. The browser run covered the six compaction workflows, the synthetic frozen benchmark, and both LARP SOMNIA instrument/fallback tests. The instrument test reported failing on Muse's Linux environment passed on this Windows run. The benchmark reproduced 21/50 correct in each arm, zero failed pairs and 1,600 synthetic usage tokens. [Delivered Linux per-pair evidence](evidence/somnia-compaction-checkpoint2-synthetic.json)
+
+The live automatic-compaction benchmark remains pending. The current UI does not supply the required cloud permit. Native interactive file-dialog testing, owner-led credential and vault checks, external audit and production release qualification remain separate gates.
