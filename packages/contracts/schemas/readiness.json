@@ -2398,6 +2398,11 @@
             "minimum": 0,
             "type": "integer"
           },
+          "strongestPrivacy": {
+            "$ref": "#/$defs/PrivacyClass",
+            "default": "standard",
+            "description": "The strongest privacy class among the dispatched segments\n(the caller's label, as the gate saw it). Older disclosures\nwithout the field read as Standard."
+          },
           "usage": {
             "anyOf": [
               {
@@ -2424,6 +2429,17 @@
           "attempts"
         ],
         "type": "object"
+      },
+      "PrivacyClass": {
+        "description": "Privacy classification of one content segment. Mirrors the classes in\n`anansi-core` (`crates/core/src/privacy.rs`) plus `Restricted`, which\nMASTER_SPEC §19 uses without defining; see decision M5-D4 in\n`docs/handoffs/M5-requirements-and-acceptance.md`.",
+        "enum": [
+          "public",
+          "standard",
+          "private",
+          "sealed",
+          "restricted"
+        ],
+        "type": "string"
       },
       "RoutingMode": {
         "description": "User-facing routing modes, verbatim from MASTER_SPEC §17.",
@@ -2827,6 +2843,11 @@
             "minimum": 0,
             "type": "integer"
           },
+          "strongestPrivacy": {
+            "$ref": "#/$defs/PrivacyClass",
+            "default": "standard",
+            "description": "The strongest privacy class among the dispatched segments\n(the caller's label, as the gate saw it). Older disclosures\nwithout the field read as Standard."
+          },
           "usage": {
             "anyOf": [
               {
@@ -2853,6 +2874,17 @@
           "attempts"
         ],
         "type": "object"
+      },
+      "PrivacyClass": {
+        "description": "Privacy classification of one content segment. Mirrors the classes in\n`anansi-core` (`crates/core/src/privacy.rs`) plus `Restricted`, which\nMASTER_SPEC §19 uses without defining; see decision M5-D4 in\n`docs/handoffs/M5-requirements-and-acceptance.md`.",
+        "enum": [
+          "public",
+          "standard",
+          "private",
+          "sealed",
+          "restricted"
+        ],
+        "type": "string"
       },
       "RoutingMode": {
         "description": "User-facing routing modes, verbatim from MASTER_SPEC §17.",
@@ -3634,6 +3666,11 @@
             "minimum": 0,
             "type": "integer"
           },
+          "strongestPrivacy": {
+            "$ref": "#/$defs/PrivacyClass",
+            "default": "standard",
+            "description": "The strongest privacy class among the dispatched segments\n(the caller's label, as the gate saw it). Older disclosures\nwithout the field read as Standard."
+          },
           "usage": {
             "anyOf": [
               {
@@ -3660,6 +3697,17 @@
           "attempts"
         ],
         "type": "object"
+      },
+      "PrivacyClass": {
+        "description": "Privacy classification of one content segment. Mirrors the classes in\n`anansi-core` (`crates/core/src/privacy.rs`) plus `Restricted`, which\nMASTER_SPEC §19 uses without defining; see decision M5-D4 in\n`docs/handoffs/M5-requirements-and-acceptance.md`.",
+        "enum": [
+          "public",
+          "standard",
+          "private",
+          "sealed",
+          "restricted"
+        ],
+        "type": "string"
       },
       "RoutingMode": {
         "description": "User-facing routing modes, verbatim from MASTER_SPEC §17.",
@@ -3988,6 +4036,13 @@
       "caseId": {
         "type": "string"
       },
+      "compactedPrivacy": {
+        "description": "The privacy class actually sent for the compacted arm (same\nrule as `original_privacy`).",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
       "compactedPrompt": {
         "type": "string"
       },
@@ -4022,6 +4077,13 @@
         ]
       },
       "failure": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "originalPrivacy": {
+        "description": "The privacy class actually sent for the original arm\n(repair design §2 D4). `Some` when it is not the standard\ndefault, `None` when it is — so saved experiments from\nbefore this field serialize identically and their content\nhashes still validate (format stays v1).",
         "type": [
           "string",
           "null"
@@ -6000,6 +6062,11 @@
             "minimum": 0,
             "type": "integer"
           },
+          "strongestPrivacy": {
+            "$ref": "#/$defs/PrivacyClass",
+            "default": "standard",
+            "description": "The strongest privacy class among the dispatched segments\n(the caller's label, as the gate saw it). Older disclosures\nwithout the field read as Standard."
+          },
           "usage": {
             "anyOf": [
               {
@@ -6046,6 +6113,17 @@
           "mustHave"
         ],
         "type": "object"
+      },
+      "PrivacyClass": {
+        "description": "Privacy classification of one content segment. Mirrors the classes in\n`anansi-core` (`crates/core/src/privacy.rs`) plus `Restricted`, which\nMASTER_SPEC §19 uses without defining; see decision M5-D4 in\n`docs/handoffs/M5-requirements-and-acceptance.md`.",
+        "enum": [
+          "public",
+          "standard",
+          "private",
+          "sealed",
+          "restricted"
+        ],
+        "type": "string"
       },
       "ProductSpec": {
         "description": "The model's specification fields (strict-parsed).",
@@ -7003,6 +7081,11 @@
             "minimum": 0,
             "type": "integer"
           },
+          "strongestPrivacy": {
+            "$ref": "#/$defs/PrivacyClass",
+            "default": "standard",
+            "description": "The strongest privacy class among the dispatched segments\n(the caller's label, as the gate saw it). Older disclosures\nwithout the field read as Standard."
+          },
           "usage": {
             "anyOf": [
               {
@@ -7029,6 +7112,17 @@
           "attempts"
         ],
         "type": "object"
+      },
+      "PrivacyClass": {
+        "description": "Privacy classification of one content segment. Mirrors the classes in\n`anansi-core` (`crates/core/src/privacy.rs`) plus `Restricted`, which\nMASTER_SPEC §19 uses without defining; see decision M5-D4 in\n`docs/handoffs/M5-requirements-and-acceptance.md`.",
+        "enum": [
+          "public",
+          "standard",
+          "private",
+          "sealed",
+          "restricted"
+        ],
+        "type": "string"
       },
       "RoutingMode": {
         "description": "User-facing routing modes, verbatim from MASTER_SPEC §17.",
@@ -7844,6 +7938,11 @@
             "minimum": 0,
             "type": "integer"
           },
+          "strongestPrivacy": {
+            "$ref": "#/$defs/PrivacyClass",
+            "default": "standard",
+            "description": "The strongest privacy class among the dispatched segments\n(the caller's label, as the gate saw it). Older disclosures\nwithout the field read as Standard."
+          },
           "usage": {
             "anyOf": [
               {
@@ -7870,6 +7969,17 @@
           "attempts"
         ],
         "type": "object"
+      },
+      "PrivacyClass": {
+        "description": "Privacy classification of one content segment. Mirrors the classes in\n`anansi-core` (`crates/core/src/privacy.rs`) plus `Restricted`, which\nMASTER_SPEC §19 uses without defining; see decision M5-D4 in\n`docs/handoffs/M5-requirements-and-acceptance.md`.",
+        "enum": [
+          "public",
+          "standard",
+          "private",
+          "sealed",
+          "restricted"
+        ],
+        "type": "string"
       },
       "RoutingMode": {
         "description": "User-facing routing modes, verbatim from MASTER_SPEC §17.",
@@ -8042,6 +8152,11 @@
             "minimum": 0,
             "type": "integer"
           },
+          "strongestPrivacy": {
+            "$ref": "#/$defs/PrivacyClass",
+            "default": "standard",
+            "description": "The strongest privacy class among the dispatched segments\n(the caller's label, as the gate saw it). Older disclosures\nwithout the field read as Standard."
+          },
           "usage": {
             "anyOf": [
               {
@@ -8153,6 +8268,17 @@
           "topic"
         ],
         "type": "object"
+      },
+      "PrivacyClass": {
+        "description": "Privacy classification of one content segment. Mirrors the classes in\n`anansi-core` (`crates/core/src/privacy.rs`) plus `Restricted`, which\nMASTER_SPEC §19 uses without defining; see decision M5-D4 in\n`docs/handoffs/M5-requirements-and-acceptance.md`.",
+        "enum": [
+          "public",
+          "standard",
+          "private",
+          "sealed",
+          "restricted"
+        ],
+        "type": "string"
       },
       "RoutingMode": {
         "description": "User-facing routing modes, verbatim from MASTER_SPEC §17.",
@@ -13544,6 +13670,11 @@
             "minimum": 0,
             "type": "integer"
           },
+          "strongestPrivacy": {
+            "$ref": "#/$defs/PrivacyClass",
+            "default": "standard",
+            "description": "The strongest privacy class among the dispatched segments\n(the caller's label, as the gate saw it). Older disclosures\nwithout the field read as Standard."
+          },
           "usage": {
             "anyOf": [
               {
@@ -13570,6 +13701,17 @@
           "attempts"
         ],
         "type": "object"
+      },
+      "PrivacyClass": {
+        "description": "Privacy classification of one content segment. Mirrors the classes in\n`anansi-core` (`crates/core/src/privacy.rs`) plus `Restricted`, which\nMASTER_SPEC §19 uses without defining; see decision M5-D4 in\n`docs/handoffs/M5-requirements-and-acceptance.md`.",
+        "enum": [
+          "public",
+          "standard",
+          "private",
+          "sealed",
+          "restricted"
+        ],
+        "type": "string"
       },
       "RoutingMode": {
         "description": "User-facing routing modes, verbatim from MASTER_SPEC §17.",
@@ -13713,6 +13855,11 @@
             "format": "uint",
             "minimum": 0,
             "type": "integer"
+          },
+          "strongestPrivacy": {
+            "$ref": "#/$defs/PrivacyClass",
+            "default": "standard",
+            "description": "The strongest privacy class among the dispatched segments\n(the caller's label, as the gate saw it). Older disclosures\nwithout the field read as Standard."
           },
           "usage": {
             "anyOf": [
@@ -13900,6 +14047,17 @@
           "kind"
         ],
         "type": "object"
+      },
+      "PrivacyClass": {
+        "description": "Privacy classification of one content segment. Mirrors the classes in\n`anansi-core` (`crates/core/src/privacy.rs`) plus `Restricted`, which\nMASTER_SPEC §19 uses without defining; see decision M5-D4 in\n`docs/handoffs/M5-requirements-and-acceptance.md`.",
+        "enum": [
+          "public",
+          "standard",
+          "private",
+          "sealed",
+          "restricted"
+        ],
+        "type": "string"
       },
       "RoutingMode": {
         "description": "User-facing routing modes, verbatim from MASTER_SPEC §17.",
@@ -15389,6 +15547,11 @@
             "minimum": 0,
             "type": "integer"
           },
+          "strongestPrivacy": {
+            "$ref": "#/$defs/PrivacyClass",
+            "default": "standard",
+            "description": "The strongest privacy class among the dispatched segments\n(the caller's label, as the gate saw it). Older disclosures\nwithout the field read as Standard."
+          },
           "usage": {
             "anyOf": [
               {
@@ -15415,6 +15578,17 @@
           "attempts"
         ],
         "type": "object"
+      },
+      "PrivacyClass": {
+        "description": "Privacy classification of one content segment. Mirrors the classes in\n`anansi-core` (`crates/core/src/privacy.rs`) plus `Restricted`, which\nMASTER_SPEC §19 uses without defining; see decision M5-D4 in\n`docs/handoffs/M5-requirements-and-acceptance.md`.",
+        "enum": [
+          "public",
+          "standard",
+          "private",
+          "sealed",
+          "restricted"
+        ],
+        "type": "string"
       },
       "ProviderResponseBody": {
         "properties": {
@@ -15619,6 +15793,11 @@
             "minimum": 0,
             "type": "integer"
           },
+          "strongestPrivacy": {
+            "$ref": "#/$defs/PrivacyClass",
+            "default": "standard",
+            "description": "The strongest privacy class among the dispatched segments\n(the caller's label, as the gate saw it). Older disclosures\nwithout the field read as Standard."
+          },
           "usage": {
             "anyOf": [
               {
@@ -15645,6 +15824,17 @@
           "attempts"
         ],
         "type": "object"
+      },
+      "PrivacyClass": {
+        "description": "Privacy classification of one content segment. Mirrors the classes in\n`anansi-core` (`crates/core/src/privacy.rs`) plus `Restricted`, which\nMASTER_SPEC §19 uses without defining; see decision M5-D4 in\n`docs/handoffs/M5-requirements-and-acceptance.md`.",
+        "enum": [
+          "public",
+          "standard",
+          "private",
+          "sealed",
+          "restricted"
+        ],
+        "type": "string"
       },
       "ProviderStreamEvent": {
         "properties": {
@@ -15948,6 +16138,11 @@
             "minimum": 0,
             "type": "integer"
           },
+          "strongestPrivacy": {
+            "$ref": "#/$defs/PrivacyClass",
+            "default": "standard",
+            "description": "The strongest privacy class among the dispatched segments\n(the caller's label, as the gate saw it). Older disclosures\nwithout the field read as Standard."
+          },
           "usage": {
             "anyOf": [
               {
@@ -15974,6 +16169,17 @@
           "attempts"
         ],
         "type": "object"
+      },
+      "PrivacyClass": {
+        "description": "Privacy classification of one content segment. Mirrors the classes in\n`anansi-core` (`crates/core/src/privacy.rs`) plus `Restricted`, which\nMASTER_SPEC §19 uses without defining; see decision M5-D4 in\n`docs/handoffs/M5-requirements-and-acceptance.md`.",
+        "enum": [
+          "public",
+          "standard",
+          "private",
+          "sealed",
+          "restricted"
+        ],
+        "type": "string"
       },
       "RoutingMode": {
         "description": "User-facing routing modes, verbatim from MASTER_SPEC §17.",
@@ -17676,6 +17882,13 @@
           "caseId": {
             "type": "string"
           },
+          "compactedPrivacy": {
+            "description": "The privacy class actually sent for the compacted arm (same\nrule as `original_privacy`).",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "compactedPrompt": {
             "type": "string"
           },
@@ -17710,6 +17923,13 @@
             ]
           },
           "failure": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "originalPrivacy": {
+            "description": "The privacy class actually sent for the original arm\n(repair design §2 D4). `Some` when it is not the standard\ndefault, `None` when it is — so saved experiments from\nbefore this field serialize identically and their content\nhashes still validate (format stays v1).",
             "type": [
               "string",
               "null"
@@ -18146,6 +18366,13 @@
           "caseId": {
             "type": "string"
           },
+          "compactedPrivacy": {
+            "description": "The privacy class actually sent for the compacted arm (same\nrule as `original_privacy`).",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "compactedPrompt": {
             "type": "string"
           },
@@ -18180,6 +18407,13 @@
             ]
           },
           "failure": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "originalPrivacy": {
+            "description": "The privacy class actually sent for the original arm\n(repair design §2 D4). `Some` when it is not the standard\ndefault, `None` when it is — so saved experiments from\nbefore this field serialize identically and their content\nhashes still validate (format stays v1).",
             "type": [
               "string",
               "null"
@@ -18725,6 +18959,86 @@
     "title": "SomniaCompactionRecord",
     "type": "object"
   },
+  "SomniaCompactionResolveTargetRequest": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "description": "Resolve the comparison target BEFORE approval (repair design §2\nD1): the UI sends the raw provider/model (blank allowed) and the\nserver returns the exact target the run would use, so the review\ncan show it and the approval can bind it. A read only — it never\ndispatches, never uses a permit, and returns no credentials or\nconfiguration beyond the one resolved target.",
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "model": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "projectId": {
+        "type": "string"
+      },
+      "provider": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "workspaceId",
+      "projectId"
+    ],
+    "title": "SomniaCompactionResolveTargetRequest",
+    "type": "object"
+  },
+  "SomniaCompactionResolveTargetResponse": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "cost": {
+        "description": "Cost class from the trusted configuration: \"free\", \"paid\", or\n\"unknown\".",
+        "type": "string"
+      },
+      "endpoint": {
+        "description": "The effective endpoint (the configured baseUrl) the run would\ncall. Bound to the approval: an endpoint change after\napproval requires a fresh review.",
+        "type": "string"
+      },
+      "locality": {
+        "description": "Catalog-derived locality: \"local\" or \"cloud\".",
+        "type": "string"
+      },
+      "model": {
+        "description": "The exact model the run would use.",
+        "type": "string"
+      },
+      "provider": {
+        "description": "The exact provider the run would use.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "provider",
+      "model",
+      "locality",
+      "cost",
+      "endpoint"
+    ],
+    "title": "SomniaCompactionResolveTargetResponse",
+    "type": "object"
+  },
   "SomniaCompactionSaveRequest": {
     "$defs": {
       "CompactionMetrics": {
@@ -18823,6 +19137,13 @@
           "caseId": {
             "type": "string"
           },
+          "compactedPrivacy": {
+            "description": "The privacy class actually sent for the compacted arm (same\nrule as `original_privacy`).",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "compactedPrompt": {
             "type": "string"
           },
@@ -18857,6 +19178,13 @@
             ]
           },
           "failure": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "originalPrivacy": {
+            "description": "The privacy class actually sent for the original arm\n(repair design §2 D4). `Some` when it is not the standard\ndefault, `None` when it is — so saved experiments from\nbefore this field serialize identically and their content\nhashes still validate (format stays v1).",
             "type": [
               "string",
               "null"

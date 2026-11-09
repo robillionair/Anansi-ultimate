@@ -18,6 +18,12 @@ pub enum PrivacyClass {
     Restricted,
 }
 
+impl Default for PrivacyClass {
+    fn default() -> Self {
+        PrivacyClass::Standard
+    }
+}
+
 /// One classified piece of a message. `redacted` means the caller has
 /// already replaced the sensitive content of `text`; the dispatcher
 /// refuses unredacted `Restricted` segments for cloud dispatch and never

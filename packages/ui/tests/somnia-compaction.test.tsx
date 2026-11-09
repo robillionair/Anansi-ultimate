@@ -184,6 +184,23 @@ test('canonical experiment JSON uses the server field order and omits empty supe
   assert.ok(json.includes('"metrics":{"pairsTotal":1,"pairsDone":1,"correctOriginal":1'));
 });
 
+test('canonical experiment JSON omits absent pair privacy and keeps present privacy', () => {
+  // A pair with no disclosed privacy (the standard default) hashes
+  // exactly as before this field existed — old saved experiments
+  // still validate.
+  const without = canonicalCompactionExperimentJson(fixtureExperiment());
+  assert.ok(!without.includes('originalPrivacy'));
+  assert.ok(!without.includes('compactedPrivacy'));
+  // A pair with a private original arm carries the field, so its
+  // hash covers what was actually sent.
+  const experiment = fixtureExperiment();
+  experiment.pairs = [pair({ originalPrivacy: 'private' })];
+  const withPrivate = canonicalCompactionExperimentJson(experiment);
+  assert.ok(withPrivate.includes('"originalPrivacy":"private"'));
+  assert.ok(!withPrivate.includes('compactedPrivacy'));
+  assert.notEqual(withPrivate, without);
+});
+
 test('sha256 helper matches the known vector', async () => {
   assert.equal(
     await sha256Hex('abc'),
@@ -214,6 +231,9 @@ test('compaction approval hash binds every reviewed field', async () => {
     }],
     provider: 'ollama',
     model: 'llama-x',
+    endpoint: 'http://127.0.0.1:11434',
+    locality: 'local',
+    cost: 'free',
     cloud: false,
     maxTotalTokens: 20000,
   };
@@ -226,6 +246,12 @@ test('compaction approval hash binds every reviewed field', async () => {
   assert.notEqual(await changed({ model: '' }), base);
   assert.notEqual(await changed({ cloud: true }), base);
   assert.notEqual(await changed({ maxTotalTokens: 50000 }), base);
+  // The resolved target's effective endpoint, locality, and cost are
+  // bound too: a configuration change to the approved target after
+  // approval invalidates the approval.
+  assert.notEqual(await changed({ endpoint: 'http://127.0.0.1:9999' }), base);
+  assert.notEqual(await changed({ locality: 'cloud' }), base);
+  assert.notEqual(await changed({ cost: 'paid' }), base);
   assert.notEqual(
     await computeCompactionApprovalHash({
       ...input,

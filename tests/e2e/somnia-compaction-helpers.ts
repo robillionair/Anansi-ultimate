@@ -94,9 +94,10 @@ function verbatimReply(promptText: string): string {
 
 /**
  * Mirrors the approval hash the UI and the server compute over the
- * reviewed inputs (design §2 D2): canonical JSON of
- * {cases:[{caseId,candidateHash,questions}],provider,model,cloud,
- * maxTotalTokens}, SHA-256 hex. The UI (SomniaCompaction.tsx) and the
+ * reviewed inputs (repair design §2 D2): canonical JSON of
+ * {cases:[{caseId,candidateHash,questions}],provider,model,endpoint,
+ * locality,cost,cloud,maxTotalTokens}, SHA-256 hex — over the RESOLVED
+ * target (never a blank default). The UI (SomniaCompaction.tsx) and the
  * server (somnia_compaction_run.rs) must produce the identical string
  * for the same inputs; this mirror is the e2e cross-check.
  */
@@ -104,6 +105,9 @@ export function computeApprovalHash(input: {
   cases: Array<{ caseId: string; candidateHash: string; questions: Array<{ id: string; text: string; expectedAnswer: string | null }> }>;
   provider: string;
   model: string;
+  endpoint: string;
+  locality: string;
+  cost: string;
   cloud: boolean;
   maxTotalTokens: number;
 }): string {
@@ -115,6 +119,9 @@ export function computeApprovalHash(input: {
     })),
     provider: input.provider,
     model: input.model,
+    endpoint: input.endpoint,
+    locality: input.locality,
+    cost: input.cost,
     cloud: input.cloud,
     maxTotalTokens: input.maxTotalTokens,
   });
@@ -224,6 +231,8 @@ export type CompactionSession = {
   workspaceId: string;
   projectId: string;
   storageRoot: string;
+  /** Path of the installed provider-config file (rewrite + restart to reconfigure). */
+  providerConfigPath: string;
   fakeHits: () => number;
   /** Models the Ollama fake received, in call order (pinning proof). */
   fakeModels: () => string[];
@@ -233,6 +242,8 @@ export type CompactionSession = {
   restartApi: () => Promise<void>;
   repair: () => Promise<void>;
   call: (group: string, operation: string, input: Record<string, unknown>) => Promise<{ status: number; body: Record<string, any> }>;
+  /** Resolve the comparison target (blank allowed) via the server op. */
+  resolveTarget: (provider?: string, model?: string) => Promise<{ status: number; body: Record<string, any> }>;
   openProject: () => Promise<void>;
   openProjectByTitle: (title: string) => Promise<void>;
   createProject: (title: string) => Promise<string>;
@@ -385,6 +396,7 @@ export async function startCompactionSession(
     workspaceId,
     projectId,
     storageRoot: path.join(root, 'storage'),
+    providerConfigPath: path.join(root, 'storage', 'provider-config', `${workspaceId}.json`),
     fakeHits: () => (fake ? fake.hits() : 0),
     fakeModels: () => (fake ? fake.models() : []),
     cloudFakeHits: () => (cloudFake ? cloudFake.hits() : 0),
@@ -397,6 +409,12 @@ export async function startCompactionSession(
       await openProjectByTitle('Harbor App');
     },
     call,
+    resolveTarget: (provider?: string, model?: string) =>
+      call('ai', 'somnia-compaction-resolve-target', {
+        workspaceId, projectId,
+        ...(provider !== undefined ? { provider } : {}),
+        ...(model !== undefined ? { model } : {}),
+      }),
     openProject: () => openProjectByTitle('Harbor App'),
     openProjectByTitle,
     createProject: async (title: string) => {

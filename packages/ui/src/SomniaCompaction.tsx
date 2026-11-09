@@ -169,7 +169,10 @@ function canonicalPair(pair: CompactionPairResult): Record<string, unknown> {
       totalTokens: value.totalTokens ?? null,
     };
   };
-  return {
+  // The server omits the privacy fields when the arm is standard
+  // (skip_serializing_if); the canonical form mirrors that, or the
+  // experiment hash would disagree with the server.
+  const out: Record<string, unknown> = {
     pairId: pair.pairId,
     caseId: pair.caseId,
     questionId: pair.questionId,
@@ -186,6 +189,13 @@ function canonicalPair(pair: CompactionPairResult): Record<string, unknown> {
     failure: pair.failure ?? null,
     compactionMicros: pair.compactionMicros,
   };
+  if (pair.originalPrivacy !== null && pair.originalPrivacy !== undefined) {
+    out.originalPrivacy = pair.originalPrivacy;
+  }
+  if (pair.compactedPrivacy !== null && pair.compactedPrivacy !== undefined) {
+    out.compactedPrivacy = pair.compactedPrivacy;
+  }
+  return out;
 }
 
 /** The canonical JSON the server hashes: Rust struct field order, hash emptied. */
@@ -237,20 +247,26 @@ export type CompactionApprovalInput = {
   }>;
   provider: string;
   model: string;
+  /** Effective endpoint of the resolved target (configured baseUrl). */
+  endpoint: string;
+  locality: string;
+  cost: string;
   cloud: boolean;
   maxTotalTokens: number;
 };
 
 /**
- * The approval hash (design §2 D2): SHA-256 hex of the canonical
+ * The approval hash (repair design §2 D2): SHA-256 hex of the canonical
  * approval JSON — the reviewed cases (case id, candidate hash,
- * questions), the raw approved provider/model (blank allowed), the
- * cloud flag, and the approved budget. Key order must match the
- * server's serde struct field order exactly (cases, provider, model,
- * cloud, maxTotalTokens; per case caseId, candidateHash, questions;
- * per question id, text, expectedAnswer); the e2e mirror builds the
- * same string. The server recomputes it at start and refuses any
- * mismatch before traffic.
+ * questions), the RESOLVED provider/model (a blank default is resolved
+ * before approval, never at start), the resolved target's effective
+ * endpoint, locality, and cost class, the cloud flag, and the approved
+ * budget. Key order must match the server's serde struct field order
+ * exactly (cases, provider, model, endpoint, locality, cost, cloud,
+ * maxTotalTokens; per case caseId, candidateHash, questions; per
+ * question id, text, expectedAnswer); the e2e mirror builds the same
+ * string. The server recomputes it at start from the live
+ * configuration and refuses any mismatch before traffic.
  */
 export async function computeCompactionApprovalHash(input: CompactionApprovalInput): Promise<string> {
   const canonical = JSON.stringify({
@@ -265,6 +281,9 @@ export async function computeCompactionApprovalHash(input: CompactionApprovalInp
     })),
     provider: input.provider,
     model: input.model,
+    endpoint: input.endpoint,
+    locality: input.locality,
+    cost: input.cost,
     cloud: input.cloud,
     maxTotalTokens: input.maxTotalTokens,
   });
@@ -335,9 +354,14 @@ type ApprovedSnapshot = {
   candidate: SomniaCompactionCandidate;
   questions: CompactionQuestion[];
   candidateHash: string;
-  /** Raw approved values (trimmed; blank means "first configured"). */
+  /** The RESOLVED approved target (repair design §2 D1–D2): exact
+   * provider/model/endpoint/locality/cost, as returned by the
+   * resolve op at approve time. Never a blank default. */
   provider: string;
   model: string;
+  endpoint: string;
+  locality: string;
+  cost: string;
   cloud: boolean;
   maxTotalTokens: number;
   approvalHash: string;
@@ -356,6 +380,7 @@ export function SomniaCompaction({ client, workspaceId, projectId, onSaved, busy
   const [benchmarkCase, setBenchmarkCase] = useState('');
   const [candidate, setCandidate] = useState<SomniaCompactionPrepareResponse | null>(null);
   const [approved, setApproved] = useState<ApprovedSnapshot | null>(null);
+  const [approving, setApproving] = useState(false);
   const [provider, setProvider] = useState('ollama');
   const [model, setModel] = useState('');
   const [cloud, setCloud] = useState(false);
@@ -488,35 +513,57 @@ export function SomniaCompaction({ client, workspaceId, projectId, onSaved, busy
   }
 
   async function approve() {
-    if (!candidate) return;
+    if (!candidate || approving) return;
     const questions = parseQuestions();
     if (questions === null || questions.length === 0) {
       setError('Add at least one question before approving the comparison.');
       return;
     }
     const caseId = benchmarkCase || 'imported';
-    const approvedProvider = provider.trim();
-    const approvedModel = model.trim();
-    const approvalHash = await computeCompactionApprovalHash({
-      cases: [{ caseId, candidateHash: candidate.candidate.contentHash, questions }],
-      provider: approvedProvider,
-      model: approvedModel,
-      cloud,
-      maxTotalTokens,
-    });
-    if (!mounted.current) return;
-    setApproved({
-      caseId,
-      candidate: candidate.candidate,
-      questions,
-      candidateHash: candidate.candidate.contentHash,
-      provider: approvedProvider,
-      model: approvedModel,
-      cloud,
-      maxTotalTokens,
-      approvalHash,
-    });
+    setApproving(true);
     setError('');
+    try {
+      // Resolve the default BEFORE approval (repair design §2 D1):
+      // a blank Model ID becomes the exact first configured model,
+      // and the review shows that target — never "first configured
+      // model". The approval hash binds the resolved values, so a
+      // configuration change after approval requires a fresh review.
+      const resolved = await client.resolveSomniaCompactionTarget(workspaceId, {
+        projectId,
+        provider: provider.trim() === '' ? undefined : provider.trim(),
+        model: model.trim() === '' ? undefined : model.trim(),
+      });
+      const approvalHash = await computeCompactionApprovalHash({
+        cases: [{ caseId, candidateHash: candidate.candidate.contentHash, questions }],
+        provider: resolved.provider,
+        model: resolved.model,
+        endpoint: resolved.endpoint,
+        locality: resolved.locality,
+        cost: resolved.cost,
+        cloud,
+        maxTotalTokens,
+      });
+      if (!mounted.current) return;
+      setApproved({
+        caseId,
+        candidate: candidate.candidate,
+        questions,
+        candidateHash: candidate.candidate.contentHash,
+        provider: resolved.provider,
+        model: resolved.model,
+        endpoint: resolved.endpoint,
+        locality: resolved.locality,
+        cost: resolved.cost,
+        cloud,
+        maxTotalTokens,
+        approvalHash,
+      });
+      setError('');
+    } catch (e) {
+      if (mounted.current) setError(e instanceof Error ? e.message : 'Could not resolve the comparison target.');
+    } finally {
+      if (mounted.current) setApproving(false);
+    }
   }
 
   async function start() {
@@ -543,9 +590,11 @@ export function SomniaCompaction({ client, workspaceId, projectId, onSaved, busy
           questions: approved.questions,
         }],
         // The approved values, not the live form: the approval hash
-        // covers exactly these, and the server refuses any mismatch.
-        provider: approved.provider === '' ? undefined : approved.provider,
-        model: approved.model === '' ? undefined : approved.model,
+        // covers exactly these resolved values, and the server
+        // refuses any mismatch — including a configuration change
+        // to the approved target after approval.
+        provider: approved.provider,
+        model: approved.model,
         cloud: approved.cloud,
         maxTotalTokens: approved.maxTotalTokens,
         approvalHash: approved.approvalHash,
@@ -693,10 +742,10 @@ export function SomniaCompaction({ client, workspaceId, projectId, onSaved, busy
           <label><input type="checkbox" checked={cloud} onChange={e => editCompare({ cloud: e.target.checked })} /> Authorize cloud transmission for this comparison</label>
           <p>Cloud comparisons run free models only — a paid or unknown-cost model is refused before any call, and a comparison never uses a single-use permit.</p>
           <label>Maximum total tokens <input type="number" min={1000} max={200000} value={maxTotalTokens} onChange={e => editCompare({ maxTotalTokens: Number(e.target.value) })} /></label>
-          <button type="submit" disabled={Boolean(approved)}>Approve reviewed inputs</button>
+          <button type="submit" disabled={Boolean(approved) || approving}>Approve reviewed inputs</button>
         </fieldset>
       </form>
-      {approved && <p role="status">Approved candidate {approved.candidateHash.slice(0, 16)}… with {approved.questions.length} question{approved.questions.length === 1 ? '' : 's'} · {approved.provider === '' ? 'first configured provider' : approved.provider} / {approved.model === '' ? 'first configured model' : approved.model} · {approved.cloud ? 'cloud transmission authorized' : 'local only'} · {approved.maxTotalTokens} tokens max. Any edit requires a fresh review.</p>}
+      {approved && <p role="status">Approved candidate {approved.candidateHash.slice(0, 16)}… with {approved.questions.length} question{approved.questions.length === 1 ? '' : 's'} · {approved.provider} / {approved.model} ({approved.locality} · {approved.cost} · {approved.endpoint}) · {approved.cloud ? 'cloud transmission authorized' : 'local only'} · {approved.maxTotalTokens} tokens max. Any edit requires a fresh review.</p>}
       {approved && <button type="button" disabled={busy || starting || polling} onClick={() => void start()}>Run approved comparison</button>}
     </section>}
     {poll && <section aria-label="Compaction run results">
@@ -710,8 +759,8 @@ export function SomniaCompaction({ client, workspaceId, projectId, onSaved, busy
           <tbody>{poll.pairs.map(pair => (
             <tr key={pair.pairId}>
               <td>{pair.question}</td>
-              <td>{pair.originalReply ?? pair.failure ?? '—'} <em>({pair.originalScore})</em></td>
-              <td>{pair.compactedReply ?? pair.failure ?? '—'} <em>({pair.compactedScore})</em></td>
+              <td>{pair.originalReply ?? pair.failure ?? '—'} <em>({pair.originalScore}{pair.originalPrivacy ? ` · ${pair.originalPrivacy}` : ''})</em></td>
+              <td>{pair.compactedReply ?? pair.failure ?? '—'} <em>({pair.compactedScore}{pair.compactedPrivacy ? ` · ${pair.compactedPrivacy}` : ''})</em></td>
             </tr>
           ))}</tbody>
         </table>
@@ -738,8 +787,8 @@ export function SomniaCompaction({ client, workspaceId, projectId, onSaved, busy
         <tbody>{viewing.pairs.map(pair => (
           <tr key={pair.pairId}>
             <td>{pair.question}</td>
-            <td>{pair.originalReply ?? pair.failure ?? '—'} <em>({pair.originalScore})</em></td>
-            <td>{pair.compactedReply ?? pair.failure ?? '—'} <em>({pair.compactedScore})</em></td>
+            <td>{pair.originalReply ?? pair.failure ?? '—'} <em>({pair.originalScore}{pair.originalPrivacy ? ` · ${pair.originalPrivacy}` : ''})</em></td>
+            <td>{pair.compactedReply ?? pair.failure ?? '—'} <em>({pair.compactedScore}{pair.compactedPrivacy ? ` · ${pair.compactedPrivacy}` : ''})</em></td>
           </tr>
         ))}</tbody>
       </table>

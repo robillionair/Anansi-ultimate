@@ -616,6 +616,7 @@ impl<'a> Dispatcher<'a> {
             message_count: request.messages.len(),
             segment_count: request.messages.iter().map(|m| m.segments.len()).sum(),
             redaction_count: PrivacyGate::redaction_count(request),
+            strongest_privacy: PrivacyGate::strongest_privacy(request),
             estimated_input_tokens: request.estimated_input_tokens(),
             cost_class: candidate.model.cost,
             usage,

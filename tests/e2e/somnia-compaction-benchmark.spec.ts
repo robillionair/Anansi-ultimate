@@ -108,6 +108,11 @@ test('frozen benchmark reruns through automatic compaction (synthetic by default
     setFakeExpectedAnswers(expectedEntries);
     const hitsBefore = session.fakeHits();
 
+    // Resolve the target first: the approval hash binds the resolved
+    // provider/model/endpoint/locality/cost, never a blank default.
+    const resolved = await session.resolveTarget(live ? 'ollama' : undefined, live ? liveModel : undefined);
+    expect(resolved.status).toBe(200);
+    const target = resolved.body as { provider: string; model: string; endpoint: string; locality: string; cost: string };
     const started = await session.call('ai', 'somnia-compaction-start', {
       workspaceId: session.workspaceId,
       projectId: session.projectId,
@@ -115,15 +120,16 @@ test('frozen benchmark reruns through automatic compaction (synthetic by default
       // A live 100-call run estimates ~50k tokens against the per-call
       // estimate (prompt chars/4 + 384), so it needs the full budget;
       // the synthetic run keeps the 20k default.
-      ...(live ? { provider: 'ollama', model: liveModel, maxTotalTokens: 200000 } : {}),
+      provider: target.provider, model: target.model,
+      ...(live ? { maxTotalTokens: 200000 } : {}),
       approvalHash: computeApprovalHash({
         cases: startCases.map(entry => ({
           caseId: entry.caseId as string,
           candidateHash: entry.candidateHash as string,
           questions: entry.questions as Array<{ id: string; text: string; expectedAnswer: string | null }>,
         })),
-        provider: live ? 'ollama' : '',
-        model: live ? liveModel : '',
+        provider: target.provider, model: target.model,
+        endpoint: target.endpoint, locality: target.locality, cost: target.cost,
         cloud: false,
         maxTotalTokens: live ? 200000 : 20000,
       }),

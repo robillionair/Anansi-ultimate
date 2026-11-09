@@ -838,6 +838,7 @@ impl Core {
             | "somnia-evaluate"
             | "somnia-save-evaluation"
             | "somnia-compaction-prepare"
+            | "somnia-compaction-resolve-target"
             | "somnia-compaction-start"
             | "somnia-compaction-poll"
             | "somnia-compaction-cancel"
@@ -992,6 +993,7 @@ impl Core {
                         | "swarmtank-ai-start"
                         | "swarmtank-ai-branch"
                         | "somnia-compaction-start"
+                        | "somnia-compaction-resolve-target"
                 ) && !crate::provider_dispatch::has_config(&scope)
                     && let (Ok(root), Some(wid)) = (self.storage_root(), &workspace_id)
                     && let Some(json) = crate::provider_dispatch::load_config_file(&root, wid)?

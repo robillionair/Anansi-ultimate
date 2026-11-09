@@ -1004,6 +1004,54 @@ pub fn configured_model_cost(
     .unwrap_or_default()
 }
 
+/// The full trusted target record for one configured chat model:
+/// its cost class and its effective endpoint — the configured
+/// `baseUrl`, or the catalog default when the configuration leaves
+/// it blank. Used by the SOMNIA compaction resolve op: the approval
+/// binds the endpoint (and cost) of the resolved target, so a
+/// configuration change after approval requires a fresh review.
+pub struct ConfiguredModelTarget {
+    pub cost: CostClass,
+    pub endpoint: String,
+}
+
+pub fn configured_model_target(
+    scope: &CallerScope,
+    provider: &str,
+    model: &str,
+) -> Option<ConfiguredModelTarget> {
+    with_backend(scope, |state| {
+        let found = state.config.as_ref().and_then(|config| {
+            config
+                .providers
+                .iter()
+                .filter(|p| p.config.enabled && p.config.provider == provider)
+                .find_map(|p| {
+                    let m = p
+                        .models
+                        .iter()
+                        .find(|m| m.id == model && m.capabilities.chat)?;
+                    let endpoint = p.config.base_url.trim().to_string();
+                    let endpoint = if endpoint.is_empty() {
+                        anansi_providers::catalog::catalog()
+                            .iter()
+                            .find(|e| e.id == provider)
+                            .and_then(|e| e.base_url.map(|u| u.to_string()))
+                            .unwrap_or_default()
+                    } else {
+                        endpoint
+                    };
+                    Some(ConfiguredModelTarget {
+                        cost: m.cost,
+                        endpoint,
+                    })
+                })
+        });
+        Ok(found)
+    })
+    .unwrap_or_default()
+}
+
 /// The installed configuration as JSON (for persistence after a
 /// successful configure).
 pub fn configured_config_json(scope: &CallerScope) -> Option<String> {

@@ -1276,6 +1276,7 @@ pub fn somnia_command(
         "somnia-evaluate" => evaluate_op(value, scope),
         "somnia-save-evaluation" => save_op(value, scope),
         "somnia-compaction-prepare"
+        | "somnia-compaction-resolve-target"
         | "somnia-compaction-start"
         | "somnia-compaction-poll"
         | "somnia-compaction-cancel"

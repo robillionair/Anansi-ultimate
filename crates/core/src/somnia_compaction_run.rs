@@ -32,15 +32,15 @@ use sha2::{Digest, Sha256};
 
 use crate::artifacts::{ArtifactRecord, ArtifactRegisterRequest};
 use crate::provider_dispatch::{
-    CallerScope, configured_chat_models, configured_model_cost, providers_command,
+    CallerScope, configured_chat_models, configured_model_target, providers_command,
 };
 use crate::readiness::{CommandError, ErrorCode};
-use anansi_providers::types::CostClass;
 use crate::somnia_compaction::{
     CompactionIssue, ParsedCompactionInput, QuarantinedRecord, SomniaCompactionCandidate,
     SomniaCompactionRecord, all_retained, compact_input, parse_json_input, parse_text_input,
     validate_candidate,
 };
+use anansi_providers::types::CostClass;
 
 pub const COMPACTION_EXPERIMENT_FORMAT: &str = "anansi-somnia-compaction-experiment";
 pub const COMPACTION_EXPERIMENT_ARTIFACT_TYPE: &str = "somnia-compaction-experiment";
@@ -98,6 +98,41 @@ pub struct SomniaCompactionPrepareRequest {
 pub struct SomniaCompactionPrepareResponse {
     pub contract_version: u8,
     pub candidate: SomniaCompactionCandidate,
+}
+
+/// Resolve the comparison target BEFORE approval (repair design §2
+/// D1): the UI sends the raw provider/model (blank allowed) and the
+/// server returns the exact target the run would use, so the review
+/// can show it and the approval can bind it. A read only — it never
+/// dispatches, never uses a permit, and returns no credentials or
+/// configuration beyond the one resolved target.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SomniaCompactionResolveTargetRequest {
+    pub contract_version: u8,
+    pub workspace_id: String,
+    pub project_id: String,
+    pub provider: Option<String>,
+    pub model: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SomniaCompactionResolveTargetResponse {
+    pub contract_version: u8,
+    /// The exact provider the run would use.
+    pub provider: String,
+    /// The exact model the run would use.
+    pub model: String,
+    /// Catalog-derived locality: "local" or "cloud".
+    pub locality: String,
+    /// Cost class from the trusted configuration: "free", "paid", or
+    /// "unknown".
+    pub cost: String,
+    /// The effective endpoint (the configured baseUrl) the run would
+    /// call. Bound to the approval: an endpoint change after
+    /// approval requires a fresh review.
+    pub endpoint: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -163,6 +198,17 @@ pub struct CompactionPairResult {
     pub compacted_usage: Option<CompactionUsage>,
     pub failure: Option<String>,
     pub compaction_micros: u64,
+    /// The privacy class actually sent for the original arm
+    /// (repair design §2 D4). `Some` when it is not the standard
+    /// default, `None` when it is — so saved experiments from
+    /// before this field serialize identically and their content
+    /// hashes still validate (format stays v1).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub original_privacy: Option<String>,
+    /// The privacy class actually sent for the compacted arm (same
+    /// rule as `original_privacy`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub compacted_privacy: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -353,6 +399,7 @@ pub fn somnia_compaction_command(
 ) -> Result<Value, CommandError> {
     match operation {
         "somnia-compaction-prepare" => prepare_op(value, scope),
+        "somnia-compaction-resolve-target" => resolve_op(value, scope),
         "somnia-compaction-start" => start_op(value, scope),
         "somnia-compaction-poll" => poll_op(value, scope),
         "somnia-compaction-cancel" => cancel_op(value, scope),
@@ -499,20 +546,28 @@ struct ApprovalHashInput {
     cases: Vec<ApprovalHashCase>,
     provider: String,
     model: String,
+    endpoint: String,
+    locality: String,
+    cost: String,
     cloud: bool,
     max_total_tokens: u64,
 }
 
 /// SHA-256 hex of the canonical approval JSON: the reviewed cases
-/// (case id, verified candidate hash, questions), the raw approved
-/// provider/model (blank allowed — a blank model is a reference to
-/// the first configured model, see `resolve_model`), the cloud
-/// flag, and the approved budget. Any edit after approval changes
-/// the recomputed hash and the run never starts.
+/// (case id, verified candidate hash, questions), the RESOLVED
+/// provider/model (repair design §2 D2 — a blank default is resolved
+/// before approval, never at start), the resolved target's effective
+/// endpoint, locality, and cost class, the cloud flag, and the
+/// approved budget. Any edit after approval — including a
+/// configuration change to the approved target — changes the
+/// recomputed hash and the run never starts.
 fn compute_approval_hash(
     cases: &[(String, String, Vec<CompactionQuestion>)],
     provider: &str,
     model: &str,
+    endpoint: &str,
+    locality: &str,
+    cost: &str,
     cloud: bool,
     max_total_tokens: u64,
 ) -> String {
@@ -527,6 +582,9 @@ fn compute_approval_hash(
             .collect(),
         provider: provider.to_string(),
         model: model.to_string(),
+        endpoint: endpoint.to_string(),
+        locality: locality.to_string(),
+        cost: cost.to_string(),
         cloud,
         max_total_tokens,
     };
@@ -568,23 +626,66 @@ fn check_run_target(
         ));
     }
     if !cloud_authorized && locality == "cloud" {
-        return Err(
-            "Local-only was requested but the configured model is not local."
-                .to_string(),
-        );
+        return Err("Local-only was requested but the configured model is not local.".to_string());
     }
     Ok(())
+}
+
+/// The catalog's locality enum is private; the Debug form is
+/// "Local" / "Cloud" (the same rendering providers-catalog uses).
+fn catalog_locality(provider: &str) -> String {
+    anansi_providers::catalog::catalog()
+        .iter()
+        .find(|e| e.id == provider)
+        .map(|e| {
+            if format!("{:?}", e.locality) == "Local" {
+                "local".to_string()
+            } else {
+                "cloud".to_string()
+            }
+        })
+        .unwrap_or_else(|| "cloud".to_string())
+}
+
+/// One resolved comparison target: the exact provider/model plus
+/// the effective endpoint and cost class from the trusted
+/// configuration. The approval binds all of it (repair design §2
+/// D1–D2).
+struct ResolvedTarget {
+    provider: String,
+    model: String,
+    locality: String,
+    cost: CostClass,
+    endpoint: String,
+}
+
+fn target_for(
+    scope: &CallerScope,
+    provider: &str,
+    model: &str,
+) -> Result<ResolvedTarget, CommandError> {
+    let target = configured_model_target(scope, provider, model)
+        .ok_or_else(|| invalid("The selected model is not configured for this workspace."))?;
+    Ok(ResolvedTarget {
+        provider: provider.to_string(),
+        model: model.to_string(),
+        locality: catalog_locality(provider),
+        cost: target.cost,
+        endpoint: target.endpoint,
+    })
 }
 
 fn resolve_model(
     scope: &CallerScope,
     want_provider: &Option<String>,
     want_model: &Option<String>,
-) -> Result<(String, String, String), CommandError> {
+) -> Result<ResolvedTarget, CommandError> {
     let configured = configured_chat_models(scope);
     // A blank value is the same as absent: the panel promises a
     // blank Model ID selects the first configured model, so the
-    // server resolves it that way instead of refusing.
+    // server resolves it that way — but only BEFORE approval, via
+    // the resolve op (repair design §2 D1). At start the target
+    // must already be exact; see `resolve_exact_model`.
     let provider = want_provider
         .as_deref()
         .map(str::trim)
@@ -595,9 +696,7 @@ fn resolve_model(
         .filter(|s| !s.is_empty());
     let (provider, model) = match (provider, model) {
         (Some(p), Some(m)) => {
-            let found = configured
-                .iter()
-                .any(|(cp, cm)| cp == p && cm == m);
+            let found = configured.iter().any(|(cp, cm)| cp == p && cm == m);
             if !found {
                 return Err(invalid(
                     "The requested provider and model are not configured for this workspace.",
@@ -621,29 +720,117 @@ fn resolve_model(
             ));
         }
     };
-    // The catalog's locality enum is private; the Debug form is
-    // "Local" / "Cloud" (the same rendering providers-catalog uses).
-    let locality = anansi_providers::catalog::catalog()
-        .iter()
-        .find(|e| e.id == provider)
-        .map(|e| {
-            if format!("{:?}", e.locality) == "Local" {
-                "local".to_string()
-            } else {
-                "cloud".to_string()
-            }
-        })
-        .unwrap_or_else(|| "cloud".to_string());
-    Ok((provider, model, locality))
+    target_for(scope, &provider, &model)
+}
+
+/// The start-time resolution: the approved target must already be
+/// exact (the UI resolved it before approval). A blank here means
+/// the client never resolved — refuse, instead of resolving a
+/// possibly-changed default after approval.
+fn resolve_exact_model(
+    scope: &CallerScope,
+    want_provider: &Option<String>,
+    want_model: &Option<String>,
+) -> Result<ResolvedTarget, CommandError> {
+    let provider = want_provider
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    let model = want_model
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    match (provider, model) {
+        (Some(p), Some(m)) => target_for(scope, p, m),
+        _ => Err(invalid(
+            "Resolve the comparison target before approval: start with the exact provider and model shown in the review.",
+        )),
+    }
+}
+
+/// The strongest (most restrictive) privacy class among the records
+/// rendered in one arm's prompt (repair design §2 D3): public <
+/// standard < private. Sealed or an unknown value fails closed —
+/// sealed is already refused at parse, and this is the second
+/// layer: a segment must never be sent with a weaker label than
+/// the content it carries.
+fn strongest_privacy(records: &[SomniaCompactionRecord]) -> Result<&'static str, String> {
+    fn rank(class: &str) -> Option<u8> {
+        match class {
+            "public" => Some(0),
+            "standard" => Some(1),
+            "private" => Some(2),
+            _ => None,
+        }
+    }
+    // The floor is Standard, not Public: the prompt always carries
+    // the unclassified question text alongside the history, and
+    // unclassified content is Standard by convention (cf.
+    // Segment::plain). Public records never lower the label below
+    // the question; Private records raise it.
+    let mut strongest = "standard";
+    let mut strongest_rank = 1u8;
+    for record in records {
+        let Some(rank) = rank(&record.privacy) else {
+            return Err(format!(
+                "Record {} has a privacy class that cannot be sent to a model.",
+                record.id
+            ));
+        };
+        if rank > strongest_rank {
+            strongest_rank = rank;
+            strongest = match record.privacy.as_str() {
+                "public" => "public",
+                "private" => "private",
+                _ => "standard",
+            };
+        }
+    }
+    Ok(strongest)
+}
+
+/// The privacy class to disclose for one arm: the strongest class
+/// when it is not the standard default, nothing when it is (the
+/// default needs no marker, and omitting it keeps saved
+/// experiments from before this field hashing identically).
+fn disclose_privacy(class: &str) -> Option<String> {
+    if class == "standard" {
+        None
+    } else {
+        Some(class.to_string())
+    }
 }
 
 // ---------------------------------------------------------------------------
 // Ops
 // ---------------------------------------------------------------------------
 
+fn resolve_op(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
+    let req: SomniaCompactionResolveTargetRequest = serde_json::from_value(value)
+        .map_err(|_| invalid("Use a supported SOMNIA compaction request."))?;
+    if req.contract_version != 1 {
+        return Err(CommandError::new(
+            ErrorCode::UnsupportedContract,
+            "Use contract version 1.",
+        ));
+    }
+    let (_workspace, _storage) =
+        crate::swarmtank::require_workspace_and_project(scope, &req.workspace_id, &req.project_id)?;
+    let target = resolve_model(scope, &req.provider, &req.model)?;
+    serde_json::to_value(SomniaCompactionResolveTargetResponse {
+        contract_version: 1,
+        provider: target.provider,
+        model: target.model,
+        locality: target.locality,
+        cost: cost_label(target.cost).to_string(),
+        endpoint: target.endpoint,
+    })
+    .map_err(|_| crate::storage::unavailable())
+}
+
 fn prepare_op(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
-    let req: SomniaCompactionPrepareRequest =
-        serde_json::from_value(value).map_err(|_| invalid("Use a supported SOMNIA compaction request."))?;
+    let req: SomniaCompactionPrepareRequest = serde_json::from_value(value)
+        .map_err(|_| invalid("Use a supported SOMNIA compaction request."))?;
     if req.contract_version != 1 {
         return Err(CommandError::new(
             ErrorCode::UnsupportedContract,
@@ -661,9 +848,7 @@ fn prepare_op(value: Value, scope: &CallerScope) -> Result<Value, CommandError> 
         "json" => parse_json_input(&req.input_text),
         "text" => parse_text_input(&req.input_text),
         _ => {
-            return Err(invalid(
-                "Compaction input format must be json or text.",
-            ));
+            return Err(invalid("Compaction input format must be json or text."));
         }
     }
     .map_err(|e| invalid(&e))?;
@@ -682,6 +867,12 @@ struct ResolvedPair {
     original_prompt: String,
     compacted_prompt: String,
     compaction_micros: u64,
+    /// Strongest privacy class of the records in the original
+    /// prompt (repair design §2 D3).
+    original_privacy: String,
+    /// Strongest privacy class of the records in the compacted
+    /// prompt — the retained records only.
+    compacted_privacy: String,
 }
 
 struct RunConfig {
@@ -705,13 +896,8 @@ fn sort_records_canonical(records: &mut [SomniaCompactionRecord]) {
     });
 }
 
-fn validate_questions(
-    case_id: &str,
-    questions: &[CompactionQuestion],
-) -> Result<(), CommandError> {
-    if questions.is_empty()
-        || questions.len() > MAX_COMPACTION_QUESTIONS_PER_CASE
-    {
+fn validate_questions(case_id: &str, questions: &[CompactionQuestion]) -> Result<(), CommandError> {
+    if questions.is_empty() || questions.len() > MAX_COMPACTION_QUESTIONS_PER_CASE {
         return Err(invalid(&format!(
             "Case {case_id} must have 1 to {MAX_COMPACTION_QUESTIONS_PER_CASE} questions.",
         )));
@@ -723,9 +909,7 @@ fn validate_questions(
                 "Case {case_id} has a missing, over-long, or duplicate question id.",
             )));
         }
-        if q.text.trim().is_empty()
-            || q.text.chars().count() > MAX_COMPACTION_QUESTION_CHARS
-        {
+        if q.text.trim().is_empty() || q.text.chars().count() > MAX_COMPACTION_QUESTION_CHARS {
             return Err(invalid(&format!(
                 "Case {case_id} has a question that must be 1 to {MAX_COMPACTION_QUESTION_CHARS} characters.",
             )));
@@ -742,8 +926,8 @@ fn validate_questions(
 }
 
 fn start_op(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
-    let req: SomniaCompactionStartRequest =
-        serde_json::from_value(value).map_err(|_| invalid("Use a supported SOMNIA compaction request."))?;
+    let req: SomniaCompactionStartRequest = serde_json::from_value(value)
+        .map_err(|_| invalid("Use a supported SOMNIA compaction request."))?;
     if req.contract_version != 1 {
         return Err(CommandError::new(
             ErrorCode::UnsupportedContract,
@@ -761,15 +945,10 @@ fn start_op(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
         .max_total_tokens
         .unwrap_or(DEFAULT_COMPACTION_TOTAL_TOKENS);
     if !(MIN_COMPACTION_TOTAL_TOKENS..=MAX_COMPACTION_TOTAL_TOKENS).contains(&max_total) {
-        return Err(invalid(
-            "Max total tokens must be between 1000 and 200000.",
-        ));
+        return Err(invalid("Max total tokens must be between 1000 and 200000."));
     }
-    // The raw approved values (trimmed; blank means "first
-    // configured"). The approval hash is computed over these, so any
-    // edit after approval invalidates it.
-    let provider_raw = req.provider.as_deref().unwrap_or("").trim().to_string();
-    let model_raw = req.model.as_deref().unwrap_or("").trim().to_string();
+    // The cloud flag and budget, as approved. The provider/model in
+    // the request must be the exact resolved target (see below).
     let cloud_effective = req.cloud.unwrap_or(false);
     // Approve-then-verify: recompute every case candidate and refuse
     // unless its hash is exactly the approved one. Compaction time is
@@ -780,12 +959,9 @@ fn start_op(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
     for case in &req.cases {
         validate_questions(&case.case_id, &case.questions)?;
         let started = Instant::now();
-        let candidate = verify_approved_candidate(
-            &case.records,
-            &case.quarantined,
-            &case.candidate_hash,
-        )
-        .map_err(|e| invalid(&e))?;
+        let candidate =
+            verify_approved_candidate(&case.records, &case.quarantined, &case.candidate_hash)
+                .map_err(|e| invalid(&e))?;
         verified.push((
             case.case_id.clone(),
             candidate.content_hash.clone(),
@@ -800,6 +976,14 @@ fn start_op(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
             .map(|r| r.record.clone())
             .collect();
         sort_records_canonical(&mut retained_records);
+        // Each arm is labelled with the strongest privacy class of
+        // the records it actually renders (repair design §2 D3).
+        let original_privacy = strongest_privacy(&original_records)
+            .map_err(|e| invalid(&e))?
+            .to_string();
+        let compacted_privacy = strongest_privacy(&retained_records)
+            .map_err(|e| invalid(&e))?
+            .to_string();
         for question in &case.questions {
             let pair_id = format!("{}:{}", case.case_id, question.id);
             resolved_pairs.push(ResolvedPair {
@@ -809,6 +993,8 @@ fn start_op(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
                 original_prompt: build_prompt(&original_records, &question.text),
                 compacted_prompt: build_prompt(&retained_records, &question.text),
                 compaction_micros: micros,
+                original_privacy: original_privacy.clone(),
+                compacted_privacy: compacted_privacy.clone(),
             });
         }
     }
@@ -817,7 +1003,7 @@ fn start_op(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
             "A compaction run takes at most {MAX_COMPACTION_PAIRS} pairs.",
         )));
     }
-    // The approval binds the reviewed cases, the selected target,
+    // The approval binds the reviewed cases, the RESOLVED target,
     // the cloud flag, and the budget — not just the candidate hash.
     // A missing or mismatched hash refuses before any dispatch.
     let Some(approval_hash) = req.approval_hash.as_deref() else {
@@ -825,10 +1011,21 @@ fn start_op(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
             "Approve the reviewed inputs before starting the run.",
         ));
     };
+    // The start request must carry the exact provider/model the user
+    // approved (repair design §2 D2). The server re-derives the
+    // endpoint, locality, and cost from the LIVE configuration and
+    // recomputes the hash from those values: a target removed after
+    // approval fails resolution here, and an endpoint, locality, or
+    // cost change makes the recomputed hash differ — either way the
+    // run never starts and no dispatch happens.
+    let target = resolve_exact_model(scope, &req.provider, &req.model)?;
     let expected_hash = compute_approval_hash(
         &verified,
-        &provider_raw,
-        &model_raw,
+        &target.provider,
+        &target.model,
+        &target.endpoint,
+        &target.locality,
+        cost_label(target.cost),
         cloud_effective,
         max_total,
     );
@@ -837,23 +1034,27 @@ fn start_op(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
             "The approval no longer matches the reviewed inputs. Review the candidate again before starting the run.",
         ));
     }
-    let (provider, model, locality) = resolve_model(scope, &req.provider, &req.model)?;
     // Free-only, up front (design §2 D3): a comparison runs free
     // models only — one permit authorizes one dispatch chain, so no
     // permit could cover the run, and the run never uses one. The
     // Zero-Cost Lock still runs per dispatch inside authorize_cost.
-    let cost = configured_model_cost(scope, &provider, &model).ok_or_else(|| {
-        invalid("The selected model is not configured for this workspace.")
-    })?;
-    check_run_target(&locality, cost, cloud_effective, &req.permit_id)
-        .map_err(|e| invalid(&e))?;
+    check_run_target(
+        &target.locality,
+        target.cost,
+        cloud_effective,
+        &req.permit_id,
+    )
+    .map_err(|e| invalid(&e))?;
+    let provider = target.provider.clone();
+    let model = target.model.clone();
+    let locality = target.locality.clone();
+    let cost = target.cost;
     let local_only = !cloud_effective;
     let estimated_calls = (resolved_pairs.len() as u32).saturating_mul(2);
     let estimated_tokens: u64 = resolved_pairs
         .iter()
         .map(|p| {
-            (p.original_prompt.chars().count() / 4
-                + p.compacted_prompt.chars().count() / 4) as u64
+            (p.original_prompt.chars().count() / 4 + p.compacted_prompt.chars().count() / 4) as u64
                 + 2 * MAX_COMPACTION_OUTPUT_TOKENS as u64
         })
         .sum();
@@ -916,7 +1117,9 @@ fn read_run(
     run_id: &str,
 ) -> Result<SomniaCompactionPollResponse, CommandError> {
     with_compaction_runs(|map| {
-        let run = map.get(&compaction_run_key(scope, run_id)).ok_or_else(not_found)?;
+        let run = map
+            .get(&compaction_run_key(scope, run_id))
+            .ok_or_else(not_found)?;
         if run.project_id != project_id {
             return Err(not_found());
         }
@@ -946,8 +1149,8 @@ fn read_run(
 }
 
 fn poll_op(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
-    let req: SomniaCompactionPollRequest =
-        serde_json::from_value(value).map_err(|_| invalid("Use a supported SOMNIA compaction request."))?;
+    let req: SomniaCompactionPollRequest = serde_json::from_value(value)
+        .map_err(|_| invalid("Use a supported SOMNIA compaction request."))?;
     if req.contract_version != 1 {
         return Err(CommandError::new(
             ErrorCode::UnsupportedContract,
@@ -961,8 +1164,8 @@ fn poll_op(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
 }
 
 fn cancel_op(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
-    let req: SomniaCompactionCancelRequest =
-        serde_json::from_value(value).map_err(|_| invalid("Use a supported SOMNIA compaction request."))?;
+    let req: SomniaCompactionCancelRequest = serde_json::from_value(value)
+        .map_err(|_| invalid("Use a supported SOMNIA compaction request."))?;
     if req.contract_version != 1 {
         return Err(CommandError::new(
             ErrorCode::UnsupportedContract,
@@ -1014,17 +1217,25 @@ fn read_usage(response: &Value) -> Option<CompactionUsage> {
     })
 }
 
+/// One arm of one pair. The segment carries the strongest privacy
+/// class of the records in that arm's prompt (repair design §2 D3),
+/// so the provider privacy gate sees the real class — a Private
+/// segment to a cloud target without explicit cloud authorization
+/// is refused by the gate itself. The dispatcher's disclosure must
+/// agree with the class sent; a mismatch fails the pair instead of
+/// recording a reply the disclosure does not support.
 fn dispatch_pair_arm(
     scope: &CallerScope,
     config: &RunConfig,
     prompt: &str,
+    privacy: &str,
 ) -> DispatchOutcome {
     let dispatch = json!({
         "contractVersion": 1,
         "workspaceId": config.workspace_id,
         "request": {
             "model": config.model.clone(),
-            "messages": [{ "role": "user", "segments": [{ "text": prompt, "privacy": "standard" }] }],
+            "messages": [{ "role": "user", "segments": [{ "text": prompt, "privacy": privacy }] }],
             "maxOutputTokens": MAX_COMPACTION_OUTPUT_TOKENS,
             "temperature": 0,
             "localOnly": config.local_only,
@@ -1080,7 +1291,10 @@ fn dispatch_pair_arm(
         return DispatchOutcome {
             reply: None,
             usage: read_usage(&response),
-            failure: Some("The provider reported a different provider. This pair cannot be compared.".to_string()),
+            failure: Some(
+                "The provider reported a different provider. This pair cannot be compared."
+                    .to_string(),
+            ),
         };
     }
     if let Some(m) = reported_model
@@ -1089,7 +1303,10 @@ fn dispatch_pair_arm(
         return DispatchOutcome {
             reply: None,
             usage: read_usage(&response),
-            failure: Some("The provider reported a different model. This pair cannot be compared.".to_string()),
+            failure: Some(
+                "The provider reported a different model. This pair cannot be compared."
+                    .to_string(),
+            ),
         };
     }
     if let Some(m) = response_model
@@ -1098,7 +1315,10 @@ fn dispatch_pair_arm(
         return DispatchOutcome {
             reply: None,
             usage: read_usage(&response),
-            failure: Some("The provider reported a different model. This pair cannot be compared.".to_string()),
+            failure: Some(
+                "The provider reported a different model. This pair cannot be compared."
+                    .to_string(),
+            ),
         };
     }
     let reply = response
@@ -1110,8 +1330,23 @@ fn dispatch_pair_arm(
         return DispatchOutcome {
             reply: None,
             usage: read_usage(&response),
+            failure: Some("Provider returned a response the core could not read.".to_string()),
+        };
+    }
+    // The dispatcher discloses the strongest privacy class it saw;
+    // it must be the class this arm sent. A disagreement means the
+    // dispatch record does not support the pair — fail it.
+    let disclosed_privacy = response
+        .get("disclosure")
+        .and_then(|d| d.get("strongestPrivacy"))
+        .and_then(|v| v.as_str());
+    if disclosed_privacy != Some(privacy) {
+        return DispatchOutcome {
+            reply: None,
+            usage: read_usage(&response),
             failure: Some(
-                "Provider returned a response the core could not read.".to_string(),
+                "The provider disclosure does not match the privacy class sent for this arm. This pair cannot be compared."
+                    .to_string(),
             ),
         };
     }
@@ -1147,7 +1382,12 @@ fn run_compaction(run_id: String, scope: CallerScope, config: RunConfig) {
                 break 'outer;
             }
         }
-        let original = dispatch_pair_arm(&scope, &config, &pair.original_prompt);
+        let original = dispatch_pair_arm(
+            &scope,
+            &config,
+            &pair.original_prompt,
+            &pair.original_privacy,
+        );
         with_compaction_runs(|map| {
             if let Some(run) = map.get_mut(&key) {
                 run.calls_made = run.calls_made.saturating_add(1);
@@ -1182,6 +1422,8 @@ fn run_compaction(run_id: String, scope: CallerScope, config: RunConfig) {
                 compacted_usage: None,
                 failure: Some("Run cancelled before the compacted arm.".to_string()),
                 compaction_micros: pair.compaction_micros,
+                original_privacy: disclose_privacy(&pair.original_privacy),
+                compacted_privacy: disclose_privacy(&pair.compacted_privacy),
             };
             with_compaction_runs(|map| {
                 if let Some(run) = map.get_mut(&key) {
@@ -1191,7 +1433,12 @@ fn run_compaction(run_id: String, scope: CallerScope, config: RunConfig) {
             terminal_status = Some("cancelled".to_string());
             break 'outer;
         }
-        let compacted = dispatch_pair_arm(&scope, &config, &pair.compacted_prompt);
+        let compacted = dispatch_pair_arm(
+            &scope,
+            &config,
+            &pair.compacted_prompt,
+            &pair.compacted_privacy,
+        );
         with_compaction_runs(|map| {
             if let Some(run) = map.get_mut(&key) {
                 run.calls_made = run.calls_made.saturating_add(1);
@@ -1218,11 +1465,8 @@ fn run_compaction(run_id: String, scope: CallerScope, config: RunConfig) {
             compacted_prompt: pair.compacted_prompt.clone(),
             original_reply: original.reply.clone(),
             compacted_reply: compacted.reply.clone(),
-            original_score: score_reply(
-                original.reply.as_deref(),
-                &pair.question.expected_answer,
-            )
-            .to_string(),
+            original_score: score_reply(original.reply.as_deref(), &pair.question.expected_answer)
+                .to_string(),
             compacted_score: score_reply(
                 compacted.reply.as_deref(),
                 &pair.question.expected_answer,
@@ -1232,6 +1476,8 @@ fn run_compaction(run_id: String, scope: CallerScope, config: RunConfig) {
             compacted_usage: compacted.usage,
             failure,
             compaction_micros: pair.compaction_micros,
+            original_privacy: disclose_privacy(&pair.original_privacy),
+            compacted_privacy: disclose_privacy(&pair.compacted_privacy),
         };
         with_compaction_runs(|map| {
             if let Some(run) = map.get_mut(&key) {
@@ -1289,22 +1535,14 @@ pub fn compute_metrics(
         if pair.original_score == "failed" || pair.compacted_score == "failed" {
             failed_pairs += 1;
         }
-        match pair
-            .original_usage
-            .as_ref()
-            .and_then(|u| u.total_tokens)
-        {
+        match pair.original_usage.as_ref().and_then(|u| u.total_tokens) {
             Some(t) => {
                 reported_original += 1;
                 tokens_original = tokens_original.map(|sum| sum.saturating_add(t));
             }
             None => tokens_original = None,
         }
-        match pair
-            .compacted_usage
-            .as_ref()
-            .and_then(|u| u.total_tokens)
-        {
+        match pair.compacted_usage.as_ref().and_then(|u| u.total_tokens) {
             Some(t) => {
                 reported_compacted += 1;
                 tokens_compacted = tokens_compacted.map(|sum| sum.saturating_add(t));
@@ -1429,7 +1667,12 @@ pub fn validate_experiment(experiment: &SomniaCompactionExperiment) -> Result<()
             ));
         }
         if pair.original_score == "failed" || pair.compacted_score == "failed" {
-            if pair.failure.as_ref().map(|f| f.trim().is_empty()).unwrap_or(true) {
+            if pair
+                .failure
+                .as_ref()
+                .map(|f| f.trim().is_empty())
+                .unwrap_or(true)
+            {
                 return Err(format!(
                     "Pair {} is failed but carries no failure reason.",
                     pair.pair_id
@@ -1464,8 +1707,8 @@ pub fn validate_experiment(experiment: &SomniaCompactionExperiment) -> Result<()
 }
 
 fn save_op(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
-    let req: SomniaCompactionSaveRequest =
-        serde_json::from_value(value).map_err(|_| invalid("Use a supported SOMNIA compaction request."))?;
+    let req: SomniaCompactionSaveRequest = serde_json::from_value(value)
+        .map_err(|_| invalid("Use a supported SOMNIA compaction request."))?;
     if req.contract_version != 1 {
         return Err(CommandError::new(
             ErrorCode::UnsupportedContract,
@@ -1553,10 +1796,7 @@ mod tests {
         }
     }
 
-    fn with_supersedes(
-        mut r: SomniaCompactionRecord,
-        targets: &[&str],
-    ) -> SomniaCompactionRecord {
+    fn with_supersedes(mut r: SomniaCompactionRecord, targets: &[&str]) -> SomniaCompactionRecord {
         r.supersedes = targets.iter().map(|s| s.to_string()).collect();
         r
     }
@@ -1597,10 +1837,15 @@ mod tests {
             }),
             failure: None,
             compaction_micros: 120,
+            original_privacy: None,
+            compacted_privacy: None,
         }
     }
 
-    fn experiment_for(candidate: SomniaCompactionCandidate, pairs: Vec<CompactionPairResult>) -> SomniaCompactionExperiment {
+    fn experiment_for(
+        candidate: SomniaCompactionCandidate,
+        pairs: Vec<CompactionPairResult>,
+    ) -> SomniaCompactionExperiment {
         let metrics = compute_metrics(&pairs, 120, 500);
         let mut experiment = SomniaCompactionExperiment {
             format: COMPACTION_EXPERIMENT_FORMAT.to_string(),
@@ -1648,12 +1893,18 @@ mod tests {
     #[test]
     fn scoring_matrix() {
         let want = Some("The customs fee is $45.".to_string());
-        assert_eq!(score_reply(Some("The customs fee is $45."), &want), "correct");
+        assert_eq!(
+            score_reply(Some("The customs fee is $45."), &want),
+            "correct"
+        );
         assert_eq!(
             score_reply(Some("  The customs fee is $45.  "), &want),
             "correct"
         );
-        assert_eq!(score_reply(Some("The customs fee is $40."), &want), "incorrect");
+        assert_eq!(
+            score_reply(Some("The customs fee is $40."), &want),
+            "incorrect"
+        );
         assert_eq!(score_reply(Some("UNKNOWN"), &want), "abstained");
         assert_eq!(score_reply(Some(""), &want), "abstained");
         assert_eq!(score_reply(None, &want), "failed");
@@ -1814,42 +2065,250 @@ mod tests {
     #[test]
     fn approval_hash_binds_every_reviewed_field() {
         let cases = approval_cases();
-        let base = compute_approval_hash(&cases, "ollama", "llama-x", false, 20_000);
+        let base = compute_approval_hash(
+            &cases,
+            "ollama",
+            "llama-x",
+            "http://127.0.0.1:11434",
+            "local",
+            "free",
+            false,
+            20_000,
+        );
         assert_eq!(base.len(), 64);
         // Same inputs hash the same; any one field changed hashes
         // differently — questions, target, cloud, budget, candidate.
         assert_eq!(
-            compute_approval_hash(&cases, "ollama", "llama-x", false, 20_000),
+            compute_approval_hash(
+                &cases,
+                "ollama",
+                "llama-x",
+                "http://127.0.0.1:11434",
+                "local",
+                "free",
+                false,
+                20_000
+            ),
             base
         );
         let mut changed_questions = approval_cases();
         changed_questions[0].2[0].text = "What was the fee before?".to_string();
         assert_ne!(
-            compute_approval_hash(&changed_questions, "ollama", "llama-x", false, 20_000),
+            compute_approval_hash(
+                &changed_questions,
+                "ollama",
+                "llama-x",
+                "http://127.0.0.1:11434",
+                "local",
+                "free",
+                false,
+                20_000
+            ),
             base
         );
         assert_ne!(
-            compute_approval_hash(&cases, "ollama", "aaa-decoy", false, 20_000),
+            compute_approval_hash(
+                &cases,
+                "ollama",
+                "aaa-decoy",
+                "http://127.0.0.1:11434",
+                "local",
+                "free",
+                false,
+                20_000
+            ),
             base
         );
         assert_ne!(
-            compute_approval_hash(&cases, "ollama", "", false, 20_000),
+            compute_approval_hash(
+                &cases,
+                "ollama",
+                "",
+                "http://127.0.0.1:11434",
+                "local",
+                "free",
+                false,
+                20_000
+            ),
             base
         );
         assert_ne!(
-            compute_approval_hash(&cases, "ollama", "llama-x", true, 20_000),
+            compute_approval_hash(
+                &cases,
+                "ollama",
+                "llama-x",
+                "http://127.0.0.1:11434",
+                "local",
+                "free",
+                true,
+                20_000
+            ),
             base
         );
         assert_ne!(
-            compute_approval_hash(&cases, "ollama", "llama-x", false, 50_000),
+            compute_approval_hash(
+                &cases,
+                "ollama",
+                "llama-x",
+                "http://127.0.0.1:11434",
+                "local",
+                "free",
+                false,
+                50_000
+            ),
             base
         );
         let mut changed_candidate = approval_cases();
         changed_candidate[0].1 = "b".repeat(64);
         assert_ne!(
-            compute_approval_hash(&changed_candidate, "ollama", "llama-x", false, 20_000),
+            compute_approval_hash(
+                &changed_candidate,
+                "ollama",
+                "llama-x",
+                "http://127.0.0.1:11434",
+                "local",
+                "free",
+                false,
+                20_000
+            ),
             base
         );
+        // The resolved target's effective endpoint, locality, and
+        // cost are bound too: a configuration change to the approved
+        // target after approval invalidates the approval.
+        assert_ne!(
+            compute_approval_hash(
+                &cases,
+                "ollama",
+                "llama-x",
+                "http://127.0.0.1:9999",
+                "local",
+                "free",
+                false,
+                20_000
+            ),
+            base
+        );
+        assert_ne!(
+            compute_approval_hash(
+                &cases,
+                "ollama",
+                "llama-x",
+                "http://127.0.0.1:11434",
+                "cloud",
+                "free",
+                false,
+                20_000
+            ),
+            base
+        );
+        assert_ne!(
+            compute_approval_hash(
+                &cases,
+                "ollama",
+                "llama-x",
+                "http://127.0.0.1:11434",
+                "local",
+                "paid",
+                false,
+                20_000
+            ),
+            base
+        );
+    }
+
+    #[test]
+    fn strongest_privacy_is_the_most_restrictive_class_present() {
+        let standard = record("r1", "fee", "ledger", 1, "fact", "trusted", "Fee is $40.");
+        assert_eq!(strongest_privacy(&[standard.clone()]).unwrap(), "standard");
+        let mut private = standard.clone();
+        private.privacy = "private".to_string();
+        assert_eq!(
+            strongest_privacy(&[standard.clone(), private.clone()]).unwrap(),
+            "private"
+        );
+        // The compacted arm renders only the retained records: when
+        // the Private record is excluded, the arm stays standard.
+        assert_eq!(strongest_privacy(&[standard]).unwrap(), "standard");
+        let mut public = private.clone();
+        public.privacy = "public".to_string();
+        // Public records never lower the label below the Standard
+        // floor (the prompt also carries the unclassified question).
+        assert_eq!(strongest_privacy(&[public.clone()]).unwrap(), "standard");
+        assert_eq!(
+            strongest_privacy(&[public, private.clone()]).unwrap(),
+            "private"
+        );
+        // An empty history is standard (no content to protect).
+        assert_eq!(strongest_privacy(&[]).unwrap(), "standard");
+        // Sealed or unknown classes fail closed, never downgraded.
+        let mut sealed = private.clone();
+        sealed.privacy = "sealed".to_string();
+        assert!(strongest_privacy(&[sealed]).is_err());
+        let mut unknown = private.clone();
+        unknown.privacy = "secret".to_string();
+        assert!(strongest_privacy(&[unknown]).is_err());
+    }
+
+    #[test]
+    fn privacy_disclosure_omits_the_standard_default() {
+        assert_eq!(disclose_privacy("standard"), None);
+        assert_eq!(disclose_privacy("private"), Some("private".to_string()));
+        assert_eq!(disclose_privacy("public"), Some("public".to_string()));
+    }
+
+    #[test]
+    fn pair_privacy_fields_survive_a_saved_experiment_round_trip() {
+        // A pair with a non-standard arm serializes with the field;
+        // a pair without one serializes identically to before the
+        // field existed, so old saved experiments still hash.
+        let records = vec![
+            record("r1", "fee", "ledger", 1, "fact", "trusted", "Fee is $40."),
+            with_supersedes(
+                record("r2", "fee", "ledger", 2, "fact", "trusted", "Fee is $45."),
+                &["r1"],
+            ),
+        ];
+        let candidate = compact(&records).unwrap();
+        let retained: Vec<SomniaCompactionRecord> = all_retained(&candidate)
+            .iter()
+            .map(|r| r.record.clone())
+            .collect();
+        let pair = pair_for(
+            "case-001:q1",
+            "case-001",
+            "What is the customs fee now?",
+            Some("The customs fee is $45."),
+            &build_prompt(&records, "What is the customs fee now?"),
+            &build_prompt(&retained, "What is the customs fee now?"),
+            Some("The customs fee is $45."),
+            Some("The customs fee is $45."),
+        );
+        assert_eq!(pair.original_privacy, None);
+        assert_eq!(pair.compacted_privacy, None);
+        let experiment = experiment_for(candidate, vec![pair]);
+        assert!(validate_experiment(&experiment).is_ok());
+        // The same experiment with a private original arm validates
+        // too, and its hash covers the disclosed field.
+        let candidate2 = compact(&records).unwrap();
+        let retained2: Vec<SomniaCompactionRecord> = all_retained(&candidate2)
+            .iter()
+            .map(|r| r.record.clone())
+            .collect();
+        let mut private_pair = pair_for(
+            "case-001:q1",
+            "case-001",
+            "What is the customs fee now?",
+            Some("The customs fee is $45."),
+            &build_prompt(&records, "What is the customs fee now?"),
+            &build_prompt(&retained2, "What is the customs fee now?"),
+            Some("The customs fee is $45."),
+            Some("The customs fee is $45."),
+        );
+        private_pair.original_privacy = Some("private".to_string());
+        let experiment2 = experiment_for(candidate2, vec![private_pair]);
+        assert!(validate_experiment(&experiment2).is_ok());
+        assert_ne!(experiment.content_hash, experiment2.content_hash);
     }
 
     #[test]
@@ -1867,8 +2326,13 @@ mod tests {
         assert!(check_run_target("cloud", CostClass::Unknown, true, &None).is_err());
         // A supplied permit never authorizes a comparison.
         assert!(
-            check_run_target("local", CostClass::Free, false, &Some("permit-1".to_string()))
-                .is_err()
+            check_run_target(
+                "local",
+                CostClass::Free,
+                false,
+                &Some("permit-1".to_string())
+            )
+            .is_err()
         );
     }
 }
