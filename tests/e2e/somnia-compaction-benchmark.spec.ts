@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import {
   fakeAnswerKey,
   renderHistory,
+  resetFakeBehavior,
   setFakeDelayMs,
   setFakeExpectedAnswers,
   startCompactionSession,
@@ -43,6 +44,7 @@ async function loadFixtureCases(): Promise<FixtureCase[]> {
 
 test('frozen benchmark reruns through automatic compaction (synthetic by default, live with ANANSI_SOMNIA_LIVE_ENDPOINT)', async ({ page }, testInfo) => {
   test.setTimeout(300_000);
+  resetFakeBehavior();
   setFakeDelayMs(0);
   // Live mode follows the model-comparison spec's pattern: with
   // ANANSI_SOMNIA_LIVE_ENDPOINT set, the run uses that authorized

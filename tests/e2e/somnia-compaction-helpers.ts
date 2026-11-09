@@ -22,9 +22,17 @@ import path from 'node:path';
 type FakeBehavior = {
   delayMs: number;
   expected: Map<string, string | null>;
+  wrongModelCall: number | null;
 };
 
-const behavior: FakeBehavior = { delayMs: 0, expected: new Map() };
+const behavior: FakeBehavior = { delayMs: 0, expected: new Map(), wrongModelCall: null };
+
+/** Every test resets the fake first: the behavior is module-level. */
+export function resetFakeBehavior(): void {
+  behavior.delayMs = 0;
+  behavior.expected = new Map();
+  behavior.wrongModelCall = null;
+}
 
 export function setFakeExpectedAnswers(entries: Array<[string, string | null]>): void {
   behavior.expected = new Map(entries);
@@ -32,6 +40,11 @@ export function setFakeExpectedAnswers(entries: Array<[string, string | null]>):
 
 export function setFakeDelayMs(ms: number): void {
   behavior.delayMs = ms;
+}
+
+/** Makes one dispatch (by call number) report a different model. */
+export function setFakeWrongModelCall(callNumber: number | null): void {
+  behavior.wrongModelCall = callNumber;
 }
 
 /**
@@ -83,6 +96,7 @@ async function startFake(): Promise<{ server: Server; url: string; hits: () => n
     });
     req.on('end', () => {
       hits += 1;
+      const callNumber = hits;
       const respond = () => {
         if (res.destroyed || res.writableEnded) return;
         const parsed = JSON.parse(body || '{}') as { stream?: boolean };
@@ -107,10 +121,13 @@ async function startFake(): Promise<{ server: Server; url: string; hits: () => n
             reply = expected;
           }
         }
+        // A wrong-model call reports a different model in the same
+        // shape the real provider would; the run must refuse the pair.
+        const model = behavior.wrongModelCall === callNumber ? 'other-model' : 'llama-x';
         res.writeHead(200, { 'content-type': 'application/json' });
         res.end(
           JSON.stringify({
-            model: 'llama-x',
+            model,
             message: { role: 'assistant', content: reply },
             done: true,
             prompt_eval_count: 12,

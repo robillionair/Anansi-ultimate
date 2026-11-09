@@ -2,8 +2,10 @@ import { expect, test } from '@playwright/test';
 import {
   fakeAnswerKey,
   renderHistory,
+  resetFakeBehavior,
   setFakeDelayMs,
   setFakeExpectedAnswers,
+  setFakeWrongModelCall,
   startCompactionSession,
 } from './somnia-compaction-helpers';
 
@@ -30,6 +32,7 @@ const CASE_001_RECORDS = [
 
 test('SOMNIA compaction runs the approved comparison and saves it privately', async ({ page }, testInfo) => {
   test.setTimeout(240_000);
+  resetFakeBehavior();
   setFakeDelayMs(0);
   // The synthetic provider answers the fee question from either history
   // and abstains on the question the history should not state.
@@ -128,6 +131,7 @@ test('SOMNIA compaction runs the approved comparison and saves it privately', as
 
 test('SOMNIA compaction refuses a start whose approval does not match the reviewed inputs', async ({ page }) => {
   test.setTimeout(120_000);
+  resetFakeBehavior();
   setFakeDelayMs(0);
   setFakeExpectedAnswers([]);
   const session = await startCompactionSession(page);
@@ -176,6 +180,7 @@ test('SOMNIA compaction refuses a start whose approval does not match the review
 
 test('SOMNIA compaction cancellation stops the run without dropping the dispatched call', async ({ page }) => {
   test.setTimeout(120_000);
+  resetFakeBehavior();
   setFakeDelayMs(3000);
   const originalHistory = renderHistory(CASE_001_RECORDS);
   const compactedHistory = renderHistory([CASE_001_RECORDS[1]]);
@@ -210,6 +215,7 @@ test('SOMNIA compaction cancellation stops the run without dropping the dispatch
 
 test('LARP scene 09 shows the compaction flow with no provider traffic on entry', async ({ page }) => {
   test.setTimeout(120_000);
+  resetFakeBehavior();
   setFakeDelayMs(0);
   setFakeExpectedAnswers([]);
   const session = await startCompactionSession(page);
@@ -237,6 +243,7 @@ test('LARP scene 09 shows the compaction flow with no provider traffic on entry'
 
 test('SOMNIA compaction runs are scoped to their project', async ({ page }) => {
   test.setTimeout(120_000);
+  resetFakeBehavior();
   setFakeDelayMs(0);
   const originalHistory = renderHistory(CASE_001_RECORDS);
   const compactedHistory = renderHistory([CASE_001_RECORDS[1]]);
@@ -282,6 +289,62 @@ test('SOMNIA compaction runs are scoped to their project', async ({ page }) => {
     await session.openProjectByTitle('Second Harbor');
     await expect(session.panel.getByRole('region', { name: 'Compaction run results' })).toHaveCount(0);
     await expect(session.panel.getByRole('region', { name: 'Saved compaction experiments' })).toHaveCount(0);
+  } finally {
+    await session.cleanup();
+  }
+});
+
+test('SOMNIA compaction refuses a pair when the provider reports a different model', async ({ page }) => {
+  test.setTimeout(120_000);
+  resetFakeBehavior();
+  setFakeDelayMs(0);
+  const originalHistory = renderHistory(CASE_001_RECORDS);
+  const compactedHistory = renderHistory([CASE_001_RECORDS[1]]);
+  setFakeExpectedAnswers([
+    [fakeAnswerKey('What is the customs fee now?', originalHistory), 'The customs fee is $45.'],
+    [fakeAnswerKey('What is the customs fee now?', compactedHistory), 'The customs fee is $45.'],
+  ]);
+  // The first dispatch (original arm) reports another model; the second
+  // (compacted arm) reports the requested one.
+  setFakeWrongModelCall(1);
+  const session = await startCompactionSession(page);
+  try {
+    const envelope = JSON.stringify({ format: 'anansi-somnia-compaction-input', version: 1, records: CASE_001_RECORDS });
+    const prepared = await session.call('ai', 'somnia-compaction-prepare', {
+      workspaceId: session.workspaceId, projectId: session.projectId, inputText: envelope, inputFormat: 'json',
+    });
+    expect(prepared.status).toBe(200);
+    const started = await session.call('ai', 'somnia-compaction-start', {
+      workspaceId: session.workspaceId, projectId: session.projectId,
+      cases: [{
+        caseId: 'case-001',
+        records: CASE_001_RECORDS,
+        quarantined: prepared.body.candidate.quarantined,
+        candidateHash: prepared.body.candidate.contentHash,
+        questions: [{ id: 'q1', text: 'What is the customs fee now?', expectedAnswer: 'The customs fee is $45.' }],
+      }],
+    });
+    expect(started.status).toBe(200);
+    const runId = started.body.runId as string;
+    let poll = await session.call('ai', 'somnia-compaction-poll', {
+      workspaceId: session.workspaceId, projectId: session.projectId, runId,
+    });
+    const deadline = Date.now() + 60_000;
+    while (poll.body.status === 'running' && Date.now() < deadline) {
+      await new Promise(resolve => setTimeout(resolve, 500));
+      poll = await session.call('ai', 'somnia-compaction-poll', {
+        workspaceId: session.workspaceId, projectId: session.projectId, runId,
+      });
+    }
+    expect(poll.body.status).toBe('complete');
+    expect(poll.body.callsMade).toBe(2);
+    expect(poll.body.pairs.length).toBe(1);
+    const pair = poll.body.pairs[0];
+    expect(pair.originalScore).toBe('failed');
+    expect(pair.failure).toContain('The provider reported a different model.');
+    // The good arm's reply is still recorded; the pair is failed, not completed.
+    expect(pair.compactedScore).toBe('correct');
+    expect(pair.compactedReply).toBe('The customs fee is $45.');
   } finally {
     await session.cleanup();
   }
