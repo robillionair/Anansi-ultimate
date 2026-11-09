@@ -2154,7 +2154,6 @@ impl crate::storage::Storage {
                 .map_err(|_| crate::jobs::invalid())?;
             let names = q
                 .column_names()
-                .iter()
                 .map(|n| n.to_string())
                 .collect::<Vec<_>>();
             let mut rows = q.query([]).map_err(|_| crate::jobs::invalid())?;

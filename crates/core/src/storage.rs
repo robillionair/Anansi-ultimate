@@ -638,6 +638,22 @@ fn migrate(connection: &mut Connection, sql: &str) -> rusqlite::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    /// RUSTSEC-2026-0459 (CVE-2026-119375): the build must run
+    /// bundled SQLite >= 3.54.0. This asserts the version the
+    /// linked library actually reports, not the lockfile alone.
+    #[test]
+    fn bundled_sqlite_is_patched() {
+        let version = rusqlite::version();
+        assert!(
+            version.starts_with("3.54."),
+            "bundled SQLite must be >= 3.54.0, got {version}"
+        );
+        assert!(
+            rusqlite::version_number() >= 3_054_000,
+            "bundled SQLite number must be >= 3054000, got {}",
+            rusqlite::version_number()
+        );
+    }
     #[test]
     fn migration_failure_rolls_back_everything() {
         let mut connection = Connection::open_in_memory().unwrap();
