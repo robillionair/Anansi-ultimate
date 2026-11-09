@@ -4033,6 +4033,12 @@ export type PrivacyClass = "public" | "standard" | "private" | "sealed" | "restr
  * policy is resolved from backend state only. The one exception is
  * `expected_target`: a caller-supplied approval binding that phase 1
  * verifies against backend state and never trusts as configuration.
+ * The binding is per-op: on unary dispatch it requires explicit
+ * model selection (`chooseModel` plus a `chosen` that matches the
+ * expected provider/model), because every other routing mode
+ * ignores `chosen` and lets the router pick a different model; on
+ * stream-start the field is refused outright, because streaming
+ * does not enforce the binding.
  */
 export interface ProviderDispatchRequest {
   /**

@@ -246,6 +246,12 @@ pub struct ExpectedDispatchTarget {
 /// policy is resolved from backend state only. The one exception is
 /// `expected_target`: a caller-supplied approval binding that phase 1
 /// verifies against backend state and never trusts as configuration.
+/// The binding is per-op: on unary dispatch it requires explicit
+/// model selection (`chooseModel` plus a `chosen` that matches the
+/// expected provider/model), because every other routing mode
+/// ignores `chosen` and lets the router pick a different model; on
+/// stream-start the field is refused outright, because streaming
+/// does not enforce the binding.
 #[derive(Debug, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ProviderDispatchRequest {
@@ -810,10 +816,22 @@ fn enforce_expected_target(
     state: &BackendState,
     expected: &ExpectedDispatchTarget,
     chosen: Option<&(String, String)>,
+    mode: RoutingMode,
 ) -> Result<(), CommandError> {
-    if let Some((provider, model)) = chosen
-        && (provider != &expected.provider || model != &expected.model)
-    {
+    // The router honors `chosen` only in ChooseModel mode; in every
+    // other mode it ignores the field and orders an automatic chain,
+    // so an expected target without explicit selection binds nothing.
+    if mode != RoutingMode::ChooseModel {
+        return Err(invalid(
+            "The expected dispatch target requires explicit model selection (chooseModel); automatic routing is not allowed.",
+        ));
+    }
+    let Some((provider, model)) = chosen else {
+        return Err(invalid(
+            "The expected dispatch target requires a chosen provider and model; automatic routing is not allowed.",
+        ));
+    };
+    if provider != &expected.provider || model != &expected.model {
         return Err(invalid(
             "The expected dispatch target does not match the chosen provider and model.",
         ));
@@ -1421,7 +1439,7 @@ pub fn providers_command(
             let (permit, runtime) = with_backend(scope, |state| {
                 enforce_configured_model(state, &req.request)?;
                 if let Some(expected) = &req.expected_target {
-                    enforce_expected_target(state, expected, req.chosen.as_ref())?;
+                    enforce_expected_target(state, expected, req.chosen.as_ref(), routing.mode)?;
                 }
                 let permit = take_permit(state, scope, &req.permit_id)?;
                 let runtime = runtime_for(state)?;
@@ -1445,6 +1463,17 @@ pub fn providers_command(
             let req: ProviderDispatchRequest = parse(value, "provider dispatch")?;
             require_contract_v1(req.contract_version)?;
             validate_request_bounds(&req.request)?;
+            // Stream-start does not enforce an expected target, so the
+            // field is refused here — before traffic and before the
+            // locked phase — rather than accepted and silently ignored.
+            // No existing caller sends it (collider, forge, ideas,
+            // opportunities); a future approval-bound stream must
+            // enforce it the same way unary dispatch does.
+            if req.expected_target.is_some() {
+                return Err(invalid(
+                    "expectedTarget is not supported on stream-start; use a unary dispatch for an approval-bound target.",
+                ));
+            }
             let routing = routing_request(&req)?;
             // Locked phase: policy resolution (model, cap
             // pre-check, permit, runtime). Unlocked: stream
