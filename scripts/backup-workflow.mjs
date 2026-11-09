@@ -42,7 +42,14 @@ export async function restoreBackup(page,jobId,name){
   await page.getByLabel('Restore into fresh workspace IDs',{exact:false}).check();
   await button(page,'Restore verified backup').click();
   await expect(page.getByRole('status').filter({hasText:'Restore complete:'})).toContainText(name,{timeout:120000});
-  await button(page,'Workspace').click();await button(page,'Close workspace').click();
+  const wsBtn = page.getByRole('button', { name: 'Workspace', exact: true });
+  if (await wsBtn.isVisible()) {
+    await wsBtn.click();
+  } else {
+    await button(page, 'Dashboard').click();
+    await button(page, 'Manage workspace').click();
+  }
+  await button(page,'Close workspace').click();
   await page.getByLabel('Existing workspace',{exact:true}).selectOption({label:name});
   await button(page,'Open workspace').click();
   const fresh=await page.locator('.workspace-id code').innerText();
