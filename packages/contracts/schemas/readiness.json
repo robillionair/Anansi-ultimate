@@ -14754,6 +14754,10 @@
       },
       "CompletionRequest": {
         "properties": {
+          "disableOpenRouterReasoning": {
+            "description": "Ask OpenRouter to omit reasoning and reserve output for answer text.",
+            "type": "boolean"
+          },
           "explicitCloudAuthorization": {
             "default": false,
             "description": "Explicit user authorization to send `Private` segments to a cloud\nprovider (ADR-0002: private material requires explicit\nauthorization). Never set implicitly by routing.",

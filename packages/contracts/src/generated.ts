@@ -3886,6 +3886,10 @@ export interface ProviderDispatchRequest {
 }
 export interface CompletionRequest {
   /**
+   * Ask OpenRouter to omit reasoning and reserve output for answer text.
+   */
+  disableOpenRouterReasoning?: boolean;
+  /**
    * Explicit user authorization to send `Private` segments to a cloud
    * provider (ADR-0002: private material requires explicit
    * authorization). Never set implicitly by routing.
