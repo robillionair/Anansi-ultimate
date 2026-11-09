@@ -250,3 +250,44 @@ PPTX, XLSX, OCR, scanned/image-only documents, headers /
 footnotes / comments text, list-number expansion, embedded-object
 text, preview promotion, pushes, remote CI. No cloud calls, no
 paid inference, no model downloads.
+
+## §10 Amendments from the spike (2026-11-09, `m13-docx-spike-results.md`)
+
+1. **Section `heading` is plain text (§5).**
+   `DocxSectionProvenance.heading` stores the heading text
+   without the `# ` prefix; the prefix is body formatting,
+   rendered only when joining the body.
+2. **Citation display keeps the `#` (AC-D1/D2).** The
+   Ask/search citation heading comes from the body line via
+   `context.rs` chunking, which stores the `#` line verbatim
+   (existing Markdown behaviour — its test asserts
+   `Some("# Guide")`) and the UI renders it verbatim, so
+   citations read `document · # <Heading> (line N)`. The
+   design's `<Heading>` shorthand means the heading text;
+   the rendered form keeps the `#`, consistent with Markdown
+   documents. The provenance heading (§10.1) and the
+   displayed heading are two different fields.
+3. **Lying declared size is refused by the zip crate itself
+   (§3, AC-D5).** The 16 MiB capped reader is the second
+   layer, not the first: honest declared sizes hit the 8 MiB
+   pre-check; lying declared sizes hit the crate's read-time
+   size check; the capped reader covers entries whose declared
+   size the pre-check cannot trust (e.g. data-descriptor
+   entries) and is proven directly by its unit check. AC-D5
+   is amended to: "refused during inflation at the earliest
+   applicable layer, fast and low-memory" — the 16 MiB budget
+   is unchanged.
+4. **Archive walk uses metadata-only entry access (§4, §6).**
+   The walk must use `by_index_data` (central-directory
+   metadata only) for the encrypted/name/size checks;
+   `by_index` opens the entry and errors on encrypted entries
+   before `encrypted()` is reached. Only `word/document.xml`
+   is opened, after the walk.
+5. **`outlineLvl` fallback is reliable (§4).** Proven by
+   `outline-lvl.docx`; the fallback stays. `outlineLvl` ≥ 3
+   is ignored (paragraph stays plain). The §7 fixture list
+   gains `outline-lvl.docx` and `doctype.docx`.
+6. **Audit finding (§1).** `libsqlite3-sys` 0.38.2,
+   RUSTSEC-2026-0459, is pre-existing (via rusqlite), medium
+   severity, fix ≥0.39.0 — out of scope, flagged for the
+   owner. No new warnings from zip/quick-xml.

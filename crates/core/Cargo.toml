@@ -30,6 +30,12 @@ pdf-extract = "=0.12.1"
 lopdf = "=0.42.0"
 flate2 = "=1.1.10"
 weezl = "=0.1.12"
+# DOCX spike (M13): bounded ZIP walk + streaming XML parse. zip is
+# minimal (deflate via the workspace's flate2/miniz_oxide; no zopfli,
+# no zlib-rs backend switch, no bzip2/lzma/zstd/aes/time) so the PDF
+# extractor's decoder backend is untouched.
+zip = { version = "=9.5.0", default-features = false, features = ["deflate-flate2"] }
+quick-xml = "=0.42.0"
 
 [target.'cfg(windows)'.dependencies]
 keyring = { version = "=3.6.3", default-features = false, features = ["windows-native"] }
