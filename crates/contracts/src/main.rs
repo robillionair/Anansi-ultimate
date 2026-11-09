@@ -42,11 +42,13 @@ use anansi_core::opportunities::{
 };
 use anansi_core::provider_dispatch::{
     ProviderAuthorizeRequest, ProviderAuthorizeResponse, ProviderCatalogResponse,
-    ProviderConfigureRequest, ProviderConfigureResponse, ProviderCredentialRemoveResponse,
+    ProviderConfigureAddRequest, ProviderConfigureAddResponse, ProviderConfigureRequest,
+    ProviderConfigureResponse, ProviderCredentialReferenceRequest,
+    ProviderCredentialReferenceResponse, ProviderCredentialRemoveResponse,
     ProviderCredentialRequest, ProviderCredentialSetResponse, ProviderCredentialStatusResponse,
     ProviderDispatchRequest, ProviderDispatchResponse, ProviderGrantRequest, ProviderPollResponse,
-    ProviderRunRequest, ProviderSessionAccessResponse, ProviderStreamStartResponse,
-    ProviderUsageResponse, ProviderWorkspaceRequest,
+    ProviderRunRequest, ProviderSessionAccessResponse, ProviderStatusResponse,
+    ProviderStreamStartResponse, ProviderUsageResponse, ProviderWorkspaceRequest,
 };
 use anansi_core::relationships::{
     CreateRelationshipRequest, DeleteRelationshipRequest, ListRelationshipsRequest,
@@ -102,6 +104,11 @@ fn main() {
     let schemas = serde_json::json!({
         "ProviderConfigureRequest":schemars::schema_for!(ProviderConfigureRequest),
         "ProviderConfigureResponse":schemars::schema_for!(ProviderConfigureResponse),
+        "ProviderConfigureAddRequest":schemars::schema_for!(ProviderConfigureAddRequest),
+        "ProviderConfigureAddResponse":schemars::schema_for!(ProviderConfigureAddResponse),
+        "ProviderCredentialReferenceRequest":schemars::schema_for!(ProviderCredentialReferenceRequest),
+        "ProviderCredentialReferenceResponse":schemars::schema_for!(ProviderCredentialReferenceResponse),
+        "ProviderStatusResponse":schemars::schema_for!(ProviderStatusResponse),
         "ProviderAuthorizeRequest":schemars::schema_for!(ProviderAuthorizeRequest),
         "ProviderAuthorizeResponse":schemars::schema_for!(ProviderAuthorizeResponse),
         "ProviderDispatchRequest":schemars::schema_for!(ProviderDispatchRequest),

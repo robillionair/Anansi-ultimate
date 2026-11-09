@@ -3977,6 +3977,108 @@ export interface ProviderCatalogEntry {
   status: string;
 }
 /**
+ * Where a provider target runs, for the configuration format.
+ */
+export type LocalityConfig = "local" | "cloud";
+/**
+ * Cost knowledge about a model. `Unknown` is treated as paid everywhere
+ * cost is enforced (decision M5-D5).
+ */
+export type SpeedTier = "fast" | "balanced" | "deep";
+
+/**
+ * Atomic add/update of ONE provider entry (Connect AI slice):
+ * the merged configuration keeps every other provider, the
+ * existing budget, and the shared usage accounting. The request
+ * carries no budget field by design — this operation can never
+ * move the budget.
+ */
+export interface ProviderConfigureAddRequest {
+  contractVersion?: number;
+  provider: RuntimeProvider;
+  workspaceId: string;
+}
+/**
+ * One configured provider: endpoint/credential configuration, its
+ * locality, and the models the user has configured for it.
+ */
+export interface RuntimeProvider {
+  config: ProviderConfig;
+  locality: LocalityConfig;
+  models: ModelInfo[];
+}
+export interface ProviderConfig {
+  /**
+   * Explicit owner opt-in for a plaintext non-loopback custom
+   * endpoint (e.g. an internal enterprise gateway). Never valid
+   * together with a credential.
+   */
+  allowInsecureCustom?: boolean;
+  /**
+   * Base URL as entered by the user / supplied by the catalog.
+   */
+  baseUrl: string;
+  /**
+   * Credential reference only; never a secret value (§15, §70).
+   */
+  credential?: CredentialRef | null;
+  /**
+   * True for user-defined OpenAI-compatible / enterprise endpoints
+   * (§14). Custom endpoints get the same policy checks, not fewer.
+   */
+  customEndpoint?: boolean;
+  enabled?: boolean;
+  provider: string;
+}
+/**
+ * A reference to a credential held by the native secret boundary.
+ * Contains no secret material; safe to persist and to log.
+ */
+export interface CredentialRef {
+  /**
+   * Provider this credential belongs to, e.g. `openai`.
+   */
+  provider: string;
+  /**
+   * Opaque vault account/reference identifier chosen by the user at
+   * setup time (MASTER_SPEC §15: the user explicitly pastes the key
+   * into the OS vault; ANANSI stores only this reference).
+   */
+  reference: string;
+}
+export interface ModelInfo {
+  capabilities: CapabilitySet;
+  contextWindow?: number | null;
+  cost: CostClass;
+  id: string;
+  /**
+   * Caller-supplied price (micro-USD per 1M tokens) with provenance in
+   * configuration. The crate ships no price table (M5-D5).
+   */
+  priceInputMicroUsdPerMtok?: number | null;
+  priceOutputMicroUsdPerMtok?: number | null;
+  provider: string;
+  speed: SpeedTier;
+}
+/**
+ * Capability flags a model can be routed on (§17: capability is one of
+ * the router's evaluation inputs).
+ */
+export interface CapabilitySet {
+  chat: boolean;
+  coding: boolean;
+  deepReasoning: boolean;
+  embeddings: boolean;
+  streaming: boolean;
+  vision: boolean;
+}
+export interface ProviderConfigureAddResponse {
+  added: string;
+  contractVersion: number;
+  providers: string[];
+  updated: boolean;
+}
+/**
  * Project budget profiles (§67). The named profiles are qualitative in
  * the spec; ceilings are always caller-supplied numbers, never
  * invented allowances (§16). `FreeOnly` is the "Max Free mode" profile
@@ -3986,12 +4088,10 @@ export type BudgetProfile = "freeOnly" | "lowCost" | "balanced" | "maximumQualit
 /**
  * Where a provider target runs, for the configuration format.
  */
-export type LocalityConfig = "local" | "cloud";
 /**
  * Cost knowledge about a model. `Unknown` is treated as paid everywhere
  * cost is enforced (decision M5-D5).
  */
-export type SpeedTier = "fast" | "balanced" | "deep";
 
 export interface ProviderConfigureRequest {
   config: RuntimeConfig;
@@ -4105,6 +4205,20 @@ export interface CapabilitySet {
 export interface ProviderConfigureResponse {
   contractVersion: number;
   providers: string[];
+}
+/**
+ * Host-generated credential reference (Connect AI slice): the
+ * reference is a keyring account label, never a secret.
+ */
+export interface ProviderCredentialReferenceRequest {
+  contractVersion?: number;
+  provider: string;
+  workspaceId: string;
+}
+export interface ProviderCredentialReferenceResponse {
+  contractVersion: number;
+  provider: string;
+  reference: string;
 }
 export interface ProviderCredentialRemoveResponse {
   contractVersion: number;
@@ -4377,6 +4491,60 @@ export interface ProviderPendingAccess {
   firstSeenMs: number;
   lastSeenMs: number;
   session: string;
+}
+/**
+ * Project budget profiles (§67). The named profiles are qualitative in
+ * the spec; ceilings are always caller-supplied numbers, never
+ * invented allowances (§16). `FreeOnly` is the "Max Free mode" profile
+ * (§16; decision M5-D7) and is meant to be combined with the lock.
+ */
+
+export interface ProviderStatusResponse {
+  budget: Budget;
+  contractVersion: number;
+  providers: ProviderStatusEntry[];
+}
+export interface Budget {
+  /**
+   * Micro-USD ceiling, enforced only when a price is configured for
+   * the model (prices are caller-supplied with provenance, M5-D5).
+   */
+  maxEstimatedCostMicroUsd?: number | null;
+  maxRequests?: number | null;
+  maxTotalTokens?: number | null;
+  profile?: BudgetProfile | null;
+}
+export interface ProviderStatusEntry {
+  baseUrlHost: string;
+  /**
+   * A dispatch has succeeded for this provider since the app
+   * started. A fresh setup is always false — setup performs
+   * zero inference calls, and verification happens on the
+   * first authorized dispatch, outside setup.
+   */
+  connectionVerified: boolean;
+  credentialReference?: string | null;
+  /**
+   * A credential exists in the OS store for the reference.
+   */
+  credentialStored: boolean;
+  displayName: string;
+  enabled: boolean;
+  locality: string;
+  models: ProviderStatusModel[];
+  provider: string;
+}
+/**
+ * One configured provider as a paired browser may see it
+ * (Connect AI slice): references and cost classes only — no
+ * secret, no usage detail beyond the verified flag.
+ */
+export interface ProviderStatusModel {
+  /**
+   * "free" | "paid" | "unknown" — the configured cost class.
+   */
+  cost: string;
+  id: string;
 }
 /**
  * Cost knowledge about a model. `Unknown` is treated as paid everywhere

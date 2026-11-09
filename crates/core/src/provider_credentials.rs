@@ -54,6 +54,14 @@ pub fn prompt_for_api_key(
     // Debug-only test provider, mirroring the vault's pattern:
     // compiled out of release builds entirely.
     #[cfg(debug_assertions)]
+    if std::env::var_os("ANANSI_PROVIDER_TEST_CANCEL").as_deref()
+        == Some(std::ffi::OsStr::new("1"))
+    {
+        // The native prompt's cancel path (ERROR_CANCELLED on
+        // Windows): no key is produced, nothing is stored.
+        return Err(invalid("Credential entry was cancelled."));
+    }
+    #[cfg(debug_assertions)]
     if let Some(value) = std::env::var_os("ANANSI_PROVIDER_TEST_CREDENTIAL") {
         return Ok(Zeroizing::new(
             value.to_string_lossy().into_owned().into_bytes(),

@@ -15122,6 +15122,256 @@
     "title": "ProviderCatalogResponse",
     "type": "object"
   },
+  "ProviderConfigureAddRequest": {
+    "$defs": {
+      "CapabilitySet": {
+        "description": "Capability flags a model can be routed on (§17: capability is one of\nthe router's evaluation inputs).",
+        "properties": {
+          "chat": {
+            "type": "boolean"
+          },
+          "coding": {
+            "type": "boolean"
+          },
+          "deepReasoning": {
+            "type": "boolean"
+          },
+          "embeddings": {
+            "type": "boolean"
+          },
+          "streaming": {
+            "type": "boolean"
+          },
+          "vision": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "chat",
+          "streaming",
+          "vision",
+          "coding",
+          "deepReasoning",
+          "embeddings"
+        ],
+        "type": "object"
+      },
+      "CostClass": {
+        "description": "Cost knowledge about a model. `Unknown` is treated as paid everywhere\ncost is enforced (decision M5-D5).",
+        "enum": [
+          "free",
+          "paid",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "CredentialRef": {
+        "description": "A reference to a credential held by the native secret boundary.\nContains no secret material; safe to persist and to log.",
+        "properties": {
+          "provider": {
+            "description": "Provider this credential belongs to, e.g. `openai`.",
+            "type": "string"
+          },
+          "reference": {
+            "description": "Opaque vault account/reference identifier chosen by the user at\nsetup time (MASTER_SPEC §15: the user explicitly pastes the key\ninto the OS vault; ANANSI stores only this reference).",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "reference"
+        ],
+        "type": "object"
+      },
+      "LocalityConfig": {
+        "description": "Where a provider target runs, for the configuration format.",
+        "enum": [
+          "local",
+          "cloud"
+        ],
+        "type": "string"
+      },
+      "ModelInfo": {
+        "properties": {
+          "capabilities": {
+            "$ref": "#/$defs/CapabilitySet"
+          },
+          "contextWindow": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "cost": {
+            "$ref": "#/$defs/CostClass"
+          },
+          "id": {
+            "type": "string"
+          },
+          "priceInputMicroUsdPerMtok": {
+            "description": "Caller-supplied price (micro-USD per 1M tokens) with provenance in\nconfiguration. The crate ships no price table (M5-D5).",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "priceOutputMicroUsdPerMtok": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "provider": {
+            "type": "string"
+          },
+          "speed": {
+            "$ref": "#/$defs/SpeedTier"
+          }
+        },
+        "required": [
+          "id",
+          "provider",
+          "capabilities",
+          "cost",
+          "speed"
+        ],
+        "type": "object"
+      },
+      "ProviderConfig": {
+        "properties": {
+          "allowInsecureCustom": {
+            "default": false,
+            "description": "Explicit owner opt-in for a plaintext non-loopback custom\nendpoint (e.g. an internal enterprise gateway). Never valid\ntogether with a credential.",
+            "type": "boolean"
+          },
+          "baseUrl": {
+            "description": "Base URL as entered by the user / supplied by the catalog.",
+            "type": "string"
+          },
+          "credential": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/CredentialRef"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Credential reference only; never a secret value (§15, §70)."
+          },
+          "customEndpoint": {
+            "default": false,
+            "description": "True for user-defined OpenAI-compatible / enterprise endpoints\n(§14). Custom endpoints get the same policy checks, not fewer.",
+            "type": "boolean"
+          },
+          "enabled": {
+            "default": true,
+            "type": "boolean"
+          },
+          "provider": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "baseUrl"
+        ],
+        "type": "object"
+      },
+      "RuntimeProvider": {
+        "description": "One configured provider: endpoint/credential configuration, its\nlocality, and the models the user has configured for it.",
+        "properties": {
+          "config": {
+            "$ref": "#/$defs/ProviderConfig"
+          },
+          "locality": {
+            "$ref": "#/$defs/LocalityConfig"
+          },
+          "models": {
+            "items": {
+              "$ref": "#/$defs/ModelInfo"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "config",
+          "locality",
+          "models"
+        ],
+        "type": "object"
+      },
+      "SpeedTier": {
+        "enum": [
+          "fast",
+          "balanced",
+          "deep"
+        ],
+        "type": "string"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "description": "Atomic add/update of ONE provider entry (Connect AI slice):\nthe merged configuration keeps every other provider, the\nexisting budget, and the shared usage accounting. The request\ncarries no budget field by design — this operation can never\nmove the budget.",
+    "properties": {
+      "contractVersion": {
+        "default": 1,
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "provider": {
+        "$ref": "#/$defs/RuntimeProvider"
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "workspaceId",
+      "provider"
+    ],
+    "title": "ProviderConfigureAddRequest",
+    "type": "object"
+  },
+  "ProviderConfigureAddResponse": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "added": {
+        "type": "string"
+      },
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "providers": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "updated": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "providers",
+      "added",
+      "updated"
+    ],
+    "title": "ProviderConfigureAddResponse",
+    "type": "object"
+  },
   "ProviderConfigureRequest": {
     "$defs": {
       "Budget": {
@@ -15438,6 +15688,56 @@
       "providers"
     ],
     "title": "ProviderConfigureResponse",
+    "type": "object"
+  },
+  "ProviderCredentialReferenceRequest": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "description": "Host-generated credential reference (Connect AI slice): the\nreference is a keyring account label, never a secret.",
+    "properties": {
+      "contractVersion": {
+        "default": 1,
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "provider": {
+        "type": "string"
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "workspaceId",
+      "provider"
+    ],
+    "title": "ProviderCredentialReferenceRequest",
+    "type": "object"
+  },
+  "ProviderCredentialReferenceResponse": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "provider": {
+        "type": "string"
+      },
+      "reference": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "provider",
+      "reference"
+    ],
+    "title": "ProviderCredentialReferenceResponse",
     "type": "object"
   },
   "ProviderCredentialRemoveResponse": {
@@ -16341,6 +16641,153 @@
       "grants"
     ],
     "title": "ProviderSessionAccessResponse",
+    "type": "object"
+  },
+  "ProviderStatusResponse": {
+    "$defs": {
+      "Budget": {
+        "properties": {
+          "maxEstimatedCostMicroUsd": {
+            "description": "Micro-USD ceiling, enforced only when a price is configured for\nthe model (prices are caller-supplied with provenance, M5-D5).",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "maxRequests": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "maxTotalTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "profile": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/BudgetProfile"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "BudgetProfile": {
+        "description": "Project budget profiles (§67). The named profiles are qualitative in\nthe spec; ceilings are always caller-supplied numbers, never\ninvented allowances (§16). `FreeOnly` is the \"Max Free mode\" profile\n(§16; decision M5-D7) and is meant to be combined with the lock.",
+        "enum": [
+          "freeOnly",
+          "lowCost",
+          "balanced",
+          "maximumQuality",
+          "custom"
+        ],
+        "type": "string"
+      },
+      "ProviderStatusEntry": {
+        "properties": {
+          "baseUrlHost": {
+            "type": "string"
+          },
+          "connectionVerified": {
+            "description": "A dispatch has succeeded for this provider since the app\nstarted. A fresh setup is always false — setup performs\nzero inference calls, and verification happens on the\nfirst authorized dispatch, outside setup.",
+            "type": "boolean"
+          },
+          "credentialReference": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "credentialStored": {
+            "description": "A credential exists in the OS store for the reference.",
+            "type": "boolean"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "locality": {
+            "type": "string"
+          },
+          "models": {
+            "items": {
+              "$ref": "#/$defs/ProviderStatusModel"
+            },
+            "type": "array"
+          },
+          "provider": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "displayName",
+          "baseUrlHost",
+          "locality",
+          "enabled",
+          "models",
+          "credentialStored",
+          "connectionVerified"
+        ],
+        "type": "object"
+      },
+      "ProviderStatusModel": {
+        "description": "One configured provider as a paired browser may see it\n(Connect AI slice): references and cost classes only — no\nsecret, no usage detail beyond the verified flag.",
+        "properties": {
+          "cost": {
+            "description": "\"free\" | \"paid\" | \"unknown\" — the configured cost class.",
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "cost"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "budget": {
+        "$ref": "#/$defs/Budget"
+      },
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "providers": {
+        "items": {
+          "$ref": "#/$defs/ProviderStatusEntry"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "providers",
+      "budget"
+    ],
+    "title": "ProviderStatusResponse",
     "type": "object"
   },
   "ProviderStreamStartResponse": {

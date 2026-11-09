@@ -66,10 +66,12 @@
 use crate::readiness::{CommandError, ErrorCode};
 use anansi_providers::dispatcher::StreamOutcome;
 use anansi_providers::error::{ProviderError, ProviderErrorCode};
-use anansi_providers::gates::{PaidInferencePermit, QuotaLedger, ZeroCostLock};
+use anansi_providers::gates::{Budget, PaidInferencePermit, QuotaLedger, ZeroCostLock};
 use anansi_providers::http::CancellationToken;
 use anansi_providers::routing::{DisclosureRecord, RoutingMode, RoutingRequest};
-use anansi_providers::runtime::{LocalityConfig, ProviderRuntime, RuntimeConfig};
+use anansi_providers::runtime::{
+    LocalityConfig, ProviderRuntime, RuntimeConfig, RuntimeProvider,
+};
 use anansi_providers::types::{CompletionRequest, CostClass, StreamEvent, Usage};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -199,6 +201,86 @@ pub struct ProviderConfigureRequest {
 pub struct ProviderConfigureResponse {
     pub contract_version: u8,
     pub providers: Vec<String>,
+}
+
+/// Atomic add/update of ONE provider entry (Connect AI slice):
+/// the merged configuration keeps every other provider, the
+/// existing budget, and the shared usage accounting. The request
+/// carries no budget field by design — this operation can never
+/// move the budget.
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProviderConfigureAddRequest {
+    #[serde(default = "default_contract_version")]
+    pub contract_version: u8,
+    pub workspace_id: String,
+    pub provider: RuntimeProvider,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderConfigureAddResponse {
+    pub contract_version: u8,
+    pub providers: Vec<String>,
+    pub added: String,
+    pub updated: bool,
+}
+
+/// Host-generated credential reference (Connect AI slice): the
+/// reference is a keyring account label, never a secret.
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProviderCredentialReferenceRequest {
+    #[serde(default = "default_contract_version")]
+    pub contract_version: u8,
+    pub workspace_id: String,
+    pub provider: String,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderCredentialReferenceResponse {
+    pub contract_version: u8,
+    pub provider: String,
+    pub reference: String,
+}
+
+/// One configured provider as a paired browser may see it
+/// (Connect AI slice): references and cost classes only — no
+/// secret, no usage detail beyond the verified flag.
+#[derive(Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderStatusModel {
+    pub id: String,
+    /// "free" | "paid" | "unknown" — the configured cost class.
+    pub cost: String,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderStatusEntry {
+    pub provider: String,
+    pub display_name: String,
+    pub base_url_host: String,
+    pub locality: String,
+    pub enabled: bool,
+    pub models: Vec<ProviderStatusModel>,
+    pub credential_reference: Option<String>,
+    /// A credential exists in the OS store for the reference.
+    pub credential_stored: bool,
+    /// A dispatch has succeeded for this provider since the app
+    /// started. A fresh setup is always false — setup performs
+    /// zero inference calls, and verification happens on the
+    /// first authorized dispatch, outside setup.
+    pub connection_verified: bool,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderStatusResponse {
+    pub contract_version: u8,
+    pub providers: Vec<ProviderStatusEntry>,
+    pub budget: Budget,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -1182,24 +1264,66 @@ pub fn configured_config_json(scope: &CallerScope) -> Option<String> {
 /// Returns Ok(false) when a configuration is already present (the
 /// in-memory one wins). Validation failures are errors: a bad
 /// persisted file must be visible, not silently ignored.
+/// Install a parsed configuration into backend state held by the
+/// caller (the lock is already held — this is the shared core of
+/// `install_persisted_config` and the configure-add lazy load).
+fn install_config_locked(
+    state: &mut BackendState,
+    config: RuntimeConfig,
+) -> Result<bool, CommandError> {
+    if state.config.is_some() {
+        return Ok(false);
+    }
+    let runtime = production_runtime(config.clone())
+        .map_err(to_command_error)?
+        .with_shared_accounting(state.used_permits.clone(), state.ledger.clone());
+    let fp = fingerprint(&serde_json::to_string(&config).unwrap_or_default());
+    state.config = Some(config);
+    state.runtime = Some((fp, Arc::new(runtime)));
+    Ok(true)
+}
+
+/// Lazy-load the persisted configuration file into backend state
+/// (restart case), inside the caller's `with_backend` closure.
+/// Returns true when a file was loaded; false when state already
+/// had a configuration or no file exists.
+fn load_persisted_config_locked(
+    state: &mut BackendState,
+    scope: &CallerScope,
+) -> Result<bool, CommandError> {
+    if state.config.is_some() {
+        return Ok(false);
+    }
+    let (Some(root), Some(wid)) = (&scope.storage_root, &scope.logical_workspace) else {
+        return Ok(false);
+    };
+    let Some(json) = load_config_file(root, wid)? else {
+        return Ok(false);
+    };
+    let config: RuntimeConfig = serde_json::from_str(&json).map_err(|_| {
+        invalid("The persisted provider configuration is unreadable; reconfigure providers.")
+    })?;
+    validate_config_bounds(&config)?;
+    enforce_derived_locality(&config)?;
+    install_config_locked(state, config)
+}
+
 pub fn install_persisted_config(scope: &CallerScope, json: &str) -> Result<bool, CommandError> {
     let config: RuntimeConfig = serde_json::from_str(json).map_err(|_| {
         invalid("The persisted provider configuration is unreadable; reconfigure providers.")
     })?;
     validate_config_bounds(&config)?;
     enforce_derived_locality(&config)?;
-    with_backend(scope, |state| {
-        if state.config.is_some() {
-            return Ok(false);
-        }
-        let runtime = production_runtime(config.clone())
-            .map_err(to_command_error)?
-            .with_shared_accounting(state.used_permits.clone(), state.ledger.clone());
-        let fp = fingerprint(&serde_json::to_string(&config).unwrap_or_default());
-        state.config = Some(config);
-        state.runtime = Some((fp, Arc::new(runtime)));
-        Ok(true)
-    })
+    with_backend(scope, |state| install_config_locked(state, config))
+}
+
+/// Generate a host-side credential reference for a provider:
+/// `{provider}-{16 lowercase hex}` from OS randomness. The
+/// reference is a keyring account label, never a secret.
+fn generate_credential_reference(provider: &str) -> String {
+    let mut bytes = [0u8; 8];
+    getrandom::fill(&mut bytes).expect("OS randomness for credential references");
+    format!("{provider}-{:016x}", u64::from_le_bytes(bytes))
 }
 
 /// Read a persisted configuration file, if one exists.
@@ -1371,6 +1495,73 @@ pub fn providers_command(
             to_value(&ProviderConfigureResponse {
                 contract_version: 1,
                 providers,
+            })
+        }
+        "providers-configure-add" => {
+            let req: ProviderConfigureAddRequest =
+                parse(value, "provider configuration add")?;
+            require_contract_v1(req.contract_version)?;
+            // The entry is validated as part of the merged config
+            // below (bounds, derived locality, runtime build), so
+            // a bad entry fails exactly like a bad full configure.
+            let added_id = req.provider.config.provider.clone();
+            if added_id.is_empty() || added_id.len() > 64 {
+                return Err(invalid("Name the provider to add."));
+            }
+            let (providers, updated) = with_backend(scope, |state| {
+                require_owner_recording(state, scope)?;
+                // Restart case: bring the persisted configuration
+                // into memory first, so the add merges with what
+                // is on disk rather than overwriting it with a
+                // single-provider config.
+                load_persisted_config_locked(state, scope)?;
+                let mut merged = state
+                    .config
+                    .clone()
+                    .unwrap_or_default();
+                let updated = if let Some(slot) = merged
+                    .providers
+                    .iter_mut()
+                    .find(|p| p.config.provider == added_id)
+                {
+                    *slot = req.provider.clone();
+                    true
+                } else {
+                    merged.providers.push(req.provider.clone());
+                    false
+                };
+                validate_config_bounds(&merged)?;
+                enforce_derived_locality(&merged)?;
+                // Validate by building the runtime now, so a bad
+                // merged configuration fails at add time — with
+                // the workspace's shared accounting wired in.
+                let runtime = production_runtime(merged.clone())
+                    .map_err(to_command_error)?
+                    .with_shared_accounting(state.used_permits.clone(), state.ledger.clone());
+                let serialized = serde_json::to_string(&merged).unwrap_or_default();
+                // Persist BEFORE installing, under this same
+                // backend lock: if persistence fails, the
+                // operation fails and memory stays exactly as it
+                // was — the previous providers, budget, and
+                // usage accounting are untouched.
+                if let (Some(root), Some(wid)) = (&scope.storage_root, &scope.logical_workspace) {
+                    persist_config_file(root, wid, &serialized)?;
+                }
+                let fp = fingerprint(&serialized);
+                state.config = Some(merged.clone());
+                state.runtime = Some((fp, Arc::new(runtime)));
+                let providers: Vec<String> = merged
+                    .providers
+                    .iter()
+                    .map(|p| p.config.provider.clone())
+                    .collect();
+                Ok((providers, updated))
+            })?;
+            to_value(&ProviderConfigureAddResponse {
+                contract_version: 1,
+                providers,
+                added: added_id,
+                updated,
             })
         }
         "providers-authorize" => {
@@ -1627,6 +1818,39 @@ pub fn providers_command(
             })?;
             to_value(&serde_json::json!({ "granted": granting }))
         }
+        "providers-credential-reference" => {
+            let req: ProviderCredentialReferenceRequest =
+                parse(value, "provider credential reference")?;
+            require_contract_v1(req.contract_version)?;
+            if req.provider.is_empty() || req.provider.len() > 64 {
+                return Err(invalid("Name the provider for this credential."));
+            }
+            // Owner-only: the reference names the keyring account
+            // the host prompt will store under, so a browser must
+            // not mint labels the host never approved. A refusal
+            // is recorded for the host's approval queue.
+            with_backend(scope, |state| require_owner_recording(state, scope))?;
+            let resolver = shared_resolver();
+            // Bounded retries on collision: a reference that
+            // already has a stored credential must never be
+            // handed out as "fresh".
+            let mut reference = String::new();
+            for _ in 0..8 {
+                let candidate = generate_credential_reference(&req.provider);
+                if !resolver.exists(&candidate) {
+                    reference = candidate;
+                    break;
+                }
+            }
+            if reference.is_empty() {
+                return Err(crate::storage::unavailable());
+            }
+            to_value(&ProviderCredentialReferenceResponse {
+                contract_version: 1,
+                provider: req.provider,
+                reference,
+            })
+        }
         "providers-credential-set" => {
             let req: ProviderCredentialRequest = parse(value, "provider credential")?;
             require_contract_v1(req.contract_version)?;
@@ -1730,6 +1954,79 @@ pub fn providers_command(
                             output_tokens: totals.output_tokens,
                         })
                         .collect(),
+                })
+            })
+        }
+        "providers-status" => {
+            // Browser-readable setup status (Connect AI slice):
+            // no owner check, like `providers-usage`. A paired
+            // browser may see what is configured, whether a
+            // credential is stored, and whether the connection
+            // has been verified in this app session — and is
+            // directed to the desktop to enter credentials. No
+            // secret ever leaves the keyring.
+            let req: ProviderWorkspaceRequest = parse(value, "provider status")?;
+            require_contract_v1(req.contract_version)?;
+            with_backend(scope, |state| {
+                let config = state.config.clone().unwrap_or_default();
+                let ledger = state
+                    .ledger
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
+                let verified: std::collections::HashSet<String> = ledger
+                    .totals_snapshot()
+                    .into_iter()
+                    .filter(|(_, totals)| totals.requests > 0)
+                    .map(|(provider, _)| provider)
+                    .collect();
+                let resolver = shared_resolver();
+                let catalog = anansi_providers::catalog::catalog();
+                let providers = config
+                    .providers
+                    .iter()
+                    .map(|p| {
+                        let reference = p
+                            .config
+                            .credential
+                            .as_ref()
+                            .map(|c| c.reference.clone());
+                        let credential_stored = reference
+                            .as_ref()
+                            .map(|r| resolver.exists(r))
+                            .unwrap_or(false);
+                        let base_url_host = p
+                            .config
+                            .validate()
+                            .map(|e| e.host)
+                            .unwrap_or_default();
+                        ProviderStatusEntry {
+                            provider: p.config.provider.clone(),
+                            display_name: catalog
+                                .iter()
+                                .find(|e| e.id == p.config.provider)
+                                .map(|e| e.display_name.to_string())
+                                .unwrap_or_else(|| p.config.provider.clone()),
+                            base_url_host,
+                            locality: format!("{:?}", p.locality),
+                            enabled: p.config.enabled,
+                            models: p
+                                .models
+                                .iter()
+                                .map(|m| ProviderStatusModel {
+                                    id: m.id.clone(),
+                                    cost: format!("{:?}", m.cost).to_lowercase(),
+                                })
+                                .collect(),
+                            credential_reference: reference,
+                            credential_stored,
+                            connection_verified: verified.contains(&p.config.provider),
+                        }
+                    })
+                    .collect();
+                to_value(&ProviderStatusResponse {
+                    contract_version: 1,
+                    providers,
+                    budget: config.budget,
                 })
             })
         }
