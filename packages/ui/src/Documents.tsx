@@ -11,7 +11,7 @@ import {
 } from './documents.ts';
 import type { PendingDocument } from './documents.ts';
 
-const SUPPORTED_NOTE = 'Only .txt, .md and text-layer .pdf files can be imported in this slice. DOCX and other formats are tracked as follow-up work.';
+const SUPPORTED_NOTE = 'Only .txt, .md, text-layer .pdf and .docx files can be imported in this slice. Other formats are tracked as follow-up work.';
 
 function formatRefusal(fileName: string, message: string): string {
   if (!message.includes('Only .txt and .md') && !message.includes('Only .txt, .md')) return message;
@@ -85,6 +85,7 @@ export function Documents({
   const [query, setQuery] = useState('');
   const [searchResults, setSearchResults] = useState<MemoryMetadata[] | null>(null);
   const [searchPages, setSearchPages] = useState<Record<string, number>>({});
+  const [searchSections, setSearchSections] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -230,6 +231,7 @@ export function Documents({
     if (!query.trim()) {
       setSearchResults(null);
       setSearchPages({});
+      setSearchSections({});
       return;
     }
     await run(async () => {
@@ -245,7 +247,12 @@ export function Documents({
       // body: a PDF body is pages joined by a form feed, so the page
       // is the count of form feeds before the first match plus one.
       // TXT/Markdown bodies have no form feed, so they report page 1.
+      // The section of the first match is likewise the last `#`
+      // heading line before it (a DOCX body carries its headings as
+      // `#` lines, as do Markdown bodies), shown as plain heading
+      // text.
       const pages: Record<string, number> = {};
+      const sections: Record<string, string> = {};
       const needle = query.trim().toLowerCase();
       for (const record of result.memories) {
         try {
@@ -253,12 +260,19 @@ export function Documents({
           const at = details.body.toLowerCase().indexOf(needle);
           if (at >= 0) {
             pages[record.id] = details.body.slice(0, at).split('\x0c').length;
+            const before = details.body.slice(0, at);
+            const headingLines = before
+              .split('\n')
+              .filter(line => line.trimStart().startsWith('#'));
+            const last = headingLines[headingLines.length - 1];
+            if (last) sections[record.id] = last.replace(/^#+\s*/, '');
           }
         } catch {
           // A result whose body cannot be read keeps no page label.
         }
       }
       setSearchPages(pages);
+      setSearchSections(sections);
     });
   }
 
@@ -267,11 +281,12 @@ export function Documents({
     <section className="card documents" aria-labelledby="documents-title" aria-busy={busy}>
       <h2 id="documents-title">Your documents</h2>
       <p>
-        Import a local text, Markdown or text-layer PDF file as a document record. Imports are
-        asynchronous, resumable and cancellable, run as persistent jobs, and stay in this
+        Import a local text, Markdown, text-layer PDF or DOCX file as a document record. Imports
+        are asynchronous, resumable and cancellable, run as persistent jobs, and stay in this
         workspace. Private is the default; Sealed import is refused until an encrypted vault
-        path exists. Only .txt, .md and .pdf files are supported in this slice; a PDF's text
-        is extracted on the server (scanned or image-only PDFs need OCR, a separate slice).
+        path exists. Only .txt, .md, .pdf and .docx files are supported in this slice; a PDF's
+        or DOCX's text is extracted on the server (scanned or image-only PDFs need OCR, a
+        separate slice).
       </p>
       {error && (
         <p role="alert" className="error">
@@ -285,13 +300,13 @@ export function Documents({
       )}
       <div className="actions">
         <label className="file-label" htmlFor="document-file">
-          Choose a .txt, .md or .pdf file
+          Choose a .txt, .md, .pdf or .docx file
         </label>
         <input
           id="document-file"
           ref={fileRef}
           type="file"
-          accept=".txt,.md,.pdf,text/plain,text/markdown,application/pdf"
+          accept=".txt,.md,.pdf,.docx,text/plain,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
           disabled={busy}
           onChange={event => void pick(event.target.files?.[0])}
         />
@@ -303,7 +318,9 @@ export function Documents({
             {pending.fileName} · {pending.rawBytes} bytes ·{' '}
             {pending.kind === 'pdf'
               ? 'PDF — text extracted on the server during import'
-              : `${pending.textChars} characters`}
+              : pending.kind === 'docx'
+                ? 'DOCX — text extracted on the server during import'
+                : `${pending.textChars} characters`}
             {pending.bom ? ' · UTF-8 BOM (stripped and recorded)' : ''} · {pending.kind}
           </p>
           <p className="help">
@@ -420,6 +437,7 @@ export function Documents({
               setQuery('');
               setSearchResults(null);
               setSearchPages({});
+              setSearchSections({});
             }}
           >
             Clear
@@ -436,6 +454,7 @@ export function Documents({
                   {' '}
                   · {result.privacy}
                   {searchPages[result.id] !== undefined ? ` · Page ${searchPages[result.id]}` : ''}
+                  {searchSections[result.id] ? ` · ${searchSections[result.id]}` : ''}
                 </span>
               </li>
             ))}
@@ -491,12 +510,21 @@ export function Documents({
                 {doc.rawBytes} bytes · {doc.textChars} characters
                 {doc.bom ? ' · UTF-8 BOM recorded' : ' · No BOM'}
                 {doc.pages ? ` · ${doc.pages.length} pages` : ''}
+                {doc.sections ? ` · ${doc.sections.length} sections` : ''}
               </p>
               {doc.pages && (
                 <p>
                   Pages:{' '}
                   {doc.pages
                     .map(entry => `Page ${entry.page}: ${entry.chars} characters`)
+                    .join(' · ')}
+                </p>
+              )}
+              {doc.sections && (
+                <p>
+                  Sections:{' '}
+                  {doc.sections
+                    .map(entry => `${entry.heading ?? 'Introduction'}: ${entry.chars} characters`)
                     .join(' · ')}
                 </p>
               )}

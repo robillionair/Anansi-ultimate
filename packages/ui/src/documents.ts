@@ -4,10 +4,11 @@
  * the picked file's basename. TXT/Markdown bytes are decoded locally
  * with the shared strict decoder (`documentInput.ts`) before any
  * network traffic, so refusals (format, size, encoding, empty)
- * happen before an upload begins. A PDF is never decoded in the
- * browser — it is binary, and the server extracts its text layer
- * with the bounded extractor — so for `.pdf` only the raw bytes and
- * SHA-256 are computed here and the text is extracted server-side.
+ * happen before an upload begins. A PDF or DOCX is never decoded in
+ * the browser — both are binary, and the server extracts their text
+ * layer with the bounded extractors — so for `.pdf` and `.docx` only
+ * the raw bytes and SHA-256 are computed here and the text is
+ * extracted server-side.
  * Uploads go through the bounded chunked path (`jobs/ingest-begin`
  * + `jobs/ingest-part`) with the client-computed SHA-256 declared up
  * front; the server re-verifies it at finish.
@@ -18,11 +19,14 @@ import type { Client, Job, Privacy } from '@anansi/contracts';
 /** Largest accepted PDF file, in bytes (mirrors the backend). */
 export const MAX_PDF_BYTES = 1_048_576;
 
+/** Largest accepted DOCX file, in bytes (mirrors the backend). */
+export const MAX_DOCX_BYTES = 1_048_576;
+
 export type PendingDocument = {
   fileName: string;
   bytes: Uint8Array;
   text: string;
-  kind: 'txt' | 'md' | 'pdf';
+  kind: 'txt' | 'md' | 'pdf' | 'docx';
   bom: boolean;
   textChars: number;
   rawBytes: number;
@@ -45,19 +49,21 @@ function sha256Hex(data: Uint8Array): Promise<string> {
 /** Decode a picked file locally. Throws with the refusal reason. */
 export async function prepareDocument(file: File): Promise<PendingDocument> {
   const bytes = new Uint8Array(await file.arrayBuffer());
-  // A PDF is never decoded in the browser: its text layer is
+  // A PDF or DOCX is never decoded in the browser: its text layer is
   // extracted server-side by the bounded extractor. Only the raw
   // bytes and SHA-256 are computed here; the text count is unknown
   // until the import runs.
-  if (file.name.toLowerCase().endsWith('.pdf')) {
-    if (bytes.length === 0 || bytes.length > MAX_PDF_BYTES) {
-      throw Error(`The file must be 1 to ${MAX_PDF_BYTES} bytes.`);
+  const lower = file.name.toLowerCase();
+  if (lower.endsWith('.pdf') || lower.endsWith('.docx')) {
+    const maxBytes = lower.endsWith('.pdf') ? MAX_PDF_BYTES : MAX_DOCX_BYTES;
+    if (bytes.length === 0 || bytes.length > maxBytes) {
+      throw Error(`The file must be 1 to ${maxBytes} bytes.`);
     }
     return {
       fileName: file.name,
       bytes,
       text: '',
-      kind: 'pdf',
+      kind: lower.endsWith('.pdf') ? 'pdf' : 'docx',
       bom: false,
       textChars: 0,
       rawBytes: bytes.length,

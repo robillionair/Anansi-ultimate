@@ -1,0 +1,303 @@
+{
+  "fixtures": {
+    "normal.docx": {
+      "sha256": "7574407f1ae0c3be4439dc4a9108ec8237b8569067ae09f384ce1b11f6c1dda1",
+      "bytes": 37050,
+      "expected_body": "# Harbor Ledger\n# Customs\nThe bramblewick shipment cleared customs on Tuesday.\n## Manifest\nThree crates of copper fittings, two of rope.\nCopper\n3 crates\nRope\n2 coils\n### Notes\nSee the annex\nFirst item\nSecond item\nTotals: 41 crates, 12 pallets, 1 lighthouse keeper.\nBefore the break\nAfter the break",
+      "expected_sections": [
+        {
+          "heading": "Harbor Ledger",
+          "level": 1,
+          "startChar": 0,
+          "chars": 15
+        },
+        {
+          "heading": "Customs",
+          "level": 1,
+          "startChar": 16,
+          "chars": 62
+        },
+        {
+          "heading": "Manifest",
+          "level": 2,
+          "startChar": 79,
+          "chars": 86
+        },
+        {
+          "heading": "Notes",
+          "level": 3,
+          "startChar": 166,
+          "chars": 131
+        }
+      ],
+      "expected_outcome": "imported",
+      "notes": "Title + H1/H2/H3, paragraphs, 2x2 table (cells as lines), external hyperlink (display text only), list (no number expansion), mid-paragraph page break (two lines, no form feed)."
+    },
+    "outline-lvl.docx": {
+      "sha256": "661878df68aaf7542a6064181032ef2aad7530a02588b220b52c1c3b469031c0",
+      "bytes": 37045,
+      "expected_body": "# Harbor Ledger\n# Customs\nThe bramblewick shipment cleared customs on Tuesday.\n## Manifest\nThree crates of copper fittings, two of rope.\nCopper\n3 crates\nRope\n2 coils\n### Notes\nSee the annex\nFirst item\nSecond item\nTotals: 41 crates, 12 pallets, 1 lighthouse keeper.\nBefore the break\nAfter the break",
+      "expected_sections": [
+        {
+          "heading": "Harbor Ledger",
+          "level": 1,
+          "startChar": 0,
+          "chars": 15
+        },
+        {
+          "heading": "Customs",
+          "level": 1,
+          "startChar": 16,
+          "chars": 62
+        },
+        {
+          "heading": "Manifest",
+          "level": 2,
+          "startChar": 79,
+          "chars": 86
+        },
+        {
+          "heading": "Notes",
+          "level": 3,
+          "startChar": 166,
+          "chars": 131
+        }
+      ],
+      "expected_outcome": "imported",
+      "notes": "Same body as normal.docx, but all four headings carry only w:outlineLvl (0/0/1/2) and no w:pStyle: exercises the outlineLvl heading fallback. List Bullet paragraphs keep their pStyle."
+    },
+    "unicode-headings.docx": {
+      "sha256": "46aaea01503f4d75c7fc4326ab1bd1215a93dbd95c2d177a31172d9ed8759cb6",
+      "bytes": 36786,
+      "expected_body": "# 海关总署\n中文段落：货物已清关。\n## Café ☕\nUn café crème, s'il vous plaît. ☕\n### naïve façade — ünïcödé\nÆsop's fables — naïve façade. 😀",
+      "expected_sections": [
+        {
+          "heading": "海关总署",
+          "level": 1,
+          "startChar": 0,
+          "chars": 18
+        },
+        {
+          "heading": "Café ☕",
+          "level": 2,
+          "startChar": 19,
+          "chars": 43
+        },
+        {
+          "heading": "naïve façade — ünïcödé",
+          "level": 3,
+          "startChar": 63,
+          "chars": 58
+        }
+      ],
+      "expected_outcome": "imported",
+      "notes": "CJK, emoji and accented headings + paragraphs; exact code points."
+    },
+    "field-codes.docx": {
+      "sha256": "861fecb2817da1b0942cde9b59f562b582af768b9f999e6ec07e24595c67e0c5",
+      "bytes": 36723,
+      "expected_body": "Annex link\n3\nAfter the fields.",
+      "expected_sections": [
+        {
+          "heading": null,
+          "level": 0,
+          "startChar": 0,
+          "chars": 30
+        }
+      ],
+      "expected_outcome": "imported",
+      "notes": "HYPERLINK + PAGEREF fields: instrText excluded, field results included, URLs never in the body."
+    },
+    "track-changes.docx": {
+      "sha256": "25934e8412b41055421b01ead88efc7e776dbbe2d1a9e7e844e327eda3ce7d5d",
+      "bytes": 36696,
+      "expected_body": "Inserted text. Kept text.\nFinal text.",
+      "expected_sections": [
+        {
+          "heading": null,
+          "level": 0,
+          "startChar": 0,
+          "chars": 37
+        }
+      ],
+      "expected_outcome": "imported",
+      "notes": "w:ins included, w:del skipped (both w:delText and w:t inside w:del); deleted paragraph yields no line."
+    },
+    "empty.docx": {
+      "sha256": "d8a75dc8998a2127725eb9ac954af08922ae7d8bf1165d4fe23ac955f3c3f8f9",
+      "bytes": 36560,
+      "expected_body": "",
+      "expected_sections": [],
+      "expected_outcome": "ok: empty",
+      "notes": "Valid DOCX, no paragraphs; extraction yields 0 chars. The worker maps empty text to a refusal (as for PDF empty-text)."
+    },
+    "whitespace-only.docx": {
+      "sha256": "94825ec05d7db4404dadc426b6dfbf50f0abd5793ecb69e4e4a4304f6159ef5d",
+      "bytes": 36608,
+      "expected_body": "",
+      "expected_sections": [],
+      "expected_outcome": "ok: empty",
+      "notes": "Whitespace-only paragraphs are skipped; 0 chars extracted."
+    },
+    "external-hyperlink.docx": {
+      "sha256": "1b0c27949d10d53136c58768a5fc423cc0f2fd159b8e046cf713c9422a40eea8",
+      "bytes": 36682,
+      "expected_body": "External annex link\nPlain paragraph after the link.",
+      "expected_sections": [
+        {
+          "heading": null,
+          "level": 0,
+          "startChar": 0,
+          "chars": 51
+        }
+      ],
+      "expected_outcome": "imported",
+      "notes": "Hyperlink with TargetMode=External: display text imported, URL not in the body, nothing fetched."
+    },
+    "altchunk.docx": {
+      "sha256": "c5e9001d08f4ad5f6e93f34d405b094c60b470f103687dd577c5a16027dbe1aa",
+      "bytes": 36605,
+      "expected_body": null,
+      "expected_sections": null,
+      "expected_outcome": "refused: altChunk",
+      "notes": "w:altChunk present: importing would publish a partial document."
+    },
+    "doctype.docx": {
+      "sha256": "df598c8c0cfafc22e5f2e012869a0164d225c374a05d6b34cca510bfecc6f5ad",
+      "bytes": 36631,
+      "expected_body": null,
+      "expected_sections": null,
+      "expected_outcome": "refused: DOCTYPE",
+      "notes": "word/document.xml carries <!DOCTYPE with an entity declaration: refused by the pre-scan before parsing."
+    },
+    "corrupt-truncated-zip.docx": {
+      "sha256": "8438912ed6021caf69c1860dfe07f1dde80cd7c2a52b52217a29b9be57b06e5d",
+      "bytes": 21989,
+      "expected_body": null,
+      "expected_sections": null,
+      "expected_outcome": "refused: parse error",
+      "notes": "Valid document cut at 60% of its bytes."
+    },
+    "corrupt-not-a-zip.docx": {
+      "sha256": "35807ef976fe3f2a3a7ec3ee92feebaadaba3e58725aebb1bc1cd455fd131cee",
+      "bytes": 44,
+      "expected_body": null,
+      "expected_sections": null,
+      "expected_outcome": "refused: parse error",
+      "notes": "Not a ZIP archive at all."
+    },
+    "corrupt-bad-xml.docx": {
+      "sha256": "8d6b11d59ced9f7896d1a477b092c9544d785afc4f0768e518b896bc71608dfe",
+      "bytes": 36155,
+      "expected_body": null,
+      "expected_sections": null,
+      "expected_outcome": "refused: parse error",
+      "notes": "word/document.xml is malformed XML (unclosed elements)."
+    },
+    "corrupt-missing-document.docx": {
+      "sha256": "03bcc877f46b1f62bbc64224d5b6405d8896c9f0ec64dff677e5488f4b555ff9",
+      "bytes": 35947,
+      "expected_body": null,
+      "expected_sections": null,
+      "expected_outcome": "refused: missing word/document.xml",
+      "notes": "Archive without word/document.xml."
+    },
+    "corrupt-missing-content-types.docx": {
+      "sha256": "8628e95cb0dcf635b859f59fe4c9b88bccb89b5a14b7fc1b37fd19e3c459c144",
+      "bytes": 36130,
+      "expected_body": null,
+      "expected_sections": null,
+      "expected_outcome": "refused: missing [Content_Types].xml",
+      "notes": "Archive without [Content_Types].xml (malformed OPC package)."
+    },
+    "corrupt-bad-crc.docx": {
+      "sha256": "bd03c79624936a1929534df57731401e20d2c7cc243182757f7fc5f3a369fa5e",
+      "bytes": 36649,
+      "expected_body": null,
+      "expected_sections": null,
+      "expected_outcome": "refused: parse error",
+      "notes": "One flipped byte inside the compressed word/document.xml stream: decompression or CRC must fail."
+    },
+    "oversized-raw.docx": {
+      "sha256": "0d6584370821250e1746905a52fe09742e7502833dded6d5a91dc4579a51c90e",
+      "bytes": 1136761,
+      "expected_body": null,
+      "expected_sections": null,
+      "expected_outcome": "refused: raw cap",
+      "notes": "Valid document + 1.1 MB stored pad entry; raw size over 1 MiB."
+    },
+    "oversized-text.docx": {
+      "sha256": "0aae3e608f3d8549c9b0c8a6e8d7edf5e140f5e81bb4dca52b8e0523999cefe5",
+      "bytes": 36693,
+      "expected_body": null,
+      "expected_sections": null,
+      "expected_outcome": "refused: text cap",
+      "notes": "35,000 chars over the 32,000-char document cap; raw size under cap."
+    },
+    "zip-bomb.docx": {
+      "sha256": "a2e09afa2d9d8d26a5228e570c0b989be4490f9bd391d2ca1419ad9a9d701efa",
+      "bytes": 56110,
+      "expected_body": null,
+      "expected_sections": null,
+      "expected_outcome": "refused: declared uncompressed size",
+      "notes": "word/document.xml inflates to ~20 MB from 56110 raw bytes; declared size patched to 1000. The zip crate refuses the lying size during inflation; the capped reader is the second layer."
+    },
+    "many-entries.docx": {
+      "sha256": "0cb55771710b82e21f8f176f9c3d8ff3e7ff18403913da4fa18bff7ddac755db",
+      "bytes": 54069,
+      "expected_body": null,
+      "expected_sections": null,
+      "expected_outcome": "refused: entry cap",
+      "notes": "Valid document + 130 dummy entries (> 128 total)."
+    },
+    "encrypted-entry.docx": {
+      "sha256": "39e1ca9263a9da476b7974b281c62e7912f39d43f61a4c859a205a2c56806220",
+      "bytes": 36649,
+      "expected_body": null,
+      "expected_sections": null,
+      "expected_outcome": "refused: encrypted entry",
+      "notes": "General-purpose bit 0 set on word/document.xml (flag-only synthetic; content untouched). The parser must refuse, never attempt decryption."
+    },
+    "macro.docx": {
+      "sha256": "477493a4ba64fd8de1d20bb3b2afcf24f43ee034ade023fd082d5519e7d1a964",
+      "bytes": 36769,
+      "expected_body": null,
+      "expected_sections": null,
+      "expected_outcome": "refused: macro",
+      "notes": "word/vbaProject.bin present (active content)."
+    },
+    "libreoffice-realworld.docx": {
+      "sha256": "2202c6d5100e9c42178335e9f8ef9e1a37358d7ac79ef4b5feb603a20959ddc7",
+      "bytes": 19945,
+      "expected_body": "# Harbor Ledger\n# Customs\nThe bramblewick shipment cleared customs on Tuesday.\n## Manifest\nThree crates of copper fittings, two of rope.\nCopper\n3 crates\nRope\n2 coils\n### Notes\nSee the annex\nFirst item\nSecond item\nTotals: 41 crates, 12 pallets, 1 lighthouse keeper.\nBefore the break\nAfter the break",
+      "expected_sections": [
+        {
+          "heading": "Harbor Ledger",
+          "level": 1,
+          "startChar": 0,
+          "chars": 15
+        },
+        {
+          "heading": "Customs",
+          "level": 1,
+          "startChar": 16,
+          "chars": 62
+        },
+        {
+          "heading": "Manifest",
+          "level": 2,
+          "startChar": 79,
+          "chars": 86
+        },
+        {
+          "heading": "Notes",
+          "level": 3,
+          "startChar": 166,
+          "chars": 131
+        }
+      ],
+      "expected_outcome": "imported",
+      "notes": "LibreOffice round-trip of normal.docx (soffice --headless --convert-to docx). SHA recorded at generation time; LO timestamps are not reproducible, so re-running the generator changes the SHA. Cross-checked against soffice --convert-to txt."
+    }
+  }
+}
