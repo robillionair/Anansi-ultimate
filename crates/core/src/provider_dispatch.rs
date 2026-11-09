@@ -69,10 +69,8 @@ use anansi_providers::error::{ProviderError, ProviderErrorCode};
 use anansi_providers::gates::{Budget, PaidInferencePermit, QuotaLedger, ZeroCostLock};
 use anansi_providers::http::CancellationToken;
 use anansi_providers::routing::{DisclosureRecord, RoutingMode, RoutingRequest};
-use anansi_providers::config::ProviderConfig;
 use anansi_providers::runtime::{LocalityConfig, ProviderRuntime, RuntimeConfig, RuntimeProvider};
-use anansi_providers::secrets::CredentialRef;
-use anansi_providers::types::{CompletionRequest, CostClass, ModelInfo, StreamEvent, Usage};
+use anansi_providers::types::{CompletionRequest, CostClass, StreamEvent, Usage};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -2439,6 +2437,9 @@ pub fn providers_command(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use anansi_providers::config::ProviderConfig;
+    use anansi_providers::secrets::CredentialRef;
+    use anansi_providers::types::ModelInfo;
 
     fn disclosure() -> DisclosureRecord {
         serde_json::from_value(serde_json::json!({
