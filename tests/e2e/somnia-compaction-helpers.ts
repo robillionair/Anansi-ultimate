@@ -99,7 +99,7 @@ async function startFake(): Promise<{ server: Server; url: string; hits: () => n
       const callNumber = hits;
       const respond = () => {
         if (res.destroyed || res.writableEnded) return;
-        const parsed = JSON.parse(body || '{}') as { stream?: boolean };
+        const parsed = JSON.parse(body || '{}') as { stream?: boolean; model?: string };
         if (parsed.stream) {
           res.writeHead(200, { 'content-type': 'application/x-ndjson' });
           res.end(
@@ -123,7 +123,7 @@ async function startFake(): Promise<{ server: Server; url: string; hits: () => n
         }
         // A wrong-model call reports a different model in the same
         // shape the real provider would; the run must refuse the pair.
-        const model = behavior.wrongModelCall === callNumber ? 'other-model' : 'llama-x';
+        const model = behavior.wrongModelCall === callNumber ? 'other-model' : parsed.model;
         res.writeHead(200, { 'content-type': 'application/json' });
         res.end(
           JSON.stringify({
@@ -162,7 +162,7 @@ export type CompactionSession = {
 
 export async function startCompactionSession(
   page: Page,
-  options?: { liveEndpoint?: string; liveModel?: string },
+  options?: { liveEndpoint?: string; liveModel?: string; alternateModel?: string },
 ): Promise<CompactionSession> {
   page.setDefaultTimeout(8000);
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'anansi-somnia-compaction-e2e-'));
@@ -230,11 +230,11 @@ export async function startCompactionSession(
       providers: [{
         config: { provider: 'ollama', baseUrl: live ? options!.liveEndpoint : fake!.url, credential: null, enabled: true },
         locality: 'local',
-        models: [{
-          id: live ? liveModel : 'llama-x', provider: 'ollama',
+        models: [live ? liveModel : 'llama-x', ...(options?.alternateModel ? [options.alternateModel] : [])].map(id => ({
+          id, provider: 'ollama',
           capabilities: { chat: true, streaming: true, vision: false, coding: true, deepReasoning: false, embeddings: false },
           contextWindow: 8192, cost: 'free', speed: 'balanced',
-        }],
+        })),
       }],
       budget: { maxRequests: 500, maxTotalTokens: 500000 },
     }),

@@ -44,7 +44,8 @@ test('SOMNIA compaction runs the approved comparison and saves it privately', as
     [fakeAnswerKey('What was the customs fee before the update?', originalHistory), null],
     [fakeAnswerKey('What was the customs fee before the update?', compactedHistory), null],
   ]);
-  const session = await startCompactionSession(page);
+  // Auto would try this model before the explicitly chosen llama-x.
+  const session = await startCompactionSession(page, { alternateModel: 'aaa-decoy' });
   try {
     const panel = session.panel;
     // No run exists before approval, and the run button is absent.

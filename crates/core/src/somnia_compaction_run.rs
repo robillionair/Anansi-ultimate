@@ -861,7 +861,7 @@ fn dispatch_pair_arm(
             "localOnly": config.local_only,
             "explicitCloudAuthorization": config.permit_id.is_some(),
         },
-        "mode": "auto",
+        "mode": "chooseModel",
         "zeroCostLock": true,
         "chosen": [config.provider.clone(), config.model.clone()],
         "permitId": config.permit_id.clone(),
