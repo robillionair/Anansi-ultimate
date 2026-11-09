@@ -1259,6 +1259,7 @@ fn credential_op(
 
 #[test]
 fn credential_lifecycle_prompt_keyring_resolver_wire() {
+    let _lock = credential_prompt_lock();
     credential_env_once();
     let (_dir, core, ws) = core();
     let reference = format!("openai-e2e-{}", std::process::id());
@@ -1572,4 +1573,337 @@ fn stream_start_refuses_expected_target_before_traffic() {
     let started = stream_start(&core, &ws, json!({})).unwrap();
     assert!(started["runId"].as_str().is_some());
     assert!(fake_b.hits.load(Ordering::SeqCst) >= 1);
+}
+
+// ---------------------------------------------------------------------------
+// Connect AI: atomic add/update, host-generated references, status
+// (docs/handoffs/connect-ai-api-key-setup-design.md, AC-C3..C8)
+
+/// Serializes the tests that drive the native-prompt test hook:
+/// the hook reads process-global environment, so two such tests
+/// must never run concurrently.
+fn credential_prompt_lock() -> std::sync::MutexGuard<'static, ()> {
+    static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    LOCK.lock().unwrap_or_else(|p| p.into_inner())
+}
+
+fn configure_add(core: &Core, ws: &str, provider: Value) -> Result<Value, CommandError> {
+    core.ai_command(
+        "providers-configure-add",
+        json!({ "workspaceId": ws, "provider": provider }),
+    )
+}
+
+fn provider_status(core: &Core, session: Option<&str>, ws: &str) -> Result<Value, CommandError> {
+    let mut body = json!({ "workspaceId": ws });
+    if let Some(s) = session {
+        body["callerContext"] = json!({ "session": s });
+    }
+    core.ai_command("providers-status", body)
+}
+
+fn credential_reference(
+    core: &Core,
+    session: Option<&str>,
+    ws: &str,
+    provider: &str,
+) -> Result<Value, CommandError> {
+    let mut body = json!({ "workspaceId": ws, "provider": provider });
+    if let Some(s) = session {
+        body["callerContext"] = json!({ "session": s });
+    }
+    core.ai_command("providers-credential-reference", body)
+}
+
+/// One provider entry: `provider` id, `base_url`, optional
+/// credential reference, one model with the given cost class.
+fn provider_entry(provider: &str, base_url: &str, reference: Option<&str>, model: &str, cost: &str) -> Value {
+    json!({
+        "config": {
+            "provider": provider, "baseUrl": base_url,
+            "credential": reference.map(|r| json!({ "provider": provider, "reference": r })),
+            "enabled": true, "customEndpoint": provider != "ollama"
+        },
+        "locality": "local",
+        "models": [{
+            "id": model, "provider": provider,
+            "capabilities": { "chat": true, "streaming": true, "vision": false,
+                              "coding": true, "deepReasoning": false, "embeddings": false },
+            "contextWindow": 8192, "cost": cost, "speed": "balanced"
+        }]
+    })
+}
+
+fn status_entry<'a>(status: &'a Value, provider: &str) -> &'a Value {
+    status["providers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|p| p["provider"] == provider)
+        .unwrap_or_else(|| panic!("provider {provider} missing from status: {status}"))
+}
+
+#[test]
+fn configure_add_preserves_providers_budget_and_accounting() {
+    let _lock = credential_prompt_lock();
+    credential_env_once();
+    let (_dir, core, ws) = core();
+    let fake_a = start_fake_ollama();
+    let fake_b = start_fake_openai();
+
+    // Provider A with a budget, via the full-replacement op.
+    let mut config_a = ollama_config(&fake_a.base_url, "free");
+    config_a["budget"] = json!({ "maxRequests": 5, "maxTotalTokens": 100000 });
+    configure(&core, &ws, config_a).unwrap();
+    assert_eq!(fake_a.hits.load(Ordering::SeqCst), 0, "configure makes no provider calls");
+
+    // One successful dispatch: usage accounting now records A.
+    let out = dispatch(&core, "browser-1", &ws, json!({}), "hello").unwrap();
+    assert_eq!(out["response"]["text"], "core reply");
+    assert_eq!(usage(&core, &ws)["totalRequests"], 1);
+
+    // Host-generated reference for B, then the native prompt
+    // (test hook) stores the key under it.
+    let reference = credential_reference(&core, None, &ws, "openai").unwrap();
+    let reference = reference["reference"].as_str().unwrap().to_string();
+    assert!(reference.starts_with("openai-"), "{reference}");
+    assert_eq!(reference.len(), "openai-".len() + 16);
+    let set = credential_op(&core, None, "providers-credential-set", &ws, &reference).unwrap();
+    assert_eq!(set["stored"], true);
+
+    // Add B: the atomic op must keep A, the budget, and usage.
+    let added = configure_add(
+        &core,
+        &ws,
+        provider_entry("openai", &fake_b.base_url, Some(&reference), "gpt-x", "unknown"),
+    )
+    .unwrap();
+    assert_eq!(added["added"], "openai");
+    assert_eq!(added["updated"], false);
+    assert_eq!(added["providers"], json!(["ollama", "openai"]));
+
+    // A browser may read status: both providers, budget intact,
+    // credential stored vs connection verified kept apart.
+    let status = provider_status(&core, Some("browser-1"), &ws).unwrap();
+    assert_eq!(status["budget"]["maxRequests"], 5);
+    assert_eq!(status["budget"]["maxTotalTokens"], 100000);
+    let a = status_entry(&status, "ollama");
+    assert_eq!(a["credentialStored"], false);
+    assert_eq!(a["connectionVerified"], true, "A dispatched once");
+    let b = status_entry(&status, "openai");
+    assert_eq!(b["credentialStored"], true);
+    assert_eq!(b["connectionVerified"], false, "B never dispatched");
+    assert_eq!(usage(&core, &ws)["totalRequests"], 1, "usage accounting survived the add");
+
+    // Setup made zero inference calls: the only hit is the one
+    // dispatch above; B's fake server was never contacted.
+    assert_eq!(fake_a.hits.load(Ordering::SeqCst), 1);
+    assert_eq!(fake_b.hits.load(Ordering::SeqCst), 0, "setup must not call any provider");
+
+    // B's model is cost-unknown: under Zero-Cost Lock it is
+    // refused without a permit, with zero traffic.
+    let err = core
+        .ai_command(
+            "providers-dispatch",
+            stamped(
+                "browser-1",
+                json!({
+                    "workspaceId": ws, "mode": "chooseModel", "zeroCostLock": true,
+                    "chosen": ["openai", "gpt-x"],
+                    "request": {
+                        "model": "gpt-x",
+                        "messages": [{ "role": "user",
+                                       "segments": [{ "text": "hello", "privacy": "standard" }] }]
+                    }
+                }),
+            ),
+        )
+        .unwrap_err();
+    // The router refuses an unknown-cost candidate under the
+    // lock as Unsupported (mapped to InvalidRequest) — before
+    // any traffic.
+    assert_eq!(err.code, ErrorCode::InvalidRequest, "{}", err.message);
+    assert!(err.message.contains("cost filters"), "{}", err.message);
+    assert_eq!(fake_b.hits.load(Ordering::SeqCst), 0);
+
+    // Updating B in place keeps the provider list and budget.
+    let updated = configure_add(
+        &core,
+        &ws,
+        provider_entry("openai", &fake_b.base_url, Some(&reference), "gpt-y", "unknown"),
+    )
+    .unwrap();
+    assert_eq!(updated["updated"], true);
+    assert_eq!(updated["providers"], json!(["ollama", "openai"]));
+    let status = provider_status(&core, None, &ws).unwrap();
+    assert_eq!(status["budget"]["maxRequests"], 5);
+    assert_eq!(status_entry(&status, "openai")["models"][0]["id"], "gpt-y");
+}
+
+#[test]
+fn configure_add_survives_restart() {
+    let _lock = credential_prompt_lock();
+    credential_env_once();
+    let (dir, core, ws) = core();
+    let fake_a = start_fake_ollama();
+    let fake_b = start_fake_openai();
+
+    let mut config_a = ollama_config(&fake_a.base_url, "free");
+    config_a["budget"] = json!({ "maxRequests": 5, "maxTotalTokens": 100000 });
+    configure(&core, &ws, config_a).unwrap();
+    let reference = credential_reference(&core, None, &ws, "openai").unwrap()["reference"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    credential_op(&core, None, "providers-credential-set", &ws, &reference).unwrap();
+    configure_add(
+        &core,
+        &ws,
+        provider_entry("openai", &fake_b.base_url, Some(&reference), "gpt-x", "unknown"),
+    )
+    .unwrap();
+    // The merged configuration is on disk, references only.
+    let file = dir
+        .path()
+        .join("provider-config")
+        .join(format!("{ws}.json"));
+    assert!(file.exists(), "config file missing");
+    let text = std::fs::read_to_string(&file).unwrap();
+    assert!(!text.contains("sk-fake"), "config file must never hold a secret");
+    assert!(text.contains(&reference), "config file holds the reference");
+
+    // Restart: a fresh Core over the same storage root.
+    drop(core);
+    let core2 = Core::with_storage_root(dir.path().to_path_buf());
+    // The first dispatch lazily installs the persisted config.
+    let out = dispatch(&core2, "browser-1", &ws, json!({}), "hello").unwrap();
+    assert_eq!(out["response"]["text"], "core reply");
+    let status = provider_status(&core2, None, &ws).unwrap();
+    assert_eq!(status["providers"].as_array().unwrap().len(), 2);
+    assert_eq!(status["budget"]["maxRequests"], 5);
+    assert_eq!(status["budget"]["maxTotalTokens"], 100000);
+    assert_eq!(status_entry(&status, "openai")["credentialStored"], true);
+}
+
+#[test]
+fn configure_add_is_atomic_on_persist_failure() {
+    let (_dir, core, ws) = core();
+    let fake_a = start_fake_ollama();
+    configure(&core, &ws, ollama_config(&fake_a.base_url, "free")).unwrap();
+
+    // Break persistence: replace the provider-config directory
+    // with a regular file, so create_dir_all fails.
+    let root = _dir.path();
+    std::fs::remove_dir_all(root.join("provider-config")).unwrap();
+    std::fs::write(root.join("provider-config"), b"not a directory").unwrap();
+
+    let err = configure_add(
+        &core,
+        &ws,
+        provider_entry("openai", "http://127.0.0.1:9", None, "gpt-x", "unknown"),
+    )
+    .unwrap_err();
+    assert_eq!(err.code, ErrorCode::StorageUnavailable, "{}", err.message);
+    // Memory is exactly as before: only A, still usable.
+    let status = provider_status(&core, None, &ws).unwrap();
+    assert_eq!(status["providers"].as_array().unwrap().len(), 1);
+    assert_eq!(status_entry(&status, "ollama")["provider"], "ollama");
+    let out = dispatch(&core, "browser-1", &ws, json!({}), "hello").unwrap();
+    assert_eq!(out["response"]["text"], "core reply");
+
+    // Clean retry once persistence works again.
+    std::fs::remove_file(root.join("provider-config")).unwrap();
+    let added = configure_add(
+        &core,
+        &ws,
+        provider_entry("openai", "http://127.0.0.1:9", None, "gpt-x", "unknown"),
+    )
+    .unwrap();
+    assert_eq!(added["providers"], json!(["ollama", "openai"]));
+}
+
+#[test]
+fn browser_refusal_leaves_state_unchanged() {
+    let _lock = credential_prompt_lock();
+    credential_env_once();
+    let (_dir, core, ws) = core();
+    let fake_a = start_fake_ollama();
+    configure(&core, &ws, ollama_config(&fake_a.base_url, "free")).unwrap();
+
+    for (op, body) in [
+        (
+            "providers-configure-add",
+            json!({ "workspaceId": ws, "provider": provider_entry("openai", "http://127.0.0.1:9", None, "gpt-x", "unknown") }),
+        ),
+        (
+            "providers-credential-reference",
+            json!({ "workspaceId": ws, "provider": "openai" }),
+        ),
+        (
+            "providers-credential-set",
+            json!({ "workspaceId": ws, "provider": "openai", "reference": "openai-0000000000000000" }),
+        ),
+    ] {
+        let mut stamped_body = body.clone();
+        stamped_body["callerContext"] = json!({ "session": "browser-1" });
+        let err = core.ai_command(op, stamped_body).unwrap_err();
+        assert_eq!(err.code, ErrorCode::Forbidden, "{op}: {}", err.message);
+    }
+    // Nothing changed; the refusal is queued for host approval.
+    let status = provider_status(&core, Some("browser-1"), &ws).unwrap();
+    assert_eq!(status["providers"].as_array().unwrap().len(), 1);
+    let access = session_access(&core, None, &ws).unwrap();
+    assert!(
+        access["pending"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|p| p["session"] == "browser-1"),
+        "{access}"
+    );
+}
+
+#[test]
+fn cancelled_prompt_stores_nothing_and_leaves_config_unchanged() {
+    let _lock = credential_prompt_lock();
+    credential_env_once();
+    let (_dir, core, ws) = core();
+    let fake_a = start_fake_ollama();
+    configure(&core, &ws, ollama_config(&fake_a.base_url, "free")).unwrap();
+    let reference = credential_reference(&core, None, &ws, "openai").unwrap()["reference"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    // Cancel the native prompt (test hook): nothing is stored,
+    // the configuration is untouched.
+    unsafe { std::env::set_var("ANANSI_PROVIDER_TEST_CANCEL", "1") };
+    let err = credential_op(&core, None, "providers-credential-set", &ws, &reference).unwrap_err();
+    assert_eq!(err.code, ErrorCode::InvalidRequest, "{}", err.message);
+    assert!(err.message.contains("cancelled"), "{}", err.message);
+    unsafe { std::env::remove_var("ANANSI_PROVIDER_TEST_CANCEL") };
+    let status =
+        credential_op(&core, None, "providers-credential-status", &ws, &reference).unwrap();
+    assert_eq!(status["present"], false);
+    let status = provider_status(&core, None, &ws).unwrap();
+    assert_eq!(status["providers"].as_array().unwrap().len(), 1);
+
+    // Clean retry with the prompt working again.
+    let set = credential_op(&core, None, "providers-credential-set", &ws, &reference).unwrap();
+    assert_eq!(set["stored"], true);
+    let status =
+        credential_op(&core, None, "providers-credential-status", &ws, &reference).unwrap();
+    assert_eq!(status["present"], true);
+}
+
+#[test]
+fn status_is_readable_by_a_browser_and_shows_no_secrets() {
+    let (_dir, core, ws) = core();
+    let fake_a = start_fake_ollama();
+    configure(&core, &ws, ollama_config(&fake_a.base_url, "free")).unwrap();
+    let status = provider_status(&core, Some("browser-1"), &ws).unwrap();
+    assert_eq!(status["providers"][0]["provider"], "ollama");
+    assert_eq!(status["providers"][0]["connectionVerified"], false);
+    let text = serde_json::to_string(&status).unwrap();
+    assert!(!text.contains("sk-"), "status must never carry secret material");
 }

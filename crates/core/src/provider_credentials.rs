@@ -182,3 +182,25 @@ fn windows_prompt(provider: &str, reference: &str) -> Result<Zeroizing<Vec<u8>>,
     }
     Ok(Zeroizing::new(secret.into_bytes()))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cancel_env_returns_the_cancelled_error() {
+        // The native prompt's cancel path, via the debug-only
+        // test hook (mirrors the vault's ANANSI_VAULT_TEST_CANCEL).
+        // The lib test binary has no other prompt caller, so the
+        // process-global env mutation is safe here.
+        unsafe {
+            std::env::set_var("ANANSI_PROVIDER_TEST_CANCEL", "1");
+        }
+        let err = prompt_for_api_key("openai", "openai-test").unwrap_err();
+        unsafe {
+            std::env::remove_var("ANANSI_PROVIDER_TEST_CANCEL");
+        }
+        assert_eq!(err.code, ErrorCode::InvalidRequest);
+        assert!(err.message.contains("cancelled"), "{}", err.message);
+    }
+}
