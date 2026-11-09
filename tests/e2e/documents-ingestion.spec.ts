@@ -196,14 +196,14 @@ test('documents API: oversize, sealed, hash-mismatch and unsupported-format refu
       privacy: 'sealed',
     });
     expect(sealed.status).toBe(400);
-    const docx = await session.call('jobs', 'ingest-begin', {
+    const pptx = await session.call('jobs', 'ingest-begin', {
       workspaceId,
-      fileName: 'report.docx',
+      fileName: 'report.pptx',
       bytes: bytes.length,
       sha256: hash,
       privacy: 'private',
     });
-    expect(docx.status).toBe(400);
+    expect(pptx.status).toBe(400);
     const mismatch = await session.call('jobs', 'ingest-begin', {
       workspaceId,
       fileName: 'mismatch.txt',
