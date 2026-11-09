@@ -242,7 +242,7 @@ test('vault view exposes native and paired-browser controls plus encrypted backu
   assert.doesNotMatch(browserHtml, /type="password"/);
 });
 
-import {Providers, DisclosurePanel, deriveLocality, defaultFlowModels} from '../src/Providers';
+import {Providers, UnusedCredentials, DisclosurePanel, deriveLocality, defaultFlowModels} from '../src/Providers';
 
 test('providers screen renders the guided Connect AI flow: catalog step, connected list, zero-cost lock, routing modes, usage',()=>{
   const html=renderToStaticMarkup(<Providers client={{providersCatalog:async()=>({contractVersion:1,providers:[]}),providersUsage:async()=>({contractVersion:1,totalRequests:0,totalInputTokens:0,totalOutputTokens:0,totalEstimatedCostMicroUsd:0,reservedRequests:0,reservedTokens:0,reservedEstimatedCostMicroUsd:0,providers:[]}),providersSessionAccess:async()=>({contractVersion:1,pending:[],grants:[]})} as any} workspaceId="ws1"/>);
@@ -264,6 +264,21 @@ test('providers screen renders the guided Connect AI flow: catalog step, connect
 
 test('connect AI flow starts new models as cost-unknown, never free',()=>{
   assert.deepEqual(defaultFlowModels(),[{id:'',cost:'unknown'}]);
+});
+
+test('unused credentials list names the orphaned key and offers removal, and renders nothing when empty',()=>{
+  const orphan = { provider: 'openai', reference: 'openai-0123456789abcdef' };
+  const html = renderToStaticMarkup(
+    <UnusedCredentials orphaned={[orphan]} busy="" note="" onRemove={() => {}} />,
+  );
+  assert.match(html, /Unused credentials/);
+  assert.match(html, /openai-0123456789abcdef/);
+  assert.match(html, /Remove unused key/);
+  assert.doesNotMatch(html, /sk-/);
+  assert.equal(
+    renderToStaticMarkup(<UnusedCredentials orphaned={[]} busy="" note="" onRemove={() => {}} />),
+    '',
+  );
 });
 
 test('providers locality derivation mirrors the backend rule',()=>{

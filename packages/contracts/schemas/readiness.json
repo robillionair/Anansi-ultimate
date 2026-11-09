@@ -16702,7 +16702,7 @@
             "type": "string"
           },
           "connectionVerified": {
-            "description": "A dispatch has succeeded for this provider since the app\nstarted. A fresh setup is always false — setup performs\nzero inference calls, and verification happens on the\nfirst authorized dispatch, outside setup.",
+            "description": "A dispatch has succeeded for THIS saved connection — the\nexact endpoint and credential reference recorded below —\nsince the app started. Changing the endpoint, replacing\nthe key (even under the same reference), or removing the\nprovider clears it until the new connection succeeds.\nSession-scoped: a restart clears it, as the UI states.",
             "type": "boolean"
           },
           "credentialReference": {
@@ -16762,6 +16762,22 @@
           "cost"
         ],
         "type": "object"
+      },
+      "ProviderStatusOrphanedCredential": {
+        "description": "A stored credential no saved connection references: a key\nminted during setup whose draft was discarded or abandoned.\nLabels only — the reference and the provider it was minted\nfor — never secret material.",
+        "properties": {
+          "provider": {
+            "type": "string"
+          },
+          "reference": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "reference"
+        ],
+        "type": "object"
       }
     },
     "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -16775,6 +16791,12 @@
         "minimum": 0,
         "type": "integer"
       },
+      "orphanedCredentials": {
+        "items": {
+          "$ref": "#/$defs/ProviderStatusOrphanedCredential"
+        },
+        "type": "array"
+      },
       "providers": {
         "items": {
           "$ref": "#/$defs/ProviderStatusEntry"
@@ -16785,6 +16807,7 @@
     "required": [
       "contractVersion",
       "providers",
+      "orphanedCredentials",
       "budget"
     ],
     "title": "ProviderStatusResponse",

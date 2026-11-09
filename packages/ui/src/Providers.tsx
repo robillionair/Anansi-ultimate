@@ -4,6 +4,7 @@ import type {
   CompletionRequest,
   DisclosureRecord,
   ProviderCatalogEntry,
+  ProviderStatusOrphanedCredential,
   ProviderStatusResponse,
   ProviderUsageResponse,
   RuntimeProvider,
@@ -68,6 +69,47 @@ export function defaultFlowModels(): ModelRow[] {
   return [{ id: '', cost: 'unknown' }];
 }
 
+/**
+ * Unused credentials: keys stored during a setup that was never
+ * saved. Each entry is a label only (provider + reference) — no
+ * secret — with a removal action. Rendered only when the list is
+ * non-empty; kept separate so it can be unit-tested statically.
+ */
+export function UnusedCredentials({
+  orphaned,
+  busy,
+  note,
+  onRemove,
+}: {
+  orphaned: ProviderStatusOrphanedCredential[];
+  busy: string;
+  note: string;
+  onRemove: (entry: ProviderStatusOrphanedCredential) => void;
+}) {
+  if (orphaned.length === 0) return null;
+  return (
+    <div>
+      <h3>Unused credentials</h3>
+      <p>
+        Keys stored during a setup that was never saved. They are not connected to any
+        provider — removing one deletes it from the operating system credential store.
+        A credential a saved connection uses never appears here.
+      </p>
+      <ul>
+        {orphaned.map((o) => (
+          <li key={o.reference}>
+            {o.provider} — {o.reference}{' '}
+            <button type="button" className="secondary" disabled={busy === o.reference} onClick={() => onRemove(o)}>
+              Remove unused key
+            </button>
+          </li>
+        ))}
+      </ul>
+      {note && <p role="status">{note}</p>}
+    </div>
+  );
+}
+
 export function Providers({ client, workspaceId }: { client: Client; workspaceId: string }) {
   const [catalog, setCatalog] = useState<ProviderCatalogEntry[]>([]);
   const [catalogError, setCatalogError] = useState('');
@@ -79,6 +121,9 @@ export function Providers({ client, workspaceId }: { client: Client; workspaceId
   // Connected providers (backend-owned status: credential stored
   // vs verified in this session, plus the surviving budget).
   const [connected, setConnected] = useState<ProviderStatusResponse | null>(null);
+  // Unused-credential removal (orphaned setup keys).
+  const [orphanBusy, setOrphanBusy] = useState('');
+  const [orphanNote, setOrphanNote] = useState('');
 
   // Guided Connect AI flow (steps 2–5; step 1 is the catalog).
   const [flowStep, setFlowStep] = useState(0);
@@ -197,6 +242,87 @@ export function Providers({ client, workspaceId }: { client: Client; workspaceId
   function isOwnerRefusal(e: unknown) {
     const message = e instanceof Error ? e.message : '';
     return /owner authorization|Forbidden/i.test(message);
+  }
+
+  // Whether the draft's reference is used by a saved connection:
+  // such a credential is protected and can never be removed from
+  // the draft (the backend refuses it too).
+  const flowReferenceIsReferenced =
+    flowReference.trim() !== '' &&
+    (connected?.providers.some((p) => p.credentialReference === flowReference.trim()) ?? false);
+
+  function resetFlow() {
+    setFlowProviderId('');
+    setFlowBaseUrl('');
+    setFlowCustomEndpoint(false);
+    setFlowAllowInsecure(false);
+    setFlowReference('');
+    setFlowCredStored(null);
+    setFlowModels(defaultFlowModels());
+    setFlowError('');
+    setFlowDone(false);
+    setFlowStep(0);
+  }
+
+  // Discard the draft (AC-V6/V9): leave setup and, when this
+  // draft stored a key no saved connection uses, remove that
+  // unused key through the guarded op. If the key became
+  // referenced meanwhile (an overlapping setup saved it first)
+  // the backend refuses and the key is kept; if this is a paired
+  // browser the key stays stored and listed under Unused
+  // credentials for the desktop to remove. The draft always
+  // resets either way.
+  async function handleDiscardDraft() {
+    setFlowBusy(true);
+    setFlowError('');
+    const reference = flowReference.trim();
+    const stored = flowCredStored === true && reference !== '';
+    try {
+      if (stored) {
+        try {
+          await client.providersCredentialRemove(workspaceId, flowProviderId, reference);
+          setFlowNotice('Draft discarded. The unused key was removed from the OS credential store.');
+        } catch (e) {
+          if (isOwnerRefusal(e)) {
+            setFlowNotice(
+              'Draft discarded. The key is still stored — remove it in the desktop app, or find it under Unused credentials.',
+            );
+          } else if (/in use/i.test(e instanceof Error ? e.message : '')) {
+            setFlowNotice('Draft discarded. The key is now in use by a saved connection, so it was kept.');
+          } else {
+            setFlowNotice('Draft discarded. The key could not be removed — find it under Unused credentials.');
+          }
+        }
+      } else {
+        setFlowNotice('Draft discarded.');
+      }
+      await refreshConnected();
+    } finally {
+      resetFlow();
+      setFlowBusy(false);
+    }
+  }
+
+  // Remove one orphaned (unused) credential from the Connected
+  // providers list.
+  async function handleRemoveOrphan(entry: ProviderStatusOrphanedCredential) {
+    setOrphanBusy(entry.reference);
+    setOrphanNote('');
+    try {
+      await client.providersCredentialRemove(workspaceId, entry.provider, entry.reference);
+      setOrphanNote(`Removed the unused ${entry.provider} key (${entry.reference}).`);
+      await refreshConnected();
+    } catch (e) {
+      setOrphanNote(
+        isOwnerRefusal(e)
+          ? 'Remove unused keys in the desktop app — browsers cannot manage API keys.'
+          : e instanceof Error
+            ? e.message
+            : 'Credential removal failed.',
+      );
+    } finally {
+      setOrphanBusy('');
+    }
   }
 
   async function handleGenerateReference() {
@@ -625,6 +751,7 @@ export function Providers({ client, workspaceId }: { client: Client; workspaceId
                 <div className="actions">
                   <button type="button" className="secondary" disabled={flowBusy} onClick={() => setFlowStep(0)}>Back to providers</button>
                   <button type="button" disabled={flowBusy || !flowCanContinue()} onClick={() => setFlowStep(flowNeedsKey ? 3 : 4)}>Continue</button>
+                  <button type="button" className="secondary" disabled={flowBusy} onClick={() => void handleDiscardDraft()}>Discard draft</button>
                 </div>
               </div>
             )}
@@ -651,13 +778,19 @@ export function Providers({ client, workspaceId }: { client: Client; workspaceId
                   <button type="button" disabled={flowBusy || !flowReference.trim()} onClick={() => void handleFlowCredentialSet()}>
                     Set credential (native prompt)
                   </button>
-                  <button type="button" className="secondary" disabled={flowBusy || !flowReference.trim()} onClick={() => void handleFlowCredentialRemove()}>
+                  <button type="button" className="secondary" disabled={flowBusy || !flowReference.trim() || flowReferenceIsReferenced} onClick={() => void handleFlowCredentialRemove()}>
                     Remove credential
                   </button>
                   <button type="button" className="secondary" disabled={flowBusy || !flowReference.trim()} onClick={() => void handleFlowCredentialStatus()}>
                     Check status
                   </button>
                 </div>
+                {flowReferenceIsReferenced && (
+                  <p className="help">
+                    This credential is in use by a saved connection — removing it would break that
+                    connection. Save the connection under a different credential first.
+                  </p>
+                )}
                 {flowCredStored !== null && (
                   <p role="status">Credential for this reference: {flowCredStored ? 'present in the OS store' : 'not present'}.</p>
                 )}
@@ -665,6 +798,7 @@ export function Providers({ client, workspaceId }: { client: Client; workspaceId
                   <button type="button" className="secondary" disabled={flowBusy} onClick={() => setFlowStep(2)}>Back</button>
                   <button type="button" disabled={flowBusy || !flowCanContinue()} onClick={() => setFlowStep(4)}>Continue</button>
                   <button type="button" className="secondary" disabled={flowBusy} onClick={() => setFlowStep(4)}>Continue without a credential</button>
+                  <button type="button" className="secondary" disabled={flowBusy} onClick={() => void handleDiscardDraft()}>Discard draft</button>
                 </div>
               </div>
             )}
@@ -719,6 +853,7 @@ export function Providers({ client, workspaceId }: { client: Client; workspaceId
                 <div className="actions">
                   <button type="button" className="secondary" disabled={flowBusy} onClick={() => setFlowStep(flowNeedsKey ? 3 : 2)}>Back</button>
                   <button type="button" disabled={flowBusy || !flowCanContinue()} onClick={() => setFlowStep(5)}>Review</button>
+                  <button type="button" className="secondary" disabled={flowBusy} onClick={() => void handleDiscardDraft()}>Discard draft</button>
                 </div>
               </div>
             )}
@@ -739,6 +874,7 @@ export function Providers({ client, workspaceId }: { client: Client; workspaceId
                 <div className="actions">
                   <button type="button" className="secondary" disabled={flowBusy} onClick={() => setFlowStep(4)}>Back</button>
                   <button type="button" disabled={flowBusy || flowDone} onClick={() => void handleFlowSave()}>Save connection</button>
+                  <button type="button" className="secondary" disabled={flowBusy} onClick={() => void handleDiscardDraft()}>Discard draft</button>
                   {flowDone && (
                     <button type="button" className="secondary" onClick={() => { setFlowStep(0); setFlowDone(false); }}>
                       Connect another provider
@@ -747,18 +883,20 @@ export function Providers({ client, workspaceId }: { client: Client; workspaceId
                 </div>
               </div>
             )}
-            {flowError && <p className="error" role="alert" aria-label="Connect AI error">{flowError}</p>}
-            {flowNotice && <p role="status">{flowNotice}</p>}
           </>
         )}
+        {flowError && <p className="error" role="alert" aria-label="Connect AI error">{flowError}</p>}
+        {flowNotice && <p role="status">{flowNotice}</p>}
       </section>
 
       <section className="card" aria-labelledby="providers-connected-title">
         <h2 id="providers-connected-title">Connected providers</h2>
         <p>
           What this workspace has configured. Credential stored means a key is in the operating
-          system store; connection verified means a dispatch has succeeded for that provider in
-          this app session. A fresh setup is always unverified until its first authorized use.
+          system store; connection verified means a dispatch has succeeded for that exact saved
+          connection — its endpoint and credential — in this app session. Changing the endpoint
+          or replacing the key clears it until the new connection succeeds. A fresh setup is
+          always unverified until its first authorized use.
         </p>
         {!connected ? (
           <p>No provider status available.</p>
@@ -786,6 +924,14 @@ export function Providers({ client, workspaceId }: { client: Client; workspaceId
             {connected.budget.maxTotalTokens != null ? `, max ${connected.budget.maxTotalTokens} tokens` : ', no token cap'}
             {connected.budget.maxEstimatedCostMicroUsd != null ? `, cost cap ${connected.budget.maxEstimatedCostMicroUsd} µUSD` : ''}.
           </p>
+        )}
+        {connected && (
+          <UnusedCredentials
+            orphaned={connected.orphanedCredentials}
+            busy={orphanBusy}
+            note={orphanNote}
+            onRemove={(entry) => void handleRemoveOrphan(entry)}
+          />
         )}
         <button type="button" className="secondary" onClick={() => void refreshConnected()}>Refresh connected providers</button>
       </section>

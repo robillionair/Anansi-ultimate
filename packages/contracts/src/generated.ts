@@ -4502,6 +4502,7 @@ export interface ProviderPendingAccess {
 export interface ProviderStatusResponse {
   budget: Budget;
   contractVersion: number;
+  orphanedCredentials: ProviderStatusOrphanedCredential[];
   providers: ProviderStatusEntry[];
 }
 export interface Budget {
@@ -4514,13 +4515,25 @@ export interface Budget {
   maxTotalTokens?: number | null;
   profile?: BudgetProfile | null;
 }
+/**
+ * A stored credential no saved connection references: a key
+ * minted during setup whose draft was discarded or abandoned.
+ * Labels only — the reference and the provider it was minted
+ * for — never secret material.
+ */
+export interface ProviderStatusOrphanedCredential {
+  provider: string;
+  reference: string;
+}
 export interface ProviderStatusEntry {
   baseUrlHost: string;
   /**
-   * A dispatch has succeeded for this provider since the app
-   * started. A fresh setup is always false — setup performs
-   * zero inference calls, and verification happens on the
-   * first authorized dispatch, outside setup.
+   * A dispatch has succeeded for THIS saved connection — the
+   * exact endpoint and credential reference recorded below —
+   * since the app started. Changing the endpoint, replacing
+   * the key (even under the same reference), or removing the
+   * provider clears it until the new connection succeeds.
+   * Session-scoped: a restart clears it, as the UI states.
    */
   connectionVerified: boolean;
   credentialReference?: string | null;

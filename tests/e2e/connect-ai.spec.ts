@@ -220,7 +220,44 @@ test('connect AI: guided flow prefill, browser refusal with desktop direction, r
     await expect(page.getByRole('alert', { name: 'Connect AI error' })).toContainText('Owner authorization required');
     await expect(page.getByRole('alert', { name: 'Connect AI error' })).toContainText('still usable');
 
-    // 4. The owner-side add of B arrives as the merged persisted
+    // A failed save offers discard as well as retry: discarding
+    // resets the draft to step 1 (no key was stored from this
+    // browser, so there is nothing to clean up here).
+    await page.getByRole('button', { name: 'Discard draft', exact: true }).click();
+    await expect(page.locator('[aria-labelledby="providers-connect-title"]')).toContainText('Pick a provider above to start');
+    await expect(page.locator('[aria-labelledby="providers-connect-title"]')).toContainText('Draft discarded.');
+
+    // 4. Verification is bound to the saved connection: changing
+    // A's endpoint across a restart clears "verified in this
+    // session" — the old connection's success does not carry
+    // over — with no call to the new endpoint.
+    const hitsBeforeChange = fakeAHits;
+    await stopApi();
+    fs.writeFileSync(
+      path.join(configDir, `${workspace.id}.json`),
+      JSON.stringify({
+        providers: [
+          {
+            config: { provider: 'ollama', baseUrl: 'http://127.0.0.1:9', credential: null, enabled: true },
+            locality: 'local',
+            models: [
+              { id: 'llama-free', provider: 'ollama', cost: 'free', ...modelShape },
+              { id: 'llama-paid', provider: 'ollama', cost: 'paid', ...modelShape },
+            ],
+          },
+        ],
+        budget: { maxRequests: 5, maxTotalTokens: 100000 },
+      }),
+    );
+    await startApi();
+    await pairAndOpen(workspace.id);
+    await expect(connected).toContainText('Ollama (local)');
+    await expect(connected).toContainText('max 5 requests');
+    await expect(connected).toContainText('not yet verified');
+    await expect(connected).not.toContainText('verified in this session');
+    expect(fakeAHits).toBe(hitsBeforeChange);
+
+    // 5. The owner-side add of B arrives as the merged persisted
     // config across a restart: both providers and the budget.
     await stopApi();
     fs.writeFileSync(
