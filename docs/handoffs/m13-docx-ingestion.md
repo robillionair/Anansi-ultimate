@@ -96,7 +96,7 @@ No cloud calls, no paid inference, no model downloads.
 | Provider-dispatch integration | 22/22 |
 | tsc (`pnpm typecheck`) | 0 errors |
 | Contracts (`node scripts/contracts.mjs` re-run) | 0 drift |
-| Docs (`node scripts/validate-docs.mjs`) | 335 PASS (was 333; +2 new handoff docs) |
+| Docs (`node scripts/validate-docs.mjs`) | 336 PASS (was 333; +3 new handoff docs: design, spike results, this handoff) |
 | UI (`pnpm test:ui`) | 338/338 (was 337; +1 DOCX acceptance) |
 | E2E `documents-docx.spec.ts` | 7/7 (UI import + provenance + Markdown rendering; search names the section; Ask cites `## Manifest (line 5)`; backup/fresh restore preserves sections; 6 refusals publish nothing; cancel; kill/restart/resume once) |
 | E2E `documents-ingestion.spec.ts` (TXT/MD) | 9/9 |
