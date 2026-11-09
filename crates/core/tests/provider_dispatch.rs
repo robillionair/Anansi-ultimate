@@ -27,6 +27,11 @@ use std::time::{Duration, Instant};
 struct FakeOllama {
     base_url: String,
     hits: Arc<AtomicUsize>,
+    /// The model id each request named, in arrival order — the
+    /// Ollama adapter binds the wire request to the selected
+    /// candidate's model, so this proves WHICH model a dispatch
+    /// actually reached, not just that traffic happened.
+    models: Arc<Mutex<Vec<String>>>,
     /// Gate for "gated" streams: the server sends a few tokens,
     /// then holds the stream open until the test releases it — a
     /// stream that provably stays active until the test decides,
@@ -43,6 +48,8 @@ fn start_fake_ollama() -> FakeOllama {
     let addr = listener.local_addr().unwrap();
     let hits = Arc::new(AtomicUsize::new(0));
     let hits_thread = hits.clone();
+    let models = Arc::new(Mutex::new(Vec::new()));
+    let models_thread = models.clone();
     let release = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let release_thread = release.clone();
     let slow_in_flight = Arc::new(std::sync::atomic::AtomicBool::new(false));
@@ -51,6 +58,7 @@ fn start_fake_ollama() -> FakeOllama {
         for stream in listener.incoming() {
             let Ok(mut stream) = stream else { continue };
             let hits = hits_thread.clone();
+            let models = models_thread.clone();
             let release = release_thread.clone();
             let slow_in_flight = slow_thread.clone();
             std::thread::spawn(move || {
@@ -76,6 +84,9 @@ fn start_fake_ollama() -> FakeOllama {
                     return;
                 }
                 let body = String::from_utf8_lossy(&body).to_string();
+                if let Some(model) = requested_model(&body) {
+                    models.lock().unwrap().push(model);
+                }
                 let streaming = body.contains("\"stream\":true");
                 let slow = body.contains("slow");
                 let gated = body.contains("gated");
@@ -136,8 +147,23 @@ fn start_fake_ollama() -> FakeOllama {
     FakeOllama {
         base_url: format!("http://{addr}"),
         hits,
+        models,
         release,
         slow_in_flight,
+    }
+}
+
+/// The `"model":"..."` field of an Ollama request body, if present.
+fn requested_model(body: &str) -> Option<String> {
+    let key = "\"model\":\"";
+    let start = body.find(key)? + key.len();
+    let end = body[start..].find('"')? + start;
+    Some(body[start..end].to_string())
+}
+
+impl FakeOllama {
+    fn models_seen(&self) -> Vec<String> {
+        self.models.lock().unwrap().clone()
     }
 }
 
@@ -1372,4 +1398,178 @@ fn refused_browser_attempts_queue_for_host_approval() {
     body["callerContext"] = json!({ "session": "sess-hopeful" });
     let err = core.ai_command("providers-configure", body).unwrap_err();
     assert_eq!(err.code, ErrorCode::Forbidden);
+}
+
+// ---------------------------------------------------------------------------
+// Expected-target contract
+// (docs/handoffs/expected-target-contract-repair-design.md):
+// an expected target binds a dispatch only when the caller pins
+// chooseModel + chosen; on stream-start the field is refused outright.
+
+/// One ollama provider with two free models. Auto mode orders by
+/// provider id then model id, so `aaa-decoy` is first in the chain.
+fn two_model_ollama_config(base_url: &str) -> Value {
+    let mut config = ollama_config(base_url, "free");
+    config["providers"][0]["models"] = json!([
+        { "id": "aaa-decoy", "provider": "ollama",
+          "capabilities": { "chat": true, "streaming": true, "vision": false,
+                            "coding": true, "deepReasoning": false, "embeddings": false },
+          "contextWindow": 8192, "cost": "free", "speed": "balanced" },
+        { "id": "llama-x", "provider": "ollama",
+          "capabilities": { "chat": true, "streaming": true, "vision": false,
+                            "coding": true, "deepReasoning": false, "embeddings": false },
+          "contextWindow": 8192, "cost": "free", "speed": "balanced" },
+    ]);
+    config
+}
+
+fn expected_target(base_url: &str) -> Value {
+    json!({
+        "provider": "ollama", "model": "llama-x",
+        "endpoint": base_url, "locality": "local", "cost": "free"
+    })
+}
+
+fn stream_start(core: &Core, ws: &str, extra: Value) -> Result<Value, CommandError> {
+    let mut body = json!({ "workspaceId": ws, "request": chat("stream please"), "mode": "auto" });
+    if let (Some(dst), Some(src)) = (body.as_object_mut(), extra.as_object()) {
+        for (k, v) in src {
+            dst.insert(k.clone(), v.clone());
+        }
+    }
+    core.ai_command("providers-stream-start", stamped("s1", body))
+}
+
+#[test]
+fn expected_target_with_auto_routing_is_refused_before_traffic() {
+    let (_dir, core, ws) = core();
+    let fake = start_fake_ollama();
+    configure(&core, &ws, two_model_ollama_config(&fake.base_url)).unwrap();
+
+    let result = dispatch(
+        &core,
+        "s1",
+        &ws,
+        json!({ "expectedTarget": expected_target(&fake.base_url) }),
+        "hello",
+    );
+    // On unfixed code the dispatch succeeds — and the fake proves it
+    // went to the decoy, not the expected target.
+    assert!(
+        fake.models_seen().is_empty(),
+        "auto routing must not dispatch under an expected target; models dispatched: {:?}",
+        fake.models_seen()
+    );
+    let err = result.unwrap_err();
+    assert_eq!(err.code, ErrorCode::InvalidRequest);
+    assert_eq!(fake.hits.load(Ordering::SeqCst), 0);
+}
+
+#[test]
+fn expected_target_with_auto_routing_and_chosen_is_refused_before_traffic() {
+    let (_dir, core, ws) = core();
+    let fake = start_fake_ollama();
+    configure(&core, &ws, two_model_ollama_config(&fake.base_url)).unwrap();
+
+    let result = dispatch(
+        &core,
+        "s1",
+        &ws,
+        json!({
+            "chosen": ["ollama", "llama-x"],
+            "expectedTarget": expected_target(&fake.base_url),
+        }),
+        "hello",
+    );
+    // `chosen` is ignored in auto mode, so its presence cannot rescue
+    // automatic routing — on unfixed code this reaches the decoy.
+    assert!(
+        fake.models_seen().is_empty(),
+        "chosen is ignored in auto mode; models dispatched: {:?}",
+        fake.models_seen()
+    );
+    let err = result.unwrap_err();
+    assert_eq!(err.code, ErrorCode::InvalidRequest);
+    assert_eq!(fake.hits.load(Ordering::SeqCst), 0);
+}
+
+#[test]
+fn expected_target_with_choose_model_dispatches_to_the_exact_target() {
+    let (_dir, core, ws) = core();
+    let fake = start_fake_ollama();
+    configure(&core, &ws, two_model_ollama_config(&fake.base_url)).unwrap();
+
+    let out = dispatch(
+        &core,
+        "s1",
+        &ws,
+        json!({
+            "mode": "chooseModel",
+            "chosen": ["ollama", "llama-x"],
+            "expectedTarget": expected_target(&fake.base_url),
+        }),
+        "hello",
+    )
+    .unwrap();
+    assert_eq!(out["response"]["text"], "core reply");
+    assert_eq!(out["disclosure"]["model"], "llama-x");
+    assert_eq!(fake.models_seen(), vec!["llama-x".to_string()]);
+
+    // A mismatched chosen is refused before traffic.
+    let hits_before = fake.hits.load(Ordering::SeqCst);
+    let err = dispatch(
+        &core,
+        "s1",
+        &ws,
+        json!({
+            "mode": "chooseModel",
+            "chosen": ["ollama", "aaa-decoy"],
+            "expectedTarget": expected_target(&fake.base_url),
+        }),
+        "hello",
+    )
+    .unwrap_err();
+    assert_eq!(err.code, ErrorCode::InvalidRequest);
+    assert_eq!(fake.hits.load(Ordering::SeqCst), hits_before);
+    assert_eq!(fake.models_seen(), vec!["llama-x".to_string()]);
+}
+
+#[test]
+fn stream_start_refuses_expected_target_before_traffic() {
+    let (_dir, core, ws) = core();
+    let fake_b = start_fake_ollama();
+    let fake_a = start_fake_ollama();
+    configure(&core, &ws, ollama_config(&fake_b.base_url, "free")).unwrap();
+
+    // Mismatched expected endpoint: on unfixed code the field is
+    // ignored, the stream starts, and fake B gets the traffic.
+    let result = stream_start(
+        &core,
+        &ws,
+        json!({ "expectedTarget": expected_target(&fake_a.base_url) }),
+    );
+    assert_eq!(
+        fake_b.hits.load(Ordering::SeqCst),
+        0,
+        "stream-start must not dispatch under an expected target"
+    );
+    let err = result.unwrap_err();
+    assert_eq!(err.code, ErrorCode::InvalidRequest);
+    assert_eq!(fake_a.hits.load(Ordering::SeqCst), 0);
+
+    // Even a matching expected target is refused: stream-start does
+    // not enforce the binding, so accepting it would be a lie.
+    let err = stream_start(
+        &core,
+        &ws,
+        json!({ "expectedTarget": expected_target(&fake_b.base_url) }),
+    )
+    .unwrap_err();
+    assert_eq!(err.code, ErrorCode::InvalidRequest);
+    assert_eq!(fake_b.hits.load(Ordering::SeqCst), 0);
+
+    // Positive control: a stream without the field still starts.
+    let started = stream_start(&core, &ws, json!({})).unwrap();
+    assert!(started["runId"].as_str().is_some());
+    assert!(fake_b.hits.load(Ordering::SeqCst) >= 1);
 }
