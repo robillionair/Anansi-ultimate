@@ -15,9 +15,10 @@
   ("SOMNIA compaction Checkpoint 2: wire import → candidate → review
   → approve → compare → save"), plus `b55efa93a` (e2e: pin the
   model-mismatch refusal, reset the fake per test).
-- **Final tip:** `b55efa93a6638803ff377cc8c5ad21579f522d7d` (after the
-  handoff commit `f04e2da13`; the delivery ZIP's MANIFEST records
-  this tip).
+- **Final tip:** recorded in the delivery ZIP's MANIFEST (the
+  authoritative tip record); this handoff names the implementation
+  commits, not the tip hash, so a handoff correction cannot stale
+  it.
 
 ## §1 What was built
 
