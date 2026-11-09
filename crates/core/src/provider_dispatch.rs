@@ -70,7 +70,7 @@ use anansi_providers::gates::{PaidInferencePermit, QuotaLedger, ZeroCostLock};
 use anansi_providers::http::CancellationToken;
 use anansi_providers::routing::{DisclosureRecord, RoutingMode, RoutingRequest};
 use anansi_providers::runtime::{LocalityConfig, ProviderRuntime, RuntimeConfig};
-use anansi_providers::types::{CompletionRequest, StreamEvent, Usage};
+use anansi_providers::types::{CompletionRequest, CostClass, StreamEvent, Usage};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -976,6 +976,30 @@ pub fn configured_chat_models(scope: &CallerScope) -> Vec<(String, String)> {
             }
         }
         Ok(out)
+    })
+    .unwrap_or_default()
+}
+
+/// The cost class of one configured chat model, from the trusted
+/// configuration — never from a request. Used by the SOMNIA
+/// compaction free-only gate: a comparison runs free models only,
+/// because one permit authorizes one dispatch chain.
+pub fn configured_model_cost(
+    scope: &CallerScope,
+    provider: &str,
+    model: &str,
+) -> Option<CostClass> {
+    with_backend(scope, |state| {
+        let found = state.config.as_ref().and_then(|config| {
+            config
+                .providers
+                .iter()
+                .filter(|p| p.config.enabled && p.config.provider == provider)
+                .flat_map(|p| p.models.iter())
+                .find(|m| m.id == model && m.capabilities.chat)
+                .map(|m| m.cost)
+        });
+        Ok(found)
     })
     .unwrap_or_default()
 }

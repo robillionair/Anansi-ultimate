@@ -2,11 +2,15 @@
 //
 // The Checkpoint 1 compactor library is pure and provider-free. This
 // module wires it into the application: prepare a candidate from
-// imported records, approve it (the approval binds to the candidate
-// hash — the server recomputes the candidate at start and refuses any
-// edit), compare both histories (original vs compacted) against the
-// same configured model through the existing provider gates, and save
-// the complete experiment as a new artifact type.
+// imported records, approve it (the approval binds to the reviewed
+// inputs — candidate hash, questions, selected provider/model, cloud
+// flag, and budget — the server recomputes the approval hash at start
+// and refuses any edit), compare both histories (original vs
+// compacted) against the same configured model through the existing
+// provider gates, and save the complete experiment as a new artifact
+// type. Comparisons run free models only: one permit authorizes one
+// dispatch chain, so no single permit could cover a comparison's
+// up-to-100 dispatches, and the run never uses one.
 //
 // Runs are backgrounded, pollable and cancellable, following the
 // SwarmTank AI pattern. The registry is process-local, so an
@@ -27,8 +31,11 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
 use crate::artifacts::{ArtifactRecord, ArtifactRegisterRequest};
-use crate::provider_dispatch::{CallerScope, configured_chat_models, providers_command};
+use crate::provider_dispatch::{
+    CallerScope, configured_chat_models, configured_model_cost, providers_command,
+};
 use crate::readiness::{CommandError, ErrorCode};
+use anansi_providers::types::CostClass;
 use crate::somnia_compaction::{
     CompactionIssue, ParsedCompactionInput, QuarantinedRecord, SomniaCompactionCandidate,
     SomniaCompactionRecord, all_retained, compact_input, parse_json_input, parse_text_input,
@@ -105,6 +112,13 @@ pub struct SomniaCompactionStartRequest {
     pub cloud: Option<bool>,
     pub permit_id: Option<String>,
     pub max_total_tokens: Option<u64>,
+    /// SHA-256 hex of the canonical approval JSON (design §2 D2):
+    /// the reviewed cases (case id, verified candidate hash,
+    /// questions), the raw approved provider/model (blank allowed),
+    /// the cloud flag, and the approved budget. The server recomputes
+    /// it from the request and refuses any mismatch before traffic.
+    /// Absent means the run was never approved.
+    pub approval_hash: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -115,6 +129,9 @@ pub struct SomniaCompactionStartResponse {
     pub provider: String,
     pub model: String,
     pub locality: String,
+    /// Cost class of the resolved model, from the trusted
+    /// configuration: "free", "paid", or "unknown".
+    pub cost: String,
     pub pairs_total: usize,
     pub estimated_calls: u32,
     pub estimated_tokens: u64,
@@ -166,6 +183,9 @@ pub struct SomniaCompactionPollResponse {
     pub provider: String,
     pub model: String,
     pub locality: String,
+    /// Cost class of the resolved model, from the trusted
+    /// configuration: "free", "paid", or "unknown".
+    pub cost: String,
     pub pairs_total: usize,
     pub pairs_done: usize,
     pub calls_made: u32,
@@ -253,6 +273,7 @@ struct CompactionRun {
     provider: String,
     model: String,
     locality: String,
+    cost: String,
     pairs: Vec<CompactionPairResult>,
     pairs_total: usize,
     calls_made: u32,
@@ -461,13 +482,118 @@ pub fn verify_approved_candidate(
     Ok(candidate)
 }
 
+/// Canonical approval input, serialized in field order. The UI
+/// (`SomniaCompaction.tsx`) and the e2e mirror build the identical
+/// JSON string; any key-order change here must change there too.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ApprovalHashCase {
+    case_id: String,
+    candidate_hash: String,
+    questions: Vec<CompactionQuestion>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ApprovalHashInput {
+    cases: Vec<ApprovalHashCase>,
+    provider: String,
+    model: String,
+    cloud: bool,
+    max_total_tokens: u64,
+}
+
+/// SHA-256 hex of the canonical approval JSON: the reviewed cases
+/// (case id, verified candidate hash, questions), the raw approved
+/// provider/model (blank allowed — a blank model is a reference to
+/// the first configured model, see `resolve_model`), the cloud
+/// flag, and the approved budget. Any edit after approval changes
+/// the recomputed hash and the run never starts.
+fn compute_approval_hash(
+    cases: &[(String, String, Vec<CompactionQuestion>)],
+    provider: &str,
+    model: &str,
+    cloud: bool,
+    max_total_tokens: u64,
+) -> String {
+    let input = ApprovalHashInput {
+        cases: cases
+            .iter()
+            .map(|(case_id, candidate_hash, questions)| ApprovalHashCase {
+                case_id: case_id.clone(),
+                candidate_hash: candidate_hash.clone(),
+                questions: questions.clone(),
+            })
+            .collect(),
+        provider: provider.to_string(),
+        model: model.to_string(),
+        cloud,
+        max_total_tokens,
+    };
+    let text = serde_json::to_string(&input).unwrap_or_default();
+    sha_hex(&text)
+}
+
+fn cost_label(cost: CostClass) -> &'static str {
+    match cost {
+        CostClass::Free => "free",
+        CostClass::Paid => "paid",
+        CostClass::Unknown => "unknown",
+    }
+}
+
+/// A comparison runs free models only. One permit authorizes one
+/// dispatch chain (`providers` dispatcher: a permit id is consumed
+/// once per candidate), so no single permit could cover a
+/// comparison's up-to-100 dispatches, and the run never uses a
+/// permit at all. The check runs at start, before any call, so a
+/// billable target is refused with zero traffic instead of failing
+/// pair by pair at dispatch time.
+fn check_run_target(
+    locality: &str,
+    cost: CostClass,
+    cloud_authorized: bool,
+    permit_id: &Option<String>,
+) -> Result<(), String> {
+    if permit_id.is_some() {
+        return Err(
+            "Compaction comparisons do not use single-use permits: one permit authorizes one dispatch, and a comparison needs up to 100. Remove the permit and approve a free model instead."
+                .to_string(),
+        );
+    }
+    if cost != CostClass::Free {
+        return Err(format!(
+            "This comparison only runs free models: the selected model is {}, and one permit cannot authorize a multi-dispatch comparison. Approve a free model instead.",
+            cost_label(cost)
+        ));
+    }
+    if !cloud_authorized && locality == "cloud" {
+        return Err(
+            "Local-only was requested but the configured model is not local."
+                .to_string(),
+        );
+    }
+    Ok(())
+}
+
 fn resolve_model(
     scope: &CallerScope,
     want_provider: &Option<String>,
     want_model: &Option<String>,
 ) -> Result<(String, String, String), CommandError> {
     let configured = configured_chat_models(scope);
-    let (provider, model) = match (want_provider, want_model) {
+    // A blank value is the same as absent: the panel promises a
+    // blank Model ID selects the first configured model, so the
+    // server resolves it that way instead of refusing.
+    let provider = want_provider
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    let model = want_model
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    let (provider, model) = match (provider, model) {
         (Some(p), Some(m)) => {
             let found = configured
                 .iter()
@@ -477,12 +603,19 @@ fn resolve_model(
                     "The requested provider and model are not configured for this workspace.",
                 ));
             }
-            (p.clone(), m.clone())
+            (p.to_string(), m.to_string())
         }
+        (Some(p), None) => configured
+            .iter()
+            .find(|(cp, _)| cp == p)
+            .cloned()
+            .ok_or_else(|| {
+                invalid("The requested provider has no configured chat model for this workspace.")
+            })?,
         (None, None) => configured.into_iter().next().ok_or_else(|| {
             invalid("No chat model is configured for this workspace; configure a provider first.")
         })?,
-        _ => {
+        (None, Some(_)) => {
             return Err(invalid(
                 "Provider and model must be given together, or neither.",
             ));
@@ -557,7 +690,11 @@ struct RunConfig {
     provider: String,
     model: String,
     local_only: bool,
-    permit_id: Option<String>,
+    /// The user explicitly approved cloud transmission for this
+    /// comparison (review + approval hash). It is NOT a permit: the
+    /// run never uses a permit, and the dispatch flag records the
+    /// user's consent, not an authorization token.
+    cloud_authorized: bool,
     max_total_tokens: u64,
     cancel: Arc<AtomicBool>,
 }
@@ -628,11 +765,18 @@ fn start_op(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
             "Max total tokens must be between 1000 and 200000.",
         ));
     }
+    // The raw approved values (trimmed; blank means "first
+    // configured"). The approval hash is computed over these, so any
+    // edit after approval invalidates it.
+    let provider_raw = req.provider.as_deref().unwrap_or("").trim().to_string();
+    let model_raw = req.model.as_deref().unwrap_or("").trim().to_string();
+    let cloud_effective = req.cloud.unwrap_or(false);
     // Approve-then-verify: recompute every case candidate and refuse
     // unless its hash is exactly the approved one. Compaction time is
     // measured per case here, before any provider call.
     let mut resolved_pairs: Vec<ResolvedPair> = Vec::new();
     let mut compaction_micros_total: u64 = 0;
+    let mut verified: Vec<(String, String, Vec<CompactionQuestion>)> = Vec::new();
     for case in &req.cases {
         validate_questions(&case.case_id, &case.questions)?;
         let started = Instant::now();
@@ -642,6 +786,11 @@ fn start_op(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
             &case.candidate_hash,
         )
         .map_err(|e| invalid(&e))?;
+        verified.push((
+            case.case_id.clone(),
+            candidate.content_hash.clone(),
+            case.questions.clone(),
+        ));
         let micros = started.elapsed().as_micros() as u64;
         compaction_micros_total = compaction_micros_total.saturating_add(micros);
         let mut original_records = case.records.clone();
@@ -668,20 +817,37 @@ fn start_op(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
             "A compaction run takes at most {MAX_COMPACTION_PAIRS} pairs.",
         )));
     }
+    // The approval binds the reviewed cases, the selected target,
+    // the cloud flag, and the budget — not just the candidate hash.
+    // A missing or mismatched hash refuses before any dispatch.
+    let Some(approval_hash) = req.approval_hash.as_deref() else {
+        return Err(invalid(
+            "Approve the reviewed inputs before starting the run.",
+        ));
+    };
+    let expected_hash = compute_approval_hash(
+        &verified,
+        &provider_raw,
+        &model_raw,
+        cloud_effective,
+        max_total,
+    );
+    if approval_hash != expected_hash {
+        return Err(invalid(
+            "The approval no longer matches the reviewed inputs. Review the candidate again before starting the run.",
+        ));
+    }
     let (provider, model, locality) = resolve_model(scope, &req.provider, &req.model)?;
-    // Zero-Cost Lock, up front: a cloud model without an explicit
-    // permit refuses before any call is made.
-    let local_only = !req.cloud.unwrap_or(false);
-    if local_only && locality == "cloud" {
-        return Err(invalid(
-            "Local-only was requested but the configured model is not local.",
-        ));
-    }
-    if locality == "cloud" && req.permit_id.is_none() {
-        return Err(invalid(
-            "This model requires explicit authorization. Authorize it first (providers-authorize), then start the run with the permit.",
-        ));
-    }
+    // Free-only, up front (design §2 D3): a comparison runs free
+    // models only — one permit authorizes one dispatch chain, so no
+    // permit could cover the run, and the run never uses one. The
+    // Zero-Cost Lock still runs per dispatch inside authorize_cost.
+    let cost = configured_model_cost(scope, &provider, &model).ok_or_else(|| {
+        invalid("The selected model is not configured for this workspace.")
+    })?;
+    check_run_target(&locality, cost, cloud_effective, &req.permit_id)
+        .map_err(|e| invalid(&e))?;
+    let local_only = !cloud_effective;
     let estimated_calls = (resolved_pairs.len() as u32).saturating_mul(2);
     let estimated_tokens: u64 = resolved_pairs
         .iter()
@@ -701,6 +867,7 @@ fn start_op(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
         provider: provider.clone(),
         model: model.clone(),
         locality: locality.clone(),
+        cost: cost_label(cost).to_string(),
         pairs: Vec::new(),
         pairs_total: resolved_pairs.len(),
         calls_made: 0,
@@ -722,7 +889,7 @@ fn start_op(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
         provider: provider.clone(),
         model: model.clone(),
         local_only,
-        permit_id: req.permit_id.clone(),
+        cloud_authorized: cloud_effective,
         max_total_tokens: max_total,
         cancel,
     };
@@ -735,6 +902,7 @@ fn start_op(value: Value, scope: &CallerScope) -> Result<Value, CommandError> {
         provider,
         model,
         locality,
+        cost: cost_label(cost).to_string(),
         pairs_total,
         estimated_calls,
         estimated_tokens,
@@ -764,6 +932,7 @@ fn read_run(
             provider: run.provider.clone(),
             model: run.model.clone(),
             locality: run.locality.clone(),
+            cost: run.cost.clone(),
             pairs_total: run.pairs_total,
             pairs_done: run.pairs.len(),
             calls_made: run.calls_made,
@@ -859,12 +1028,14 @@ fn dispatch_pair_arm(
             "maxOutputTokens": MAX_COMPACTION_OUTPUT_TOKENS,
             "temperature": 0,
             "localOnly": config.local_only,
-            "explicitCloudAuthorization": config.permit_id.is_some(),
+            // The user's explicit approval to send this history to
+            // the cloud provider (review + approval hash), not a
+            // permit — the run never uses one.
+            "explicitCloudAuthorization": config.cloud_authorized,
         },
         "mode": "chooseModel",
         "zeroCostLock": true,
         "chosen": [config.provider.clone(), config.model.clone()],
-        "permitId": config.permit_id.clone(),
     });
     // OpenRouter reasoning is disabled for compaction comparisons:
     // reasoning tokens would crowd out answer text and the comparison
@@ -1626,5 +1797,78 @@ mod tests {
         assert_eq!(metrics.tokens_original, Some(110));
         assert_eq!(metrics.tokens_compacted, Some(60));
         assert_eq!(metrics.failed_pairs, 0);
+    }
+
+    fn approval_cases() -> Vec<(String, String, Vec<CompactionQuestion>)> {
+        vec![(
+            "case-001".to_string(),
+            "a".repeat(64),
+            vec![CompactionQuestion {
+                id: "q1".to_string(),
+                text: "What is the customs fee now?".to_string(),
+                expected_answer: Some("The customs fee is $45.".to_string()),
+            }],
+        )]
+    }
+
+    #[test]
+    fn approval_hash_binds_every_reviewed_field() {
+        let cases = approval_cases();
+        let base = compute_approval_hash(&cases, "ollama", "llama-x", false, 20_000);
+        assert_eq!(base.len(), 64);
+        // Same inputs hash the same; any one field changed hashes
+        // differently — questions, target, cloud, budget, candidate.
+        assert_eq!(
+            compute_approval_hash(&cases, "ollama", "llama-x", false, 20_000),
+            base
+        );
+        let mut changed_questions = approval_cases();
+        changed_questions[0].2[0].text = "What was the fee before?".to_string();
+        assert_ne!(
+            compute_approval_hash(&changed_questions, "ollama", "llama-x", false, 20_000),
+            base
+        );
+        assert_ne!(
+            compute_approval_hash(&cases, "ollama", "aaa-decoy", false, 20_000),
+            base
+        );
+        assert_ne!(
+            compute_approval_hash(&cases, "ollama", "", false, 20_000),
+            base
+        );
+        assert_ne!(
+            compute_approval_hash(&cases, "ollama", "llama-x", true, 20_000),
+            base
+        );
+        assert_ne!(
+            compute_approval_hash(&cases, "ollama", "llama-x", false, 50_000),
+            base
+        );
+        let mut changed_candidate = approval_cases();
+        changed_candidate[0].1 = "b".repeat(64);
+        assert_ne!(
+            compute_approval_hash(&changed_candidate, "ollama", "llama-x", false, 20_000),
+            base
+        );
+    }
+
+    #[test]
+    fn free_only_gate_matrix() {
+        // Free local without a permit: allowed.
+        assert!(check_run_target("local", CostClass::Free, false, &None).is_ok());
+        // Free cloud with explicit approval: allowed, no permit.
+        assert!(check_run_target("cloud", CostClass::Free, true, &None).is_ok());
+        // Free cloud without approval: refused (local-only request).
+        assert!(check_run_target("cloud", CostClass::Free, false, &None).is_err());
+        // Billable targets are refused before traffic, local or cloud,
+        // with or without approval — one permit cannot cover the run.
+        assert!(check_run_target("local", CostClass::Paid, false, &None).is_err());
+        assert!(check_run_target("cloud", CostClass::Paid, true, &None).is_err());
+        assert!(check_run_target("cloud", CostClass::Unknown, true, &None).is_err());
+        // A supplied permit never authorizes a comparison.
+        assert!(
+            check_run_target("local", CostClass::Free, false, &Some("permit-1".to_string()))
+                .is_err()
+        );
     }
 }

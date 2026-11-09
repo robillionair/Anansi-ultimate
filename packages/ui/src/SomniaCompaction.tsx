@@ -229,6 +229,48 @@ export async function sha256Hex(text: string): Promise<string> {
   return [...new Uint8Array(bytes)].map(byte => byte.toString(16).padStart(2, '0')).join('');
 }
 
+export type CompactionApprovalInput = {
+  cases: Array<{
+    caseId: string;
+    candidateHash: string;
+    questions: CompactionQuestion[];
+  }>;
+  provider: string;
+  model: string;
+  cloud: boolean;
+  maxTotalTokens: number;
+};
+
+/**
+ * The approval hash (design §2 D2): SHA-256 hex of the canonical
+ * approval JSON — the reviewed cases (case id, candidate hash,
+ * questions), the raw approved provider/model (blank allowed), the
+ * cloud flag, and the approved budget. Key order must match the
+ * server's serde struct field order exactly (cases, provider, model,
+ * cloud, maxTotalTokens; per case caseId, candidateHash, questions;
+ * per question id, text, expectedAnswer); the e2e mirror builds the
+ * same string. The server recomputes it at start and refuses any
+ * mismatch before traffic.
+ */
+export async function computeCompactionApprovalHash(input: CompactionApprovalInput): Promise<string> {
+  const canonical = JSON.stringify({
+    cases: input.cases.map(entry => ({
+      caseId: entry.caseId,
+      candidateHash: entry.candidateHash,
+      questions: entry.questions.map(question => ({
+        id: question.id,
+        text: question.text,
+        expectedAnswer: question.expectedAnswer ?? null,
+      })),
+    })),
+    provider: input.provider,
+    model: input.model,
+    cloud: input.cloud,
+    maxTotalTokens: input.maxTotalTokens,
+  });
+  return sha256Hex(canonical);
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -293,6 +335,12 @@ type ApprovedSnapshot = {
   candidate: SomniaCompactionCandidate;
   questions: CompactionQuestion[];
   candidateHash: string;
+  /** Raw approved values (trimmed; blank means "first configured"). */
+  provider: string;
+  model: string;
+  cloud: boolean;
+  maxTotalTokens: number;
+  approvalHash: string;
 };
 
 export function SomniaCompaction({ client, workspaceId, projectId, onSaved, busy }: {
@@ -439,7 +487,7 @@ export function SomniaCompaction({ client, workspaceId, projectId, onSaved, busy
     }
   }
 
-  function approve() {
+  async function approve() {
     if (!candidate) return;
     const questions = parseQuestions();
     if (questions === null || questions.length === 0) {
@@ -447,11 +495,26 @@ export function SomniaCompaction({ client, workspaceId, projectId, onSaved, busy
       return;
     }
     const caseId = benchmarkCase || 'imported';
+    const approvedProvider = provider.trim();
+    const approvedModel = model.trim();
+    const approvalHash = await computeCompactionApprovalHash({
+      cases: [{ caseId, candidateHash: candidate.candidate.contentHash, questions }],
+      provider: approvedProvider,
+      model: approvedModel,
+      cloud,
+      maxTotalTokens,
+    });
+    if (!mounted.current) return;
     setApproved({
       caseId,
       candidate: candidate.candidate,
       questions,
       candidateHash: candidate.candidate.contentHash,
+      provider: approvedProvider,
+      model: approvedModel,
+      cloud,
+      maxTotalTokens,
+      approvalHash,
     });
     setError('');
   }
@@ -479,10 +542,13 @@ export function SomniaCompaction({ client, workspaceId, projectId, onSaved, busy
           candidateHash: approved.candidateHash,
           questions: approved.questions,
         }],
-        provider: provider.trim() === '' ? undefined : provider.trim(),
-        model: model.trim() === '' ? undefined : model.trim(),
-        cloud,
-        maxTotalTokens,
+        // The approved values, not the live form: the approval hash
+        // covers exactly these, and the server refuses any mismatch.
+        provider: approved.provider === '' ? undefined : approved.provider,
+        model: approved.model === '' ? undefined : approved.model,
+        cloud: approved.cloud,
+        maxTotalTokens: approved.maxTotalTokens,
+        approvalHash: approved.approvalHash,
       });
       if (!mounted.current) return;
       runIdRef.current = result.runId;
@@ -620,21 +686,22 @@ export function SomniaCompaction({ client, workspaceId, projectId, onSaved, busy
           <li key={entry.recordRef}><em>{entry.reason}</em></li>
         ))}</ul>
       </details>}
-      <form onSubmit={event => { event.preventDefault(); approve(); }}>
+      <form onSubmit={event => { event.preventDefault(); void approve(); }}>
         <fieldset disabled={busy || polling}>
           <label>Provider ID <input required maxLength={128} value={provider} onChange={e => editCompare({ provider: e.target.value })} /></label>
           <label>Model ID (leave blank for the first configured model) <input maxLength={256} value={model} onChange={e => editCompare({ model: e.target.value })} /></label>
           <label><input type="checkbox" checked={cloud} onChange={e => editCompare({ cloud: e.target.checked })} /> Authorize cloud transmission for this comparison</label>
+          <p>Cloud comparisons run free models only — a paid or unknown-cost model is refused before any call, and a comparison never uses a single-use permit.</p>
           <label>Maximum total tokens <input type="number" min={1000} max={200000} value={maxTotalTokens} onChange={e => editCompare({ maxTotalTokens: Number(e.target.value) })} /></label>
           <button type="submit" disabled={Boolean(approved)}>Approve reviewed inputs</button>
         </fieldset>
       </form>
-      {approved && <p role="status">Approved candidate {approved.candidateHash.slice(0, 16)}… with {approved.questions.length} question{approved.questions.length === 1 ? '' : 's'}. Any edit requires a fresh review.</p>}
+      {approved && <p role="status">Approved candidate {approved.candidateHash.slice(0, 16)}… with {approved.questions.length} question{approved.questions.length === 1 ? '' : 's'} · {approved.provider === '' ? 'first configured provider' : approved.provider} / {approved.model === '' ? 'first configured model' : approved.model} · {approved.cloud ? 'cloud transmission authorized' : 'local only'} · {approved.maxTotalTokens} tokens max. Any edit requires a fresh review.</p>}
       {approved && <button type="button" disabled={busy || starting || polling} onClick={() => void start()}>Run approved comparison</button>}
     </section>}
     {poll && <section aria-label="Compaction run results">
       <h5>Comparison run {poll.runId}</h5>
-      <p role="status">Status: {poll.status} · {poll.provider} / {poll.model} ({poll.locality}) · {poll.pairsDone} of {poll.pairsTotal} pairs · {poll.callsMade} calls · {poll.tokensUsed} tokens used</p>
+      <p role="status">Status: {poll.status} · {poll.provider} / {poll.model} ({poll.locality} · {poll.cost}) · {poll.pairsDone} of {poll.pairsTotal} pairs · {poll.callsMade} calls · {poll.tokensUsed} tokens used</p>
       {poll.error && <p role="alert">{poll.error}</p>}
       {running && <button type="button" onClick={() => void cancel()}>Cancel compaction run</button>}
       {finished && poll.pairs.length > 0 && <>

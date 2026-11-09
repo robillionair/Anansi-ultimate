@@ -14,6 +14,7 @@ import {
 import {
   SomniaCompaction,
   canonicalCompactionExperimentJson,
+  computeCompactionApprovalHash,
   computeCompactionMetrics,
   isCompactionAbstention,
   parseSomniaCompactionExperiment,
@@ -202,6 +203,46 @@ test('saved experiment parser accepts the exact format and refuses the rest', ()
   delete (noMetrics as Record<string, unknown>).metrics;
   assert.equal(parseSomniaCompactionExperiment(JSON.stringify(noMetrics)), null);
   assert.equal(parseSomniaCompactionExperiment('{broken'), null);
+});
+
+test('compaction approval hash binds every reviewed field', async () => {
+  const input = {
+    cases: [{
+      caseId: 'case-001',
+      candidateHash: 'a'.repeat(64),
+      questions: [{ id: 'q1', text: 'What is the customs fee now?', expectedAnswer: 'The customs fee is $45.' }],
+    }],
+    provider: 'ollama',
+    model: 'llama-x',
+    cloud: false,
+    maxTotalTokens: 20000,
+  };
+  const base = await computeCompactionApprovalHash(input);
+  assert.equal(base.length, 64);
+  assert.equal(await computeCompactionApprovalHash(input), base);
+  const changed = async (patch: Record<string, unknown>) =>
+    computeCompactionApprovalHash({ ...input, ...patch });
+  assert.notEqual(await changed({ model: 'aaa-decoy' }), base);
+  assert.notEqual(await changed({ model: '' }), base);
+  assert.notEqual(await changed({ cloud: true }), base);
+  assert.notEqual(await changed({ maxTotalTokens: 50000 }), base);
+  assert.notEqual(
+    await computeCompactionApprovalHash({
+      ...input,
+      cases: [{ ...input.cases[0], candidateHash: 'b'.repeat(64) }],
+    }),
+    base,
+  );
+  assert.notEqual(
+    await computeCompactionApprovalHash({
+      ...input,
+      cases: [{
+        ...input.cases[0],
+        questions: [{ id: 'q1', text: 'What was the fee before?', expectedAnswer: 'The customs fee is $45.' }],
+      }],
+    }),
+    base,
+  );
 });
 
 test('compaction panel makes no provider call on mount', () => {

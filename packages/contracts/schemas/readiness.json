@@ -15159,6 +15159,10 @@
       },
       "CompletionRequest": {
         "properties": {
+          "disableOpenRouterReasoning": {
+            "description": "Ask OpenRouter to omit reasoning and reserve output for answer text.",
+            "type": "boolean"
+          },
           "explicitCloudAuthorization": {
             "default": false,
             "description": "Explicit user authorization to send `Private` segments to a cloud\nprovider (ADR-0002: private material requires explicit\nauthorization). Never set implicitly by routing.",
@@ -18276,6 +18280,10 @@
         "minimum": 0,
         "type": "integer"
       },
+      "cost": {
+        "description": "Cost class of the resolved model, from the trusted\nconfiguration: \"free\", \"paid\", or \"unknown\".",
+        "type": "string"
+      },
       "error": {
         "type": [
           "string",
@@ -18334,6 +18342,7 @@
       "provider",
       "model",
       "locality",
+      "cost",
       "pairsTotal",
       "pairsDone",
       "callsMade",
@@ -19488,6 +19497,13 @@
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
     "properties": {
+      "approvalHash": {
+        "description": "SHA-256 hex of the canonical approval JSON (design §2 D2):\nthe reviewed cases (case id, verified candidate hash,\nquestions), the raw approved provider/model (blank allowed),\nthe cloud flag, and the approved budget. The server recomputes\nit from the request and refuses any mismatch before traffic.\nAbsent means the run was never approved.",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
       "cases": {
         "items": {
           "$ref": "#/$defs/CompactionStartCase"
@@ -19558,6 +19574,10 @@
         "minimum": 0,
         "type": "integer"
       },
+      "cost": {
+        "description": "Cost class of the resolved model, from the trusted\nconfiguration: \"free\", \"paid\", or \"unknown\".",
+        "type": "string"
+      },
       "estimatedCalls": {
         "format": "uint32",
         "minimum": 0,
@@ -19592,6 +19612,7 @@
       "provider",
       "model",
       "locality",
+      "cost",
       "pairsTotal",
       "estimatedCalls",
       "estimatedTokens"

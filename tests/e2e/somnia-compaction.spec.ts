@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import {
+  computeApprovalHash,
   fakeAnswerKey,
   renderHistory,
   resetFakeBehavior,
@@ -346,6 +347,268 @@ test('SOMNIA compaction refuses a pair when the provider reports a different mod
     // The good arm's reply is still recorded; the pair is failed, not completed.
     expect(pair.compactedScore).toBe('correct');
     expect(pair.compactedReply).toBe('The customs fee is $45.');
+  } finally {
+    await session.cleanup();
+  }
+});
+
+test('SOMNIA compaction runs with a blank Model ID against the first configured model', async ({ page }) => {
+  test.setTimeout(240_000);
+  resetFakeBehavior();
+  setFakeDelayMs(0);
+  const originalHistory = renderHistory(CASE_001_RECORDS);
+  const compactedHistory = renderHistory([CASE_001_RECORDS[1]]);
+  setFakeExpectedAnswers([
+    [fakeAnswerKey('What is the customs fee now?', originalHistory), 'The customs fee is $45.'],
+    [fakeAnswerKey('What is the customs fee now?', compactedHistory), 'The customs fee is $45.'],
+  ]);
+  // Two configured models: llama-x is first in configuration order,
+  // aaa-decoy second. The panel promises a blank Model ID selects the
+  // first configured model; the run must use llama-x, not the decoy.
+  const session = await startCompactionSession(page, { alternateModel: 'aaa-decoy' });
+  try {
+    const panel = session.panel;
+    const hitsBefore = session.fakeHits();
+    await panel.getByLabel('Frozen benchmark case').selectOption('case-001');
+    await panel.getByLabel(/Questions/).fill(JSON.stringify([
+      { id: 'q1', text: 'What is the customs fee now?', expectedAnswer: 'The customs fee is $45.' },
+    ], null, 2));
+    await panel.getByRole('button', { name: 'Prepare candidate' }).click();
+    const review = panel.getByRole('region', { name: 'Compacted candidate review' });
+    await expect(review).toBeVisible();
+    // The Model ID field is deliberately left blank here.
+    await expect(panel.getByLabel('Model ID')).toHaveValue('');
+    await review.getByRole('button', { name: 'Approve reviewed inputs' }).click();
+    await expect(review.getByText(/Approved candidate .* with 1 question/)).toBeVisible();
+    await panel.getByRole('button', { name: 'Run approved comparison' }).click();
+    const results = panel.getByRole('region', { name: 'Compaction run results' });
+    await expect(results.getByText(/Status: complete/)).toBeVisible({ timeout: 60_000 });
+    expect(session.fakeHits() - hitsBefore).toBe(2);
+    // Every dispatch went to the first configured model, not the decoy.
+    expect(session.fakeModels()).toEqual(['llama-x', 'llama-x']);
+    const heading = await results.getByRole('heading').textContent();
+    const runId = heading!.replace('Comparison run ', '').trim();
+    const poll = await session.call('ai', 'somnia-compaction-poll', {
+      workspaceId: session.workspaceId, projectId: session.projectId, runId,
+    });
+    expect(poll.body.provider).toBe('ollama');
+    expect(poll.body.model).toBe('llama-x');
+    expect(poll.body.locality).toBe('local');
+  } finally {
+    await session.cleanup();
+  }
+});
+
+test('SOMNIA compaction runs a free cloud model with explicit approval and no permit', async ({ page }) => {
+  test.setTimeout(240_000);
+  resetFakeBehavior();
+  setFakeDelayMs(0);
+  const originalHistory = renderHistory(CASE_001_RECORDS);
+  const compactedHistory = renderHistory([CASE_001_RECORDS[1]]);
+  setFakeExpectedAnswers([
+    [fakeAnswerKey('What is the customs fee now?', originalHistory), 'The customs fee is $45.'],
+    [fakeAnswerKey('What is the customs fee now?', compactedHistory), 'The customs fee is $45.'],
+  ]);
+  const session = await startCompactionSession(page, { cloudModel: { id: 'free-cloud-model', cost: 'free' } });
+  try {
+    const panel = session.panel;
+    const hitsBefore = session.fakeHits();
+    const cloudHitsBefore = session.cloudFakeHits();
+    await panel.getByLabel('Frozen benchmark case').selectOption('case-001');
+    await panel.getByLabel(/Questions/).fill(JSON.stringify([
+      { id: 'q1', text: 'What is the customs fee now?', expectedAnswer: 'The customs fee is $45.' },
+    ], null, 2));
+    await panel.getByRole('button', { name: 'Prepare candidate' }).click();
+    const review = panel.getByRole('region', { name: 'Compacted candidate review' });
+    await expect(review).toBeVisible();
+    await panel.getByLabel('Provider ID').fill('openrouter');
+    await panel.getByLabel('Model ID').fill('free-cloud-model');
+    await panel.getByLabel('Authorize cloud transmission for this comparison').check();
+    await review.getByRole('button', { name: 'Approve reviewed inputs' }).click();
+    await expect(review.getByText(/Approved candidate .* with 1 question/)).toBeVisible();
+    await panel.getByRole('button', { name: 'Run approved comparison' }).click();
+    const results = panel.getByRole('region', { name: 'Compaction run results' });
+    await expect(results.getByText(/Status: complete/)).toBeVisible({ timeout: 60_000 });
+    // Both arms went to the cloud fake; the local fake saw nothing.
+    expect(session.cloudFakeHits() - cloudHitsBefore).toBe(2);
+    expect(session.fakeHits() - hitsBefore).toBe(0);
+    expect(session.cloudFakeModels()).toEqual(['free-cloud-model', 'free-cloud-model']);
+    const heading = await results.getByRole('heading').textContent();
+    const runId = heading!.replace('Comparison run ', '').trim();
+    const poll = await session.call('ai', 'somnia-compaction-poll', {
+      workspaceId: session.workspaceId, projectId: session.projectId, runId,
+    });
+    expect(poll.body.provider).toBe('openrouter');
+    expect(poll.body.model).toBe('free-cloud-model');
+    expect(poll.body.locality).toBe('cloud');
+    expect(poll.body.cost).toBe('free');
+  } finally {
+    await session.cleanup();
+  }
+});
+
+test('SOMNIA compaction refuses billable targets and supplied permits before traffic', async ({ page }) => {
+  test.setTimeout(120_000);
+  resetFakeBehavior();
+  setFakeDelayMs(0);
+  setFakeExpectedAnswers([]);
+  const session = await startCompactionSession(page, {
+    paidModel: 'paid-model',
+    cloudModel: { id: 'paid-cloud-model', cost: 'paid' },
+  });
+  try {
+    const envelope = JSON.stringify({ format: 'anansi-somnia-compaction-input', version: 1, records: CASE_001_RECORDS });
+    const prepared = await session.call('ai', 'somnia-compaction-prepare', {
+      workspaceId: session.workspaceId, projectId: session.projectId, inputText: envelope, inputFormat: 'json',
+    });
+    expect(prepared.status).toBe(200);
+    const candidate = prepared.body.candidate;
+    const questions = [{ id: 'q1', text: 'What is the customs fee now?', expectedAnswer: 'The customs fee is $45.' }];
+    const baseCase = {
+      caseId: 'case-001',
+      records: CASE_001_RECORDS,
+      quarantined: candidate.quarantined,
+      candidateHash: candidate.contentHash,
+      questions,
+    };
+    const hashFor = (provider: string, model: string, cloud: boolean, maxTotalTokens = 20000) =>
+      computeApprovalHash({
+        cases: [{ caseId: 'case-001', candidateHash: candidate.contentHash, questions }],
+        provider, model, cloud, maxTotalTokens,
+      });
+    const startWith = (extra: Record<string, unknown>) =>
+      session.call('ai', 'somnia-compaction-start', {
+        workspaceId: session.workspaceId, projectId: session.projectId, cases: [baseCase], ...extra,
+      });
+    // Control: the free local target with a valid approval starts.
+    const hitsBefore = session.fakeHits();
+    const ok = await startWith({
+      provider: 'ollama', model: 'llama-x', cloud: false, maxTotalTokens: 20000,
+      approvalHash: hashFor('ollama', 'llama-x', false),
+    });
+    expect(ok.status).toBe(200);
+    const runId = ok.body.runId as string;
+    let poll = await session.call('ai', 'somnia-compaction-poll', {
+      workspaceId: session.workspaceId, projectId: session.projectId, runId,
+    });
+    const deadline = Date.now() + 60_000;
+    while (poll.body.status === 'running' && Date.now() < deadline) {
+      await new Promise(resolve => setTimeout(resolve, 500));
+      poll = await session.call('ai', 'somnia-compaction-poll', {
+        workspaceId: session.workspaceId, projectId: session.projectId, runId,
+      });
+    }
+    expect(poll.body.status).toBe('complete');
+    const hitsAfterControl = session.fakeHits();
+    expect(hitsAfterControl - hitsBefore).toBe(2);
+    // A billable local model is refused at start, before any dispatch.
+    const paidLocal = await startWith({
+      provider: 'ollama', model: 'paid-model', cloud: false, maxTotalTokens: 20000,
+      approvalHash: hashFor('ollama', 'paid-model', false),
+    });
+    expect(paidLocal.status).toBe(400);
+    expect(String(paidLocal.body.message ?? paidLocal.body.error ?? '')).toMatch(/free/i);
+    expect(session.fakeHits()).toBe(hitsAfterControl);
+    // A billable cloud model is refused the same way, with no cloud hit.
+    const cloudHitsBefore = session.cloudFakeHits();
+    const paidCloud = await startWith({
+      provider: 'openrouter', model: 'paid-cloud-model', cloud: true, maxTotalTokens: 20000,
+      approvalHash: hashFor('openrouter', 'paid-cloud-model', true),
+    });
+    expect(paidCloud.status).toBe(400);
+    expect(String(paidCloud.body.message ?? paidCloud.body.error ?? '')).toMatch(/free/i);
+    expect(session.cloudFakeHits()).toBe(cloudHitsBefore);
+    // A supplied single-use permit does not authorize a comparison.
+    const permitted = await startWith({
+      provider: 'ollama', model: 'llama-x', cloud: false, maxTotalTokens: 20000,
+      permitId: 'permit-test', approvalHash: hashFor('ollama', 'llama-x', false),
+    });
+    expect(permitted.status).toBe(400);
+    expect(session.fakeHits()).toBe(hitsAfterControl);
+  } finally {
+    await session.cleanup();
+  }
+});
+
+test('SOMNIA compaction refuses a start whose approval hash does not match the request', async ({ page }) => {
+  test.setTimeout(120_000);
+  resetFakeBehavior();
+  setFakeDelayMs(0);
+  setFakeExpectedAnswers([]);
+  const session = await startCompactionSession(page, { alternateModel: 'aaa-decoy' });
+  try {
+    const envelope = JSON.stringify({ format: 'anansi-somnia-compaction-input', version: 1, records: CASE_001_RECORDS });
+    const prepared = await session.call('ai', 'somnia-compaction-prepare', {
+      workspaceId: session.workspaceId, projectId: session.projectId, inputText: envelope, inputFormat: 'json',
+    });
+    expect(prepared.status).toBe(200);
+    const candidate = prepared.body.candidate;
+    const questions = [{ id: 'q1', text: 'What is the customs fee now?', expectedAnswer: 'The customs fee is $45.' }];
+    const baseCase = {
+      caseId: 'case-001',
+      records: CASE_001_RECORDS,
+      quarantined: candidate.quarantined,
+      candidateHash: candidate.contentHash,
+      questions,
+    };
+    const validHash = computeApprovalHash({
+      cases: [{ caseId: 'case-001', candidateHash: candidate.contentHash, questions }],
+      provider: 'ollama', model: 'llama-x', cloud: false, maxTotalTokens: 20000,
+    });
+    const startWith = (extra: Record<string, unknown>) =>
+      session.call('ai', 'somnia-compaction-start', {
+        workspaceId: session.workspaceId, projectId: session.projectId, cases: [baseCase], ...extra,
+      });
+    const hitsBefore = session.fakeHits();
+    // A start without an approval hash is refused: approval is
+    // mandatory, not optional. (Before the fix this call was
+    // accepted — the server bound nothing.)
+    const noHash = await startWith({ provider: 'ollama', model: 'llama-x', cloud: false, maxTotalTokens: 20000 });
+    expect(noHash.status).toBe(400);
+    expect(session.fakeHits()).toBe(hitsBefore);
+    // The untouched approval starts cleanly.
+    const ok = await startWith({
+      provider: 'ollama', model: 'llama-x', cloud: false, maxTotalTokens: 20000, approvalHash: validHash,
+    });
+    expect(ok.status).toBe(200);
+    const runId = ok.body.runId as string;
+    let poll = await session.call('ai', 'somnia-compaction-poll', {
+      workspaceId: session.workspaceId, projectId: session.projectId, runId,
+    });
+    const deadline = Date.now() + 60_000;
+    while (poll.body.status === 'running' && Date.now() < deadline) {
+      await new Promise(resolve => setTimeout(resolve, 500));
+      poll = await session.call('ai', 'somnia-compaction-poll', {
+        workspaceId: session.workspaceId, projectId: session.projectId, runId,
+      });
+    }
+    expect(poll.body.status).toBe('complete');
+    const hitsAfterControl = session.fakeHits();
+    expect(hitsAfterControl - hitsBefore).toBe(2);
+    // One field changed at a time, same approval hash: all refused
+    // before traffic.
+    const tamperedQuestions = await startWith({
+      provider: 'ollama', model: 'llama-x', cloud: false, maxTotalTokens: 20000, approvalHash: validHash,
+      cases: [{ ...baseCase, questions: [{ id: 'q1', text: 'What is the customs fee after the update?', expectedAnswer: 'The customs fee is $45.' }] }],
+    });
+    expect(tamperedQuestions.status).toBe(400);
+    expect(session.fakeHits()).toBe(hitsAfterControl);
+    const tamperedTarget = await startWith({
+      provider: 'ollama', model: 'aaa-decoy', cloud: false, maxTotalTokens: 20000, approvalHash: validHash,
+    });
+    expect(tamperedTarget.status).toBe(400);
+    expect(session.fakeHits()).toBe(hitsAfterControl);
+    const tamperedBudget = await startWith({
+      provider: 'ollama', model: 'llama-x', cloud: false, maxTotalTokens: 50000, approvalHash: validHash,
+    });
+    expect(tamperedBudget.status).toBe(400);
+    expect(session.fakeHits()).toBe(hitsAfterControl);
+    const tamperedCandidate = await startWith({
+      provider: 'ollama', model: 'llama-x', cloud: false, maxTotalTokens: 20000, approvalHash: validHash,
+      cases: [{ ...baseCase, candidateHash: '0'.repeat(64) }],
+    });
+    expect(tamperedCandidate.status).toBe(400);
+    expect(session.fakeHits()).toBe(hitsAfterControl);
   } finally {
     await session.cleanup();
   }

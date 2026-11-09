@@ -3981,6 +3981,10 @@ export interface ProviderDispatchRequest {
 }
 export interface CompletionRequest {
   /**
+   * Ask OpenRouter to omit reasoning and reserve output for answer text.
+   */
+  disableOpenRouterReasoning?: boolean;
+  /**
    * Explicit user authorization to send `Private` segments to a cloud
    * provider (ADR-0002: private material requires explicit
    * authorization). Never set implicitly by routing.
@@ -4746,6 +4750,11 @@ export interface SomniaCompactionPollResponse {
   callsMade: number;
   compactionMicrosTotal: number;
   contractVersion: number;
+  /**
+   * Cost class of the resolved model, from the trusted
+   * configuration: "free", "paid", or "unknown".
+   */
+  cost: string;
   error?: string | null;
   locality: string;
   model: string;
@@ -5117,6 +5126,15 @@ export interface ArtifactRecord {
   version: number;
 }
 export interface SomniaCompactionStartRequest {
+  /**
+   * SHA-256 hex of the canonical approval JSON (design §2 D2):
+   * the reviewed cases (case id, verified candidate hash,
+   * questions), the raw approved provider/model (blank allowed),
+   * the cloud flag, and the approved budget. The server recomputes
+   * it from the request and refuses any mismatch before traffic.
+   * Absent means the run was never approved.
+   */
+  approvalHash?: string | null;
   cases: CompactionStartCase[];
   cloud?: boolean | null;
   contractVersion: number;
@@ -5177,6 +5195,11 @@ export interface SomniaCompactionRecord {
 }
 export interface SomniaCompactionStartResponse {
   contractVersion: number;
+  /**
+   * Cost class of the resolved model, from the trusted
+   * configuration: "free", "paid", or "unknown".
+   */
+  cost: string;
   estimatedCalls: number;
   estimatedTokens: number;
   locality: string;
