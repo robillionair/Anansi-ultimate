@@ -1,0 +1,38 @@
+{
+  "category": "conflicts",
+  "id": "case-012",
+  "questions": [
+    {
+      "abstain": false,
+      "expectedAnswer": "Ledger $40, archive $45 — they disagree.",
+      "id": "q1",
+      "neededRecordIds": [
+        "r1",
+        "r2"
+      ],
+      "text": "What fee do the two sources report?"
+    }
+  ],
+  "records": [
+    {
+      "id": "r1",
+      "key": "harbor.customs-fee",
+      "kind": "fact",
+      "privacy": "standard",
+      "revision": 1,
+      "source": "ledger",
+      "text": "The customs fee is $40.",
+      "trust": "trusted"
+    },
+    {
+      "id": "r2",
+      "key": "harbor.customs-fee",
+      "kind": "fact",
+      "privacy": "standard",
+      "revision": 1,
+      "source": "archive",
+      "text": "The customs fee is $45.",
+      "trust": "trusted"
+    }
+  ]
+}

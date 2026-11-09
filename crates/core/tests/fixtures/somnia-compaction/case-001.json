@@ -1,0 +1,43 @@
+{
+  "category": "updates",
+  "forbiddenRetained": [
+    "r1"
+  ],
+  "id": "case-001",
+  "questions": [
+    {
+      "abstain": false,
+      "expectedAnswer": "The customs fee is $45.",
+      "id": "q1",
+      "neededRecordIds": [
+        "r2"
+      ],
+      "text": "What is the customs fee now?"
+    }
+  ],
+  "records": [
+    {
+      "id": "r1",
+      "key": "harbor.customs-fee",
+      "kind": "fact",
+      "privacy": "standard",
+      "revision": 1,
+      "source": "ledger",
+      "text": "The customs fee is $40.",
+      "trust": "trusted"
+    },
+    {
+      "id": "r2",
+      "key": "harbor.customs-fee",
+      "kind": "fact",
+      "privacy": "standard",
+      "revision": 2,
+      "source": "ledger",
+      "supersedes": [
+        "r1"
+      ],
+      "text": "The customs fee is $45.",
+      "trust": "trusted"
+    }
+  ]
+}

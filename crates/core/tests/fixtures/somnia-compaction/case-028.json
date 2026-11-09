@@ -1,0 +1,43 @@
+{
+  "category": "unicode",
+  "forbiddenRetained": [
+    "r1"
+  ],
+  "id": "case-028",
+  "questions": [
+    {
+      "abstain": false,
+      "expectedAnswer": "Spare manifests 📦 and the lighthouse log.",
+      "id": "q1",
+      "neededRecordIds": [
+        "r2"
+      ],
+      "text": "What does the annex hold now?"
+    }
+  ],
+  "records": [
+    {
+      "id": "r1",
+      "key": "aurora.annex",
+      "kind": "fact",
+      "privacy": "standard",
+      "revision": 1,
+      "source": "ledger",
+      "text": "The aurora storage annex holds the spare manifests 📦.",
+      "trust": "trusted"
+    },
+    {
+      "id": "r2",
+      "key": "aurora.annex",
+      "kind": "fact",
+      "privacy": "standard",
+      "revision": 2,
+      "source": "ledger",
+      "supersedes": [
+        "r1"
+      ],
+      "text": "The aurora storage annex holds the spare manifests 📦 and the lighthouse log.",
+      "trust": "trusted"
+    }
+  ]
+}

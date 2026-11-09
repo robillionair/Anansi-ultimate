@@ -1,0 +1,38 @@
+{
+  "category": "look-alikes",
+  "id": "case-024",
+  "questions": [
+    {
+      "abstain": false,
+      "expectedAnswer": "Color harbor blue; colour lighthouse white.",
+      "id": "q1",
+      "neededRecordIds": [
+        "r1",
+        "r2"
+      ],
+      "text": "What is the paint color, and what is the paint colour?"
+    }
+  ],
+  "records": [
+    {
+      "id": "r1",
+      "key": "paint.color",
+      "kind": "fact",
+      "privacy": "standard",
+      "revision": 1,
+      "source": "ledger",
+      "text": "The paint color is harbor blue.",
+      "trust": "trusted"
+    },
+    {
+      "id": "r2",
+      "key": "paint.colour",
+      "kind": "fact",
+      "privacy": "standard",
+      "revision": 1,
+      "source": "ledger",
+      "text": "The paint colour is lighthouse white.",
+      "trust": "trusted"
+    }
+  ]
+}

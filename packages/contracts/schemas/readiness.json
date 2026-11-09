@@ -3857,6 +3857,411 @@
     "title": "CommandError",
     "type": "object"
   },
+  "CompactionMetrics": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "abstentionsCompacted": {
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "abstentionsOriginal": {
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "compactionMicrosTotal": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "correctCompacted": {
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "correctOriginal": {
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "failedPairs": {
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "pairsDone": {
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "pairsTotal": {
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "tokensCompacted": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "tokensOriginal": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "tokensReportedCompactedPairs": {
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "tokensReportedOriginalPairs": {
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "totalLatencyMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "pairsTotal",
+      "pairsDone",
+      "correctOriginal",
+      "correctCompacted",
+      "abstentionsOriginal",
+      "abstentionsCompacted",
+      "failedPairs",
+      "tokensReportedOriginalPairs",
+      "tokensReportedCompactedPairs",
+      "compactionMicrosTotal",
+      "totalLatencyMs"
+    ],
+    "title": "CompactionMetrics",
+    "type": "object"
+  },
+  "CompactionPairResult": {
+    "$defs": {
+      "CompactionUsage": {
+        "additionalProperties": false,
+        "properties": {
+          "inputTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "outputTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "totalTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "caseId": {
+        "type": "string"
+      },
+      "compactedPrompt": {
+        "type": "string"
+      },
+      "compactedReply": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "compactedScore": {
+        "type": "string"
+      },
+      "compactedUsage": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/CompactionUsage"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "compactionMicros": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "expectedAnswer": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "failure": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "originalPrompt": {
+        "type": "string"
+      },
+      "originalReply": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "originalScore": {
+        "type": "string"
+      },
+      "originalUsage": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/CompactionUsage"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "pairId": {
+        "type": "string"
+      },
+      "question": {
+        "type": "string"
+      },
+      "questionId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "pairId",
+      "caseId",
+      "questionId",
+      "question",
+      "originalPrompt",
+      "compactedPrompt",
+      "originalScore",
+      "compactedScore",
+      "compactionMicros"
+    ],
+    "title": "CompactionPairResult",
+    "type": "object"
+  },
+  "CompactionQuestion": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "expectedAnswer": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "id": {
+        "type": "string"
+      },
+      "text": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "id",
+      "text"
+    ],
+    "title": "CompactionQuestion",
+    "type": "object"
+  },
+  "CompactionStartCase": {
+    "$defs": {
+      "CompactionQuestion": {
+        "additionalProperties": false,
+        "properties": {
+          "expectedAnswer": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "text"
+        ],
+        "type": "object"
+      },
+      "QuarantinedRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "type": "string"
+          },
+          "recordRef": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "recordRef",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "SomniaCompactionRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "kind": {
+            "description": "One of `fact | instruction | uncertainty | deletion`.",
+            "type": "string"
+          },
+          "privacy": {
+            "description": "One of `standard | private | public`. `sealed` is refused.",
+            "type": "string"
+          },
+          "revision": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "source": {
+            "description": "The exact source identity, kept verbatim — never normalized\nor merged across sources.",
+            "type": "string"
+          },
+          "supersedes": {
+            "description": "Ids of records (same key and source, lower revision) this\nrecord explicitly replaces. Empty or absent means no\nsupersession is claimed.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "text": {
+            "description": "Record content. Data, never an instruction to the compactor.",
+            "type": "string"
+          },
+          "trust": {
+            "description": "One of `trusted | unverified`.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "key",
+          "source",
+          "revision",
+          "kind",
+          "trust",
+          "privacy",
+          "text"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "candidateHash": {
+        "type": "string"
+      },
+      "caseId": {
+        "type": "string"
+      },
+      "quarantined": {
+        "items": {
+          "$ref": "#/$defs/QuarantinedRecord"
+        },
+        "type": "array"
+      },
+      "questions": {
+        "items": {
+          "$ref": "#/$defs/CompactionQuestion"
+        },
+        "type": "array"
+      },
+      "records": {
+        "items": {
+          "$ref": "#/$defs/SomniaCompactionRecord"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "caseId",
+      "records",
+      "quarantined",
+      "candidateHash",
+      "questions"
+    ],
+    "title": "CompactionStartCase",
+    "type": "object"
+  },
+  "CompactionUsage": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "inputTokens": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "outputTokens": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "totalTokens": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      }
+    },
+    "title": "CompactionUsage",
+    "type": "object"
+  },
   "CompiledContext": {
     "$defs": {
       "ContextChunk": {
@@ -14754,10 +15159,6 @@
       },
       "CompletionRequest": {
         "properties": {
-          "disableOpenRouterReasoning": {
-            "description": "Ask OpenRouter to omit reasoning and reserve output for answer text.",
-            "type": "boolean"
-          },
           "explicitCloudAuthorization": {
             "default": false,
             "description": "Explicit user authorization to send `Private` segments to a cloud\nprovider (ADR-0002: private material requires explicit\nauthorization). Never set implicitly by routing.",
@@ -15723,6 +16124,24 @@
       "workspaceId"
     ],
     "title": "ProviderWorkspaceRequest",
+    "type": "object"
+  },
+  "QuarantinedRecord": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "reason": {
+        "type": "string"
+      },
+      "recordRef": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "recordRef",
+      "reason"
+    ],
+    "title": "QuarantinedRecord",
     "type": "object"
   },
   "ReadArtifactRequest": {
@@ -16835,6 +17254,2349 @@
       "count"
     ],
     "title": "SomniaCategoryCount",
+    "type": "object"
+  },
+  "SomniaCompactionCancelRequest": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "projectId": {
+        "type": "string"
+      },
+      "runId": {
+        "type": "string"
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "workspaceId",
+      "projectId",
+      "runId"
+    ],
+    "title": "SomniaCompactionCancelRequest",
+    "type": "object"
+  },
+  "SomniaCompactionCancelResponse": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "runId": {
+        "type": "string"
+      },
+      "status": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "runId",
+      "status"
+    ],
+    "title": "SomniaCompactionCancelResponse",
+    "type": "object"
+  },
+  "SomniaCompactionCandidate": {
+    "$defs": {
+      "CompactionStats": {
+        "additionalProperties": false,
+        "properties": {
+          "excludedRecords": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "inputChars": {
+            "description": "Text chars over retained + excluded records. Quarantined\nrecords are damaged or unparsed, so they contribute no\nchar count.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "inputRecords": {
+            "description": "Retained + excluded + quarantined.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "quarantinedRecords": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "retainedChars": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "retainedRecords": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "inputRecords",
+          "retainedRecords",
+          "excludedRecords",
+          "quarantinedRecords",
+          "inputChars",
+          "retainedChars"
+        ],
+        "type": "object"
+      },
+      "ExcludedRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "type": "string"
+          },
+          "reason": {
+            "description": "One of `duplicate-exact`, `superseded-by:<id>`,\n`superseded-by-deletion:<id>`. There is no other reason.",
+            "type": "string"
+          },
+          "record": {
+            "$ref": "#/$defs/SomniaCompactionRecord"
+          }
+        },
+        "required": [
+          "record",
+          "reason",
+          "detail"
+        ],
+        "type": "object"
+      },
+      "QuarantinedRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "type": "string"
+          },
+          "recordRef": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "recordRef",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "RetainedRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "conflictWith": {
+            "description": "Ids of the records this record conflicts with; empty when\nthe record is not a conflict member.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "detail": {
+            "description": "Human-readable note, e.g. which newer revision exists for\nan `older` record, or which records conflict with this one.",
+            "type": "string"
+          },
+          "record": {
+            "$ref": "#/$defs/SomniaCompactionRecord"
+          },
+          "status": {
+            "description": "One of `current | older | conflict | deletion | uncertainty`.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "record",
+          "status",
+          "detail",
+          "conflictWith"
+        ],
+        "type": "object"
+      },
+      "RetainedSections": {
+        "additionalProperties": false,
+        "properties": {
+          "conflicts": {
+            "items": {
+              "$ref": "#/$defs/RetainedRecord"
+            },
+            "type": "array"
+          },
+          "deletions": {
+            "items": {
+              "$ref": "#/$defs/RetainedRecord"
+            },
+            "type": "array"
+          },
+          "trusted": {
+            "items": {
+              "$ref": "#/$defs/RetainedRecord"
+            },
+            "type": "array"
+          },
+          "uncertainties": {
+            "items": {
+              "$ref": "#/$defs/RetainedRecord"
+            },
+            "type": "array"
+          },
+          "unverified": {
+            "items": {
+              "$ref": "#/$defs/RetainedRecord"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "trusted",
+          "unverified",
+          "conflicts",
+          "deletions",
+          "uncertainties"
+        ],
+        "type": "object"
+      },
+      "SomniaCompactionRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "kind": {
+            "description": "One of `fact | instruction | uncertainty | deletion`.",
+            "type": "string"
+          },
+          "privacy": {
+            "description": "One of `standard | private | public`. `sealed` is refused.",
+            "type": "string"
+          },
+          "revision": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "source": {
+            "description": "The exact source identity, kept verbatim — never normalized\nor merged across sources.",
+            "type": "string"
+          },
+          "supersedes": {
+            "description": "Ids of records (same key and source, lower revision) this\nrecord explicitly replaces. Empty or absent means no\nsupersession is claimed.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "text": {
+            "description": "Record content. Data, never an instruction to the compactor.",
+            "type": "string"
+          },
+          "trust": {
+            "description": "One of `trusted | unverified`.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "key",
+          "source",
+          "revision",
+          "kind",
+          "trust",
+          "privacy",
+          "text"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "contentHash": {
+        "description": "SHA-256 of the canonical candidate serialization with this\nfield empty. Recomputed by `validate_candidate`.",
+        "type": "string"
+      },
+      "excluded": {
+        "items": {
+          "$ref": "#/$defs/ExcludedRecord"
+        },
+        "type": "array"
+      },
+      "format": {
+        "type": "string"
+      },
+      "inputHash": {
+        "description": "SHA-256 of the canonical input serialization (records in\ncanonical order), so the candidate is pinned to the exact\nhistory it was built from.",
+        "type": "string"
+      },
+      "quarantined": {
+        "items": {
+          "$ref": "#/$defs/QuarantinedRecord"
+        },
+        "type": "array"
+      },
+      "retained": {
+        "$ref": "#/$defs/RetainedSections"
+      },
+      "stats": {
+        "$ref": "#/$defs/CompactionStats"
+      },
+      "version": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "format",
+      "version",
+      "inputHash",
+      "retained",
+      "excluded",
+      "quarantined",
+      "stats",
+      "contentHash"
+    ],
+    "title": "SomniaCompactionCandidate",
+    "type": "object"
+  },
+  "SomniaCompactionExperiment": {
+    "$defs": {
+      "CompactionMetrics": {
+        "additionalProperties": false,
+        "properties": {
+          "abstentionsCompacted": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "abstentionsOriginal": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "compactionMicrosTotal": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "correctCompacted": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "correctOriginal": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "failedPairs": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "pairsDone": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "pairsTotal": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "tokensCompacted": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "tokensOriginal": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "tokensReportedCompactedPairs": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "tokensReportedOriginalPairs": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "totalLatencyMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "pairsTotal",
+          "pairsDone",
+          "correctOriginal",
+          "correctCompacted",
+          "abstentionsOriginal",
+          "abstentionsCompacted",
+          "failedPairs",
+          "tokensReportedOriginalPairs",
+          "tokensReportedCompactedPairs",
+          "compactionMicrosTotal",
+          "totalLatencyMs"
+        ],
+        "type": "object"
+      },
+      "CompactionPairResult": {
+        "additionalProperties": false,
+        "properties": {
+          "caseId": {
+            "type": "string"
+          },
+          "compactedPrompt": {
+            "type": "string"
+          },
+          "compactedReply": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "compactedScore": {
+            "type": "string"
+          },
+          "compactedUsage": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/CompactionUsage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "compactionMicros": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "expectedAnswer": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "failure": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "originalPrompt": {
+            "type": "string"
+          },
+          "originalReply": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "originalScore": {
+            "type": "string"
+          },
+          "originalUsage": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/CompactionUsage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "pairId": {
+            "type": "string"
+          },
+          "question": {
+            "type": "string"
+          },
+          "questionId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "pairId",
+          "caseId",
+          "questionId",
+          "question",
+          "originalPrompt",
+          "compactedPrompt",
+          "originalScore",
+          "compactedScore",
+          "compactionMicros"
+        ],
+        "type": "object"
+      },
+      "CompactionStats": {
+        "additionalProperties": false,
+        "properties": {
+          "excludedRecords": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "inputChars": {
+            "description": "Text chars over retained + excluded records. Quarantined\nrecords are damaged or unparsed, so they contribute no\nchar count.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "inputRecords": {
+            "description": "Retained + excluded + quarantined.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "quarantinedRecords": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "retainedChars": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "retainedRecords": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "inputRecords",
+          "retainedRecords",
+          "excludedRecords",
+          "quarantinedRecords",
+          "inputChars",
+          "retainedChars"
+        ],
+        "type": "object"
+      },
+      "CompactionUsage": {
+        "additionalProperties": false,
+        "properties": {
+          "inputTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "outputTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "totalTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "ExcludedRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "type": "string"
+          },
+          "reason": {
+            "description": "One of `duplicate-exact`, `superseded-by:<id>`,\n`superseded-by-deletion:<id>`. There is no other reason.",
+            "type": "string"
+          },
+          "record": {
+            "$ref": "#/$defs/SomniaCompactionRecord"
+          }
+        },
+        "required": [
+          "record",
+          "reason",
+          "detail"
+        ],
+        "type": "object"
+      },
+      "QuarantinedRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "type": "string"
+          },
+          "recordRef": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "recordRef",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "RetainedRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "conflictWith": {
+            "description": "Ids of the records this record conflicts with; empty when\nthe record is not a conflict member.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "detail": {
+            "description": "Human-readable note, e.g. which newer revision exists for\nan `older` record, or which records conflict with this one.",
+            "type": "string"
+          },
+          "record": {
+            "$ref": "#/$defs/SomniaCompactionRecord"
+          },
+          "status": {
+            "description": "One of `current | older | conflict | deletion | uncertainty`.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "record",
+          "status",
+          "detail",
+          "conflictWith"
+        ],
+        "type": "object"
+      },
+      "RetainedSections": {
+        "additionalProperties": false,
+        "properties": {
+          "conflicts": {
+            "items": {
+              "$ref": "#/$defs/RetainedRecord"
+            },
+            "type": "array"
+          },
+          "deletions": {
+            "items": {
+              "$ref": "#/$defs/RetainedRecord"
+            },
+            "type": "array"
+          },
+          "trusted": {
+            "items": {
+              "$ref": "#/$defs/RetainedRecord"
+            },
+            "type": "array"
+          },
+          "uncertainties": {
+            "items": {
+              "$ref": "#/$defs/RetainedRecord"
+            },
+            "type": "array"
+          },
+          "unverified": {
+            "items": {
+              "$ref": "#/$defs/RetainedRecord"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "trusted",
+          "unverified",
+          "conflicts",
+          "deletions",
+          "uncertainties"
+        ],
+        "type": "object"
+      },
+      "SomniaCompactionCandidate": {
+        "additionalProperties": false,
+        "properties": {
+          "contentHash": {
+            "description": "SHA-256 of the canonical candidate serialization with this\nfield empty. Recomputed by `validate_candidate`.",
+            "type": "string"
+          },
+          "excluded": {
+            "items": {
+              "$ref": "#/$defs/ExcludedRecord"
+            },
+            "type": "array"
+          },
+          "format": {
+            "type": "string"
+          },
+          "inputHash": {
+            "description": "SHA-256 of the canonical input serialization (records in\ncanonical order), so the candidate is pinned to the exact\nhistory it was built from.",
+            "type": "string"
+          },
+          "quarantined": {
+            "items": {
+              "$ref": "#/$defs/QuarantinedRecord"
+            },
+            "type": "array"
+          },
+          "retained": {
+            "$ref": "#/$defs/RetainedSections"
+          },
+          "stats": {
+            "$ref": "#/$defs/CompactionStats"
+          },
+          "version": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "format",
+          "version",
+          "inputHash",
+          "retained",
+          "excluded",
+          "quarantined",
+          "stats",
+          "contentHash"
+        ],
+        "type": "object"
+      },
+      "SomniaCompactionRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "kind": {
+            "description": "One of `fact | instruction | uncertainty | deletion`.",
+            "type": "string"
+          },
+          "privacy": {
+            "description": "One of `standard | private | public`. `sealed` is refused.",
+            "type": "string"
+          },
+          "revision": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "source": {
+            "description": "The exact source identity, kept verbatim — never normalized\nor merged across sources.",
+            "type": "string"
+          },
+          "supersedes": {
+            "description": "Ids of records (same key and source, lower revision) this\nrecord explicitly replaces. Empty or absent means no\nsupersession is claimed.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "text": {
+            "description": "Record content. Data, never an instruction to the compactor.",
+            "type": "string"
+          },
+          "trust": {
+            "description": "One of `trusted | unverified`.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "key",
+          "source",
+          "revision",
+          "kind",
+          "trust",
+          "privacy",
+          "text"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "candidate": {
+        "$ref": "#/$defs/SomniaCompactionCandidate"
+      },
+      "contentHash": {
+        "type": "string"
+      },
+      "format": {
+        "type": "string"
+      },
+      "inputHash": {
+        "type": "string"
+      },
+      "locality": {
+        "type": "string"
+      },
+      "metrics": {
+        "$ref": "#/$defs/CompactionMetrics"
+      },
+      "model": {
+        "type": "string"
+      },
+      "pairs": {
+        "items": {
+          "$ref": "#/$defs/CompactionPairResult"
+        },
+        "type": "array"
+      },
+      "provider": {
+        "type": "string"
+      },
+      "runId": {
+        "type": "string"
+      },
+      "version": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "format",
+      "version",
+      "runId",
+      "provider",
+      "model",
+      "locality",
+      "inputHash",
+      "candidate",
+      "pairs",
+      "metrics",
+      "contentHash"
+    ],
+    "title": "SomniaCompactionExperiment",
+    "type": "object"
+  },
+  "SomniaCompactionPollRequest": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "projectId": {
+        "type": "string"
+      },
+      "runId": {
+        "type": "string"
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "workspaceId",
+      "projectId",
+      "runId"
+    ],
+    "title": "SomniaCompactionPollRequest",
+    "type": "object"
+  },
+  "SomniaCompactionPollResponse": {
+    "$defs": {
+      "CompactionPairResult": {
+        "additionalProperties": false,
+        "properties": {
+          "caseId": {
+            "type": "string"
+          },
+          "compactedPrompt": {
+            "type": "string"
+          },
+          "compactedReply": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "compactedScore": {
+            "type": "string"
+          },
+          "compactedUsage": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/CompactionUsage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "compactionMicros": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "expectedAnswer": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "failure": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "originalPrompt": {
+            "type": "string"
+          },
+          "originalReply": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "originalScore": {
+            "type": "string"
+          },
+          "originalUsage": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/CompactionUsage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "pairId": {
+            "type": "string"
+          },
+          "question": {
+            "type": "string"
+          },
+          "questionId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "pairId",
+          "caseId",
+          "questionId",
+          "question",
+          "originalPrompt",
+          "compactedPrompt",
+          "originalScore",
+          "compactedScore",
+          "compactionMicros"
+        ],
+        "type": "object"
+      },
+      "CompactionUsage": {
+        "additionalProperties": false,
+        "properties": {
+          "inputTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "outputTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "totalTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "callsMade": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "compactionMicrosTotal": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "error": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "locality": {
+        "type": "string"
+      },
+      "model": {
+        "type": "string"
+      },
+      "pairs": {
+        "items": {
+          "$ref": "#/$defs/CompactionPairResult"
+        },
+        "type": "array"
+      },
+      "pairsDone": {
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "pairsTotal": {
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "provider": {
+        "type": "string"
+      },
+      "runId": {
+        "type": "string"
+      },
+      "status": {
+        "type": "string"
+      },
+      "tokensUsed": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "totalLatencyMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "contractVersion",
+      "runId",
+      "status",
+      "provider",
+      "model",
+      "locality",
+      "pairsTotal",
+      "pairsDone",
+      "callsMade",
+      "tokensUsed",
+      "pairs",
+      "compactionMicrosTotal"
+    ],
+    "title": "SomniaCompactionPollResponse",
+    "type": "object"
+  },
+  "SomniaCompactionPrepareRequest": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "inputFormat": {
+        "type": "string"
+      },
+      "inputText": {
+        "type": "string"
+      },
+      "projectId": {
+        "type": "string"
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "workspaceId",
+      "projectId",
+      "inputText",
+      "inputFormat"
+    ],
+    "title": "SomniaCompactionPrepareRequest",
+    "type": "object"
+  },
+  "SomniaCompactionPrepareResponse": {
+    "$defs": {
+      "CompactionStats": {
+        "additionalProperties": false,
+        "properties": {
+          "excludedRecords": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "inputChars": {
+            "description": "Text chars over retained + excluded records. Quarantined\nrecords are damaged or unparsed, so they contribute no\nchar count.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "inputRecords": {
+            "description": "Retained + excluded + quarantined.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "quarantinedRecords": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "retainedChars": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "retainedRecords": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "inputRecords",
+          "retainedRecords",
+          "excludedRecords",
+          "quarantinedRecords",
+          "inputChars",
+          "retainedChars"
+        ],
+        "type": "object"
+      },
+      "ExcludedRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "type": "string"
+          },
+          "reason": {
+            "description": "One of `duplicate-exact`, `superseded-by:<id>`,\n`superseded-by-deletion:<id>`. There is no other reason.",
+            "type": "string"
+          },
+          "record": {
+            "$ref": "#/$defs/SomniaCompactionRecord"
+          }
+        },
+        "required": [
+          "record",
+          "reason",
+          "detail"
+        ],
+        "type": "object"
+      },
+      "QuarantinedRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "type": "string"
+          },
+          "recordRef": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "recordRef",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "RetainedRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "conflictWith": {
+            "description": "Ids of the records this record conflicts with; empty when\nthe record is not a conflict member.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "detail": {
+            "description": "Human-readable note, e.g. which newer revision exists for\nan `older` record, or which records conflict with this one.",
+            "type": "string"
+          },
+          "record": {
+            "$ref": "#/$defs/SomniaCompactionRecord"
+          },
+          "status": {
+            "description": "One of `current | older | conflict | deletion | uncertainty`.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "record",
+          "status",
+          "detail",
+          "conflictWith"
+        ],
+        "type": "object"
+      },
+      "RetainedSections": {
+        "additionalProperties": false,
+        "properties": {
+          "conflicts": {
+            "items": {
+              "$ref": "#/$defs/RetainedRecord"
+            },
+            "type": "array"
+          },
+          "deletions": {
+            "items": {
+              "$ref": "#/$defs/RetainedRecord"
+            },
+            "type": "array"
+          },
+          "trusted": {
+            "items": {
+              "$ref": "#/$defs/RetainedRecord"
+            },
+            "type": "array"
+          },
+          "uncertainties": {
+            "items": {
+              "$ref": "#/$defs/RetainedRecord"
+            },
+            "type": "array"
+          },
+          "unverified": {
+            "items": {
+              "$ref": "#/$defs/RetainedRecord"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "trusted",
+          "unverified",
+          "conflicts",
+          "deletions",
+          "uncertainties"
+        ],
+        "type": "object"
+      },
+      "SomniaCompactionCandidate": {
+        "additionalProperties": false,
+        "properties": {
+          "contentHash": {
+            "description": "SHA-256 of the canonical candidate serialization with this\nfield empty. Recomputed by `validate_candidate`.",
+            "type": "string"
+          },
+          "excluded": {
+            "items": {
+              "$ref": "#/$defs/ExcludedRecord"
+            },
+            "type": "array"
+          },
+          "format": {
+            "type": "string"
+          },
+          "inputHash": {
+            "description": "SHA-256 of the canonical input serialization (records in\ncanonical order), so the candidate is pinned to the exact\nhistory it was built from.",
+            "type": "string"
+          },
+          "quarantined": {
+            "items": {
+              "$ref": "#/$defs/QuarantinedRecord"
+            },
+            "type": "array"
+          },
+          "retained": {
+            "$ref": "#/$defs/RetainedSections"
+          },
+          "stats": {
+            "$ref": "#/$defs/CompactionStats"
+          },
+          "version": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "format",
+          "version",
+          "inputHash",
+          "retained",
+          "excluded",
+          "quarantined",
+          "stats",
+          "contentHash"
+        ],
+        "type": "object"
+      },
+      "SomniaCompactionRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "kind": {
+            "description": "One of `fact | instruction | uncertainty | deletion`.",
+            "type": "string"
+          },
+          "privacy": {
+            "description": "One of `standard | private | public`. `sealed` is refused.",
+            "type": "string"
+          },
+          "revision": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "source": {
+            "description": "The exact source identity, kept verbatim — never normalized\nor merged across sources.",
+            "type": "string"
+          },
+          "supersedes": {
+            "description": "Ids of records (same key and source, lower revision) this\nrecord explicitly replaces. Empty or absent means no\nsupersession is claimed.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "text": {
+            "description": "Record content. Data, never an instruction to the compactor.",
+            "type": "string"
+          },
+          "trust": {
+            "description": "One of `trusted | unverified`.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "key",
+          "source",
+          "revision",
+          "kind",
+          "trust",
+          "privacy",
+          "text"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "candidate": {
+        "$ref": "#/$defs/SomniaCompactionCandidate"
+      },
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "candidate"
+    ],
+    "title": "SomniaCompactionPrepareResponse",
+    "type": "object"
+  },
+  "SomniaCompactionRecord": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "id": {
+        "type": "string"
+      },
+      "key": {
+        "type": "string"
+      },
+      "kind": {
+        "description": "One of `fact | instruction | uncertainty | deletion`.",
+        "type": "string"
+      },
+      "privacy": {
+        "description": "One of `standard | private | public`. `sealed` is refused.",
+        "type": "string"
+      },
+      "revision": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "source": {
+        "description": "The exact source identity, kept verbatim — never normalized\nor merged across sources.",
+        "type": "string"
+      },
+      "supersedes": {
+        "description": "Ids of records (same key and source, lower revision) this\nrecord explicitly replaces. Empty or absent means no\nsupersession is claimed.",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "text": {
+        "description": "Record content. Data, never an instruction to the compactor.",
+        "type": "string"
+      },
+      "trust": {
+        "description": "One of `trusted | unverified`.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "id",
+      "key",
+      "source",
+      "revision",
+      "kind",
+      "trust",
+      "privacy",
+      "text"
+    ],
+    "title": "SomniaCompactionRecord",
+    "type": "object"
+  },
+  "SomniaCompactionSaveRequest": {
+    "$defs": {
+      "CompactionMetrics": {
+        "additionalProperties": false,
+        "properties": {
+          "abstentionsCompacted": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "abstentionsOriginal": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "compactionMicrosTotal": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "correctCompacted": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "correctOriginal": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "failedPairs": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "pairsDone": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "pairsTotal": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "tokensCompacted": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "tokensOriginal": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "tokensReportedCompactedPairs": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "tokensReportedOriginalPairs": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "totalLatencyMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "pairsTotal",
+          "pairsDone",
+          "correctOriginal",
+          "correctCompacted",
+          "abstentionsOriginal",
+          "abstentionsCompacted",
+          "failedPairs",
+          "tokensReportedOriginalPairs",
+          "tokensReportedCompactedPairs",
+          "compactionMicrosTotal",
+          "totalLatencyMs"
+        ],
+        "type": "object"
+      },
+      "CompactionPairResult": {
+        "additionalProperties": false,
+        "properties": {
+          "caseId": {
+            "type": "string"
+          },
+          "compactedPrompt": {
+            "type": "string"
+          },
+          "compactedReply": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "compactedScore": {
+            "type": "string"
+          },
+          "compactedUsage": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/CompactionUsage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "compactionMicros": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "expectedAnswer": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "failure": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "originalPrompt": {
+            "type": "string"
+          },
+          "originalReply": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "originalScore": {
+            "type": "string"
+          },
+          "originalUsage": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/CompactionUsage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "pairId": {
+            "type": "string"
+          },
+          "question": {
+            "type": "string"
+          },
+          "questionId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "pairId",
+          "caseId",
+          "questionId",
+          "question",
+          "originalPrompt",
+          "compactedPrompt",
+          "originalScore",
+          "compactedScore",
+          "compactionMicros"
+        ],
+        "type": "object"
+      },
+      "CompactionStats": {
+        "additionalProperties": false,
+        "properties": {
+          "excludedRecords": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "inputChars": {
+            "description": "Text chars over retained + excluded records. Quarantined\nrecords are damaged or unparsed, so they contribute no\nchar count.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "inputRecords": {
+            "description": "Retained + excluded + quarantined.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "quarantinedRecords": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "retainedChars": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "retainedRecords": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "inputRecords",
+          "retainedRecords",
+          "excludedRecords",
+          "quarantinedRecords",
+          "inputChars",
+          "retainedChars"
+        ],
+        "type": "object"
+      },
+      "CompactionUsage": {
+        "additionalProperties": false,
+        "properties": {
+          "inputTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "outputTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "totalTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "ExcludedRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "type": "string"
+          },
+          "reason": {
+            "description": "One of `duplicate-exact`, `superseded-by:<id>`,\n`superseded-by-deletion:<id>`. There is no other reason.",
+            "type": "string"
+          },
+          "record": {
+            "$ref": "#/$defs/SomniaCompactionRecord"
+          }
+        },
+        "required": [
+          "record",
+          "reason",
+          "detail"
+        ],
+        "type": "object"
+      },
+      "QuarantinedRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "type": "string"
+          },
+          "recordRef": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "recordRef",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "RetainedRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "conflictWith": {
+            "description": "Ids of the records this record conflicts with; empty when\nthe record is not a conflict member.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "detail": {
+            "description": "Human-readable note, e.g. which newer revision exists for\nan `older` record, or which records conflict with this one.",
+            "type": "string"
+          },
+          "record": {
+            "$ref": "#/$defs/SomniaCompactionRecord"
+          },
+          "status": {
+            "description": "One of `current | older | conflict | deletion | uncertainty`.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "record",
+          "status",
+          "detail",
+          "conflictWith"
+        ],
+        "type": "object"
+      },
+      "RetainedSections": {
+        "additionalProperties": false,
+        "properties": {
+          "conflicts": {
+            "items": {
+              "$ref": "#/$defs/RetainedRecord"
+            },
+            "type": "array"
+          },
+          "deletions": {
+            "items": {
+              "$ref": "#/$defs/RetainedRecord"
+            },
+            "type": "array"
+          },
+          "trusted": {
+            "items": {
+              "$ref": "#/$defs/RetainedRecord"
+            },
+            "type": "array"
+          },
+          "uncertainties": {
+            "items": {
+              "$ref": "#/$defs/RetainedRecord"
+            },
+            "type": "array"
+          },
+          "unverified": {
+            "items": {
+              "$ref": "#/$defs/RetainedRecord"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "trusted",
+          "unverified",
+          "conflicts",
+          "deletions",
+          "uncertainties"
+        ],
+        "type": "object"
+      },
+      "SomniaCompactionCandidate": {
+        "additionalProperties": false,
+        "properties": {
+          "contentHash": {
+            "description": "SHA-256 of the canonical candidate serialization with this\nfield empty. Recomputed by `validate_candidate`.",
+            "type": "string"
+          },
+          "excluded": {
+            "items": {
+              "$ref": "#/$defs/ExcludedRecord"
+            },
+            "type": "array"
+          },
+          "format": {
+            "type": "string"
+          },
+          "inputHash": {
+            "description": "SHA-256 of the canonical input serialization (records in\ncanonical order), so the candidate is pinned to the exact\nhistory it was built from.",
+            "type": "string"
+          },
+          "quarantined": {
+            "items": {
+              "$ref": "#/$defs/QuarantinedRecord"
+            },
+            "type": "array"
+          },
+          "retained": {
+            "$ref": "#/$defs/RetainedSections"
+          },
+          "stats": {
+            "$ref": "#/$defs/CompactionStats"
+          },
+          "version": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "format",
+          "version",
+          "inputHash",
+          "retained",
+          "excluded",
+          "quarantined",
+          "stats",
+          "contentHash"
+        ],
+        "type": "object"
+      },
+      "SomniaCompactionExperiment": {
+        "additionalProperties": false,
+        "properties": {
+          "candidate": {
+            "$ref": "#/$defs/SomniaCompactionCandidate"
+          },
+          "contentHash": {
+            "type": "string"
+          },
+          "format": {
+            "type": "string"
+          },
+          "inputHash": {
+            "type": "string"
+          },
+          "locality": {
+            "type": "string"
+          },
+          "metrics": {
+            "$ref": "#/$defs/CompactionMetrics"
+          },
+          "model": {
+            "type": "string"
+          },
+          "pairs": {
+            "items": {
+              "$ref": "#/$defs/CompactionPairResult"
+            },
+            "type": "array"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "runId": {
+            "type": "string"
+          },
+          "version": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "format",
+          "version",
+          "runId",
+          "provider",
+          "model",
+          "locality",
+          "inputHash",
+          "candidate",
+          "pairs",
+          "metrics",
+          "contentHash"
+        ],
+        "type": "object"
+      },
+      "SomniaCompactionRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "kind": {
+            "description": "One of `fact | instruction | uncertainty | deletion`.",
+            "type": "string"
+          },
+          "privacy": {
+            "description": "One of `standard | private | public`. `sealed` is refused.",
+            "type": "string"
+          },
+          "revision": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "source": {
+            "description": "The exact source identity, kept verbatim — never normalized\nor merged across sources.",
+            "type": "string"
+          },
+          "supersedes": {
+            "description": "Ids of records (same key and source, lower revision) this\nrecord explicitly replaces. Empty or absent means no\nsupersession is claimed.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "text": {
+            "description": "Record content. Data, never an instruction to the compactor.",
+            "type": "string"
+          },
+          "trust": {
+            "description": "One of `trusted | unverified`.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "key",
+          "source",
+          "revision",
+          "kind",
+          "trust",
+          "privacy",
+          "text"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "experiment": {
+        "$ref": "#/$defs/SomniaCompactionExperiment"
+      },
+      "projectId": {
+        "type": "string"
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "workspaceId",
+      "projectId",
+      "experiment"
+    ],
+    "title": "SomniaCompactionSaveRequest",
+    "type": "object"
+  },
+  "SomniaCompactionSaveResponse": {
+    "$defs": {
+      "ArtifactRecord": {
+        "description": "One artifact version's metadata — the §9 field set.",
+        "properties": {
+          "artifactId": {
+            "type": "string"
+          },
+          "contentHash": {
+            "type": "string"
+          },
+          "generator": {
+            "description": "Generator/model metadata: `{\"kind\":\"manual\"}` in this\nslice; generator slices record model provenance here."
+          },
+          "privacy": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "sourceReferences": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "timestamp": {
+            "description": "The §9 timestamp: when this version was registered.",
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "validationStatus": {
+            "type": "string"
+          },
+          "version": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "artifactId",
+          "projectId",
+          "type",
+          "version",
+          "title",
+          "timestamp",
+          "sourceReferences",
+          "validationStatus",
+          "privacy",
+          "contentHash"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "artifact": {
+        "$ref": "#/$defs/ArtifactRecord"
+      },
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "artifact"
+    ],
+    "title": "SomniaCompactionSaveResponse",
+    "type": "object"
+  },
+  "SomniaCompactionStartRequest": {
+    "$defs": {
+      "CompactionQuestion": {
+        "additionalProperties": false,
+        "properties": {
+          "expectedAnswer": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "text"
+        ],
+        "type": "object"
+      },
+      "CompactionStartCase": {
+        "additionalProperties": false,
+        "properties": {
+          "candidateHash": {
+            "type": "string"
+          },
+          "caseId": {
+            "type": "string"
+          },
+          "quarantined": {
+            "items": {
+              "$ref": "#/$defs/QuarantinedRecord"
+            },
+            "type": "array"
+          },
+          "questions": {
+            "items": {
+              "$ref": "#/$defs/CompactionQuestion"
+            },
+            "type": "array"
+          },
+          "records": {
+            "items": {
+              "$ref": "#/$defs/SomniaCompactionRecord"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "caseId",
+          "records",
+          "quarantined",
+          "candidateHash",
+          "questions"
+        ],
+        "type": "object"
+      },
+      "QuarantinedRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "type": "string"
+          },
+          "recordRef": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "recordRef",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "SomniaCompactionRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "kind": {
+            "description": "One of `fact | instruction | uncertainty | deletion`.",
+            "type": "string"
+          },
+          "privacy": {
+            "description": "One of `standard | private | public`. `sealed` is refused.",
+            "type": "string"
+          },
+          "revision": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "source": {
+            "description": "The exact source identity, kept verbatim — never normalized\nor merged across sources.",
+            "type": "string"
+          },
+          "supersedes": {
+            "description": "Ids of records (same key and source, lower revision) this\nrecord explicitly replaces. Empty or absent means no\nsupersession is claimed.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "text": {
+            "description": "Record content. Data, never an instruction to the compactor.",
+            "type": "string"
+          },
+          "trust": {
+            "description": "One of `trusted | unverified`.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "key",
+          "source",
+          "revision",
+          "kind",
+          "trust",
+          "privacy",
+          "text"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "cases": {
+        "items": {
+          "$ref": "#/$defs/CompactionStartCase"
+        },
+        "type": "array"
+      },
+      "cloud": {
+        "type": [
+          "boolean",
+          "null"
+        ]
+      },
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "maxTotalTokens": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "model": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "permitId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "projectId": {
+        "type": "string"
+      },
+      "provider": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "workspaceId",
+      "projectId",
+      "cases"
+    ],
+    "title": "SomniaCompactionStartRequest",
+    "type": "object"
+  },
+  "SomniaCompactionStartResponse": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "estimatedCalls": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "estimatedTokens": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "locality": {
+        "type": "string"
+      },
+      "model": {
+        "type": "string"
+      },
+      "pairsTotal": {
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "provider": {
+        "type": "string"
+      },
+      "runId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "runId",
+      "provider",
+      "model",
+      "locality",
+      "pairsTotal",
+      "estimatedCalls",
+      "estimatedTokens"
+    ],
+    "title": "SomniaCompactionStartResponse",
     "type": "object"
   },
   "SomniaConstraint": {

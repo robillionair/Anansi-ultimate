@@ -58,6 +58,16 @@ use anansi_core::somnia::{
     SomniaRetrievedRecord, SomniaSaveRequest, SomniaSaveResponse, SomniaScenario,
     SomniaScenarioResult, SomniaToolEvent, SomniaViolation,
 };
+use anansi_core::somnia_compaction::{
+    QuarantinedRecord, SomniaCompactionCandidate, SomniaCompactionRecord,
+};
+use anansi_core::somnia_compaction_run::{
+    CompactionMetrics, CompactionPairResult, CompactionQuestion, CompactionStartCase,
+    CompactionUsage, SomniaCompactionCancelRequest, SomniaCompactionCancelResponse,
+    SomniaCompactionExperiment, SomniaCompactionPollRequest, SomniaCompactionPollResponse,
+    SomniaCompactionPrepareRequest, SomniaCompactionPrepareResponse, SomniaCompactionSaveRequest,
+    SomniaCompactionSaveResponse, SomniaCompactionStartRequest, SomniaCompactionStartResponse,
+};
 use anansi_core::swarmtank::{
     CountedItem, ScenarioComparison, ScenarioMetrics, ScenarioMetricsPair, ScenarioObjectionDelta,
     ScenarioTransition, ScenarioTrustSignals, SwarmtankAddendum, SwarmtankBatchInfo,
@@ -207,6 +217,25 @@ fn main() {
         "SomniaEvaluateResponse":schemars::schema_for!(SomniaEvaluateResponse),
         "SomniaSaveRequest":schemars::schema_for!(SomniaSaveRequest),
         "SomniaSaveResponse":schemars::schema_for!(SomniaSaveResponse),
+        "SomniaCompactionRecord":schemars::schema_for!(SomniaCompactionRecord),
+        "QuarantinedRecord":schemars::schema_for!(QuarantinedRecord),
+        "SomniaCompactionCandidate":schemars::schema_for!(SomniaCompactionCandidate),
+        "CompactionQuestion":schemars::schema_for!(CompactionQuestion),
+        "CompactionStartCase":schemars::schema_for!(CompactionStartCase),
+        "SomniaCompactionPrepareRequest":schemars::schema_for!(SomniaCompactionPrepareRequest),
+        "SomniaCompactionPrepareResponse":schemars::schema_for!(SomniaCompactionPrepareResponse),
+        "SomniaCompactionStartRequest":schemars::schema_for!(SomniaCompactionStartRequest),
+        "SomniaCompactionStartResponse":schemars::schema_for!(SomniaCompactionStartResponse),
+        "CompactionUsage":schemars::schema_for!(CompactionUsage),
+        "CompactionPairResult":schemars::schema_for!(CompactionPairResult),
+        "SomniaCompactionPollRequest":schemars::schema_for!(SomniaCompactionPollRequest),
+        "SomniaCompactionPollResponse":schemars::schema_for!(SomniaCompactionPollResponse),
+        "SomniaCompactionCancelRequest":schemars::schema_for!(SomniaCompactionCancelRequest),
+        "SomniaCompactionCancelResponse":schemars::schema_for!(SomniaCompactionCancelResponse),
+        "CompactionMetrics":schemars::schema_for!(CompactionMetrics),
+        "SomniaCompactionExperiment":schemars::schema_for!(SomniaCompactionExperiment),
+        "SomniaCompactionSaveRequest":schemars::schema_for!(SomniaCompactionSaveRequest),
+        "SomniaCompactionSaveResponse":schemars::schema_for!(SomniaCompactionSaveResponse),
         "IdeasGenerateStartRequest":schemars::schema_for!(IdeasGenerateStartRequest),
         "IdeasRunRequest":schemars::schema_for!(IdeasRunRequest),
         "IdeasGenerateStartResponse":schemars::schema_for!(IdeasGenerateStartResponse),

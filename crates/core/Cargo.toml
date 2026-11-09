@@ -39,6 +39,8 @@ keyring = { version = "=3.6.3", default-features = false, features = ["apple-nat
 [target.'cfg(target_os = "linux")'.dependencies]
 keyring = { version = "=3.6.3", default-features = false }
 [dev-dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
 tempfile = "=3.27.0"
 # Synthetic HTTPS servers: test-only certificates.
 rcgen = "=0.13.2"
