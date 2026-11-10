@@ -1837,6 +1837,255 @@
     "title": "BranchChanges",
     "type": "object"
   },
+  "ChatGptSigninAccountRequest": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "description": "Workspace (+ optional account) for the ChatGPT status,\nrefresh, and disconnect operations.",
+    "properties": {
+      "clientId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "contractVersion": {
+        "default": 1,
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "workspaceId"
+    ],
+    "title": "ChatGptSigninAccountRequest",
+    "type": "object"
+  },
+  "ChatGptSigninDisconnectResponse": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "disconnected": {
+        "type": "boolean"
+      },
+      "remoteRevocationConfirmed": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "disconnected",
+      "remoteRevocationConfirmed"
+    ],
+    "title": "ChatGptSigninDisconnectResponse",
+    "type": "object"
+  },
+  "ChatGptSigninRefreshResponse": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "expiresAtMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "refreshed": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "refreshed"
+    ],
+    "title": "ChatGptSigninRefreshResponse",
+    "type": "object"
+  },
+  "ChatGptSigninStartRequest": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "description": "\"Continue with ChatGPT\" sign-in (spike): start a host-side\nsign-in attempt. `client_id` names a saved registration to\nre-authorize; absent means first-time dynamic registration.",
+    "properties": {
+      "clientId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "contractVersion": {
+        "default": 1,
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "workspaceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "workspaceId"
+    ],
+    "title": "ChatGptSigninStartRequest",
+    "type": "object"
+  },
+  "ChatGptSigninStartResponse": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "attemptId": {
+        "type": "string"
+      },
+      "authorizationUrl": {
+        "type": "string"
+      },
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "expiresInSeconds": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "redirectUri": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "attemptId",
+      "authorizationUrl",
+      "redirectUri",
+      "expiresInSeconds"
+    ],
+    "title": "ChatGptSigninStartResponse",
+    "type": "object"
+  },
+  "ChatGptSigninStatusResponse": {
+    "$defs": {
+      "ChatGptSigninAccount": {
+        "description": "One saved ChatGPT account (labels only — never tokens).",
+        "properties": {
+          "clientId": {
+            "type": "string"
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "planUsage": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "clientId",
+          "planUsage"
+        ],
+        "type": "object"
+      },
+      "ChatGptSigninAttemptStatus": {
+        "description": "A sign-in attempt as a browser may see it (labels only).",
+        "properties": {
+          "attemptId": {
+            "type": "string"
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "attemptId",
+          "status"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "accounts": {
+        "items": {
+          "$ref": "#/$defs/ChatGptSigninAccount"
+        },
+        "type": "array"
+      },
+      "contractVersion": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "email": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "expiresAtMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "pendingAttempt": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/ChatGptSigninAttemptStatus"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "planUsage": {
+        "type": "boolean"
+      },
+      "planUsageReason": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "signedIn": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "signedIn",
+      "planUsage",
+      "accounts"
+    ],
+    "title": "ChatGptSigninStatusResponse",
+    "type": "object"
+  },
   "ColliderCombination": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,

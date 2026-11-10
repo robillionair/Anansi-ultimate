@@ -70,6 +70,7 @@ use anansi_providers::gates::{Budget, PaidInferencePermit, QuotaLedger, ZeroCost
 use anansi_providers::http::CancellationToken;
 use anansi_providers::routing::{DisclosureRecord, RoutingMode, RoutingRequest};
 use anansi_providers::runtime::{LocalityConfig, ProviderRuntime, RuntimeConfig, RuntimeProvider};
+use anansi_providers::secrets::SecretResolver;
 use anansi_providers::types::{CompletionRequest, CostClass, StreamEvent, Usage};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -293,6 +294,86 @@ pub struct ProviderStatusResponse {
     pub providers: Vec<ProviderStatusEntry>,
     pub orphaned_credentials: Vec<ProviderStatusOrphanedCredential>,
     pub budget: Budget,
+}
+
+/// "Continue with ChatGPT" sign-in (spike): start a host-side
+/// sign-in attempt. `client_id` names a saved registration to
+/// re-authorize; absent means first-time dynamic registration.
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ChatGptSigninStartRequest {
+    #[serde(default = "default_contract_version")]
+    pub contract_version: u8,
+    pub workspace_id: String,
+    pub client_id: Option<String>,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatGptSigninStartResponse {
+    pub contract_version: u8,
+    pub attempt_id: String,
+    pub authorization_url: String,
+    pub redirect_uri: String,
+    pub expires_in_seconds: u64,
+}
+
+/// Workspace (+ optional account) for the ChatGPT status,
+/// refresh, and disconnect operations.
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ChatGptSigninAccountRequest {
+    #[serde(default = "default_contract_version")]
+    pub contract_version: u8,
+    pub workspace_id: String,
+    pub client_id: Option<String>,
+}
+
+/// One saved ChatGPT account (labels only — never tokens).
+#[derive(Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatGptSigninAccount {
+    pub client_id: String,
+    pub email: Option<String>,
+    pub plan_usage: bool,
+}
+
+/// A sign-in attempt as a browser may see it (labels only).
+#[derive(Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatGptSigninAttemptStatus {
+    pub attempt_id: String,
+    pub status: String,
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatGptSigninStatusResponse {
+    pub contract_version: u8,
+    pub signed_in: bool,
+    pub email: Option<String>,
+    pub plan_usage: bool,
+    pub plan_usage_reason: Option<String>,
+    pub expires_at_ms: Option<u64>,
+    pub accounts: Vec<ChatGptSigninAccount>,
+    pub pending_attempt: Option<ChatGptSigninAttemptStatus>,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatGptSigninRefreshResponse {
+    pub contract_version: u8,
+    pub refreshed: bool,
+    pub expires_at_ms: Option<u64>,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatGptSigninDisconnectResponse {
+    pub contract_version: u8,
+    pub disconnected: bool,
+    pub remote_revocation_confirmed: bool,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -557,6 +638,35 @@ struct StreamRun {
     verified_snapshot: std::collections::HashMap<String, String>,
 }
 
+/// A "Continue with ChatGPT" sign-in attempt (spike): the pending
+/// authorization whose loopback callback the host is waiting for.
+/// In-memory only; a restart drops pending attempts (the user
+/// simply signs in again). The authorization `code` never lives
+/// here: the listener thread takes the callback payload out of
+/// the attempt under the lock and exchanges it from locals.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum ChatGptAttemptStatus {
+    Pending,
+    CallbackReceived,
+    Succeeded,
+    Failed(String),
+}
+
+#[derive(Debug, Clone)]
+struct ChatGptAttempt {
+    id: String,
+    /// `dynamic_agent_client` first time; the issued ID thereafter.
+    client_id: String,
+    state: String,
+    nonce: String,
+    verifier: String,
+    redirect_uri: String,
+    ext_agent_host_id: String,
+    created: Instant,
+    consumed: bool,
+    status: ChatGptAttemptStatus,
+}
+
 /// A browser session that attempted an owner operation and was
 /// refused: the host's approval queue. Bounded and swept (see
 /// `record_pending_access`).
@@ -598,6 +708,13 @@ struct BackendState {
     /// (false until the first load, so an empty ledger is not
     /// re-read on every status call).
     minted_loaded: bool,
+    /// "Continue with ChatGPT" sign-in attempts (spike), by
+    /// attempt id. In-memory only; swept on the attempt TTL.
+    chatgpt_attempts: HashMap<String, ChatGptAttempt>,
+    /// A ChatGPT refresh is running for this workspace: a second
+    /// concurrent refresh is refused so two callers cannot race
+    /// a rotating refresh token.
+    chatgpt_refresh_in_flight: bool,
 }
 
 /// Backend key for a logical workspace that has been validated
@@ -700,6 +817,13 @@ fn sweep(state: &mut BackendState) {
             run.cancel.cancel();
         }
     }
+    // ChatGPT sign-in attempts (spike): a pending attempt older
+    // than its TTL is dropped; its listener thread notices the
+    // missing attempt and exits.
+    state.chatgpt_attempts.retain(|_, attempt| {
+        attempt.created.elapsed()
+            < Duration::from_secs(crate::chatgpt_signin::ATTEMPT_TTL_SECS)
+    });
 }
 
 fn runtime_for(state: &mut BackendState) -> Result<Arc<ProviderRuntime>, CommandError> {
@@ -1137,6 +1261,476 @@ fn shared_resolver() -> Arc<anansi_providers::keyring_resolver::KeyringSecretRes
     RESOLVER
         .get_or_init(|| Arc::new(anansi_providers::keyring_resolver::KeyringSecretResolver::new()))
         .clone()
+}
+
+/// The ChatGPT token store: the same keyring boundary as provider
+/// API keys, under a distinct service, so the two stores cannot
+/// collide and the API-key orphan logic never sees ChatGPT
+/// material.
+fn shared_chatgpt_resolver() -> Arc<anansi_providers::keyring_resolver::KeyringSecretResolver> {
+    static RESOLVER: std::sync::OnceLock<
+        Arc<anansi_providers::keyring_resolver::KeyringSecretResolver>,
+    > = std::sync::OnceLock::new();
+    RESOLVER
+        .get_or_init(|| {
+            Arc::new(
+                anansi_providers::keyring_resolver::KeyringSecretResolver::with_service(
+                    crate::chatgpt_signin::CHATGPT_KEYRING_SERVICE,
+                ),
+            )
+        })
+        .clone()
+}
+
+fn chatgpt_error_to_command(e: crate::chatgpt_signin::ChatGptError) -> CommandError {
+    use crate::chatgpt_signin::ChatGptError as E;
+    match e {
+        E::Network(message) => CommandError::new(ErrorCode::StorageUnavailable, &message),
+        other => CommandError::new(ErrorCode::InvalidRequest, &other.message()),
+    }
+}
+
+// --- "Continue with ChatGPT" persistence (labels only on disk) ---
+
+fn chatgpt_host_file_path(root: &std::path::Path) -> std::path::PathBuf {
+    root.join("provider-config").join("chatgpt-host.json")
+}
+
+fn chatgpt_registrations_path(
+    root: &std::path::Path,
+    workspace_id: &str,
+) -> std::path::PathBuf {
+    let safe: String = workspace_id
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || matches!(c, '-' | '_') {
+                c
+            } else {
+                '-'
+            }
+        })
+        .collect();
+    root.join("provider-config")
+        .join(format!("{safe}.chatgpt.json"))
+}
+
+fn chatgpt_provider_config_dir(root: &std::path::Path) -> Result<std::path::PathBuf, CommandError> {
+    let dir = root.join("provider-config");
+    std::fs::create_dir_all(&dir).map_err(|_| crate::storage::unavailable())?;
+    crate::storage::reject_links(&dir).map_err(|_| crate::storage::unavailable())?;
+    crate::storage::private_permissions(&dir, true, false)
+        .map_err(|_| crate::storage::unavailable())?;
+    Ok(dir)
+}
+
+/// The stable per-host `ext_agent_host_id`: created once per
+/// storage root, then reused for every sign-in from this host.
+/// Labels only; the file holds no token material.
+fn load_or_create_host_id(root: &std::path::Path) -> Result<String, CommandError> {
+    let path = chatgpt_host_file_path(root);
+    if path.exists() {
+        crate::storage::reject_links(&path).map_err(|_| crate::storage::unavailable())?;
+        let text = std::fs::read_to_string(&path).map_err(|_| crate::storage::unavailable())?;
+        let value: serde_json::Value =
+            serde_json::from_str(&text).map_err(|_| crate::storage::unavailable())?;
+        if let Some(id) = value
+            .get("ext_agent_host_id")
+            .and_then(|v| v.as_str())
+            .filter(|id| {
+                id.starts_with("urn:uuid:")
+                    && id.len() == 41
+                    && id[9..].chars().all(|c| c.is_ascii_hexdigit())
+            })
+        {
+            return Ok(id.to_string());
+        }
+        return Err(crate::storage::unavailable());
+    }
+    let dir = chatgpt_provider_config_dir(root)?;
+    let id = crate::chatgpt_signin::new_host_id();
+    let json = serde_json::to_string(&serde_json::json!({ "ext_agent_host_id": id }))
+        .unwrap_or_default();
+    persist_text_file_atomic(&dir, &path, &json)?;
+    Ok(id)
+}
+
+/// Saved ChatGPT registrations (labels only): client ID ->
+/// registration. Missing file means none; a corrupt file fails
+/// closed — a registration the host cannot read is not a
+/// registration the host may use.
+fn load_chatgpt_registrations(
+    root: &std::path::Path,
+    workspace_id: &str,
+) -> Result<HashMap<String, crate::chatgpt_signin::ChatGptRegistration>, CommandError> {
+    let path = chatgpt_registrations_path(root, workspace_id);
+    if !path.exists() {
+        return Ok(HashMap::new());
+    }
+    crate::storage::reject_links(&path).map_err(|_| crate::storage::unavailable())?;
+    let text = std::fs::read_to_string(&path).map_err(|_| crate::storage::unavailable())?;
+    let parsed: HashMap<String, crate::chatgpt_signin::ChatGptRegistration> =
+        serde_json::from_str(&text).map_err(|_| crate::storage::unavailable())?;
+    Ok(parsed)
+}
+
+fn persist_chatgpt_registrations(
+    root: &std::path::Path,
+    workspace_id: &str,
+    registrations: &HashMap<String, crate::chatgpt_signin::ChatGptRegistration>,
+) -> Result<(), CommandError> {
+    let dir = chatgpt_provider_config_dir(root)?;
+    let path = chatgpt_registrations_path(root, workspace_id);
+    if path.symlink_metadata().is_ok() {
+        crate::storage::reject_links(&path).map_err(|_| crate::storage::unavailable())?;
+    }
+    let json = serde_json::to_string(registrations).unwrap_or_default();
+    persist_text_file_atomic(&dir, &path, &json)
+}
+
+/// Load a stored credential record from the keyring, if present
+/// and parseable. A corrupt entry is treated as absent (the next
+/// sign-in replaces it); the bytes are never logged.
+fn load_chatgpt_record(
+    resolver: &anansi_providers::keyring_resolver::KeyringSecretResolver,
+    client_id: &str,
+) -> Option<crate::chatgpt_signin::ChatGptCredentialRecord> {
+    let reference = format!("chatgpt-{client_id}");
+    let credential = anansi_providers::secrets::CredentialRef::new("chatgpt", reference);
+    let material = resolver.resolve(&credential).ok()?;
+    let anansi_providers::secrets::AuthMaterial::ApiKey(secret) = material else {
+        return None;
+    };
+    serde_json::from_slice::<crate::chatgpt_signin::ChatGptCredentialRecord>(
+        secret.expose().as_bytes(),
+    )
+    .ok()
+}
+
+fn store_chatgpt_record(
+    resolver: &anansi_providers::keyring_resolver::KeyringSecretResolver,
+    record: &crate::chatgpt_signin::ChatGptCredentialRecord,
+) -> Result<(), CommandError> {
+    let json = serde_json::to_vec(record).map_err(|_| crate::storage::unavailable())?;
+    resolver
+        .store_api_key(&record.reference(), &json)
+        .map_err(to_command_error)
+}
+
+/// The loopback callback listener for one sign-in attempt. Bound
+/// by the start op (so the port in `redirect_uri` is the bound
+/// port, never a guess) and moved here; the thread accepts until
+/// the attempt is consumed or its TTL expires, then exits. It
+/// validates the callback under the backend lock, exchanges the
+/// code with no lock held, and stores the result under the lock.
+/// The authorization code lives only in thread locals — never in
+/// backend state, files, or logs.
+fn spawn_chatgpt_callback_listener(
+    scope: CallerScope,
+    attempt_id: String,
+    listener: std::net::TcpListener,
+) {
+    std::thread::spawn(move || {
+        let _ = listener.set_nonblocking(true);
+        let deadline =
+            Instant::now() + Duration::from_secs(crate::chatgpt_signin::ATTEMPT_TTL_SECS);
+        loop {
+            match listener.accept() {
+                Ok((stream, _)) => {
+                    let consumed = chatgpt_handle_callback(&scope, &attempt_id, stream);
+                    if consumed {
+                        break;
+                    }
+                }
+                Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                    std::thread::sleep(Duration::from_millis(50));
+                    let alive = with_backend(&scope, |state| {
+                        Ok(state.chatgpt_attempts.contains_key(&attempt_id))
+                    })
+                    .unwrap_or(false);
+                    if !alive || Instant::now() > deadline {
+                        break;
+                    }
+                }
+                Err(_) => break,
+            }
+        }
+    });
+}
+
+/// Handle one callback connection. Returns true when the attempt
+/// was consumed (successfully or not) and the listener may exit.
+fn chatgpt_handle_callback(
+    scope: &CallerScope,
+    attempt_id: &str,
+    mut stream: std::net::TcpStream,
+) -> bool {
+    use std::io::{Read, Write};
+    let _ = stream.set_read_timeout(Some(Duration::from_secs(10)));
+    let mut raw = Vec::new();
+    let mut buf = [0u8; 4096];
+    loop {
+        match stream.read(&mut buf) {
+            Ok(0) => break,
+            Ok(n) => {
+                raw.extend_from_slice(&buf[..n]);
+                if raw.len() > 8192 || raw.windows(4).any(|w| w == b"\r\n\r\n") {
+                    break;
+                }
+            }
+            Err(_) => break,
+        }
+    }
+    let text = String::from_utf8_lossy(&raw);
+    let mut lines = text.lines();
+    let request_line = lines.next().unwrap_or("");
+    let mut parts = request_line.split_whitespace();
+    let (method, target) = (parts.next().unwrap_or(""), parts.next().unwrap_or(""));
+    let mut outcome = "This sign-in link is not valid. Start a new sign-in in ANANSI.".to_string();
+    let mut consumed = false;
+    if method == "GET" && target.starts_with(crate::chatgpt_signin::CALLBACK_PATH) {
+        let query = target
+            .split_once('?')
+            .map(|(_, q)| q)
+            .unwrap_or("");
+        let params: HashMap<String, String> =
+            url::form_urlencoded::parse(query.as_bytes()).into_owned().collect();
+        let (outcome_text, was_consumed) =
+            chatgpt_complete_callback(scope, attempt_id, &params);
+        outcome = outcome_text;
+        consumed = was_consumed;
+    }
+    let body = format!(
+        "<!doctype html><html><body><p>{}</p></body></html>",
+        outcome
+    );
+    let _ = stream.write_all(
+        format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            body.len(),
+            body
+        )
+        .as_bytes(),
+    );
+    let _ = stream.flush();
+    consumed
+}
+
+/// Validate one callback against its pending attempt and, when it
+/// carries a code, exchange it. Returns the page text and whether
+/// the attempt was consumed. The code is taken out of the attempt
+/// under the lock and exchanged from locals; no lock is held
+/// across the network calls.
+fn chatgpt_complete_callback(
+    scope: &CallerScope,
+    attempt_id: &str,
+    params: &HashMap<String, String>,
+) -> (String, bool) {
+    use crate::chatgpt_signin::ChatGptError as E;
+    // Take the attempt data out under the lock: validate state,
+    // single-use, and the client ID, then mark consumed.
+    struct Taken {
+        client_id: String,
+        nonce: String,
+        verifier: String,
+        redirect_uri: String,
+        ext_agent_host_id: String,
+        code: String,
+        issued_client_id: String,
+    }
+    let taken = with_backend(scope, |state| {
+        let Some(attempt) = state.chatgpt_attempts.get_mut(attempt_id) else {
+            return Err(invalid("This sign-in attempt has expired. Start a new sign-in."));
+        };
+        if attempt.consumed {
+            return Err(invalid("This sign-in reply was already used. Start a new sign-in."));
+        }
+        let state_ok = params
+            .get("state")
+            .map(|s| constant_time_eq(s, &attempt.state))
+            .unwrap_or(false);
+        if !state_ok {
+            attempt.consumed = true;
+            attempt.status = ChatGptAttemptStatus::Failed("state".to_string());
+            return Err(invalid(
+                "The sign-in reply does not match this attempt. Start a new sign-in.",
+            ));
+        }
+        if let Some(error) = params.get("error") {
+            attempt.consumed = true;
+            attempt.status = ChatGptAttemptStatus::Failed(if error == "access_denied" {
+                "denied".to_string()
+            } else {
+                "error".to_string()
+            });
+            if error == "access_denied" {
+                return Err(invalid("ChatGPT sign-in was declined. Nothing was connected."));
+            }
+            return Err(invalid("ChatGPT sign-in failed. Start a new sign-in."));
+        }
+        let code = params.get("code").cloned().unwrap_or_default();
+        if code.is_empty() {
+            attempt.consumed = true;
+            attempt.status = ChatGptAttemptStatus::Failed("missing-code".to_string());
+            return Err(invalid("The sign-in reply carried no code. Start a new sign-in."));
+        }
+        // Client ID: a new registration must supply one; a
+        // reauthorization may omit it (retain the attempt's) but
+        // must never supply a different one.
+        let issued_client_id = match params.get("client_id") {
+            Some(supplied) if attempt.client_id == crate::chatgpt_signin::DYNAMIC_CLIENT_ID => {
+                supplied.clone()
+            }
+            Some(supplied) if supplied == &attempt.client_id => attempt.client_id.clone(),
+            Some(_) => {
+                attempt.consumed = true;
+                attempt.status = ChatGptAttemptStatus::Failed("client-id".to_string());
+                return Err(invalid(
+                    "The sign-in reply belongs to a different registration.",
+                ));
+            }
+            None if attempt.client_id == crate::chatgpt_signin::DYNAMIC_CLIENT_ID => {
+                attempt.consumed = true;
+                attempt.status = ChatGptAttemptStatus::Failed("missing-client-id".to_string());
+                return Err(invalid(
+                    "Registration did not return an issued client ID.",
+                ));
+            }
+            None => attempt.client_id.clone(),
+            _ => unreachable!(),
+        };
+        if issued_client_id == crate::chatgpt_signin::DYNAMIC_CLIENT_ID {
+            attempt.consumed = true;
+            attempt.status = ChatGptAttemptStatus::Failed("missing-client-id".to_string());
+            return Err(invalid(
+                "Registration did not return an issued client ID.",
+            ));
+        }
+        attempt.consumed = true;
+        attempt.status = ChatGptAttemptStatus::CallbackReceived;
+        Ok(Taken {
+            client_id: attempt.client_id.clone(),
+            nonce: attempt.nonce.clone(),
+            verifier: attempt.verifier.clone(),
+            redirect_uri: attempt.redirect_uri.clone(),
+            ext_agent_host_id: attempt.ext_agent_host_id.clone(),
+            code,
+            issued_client_id,
+        })
+    });
+    let taken = match taken {
+        Ok(taken) => taken,
+        Err(e) => return (e.message, true),
+    };
+    let _ = taken.client_id;
+    // Exchange with no lock held.
+    let result = (|| -> Result<crate::chatgpt_signin::ChatGptCredentialRecord, E> {
+        let endpoints = crate::chatgpt_signin::resolve_endpoints()?;
+        let tokens = crate::chatgpt_signin::exchange_authorization_code(
+            &endpoints,
+            &taken.issued_client_id,
+            &taken.code,
+            &taken.verifier,
+            &taken.redirect_uri,
+        )?;
+        let Some(id_token) = &tokens.id_token else {
+            return Err(E::InvalidToken("missing".to_string()));
+        };
+        let jwks = crate::chatgpt_signin::fetch_jwks(&endpoints)?;
+        let identity = crate::chatgpt_signin::validate_id_token(
+            id_token,
+            endpoints.expected_issuer(),
+            &taken.issued_client_id,
+            Some(&taken.nonce),
+            None,
+            &jwks,
+        )?;
+        Ok(crate::chatgpt_signin::ChatGptCredentialRecord {
+            email: identity.email,
+            subject: identity.subject,
+            issuer: endpoints.expected_issuer().to_string(),
+            client_id: taken.issued_client_id.clone(),
+            ext_agent_host_id: taken.ext_agent_host_id.clone(),
+            id_token: Some(id_token.clone()),
+            access_token: tokens.access_token.clone(),
+            refresh_token: tokens.refresh_token.clone(),
+            token_type: "Bearer".to_string(),
+            expires_in: tokens.expires_in,
+            scopes: tokens.scopes.clone(),
+            saved_at_ms: crate::chatgpt_signin::now_unix_ms(),
+        })
+    })();
+    // Store the result under the lock.
+    match result {
+        Ok(record) => {
+            let plan_usage = record.plan_usage();
+            let stored = (|| -> Result<(), CommandError> {
+                let resolver = shared_chatgpt_resolver();
+                store_chatgpt_record(&resolver, &record)?;
+                if let (Some(root), Some(wid)) = (&scope.storage_root, &scope.logical_workspace) {
+                    let mut registrations = load_chatgpt_registrations(root, wid)?;
+                    registrations.insert(
+                        record.client_id.clone(),
+                        crate::chatgpt_signin::ChatGptRegistration {
+                            email: record.email.clone(),
+                            subject: record.subject.clone(),
+                            plan_usage,
+                            last_verified_ms: crate::chatgpt_signin::now_unix_ms(),
+                        },
+                    );
+                    persist_chatgpt_registrations(root, wid, &registrations)?;
+                }
+                Ok(())
+            })();
+            match stored {
+                Ok(()) => {
+                    let _ = with_backend(scope, |state| {
+                        if let Some(attempt) = state.chatgpt_attempts.get_mut(attempt_id) {
+                            attempt.status = ChatGptAttemptStatus::Succeeded;
+                        }
+                        Ok(())
+                    });
+                    if plan_usage {
+                        (
+                            "Signed in with ChatGPT. You can close this tab and return to ANANSI."
+                                .to_string(),
+                            true,
+                        )
+                    } else {
+                        (
+                            "Signed in with ChatGPT (identity only — ChatGPT plan usage was not granted). You can close this tab and return to ANANSI."
+                                .to_string(),
+                            true,
+                        )
+                    }
+                }
+                Err(e) => {
+                    let _ = with_backend(scope, |state| {
+                        if let Some(attempt) = state.chatgpt_attempts.get_mut(attempt_id) {
+                            attempt.status =
+                                ChatGptAttemptStatus::Failed("store".to_string());
+                        }
+                        Ok(())
+                    });
+                    (e.message, true)
+                }
+            }
+        }
+        Err(e) => {
+            let reason = match &e {
+                E::InvalidToken(r) => format!("token-{r}"),
+                E::InvalidGrant => "grant".to_string(),
+                E::Network(_) => "network".to_string(),
+                _ => "exchange".to_string(),
+            };
+            let _ = with_backend(scope, |state| {
+                if let Some(attempt) = state.chatgpt_attempts.get_mut(attempt_id) {
+                    attempt.status = ChatGptAttemptStatus::Failed(reason);
+                }
+                Ok(())
+            });
+            (e.message(), true)
+        }
+    }
 }
 
 fn production_runtime(
@@ -2425,6 +3019,351 @@ pub fn providers_command(
                     orphaned_credentials,
                     budget: config.budget,
                 })
+            })
+        }
+        "chatgpt-signin-start" => {
+            let req: ChatGptSigninStartRequest = parse(value, "chatgpt sign-in start")?;
+            require_contract_v1(req.contract_version)?;
+            if let Some(id) = &req.client_id {
+                if id.is_empty()
+                    || id.len() > 128
+                    || id.chars().any(|c| c.is_control() || c.is_whitespace())
+                {
+                    return Err(invalid("Name a saved ChatGPT account to re-authorize."));
+                }
+            }
+            // Owner-only: starting a sign-in opens the system
+            // browser and mints host-side state; a browser must
+            // not initiate host-only login.
+            with_backend(scope, |state| require_owner_recording(state, scope))?;
+            let endpoints =
+                crate::chatgpt_signin::resolve_endpoints().map_err(chatgpt_error_to_command)?;
+            let root = scope
+                .storage_root
+                .clone()
+                .ok_or_else(crate::storage::unavailable)?;
+            let wid = scope
+                .logical_workspace
+                .clone()
+                .ok_or_else(|| invalid("A workspaceId is required."))?;
+            let host_id = load_or_create_host_id(&root)?;
+            let registrations = load_chatgpt_registrations(&root, &wid)?;
+            let (client_id, agent_name_hint, id_token_hint, login_hint) = match &req.client_id {
+                Some(id) => {
+                    let reg = registrations.get(id).ok_or_else(|| {
+                        invalid("No saved ChatGPT account with that client ID.")
+                    })?;
+                    let resolver = shared_chatgpt_resolver();
+                    let hint = load_chatgpt_record(&resolver, id).and_then(|r| r.id_token);
+                    (id.clone(), None, hint, reg.email.clone())
+                }
+                None => (
+                    crate::chatgpt_signin::DYNAMIC_CLIENT_ID.to_string(),
+                    Some(crate::chatgpt_signin::AGENT_NAME_HINT.to_string()),
+                    None,
+                    None,
+                ),
+            };
+            let state = crate::chatgpt_signin::new_random_value();
+            let nonce = crate::chatgpt_signin::new_random_value();
+            let verifier = crate::chatgpt_signin::new_pkce_verifier();
+            let challenge = crate::chatgpt_signin::pkce_challenge(&verifier);
+            // Bind the loopback listener BEFORE the URL is
+            // returned, so the port in `redirect_uri` is the
+            // bound port, never a guess.
+            let listener =
+                std::net::TcpListener::bind("127.0.0.1:0").map_err(|_| crate::storage::unavailable())?;
+            let port = listener
+                .local_addr()
+                .map_err(|_| crate::storage::unavailable())?
+                .port();
+            let redirect_uri = crate::chatgpt_signin::redirect_uri_for_port(port);
+            let attempt_id = random_capability("chatgpt-attempt-");
+            let attempt = ChatGptAttempt {
+                id: attempt_id.clone(),
+                client_id: client_id.clone(),
+                state: state.clone(),
+                nonce: nonce.clone(),
+                verifier: verifier.clone(),
+                redirect_uri: redirect_uri.clone(),
+                ext_agent_host_id: host_id.clone(),
+                created: Instant::now(),
+                consumed: false,
+                status: ChatGptAttemptStatus::Pending,
+            };
+            with_backend(scope, |state| {
+                state.chatgpt_attempts.insert(attempt_id.clone(), attempt);
+                Ok(())
+            })?;
+            let authorization_url = crate::chatgpt_signin::build_authorization_url(
+                &endpoints,
+                &crate::chatgpt_signin::AuthorizationRequest {
+                    client_id,
+                    agent_name_hint,
+                    ext_agent_host_id: host_id,
+                    id_token_hint,
+                    login_hint,
+                    redirect_uri: redirect_uri.clone(),
+                    scope: crate::chatgpt_signin::full_scope(),
+                    state,
+                    nonce,
+                    code_challenge: challenge,
+                },
+            );
+            spawn_chatgpt_callback_listener(scope.clone(), attempt_id.clone(), listener);
+            to_value(&ChatGptSigninStartResponse {
+                contract_version: 1,
+                attempt_id,
+                authorization_url,
+                redirect_uri,
+                expires_in_seconds: crate::chatgpt_signin::ATTEMPT_TTL_SECS,
+            })
+        }
+        "chatgpt-signin-status" => {
+            let req: ChatGptSigninAccountRequest = parse(value, "chatgpt sign-in status")?;
+            require_contract_v1(req.contract_version)?;
+            // Browser-readable (labels only), like
+            // providers-status: no owner check. No token ever
+            // leaves the keyring.
+            let registrations = match (&scope.storage_root, &scope.logical_workspace) {
+                (Some(root), Some(wid)) => {
+                    load_chatgpt_registrations(root, wid).unwrap_or_default()
+                }
+                _ => HashMap::new(),
+            };
+            let resolver = shared_chatgpt_resolver();
+            let now_ms = crate::chatgpt_signin::now_unix_ms();
+            let mut accounts = Vec::new();
+            let mut signed_in = false;
+            let mut email = None;
+            let mut plan_usage = false;
+            let mut plan_usage_reason = None;
+            let mut expires_at_ms = None;
+            for (client_id, reg) in &registrations {
+                accounts.push(ChatGptSigninAccount {
+                    client_id: client_id.clone(),
+                    email: reg.email.clone(),
+                    plan_usage: reg.plan_usage,
+                });
+                if let Some(record) = load_chatgpt_record(&resolver, client_id) {
+                    // The record with the latest expiry is the
+                    // active one when several accounts are saved.
+                    if expires_at_ms
+                        .map(|e| record.expires_at_ms() > e)
+                        .unwrap_or(true)
+                    {
+                        signed_in = !record.access_expired(now_ms);
+                        email = record.email.clone();
+                        plan_usage = record.plan_usage();
+                        plan_usage_reason = if record.access_expired(now_ms) {
+                            Some("expired".to_string())
+                        } else if !plan_usage {
+                            Some("scope_missing".to_string())
+                        } else {
+                            None
+                        };
+                        expires_at_ms = Some(record.expires_at_ms());
+                    }
+                }
+            }
+            accounts.sort_by(|a, b| a.client_id.cmp(&b.client_id));
+            // The latest attempt (any status) so the UI can show
+            // the outcome of a finished sign-in.
+            let pending_attempt = with_backend(scope, |state| {
+                Ok(state
+                    .chatgpt_attempts
+                    .values()
+                    .max_by_key(|a| a.created)
+                    .map(|a| {
+                        let (status, reason) = match &a.status {
+                            ChatGptAttemptStatus::Pending => {
+                                ("pending".to_string(), None)
+                            }
+                            ChatGptAttemptStatus::CallbackReceived => {
+                                ("callback_received".to_string(), None)
+                            }
+                            ChatGptAttemptStatus::Succeeded => {
+                                ("succeeded".to_string(), None)
+                            }
+                            ChatGptAttemptStatus::Failed(r) => {
+                                ("failed".to_string(), Some(r.clone()))
+                            }
+                        };
+                        ChatGptSigninAttemptStatus {
+                            attempt_id: a.id.clone(),
+                            status,
+                            reason,
+                        }
+                    }))
+            })?;
+            to_value(&ChatGptSigninStatusResponse {
+                contract_version: 1,
+                signed_in,
+                email,
+                plan_usage,
+                plan_usage_reason,
+                expires_at_ms,
+                accounts,
+                pending_attempt,
+            })
+        }
+        "chatgpt-signin-refresh" => {
+            let req: ChatGptSigninAccountRequest = parse(value, "chatgpt sign-in refresh")?;
+            require_contract_v1(req.contract_version)?;
+            with_backend(scope, |state| require_owner_recording(state, scope))?;
+            let root = scope
+                .storage_root
+                .clone()
+                .ok_or_else(crate::storage::unavailable)?;
+            let wid = scope
+                .logical_workspace
+                .clone()
+                .ok_or_else(|| invalid("A workspaceId is required."))?;
+            let registrations = load_chatgpt_registrations(&root, &wid)?;
+            let client_id = match &req.client_id {
+                Some(id) => id.clone(),
+                None => registrations
+                    .keys()
+                    .next()
+                    .cloned()
+                    .ok_or_else(|| invalid("No ChatGPT account is signed in."))?,
+            };
+            let resolver = shared_chatgpt_resolver();
+            let record = load_chatgpt_record(&resolver, &client_id)
+                .ok_or_else(|| invalid("No ChatGPT account is signed in."))?;
+            let now_ms = crate::chatgpt_signin::now_unix_ms();
+            if !record.needs_refresh(now_ms) {
+                return to_value(&ChatGptSigninRefreshResponse {
+                    contract_version: 1,
+                    refreshed: false,
+                    expires_at_ms: Some(record.expires_at_ms()),
+                });
+            }
+            let Some(refresh_token) = record.refresh_token.clone() else {
+                return Err(invalid(
+                    "This ChatGPT session has no refresh token. Sign in again.",
+                ));
+            };
+            // Serialize: a second concurrent refresh is refused
+            // so two callers cannot race a rotating refresh token.
+            with_backend(scope, |state| {
+                if state.chatgpt_refresh_in_flight {
+                    return Err(invalid("A ChatGPT refresh is already running."));
+                }
+                state.chatgpt_refresh_in_flight = true;
+                Ok(())
+            })?;
+            let outcome = (|| -> Result<
+                crate::chatgpt_signin::TokenResponse,
+                crate::chatgpt_signin::ChatGptError,
+            > {
+                let endpoints = crate::chatgpt_signin::resolve_endpoints()?;
+                let tokens = crate::chatgpt_signin::refresh_access_token(
+                    &endpoints,
+                    &record.client_id,
+                    &refresh_token,
+                )?;
+                if let Some(id_token) = &tokens.id_token {
+                    let jwks = crate::chatgpt_signin::fetch_jwks(&endpoints)?;
+                    crate::chatgpt_signin::validate_id_token(
+                        id_token,
+                        endpoints.expected_issuer(),
+                        &record.client_id,
+                        None,
+                        Some(&record.subject),
+                        &jwks,
+                    )?;
+                }
+                Ok(tokens)
+            })();
+            // Always clear the in-flight flag.
+            let _ = with_backend(scope, |state| {
+                state.chatgpt_refresh_in_flight = false;
+                Ok(())
+            });
+            match outcome {
+                Ok(tokens) => {
+                    let mut new_record = record.clone();
+                    new_record.access_token = tokens.access_token;
+                    new_record.refresh_token = tokens.refresh_token.or(record.refresh_token);
+                    new_record.id_token = tokens.id_token.or(record.id_token);
+                    new_record.expires_in = tokens.expires_in;
+                    new_record.scopes = tokens.scopes;
+                    new_record.saved_at_ms = crate::chatgpt_signin::now_unix_ms();
+                    store_chatgpt_record(&resolver, &new_record)?;
+                    let mut registrations = load_chatgpt_registrations(&root, &wid)?;
+                    if let Some(reg) = registrations.get_mut(&client_id) {
+                        reg.plan_usage = new_record.plan_usage();
+                        reg.last_verified_ms = crate::chatgpt_signin::now_unix_ms();
+                        persist_chatgpt_registrations(&root, &wid, &registrations)?;
+                    }
+                    to_value(&ChatGptSigninRefreshResponse {
+                        contract_version: 1,
+                        refreshed: true,
+                        expires_at_ms: Some(new_record.expires_at_ms()),
+                    })
+                }
+                Err(crate::chatgpt_signin::ChatGptError::InvalidGrant) => {
+                    // Unusable refresh token: clear the record
+                    // (the docs' rule) and report that a fresh
+                    // sign-in is needed. The registration stub
+                    // survives, so re-sign-in reuses the issued
+                    // client ID.
+                    let _ = resolver.delete(&record.reference());
+                    Err(invalid("The ChatGPT session ended. Sign in again."))
+                }
+                Err(e) => Err(chatgpt_error_to_command(e)),
+            }
+        }
+        "chatgpt-signin-disconnect" => {
+            let req: ChatGptSigninAccountRequest = parse(value, "chatgpt sign-in disconnect")?;
+            require_contract_v1(req.contract_version)?;
+            with_backend(scope, |state| require_owner_recording(state, scope))?;
+            let root = scope
+                .storage_root
+                .clone()
+                .ok_or_else(crate::storage::unavailable)?;
+            let wid = scope
+                .logical_workspace
+                .clone()
+                .ok_or_else(|| invalid("A workspaceId is required."))?;
+            let registrations = load_chatgpt_registrations(&root, &wid)?;
+            let client_id = match &req.client_id {
+                Some(id) => id.clone(),
+                None => registrations
+                    .keys()
+                    .next()
+                    .cloned()
+                    .ok_or_else(|| invalid("No ChatGPT account is signed in."))?,
+            };
+            let resolver = shared_chatgpt_resolver();
+            let record = load_chatgpt_record(&resolver, &client_id);
+            let mut confirmed = false;
+            if let Some(record) = &record
+                && let Some(refresh_token) = &record.refresh_token
+            {
+                let endpoints =
+                    crate::chatgpt_signin::resolve_endpoints().map_err(chatgpt_error_to_command)?;
+                confirmed = crate::chatgpt_signin::revoke_refresh_token(
+                    &endpoints,
+                    &record.client_id,
+                    refresh_token,
+                )
+                .unwrap_or(false);
+            }
+            // Local tokens are cleared whether or not revocation
+            // was confirmed; an unconfirmed revocation is
+            // reported, not hidden.
+            let _ = resolver.delete(&format!("chatgpt-{client_id}"));
+            let mut registrations = load_chatgpt_registrations(&root, &wid)?;
+            if let Some(reg) = registrations.get_mut(&client_id) {
+                reg.plan_usage = false;
+                persist_chatgpt_registrations(&root, &wid, &registrations)?;
+            }
+            to_value(&ChatGptSigninDisconnectResponse {
+                contract_version: 1,
+                disconnected: true,
+                remote_revocation_confirmed: confirmed,
             })
         }
         _ => Err(CommandError::new(

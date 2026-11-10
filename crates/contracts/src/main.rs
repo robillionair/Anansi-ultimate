@@ -41,6 +41,8 @@ use anansi_core::opportunities::{
     OpportunityConcept, OpportunitySet, OpportunitySourceRecord, SuppliedSourceInput,
 };
 use anansi_core::provider_dispatch::{
+    ChatGptSigninAccountRequest, ChatGptSigninDisconnectResponse, ChatGptSigninRefreshResponse,
+    ChatGptSigninStartRequest, ChatGptSigninStartResponse, ChatGptSigninStatusResponse,
     ProviderAuthorizeRequest, ProviderAuthorizeResponse, ProviderCatalogResponse,
     ProviderConfigureAddRequest, ProviderConfigureAddResponse, ProviderConfigureRequest,
     ProviderConfigureResponse, ProviderCredentialReferenceRequest,
@@ -109,6 +111,12 @@ fn main() {
         "ProviderCredentialReferenceRequest":schemars::schema_for!(ProviderCredentialReferenceRequest),
         "ProviderCredentialReferenceResponse":schemars::schema_for!(ProviderCredentialReferenceResponse),
         "ProviderStatusResponse":schemars::schema_for!(ProviderStatusResponse),
+        "ChatGptSigninStartRequest":schemars::schema_for!(ChatGptSigninStartRequest),
+        "ChatGptSigninStartResponse":schemars::schema_for!(ChatGptSigninStartResponse),
+        "ChatGptSigninAccountRequest":schemars::schema_for!(ChatGptSigninAccountRequest),
+        "ChatGptSigninStatusResponse":schemars::schema_for!(ChatGptSigninStatusResponse),
+        "ChatGptSigninRefreshResponse":schemars::schema_for!(ChatGptSigninRefreshResponse),
+        "ChatGptSigninDisconnectResponse":schemars::schema_for!(ChatGptSigninDisconnectResponse),
         "ProviderAuthorizeRequest":schemars::schema_for!(ProviderAuthorizeRequest),
         "ProviderAuthorizeResponse":schemars::schema_for!(ProviderAuthorizeResponse),
         "ProviderDispatchRequest":schemars::schema_for!(ProviderDispatchRequest),

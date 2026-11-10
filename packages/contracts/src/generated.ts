@@ -440,6 +440,68 @@ export interface BranchChanges {
   priceAmount?: number | null;
 }
 /**
+ * Workspace (+ optional account) for the ChatGPT status,
+ * refresh, and disconnect operations.
+ */
+export interface ChatGptSigninAccountRequest {
+  clientId?: string | null;
+  contractVersion?: number;
+  workspaceId: string;
+}
+export interface ChatGptSigninDisconnectResponse {
+  contractVersion: number;
+  disconnected: boolean;
+  remoteRevocationConfirmed: boolean;
+}
+export interface ChatGptSigninRefreshResponse {
+  contractVersion: number;
+  expiresAtMs?: number | null;
+  refreshed: boolean;
+}
+/**
+ * "Continue with ChatGPT" sign-in (spike): start a host-side
+ * sign-in attempt. `client_id` names a saved registration to
+ * re-authorize; absent means first-time dynamic registration.
+ */
+export interface ChatGptSigninStartRequest {
+  clientId?: string | null;
+  contractVersion?: number;
+  workspaceId: string;
+}
+export interface ChatGptSigninStartResponse {
+  attemptId: string;
+  authorizationUrl: string;
+  contractVersion: number;
+  expiresInSeconds: number;
+  redirectUri: string;
+}
+export interface ChatGptSigninStatusResponse {
+  accounts: ChatGptSigninAccount[];
+  contractVersion: number;
+  email?: string | null;
+  expiresAtMs?: number | null;
+  pendingAttempt?: ChatGptSigninAttemptStatus | null;
+  planUsage: boolean;
+  planUsageReason?: string | null;
+  signedIn: boolean;
+}
+/**
+ * One saved ChatGPT account (labels only — never tokens).
+ */
+export interface ChatGptSigninAccount {
+  clientId: string;
+  email?: string | null;
+  planUsage: boolean;
+}
+/**
+ * A sign-in attempt as a browser may see it (labels only).
+ */
+export interface ChatGptSigninAttemptStatus {
+  attemptId: string;
+  reason?: string | null;
+  status: string;
+}
+/**
  * One proposed combination or architecture (§25 stage 4).
  */
 export interface ColliderCombination {

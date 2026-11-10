@@ -32,6 +32,7 @@ pub mod pipeline;
 pub mod privacy;
 pub mod provider_credentials;
 pub mod provider_dispatch;
+pub mod chatgpt_signin;
 pub mod relationships;
 pub mod restore;
 pub mod search;

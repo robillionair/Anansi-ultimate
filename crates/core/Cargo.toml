@@ -24,6 +24,11 @@ url = "=2.5.8"
 rustls = { version = "=0.23.46", default-features = false, features = ["ring", "std", "tls12"] }
 rustls-pki-types = "=1.15.1"
 webpki-roots = "=1.0.10"
+# ChatGPT sign-in spike: RS256 ID-token verification against the
+# issuer JWKS (ring) + base64url for PKCE/JWT (base64). Both
+# versions are already in Cargo.lock via other crates.
+ring = "=0.17.14"
+base64 = "=0.22.1"
 chacha20poly1305 = { version = "=0.11.0", default-features = false, features = ["alloc", "zeroize"] }
 zeroize = { version = "=1.9.1", features = ["derive"] }
 pdf-extract = "=0.12.1"
@@ -53,3 +58,7 @@ tempfile = "=3.27.0"
 sha2 = "=0.10.9"
 # Synthetic HTTPS servers: test-only certificates.
 rcgen = "=0.13.2"
+# ChatGPT sign-in spike: the synthetic issuer signs ID tokens
+# with a test RSA key (ring) and builds JWTs/JWKS with base64url.
+ring = "=0.17.14"
+base64 = "=0.22.1"
