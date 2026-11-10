@@ -1433,13 +1433,13 @@ fn spawn_chatgpt_callback_listener(
         let _ = listener.set_nonblocking(true);
         let deadline =
             Instant::now() + Duration::from_secs(crate::chatgpt_signin::ATTEMPT_TTL_SECS);
+        // Stay up until the attempt expires: a replayed callback
+        // arriving after the first must still get the "already
+        // used" page rather than a refused connection.
         loop {
             match listener.accept() {
                 Ok((stream, _)) => {
-                    let consumed = chatgpt_handle_callback(&scope, &attempt_id, stream);
-                    if consumed {
-                        break;
-                    }
+                    chatgpt_handle_callback(&scope, &attempt_id, stream);
                 }
                 Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                     std::thread::sleep(Duration::from_millis(50));
