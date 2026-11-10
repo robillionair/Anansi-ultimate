@@ -2,7 +2,8 @@
 
 Branch: `muse/connect-ai-chatgpt-signin-spike`
 Base: Connect AI verification repair `54347381ffa2f8c8f9e4a869f0a120e095a3672c`
-Tip: `79c4dd61889b5a4246a6ede58052360408c6c490`
+Tip: the handoff commit on this branch (exact SHA in the delivery
+message); last code commit `79c4dd61889b5a4246a6ede58052360408c6c490`
 Date: 2026-11-10 (Linux evidence only — **WINDOWS REVIEW OUTSTANDING**)
 Design (committed before implementation): `docs/handoffs/connect-ai-chatgpt-signin-design.md`
 (`ddc51873e`, AC-S1..S12)
@@ -253,8 +254,9 @@ version pinning, verification) is unverified — the page assumes
 
 ## 7. Windows rerun checklist
 
-1. Apply the bundle ZIP on Windows; confirm the tip
-   `79c4dd61889b5a4246a6ede58052360408c6c490` and a clean tree.
+1. Apply the bundle ZIP on Windows; confirm the tip stated in the
+   delivery message (handoff commit; last code commit
+   `79c4dd61889b5a4246a6ede58052360408c6c490`) and a clean tree.
 2. Run the Rust battery: `cargo test --locked --workspace --lib`
    (expect 366), `--test provider_dispatch` (39/39),
    `--test chatgpt_signin` (21/21).
