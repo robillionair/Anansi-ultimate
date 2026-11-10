@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type {
+  ChatGptSigninStatusResponse,
   Client,
   CompletionRequest,
   DisclosureRecord,
@@ -121,6 +122,8 @@ export function Providers({ client, workspaceId }: { client: Client; workspaceId
   // Connected providers (backend-owned status: credential stored
   // vs verified in this session, plus the surviving budget).
   const [connected, setConnected] = useState<ProviderStatusResponse | null>(null);
+  // ChatGPT sign-in prototype status (dev-gated; null until loaded).
+  const [chatgpt, setChatgpt] = useState<ChatGptSigninStatusResponse | null>(null);
   // Unused-credential removal (orphaned setup keys).
   const [orphanBusy, setOrphanBusy] = useState('');
   const [orphanNote, setOrphanNote] = useState('');
@@ -184,6 +187,9 @@ export function Providers({ client, workspaceId }: { client: Client; workspaceId
     void refreshUsage();
     void refreshAccess();
     void refreshConnected();
+    // Prototype status is fetched only behind the dev gate; no
+    // production render makes the call.
+    if (chatGptSigninDevEnabled()) void refreshChatGpt();
     return () => {
       live = false;
     };
@@ -211,6 +217,16 @@ export function Providers({ client, workspaceId }: { client: Client; workspaceId
       setConnected(await client.providersStatus(workspaceId));
     } catch {
       setConnected(null);
+    }
+  }
+
+  async function refreshChatGpt() {
+    try {
+      // Labels only, no owner check — same boundary as the
+      // connected-providers status above.
+      setChatgpt(await client.chatgptSigninStatus(workspaceId));
+    } catch {
+      setChatgpt(null);
     }
   }
 
@@ -1077,7 +1093,53 @@ export function Providers({ client, workspaceId }: { client: Client; workspaceId
           Refresh session access
         </button>
       </section>
+
+      <ChatGptSigninPrototype status={chatgpt} />
     </div>
+  );
+}
+
+/** "Continue with ChatGPT" prototype (spike, AC-S10): the section
+ * renders ONLY when the development flag
+ * `__ANANSI_CHATGPT_SIGNIN_DEV__` is true. No production code path
+ * sets it, so no build ships this section. Sign-in is DISABLED
+ * here: live eligibility and authorization have not been verified,
+ * so the section shows status labels only and its button is
+ * disabled. */
+export function chatGptSigninDevEnabled(): boolean {
+  return (
+    (globalThis as unknown as Record<string, unknown>).__ANANSI_CHATGPT_SIGNIN_DEV__ === true
+  );
+}
+
+export function ChatGptSigninPrototype({ status }: { status: ChatGptSigninStatusResponse | null }) {
+  if (!chatGptSigninDevEnabled()) return null;
+  return (
+    <section className="card" aria-labelledby="chatgpt-signin-title">
+      <h2 id="chatgpt-signin-title">Continue with ChatGPT (prototype)</h2>
+      <p>
+        Development prototype only. Live sign-in is not yet available:
+        OpenAI eligibility has not been verified, so sign-in stays
+        disabled and this section shows status labels only.
+      </p>
+      {!status ? (
+        <p>No ChatGPT sign-in status available.</p>
+      ) : !status.signedIn ? (
+        <p>No ChatGPT account signed in.</p>
+      ) : (
+        <ul>
+          {status.accounts.map((a) => (
+            <li key={a.clientId}>
+              {a.email ?? 'ChatGPT account'} — ChatGPT plan usage: {a.planUsage ? 'enabled' : 'disabled'}
+            </li>
+          ))}
+        </ul>
+      )}
+      {status?.planUsageReason && <p>{status.planUsageReason}</p>}
+      <button type="button" disabled>
+        Continue with ChatGPT
+      </button>
+    </section>
   );
 }
 

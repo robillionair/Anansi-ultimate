@@ -48,8 +48,11 @@ pub const PLAN_SCOPE: &str = "chatgpt.tokens.use.direct";
 /// Identity scopes (sign-in without plan usage).
 pub const IDENTITY_SCOPES: [&str; 3] = ["openid", "profile", "email"];
 /// Plan-usage scopes, in addition to the identity scopes.
-pub const PLAN_SCOPES: [&str; 3] =
-    ["offline_access", "resource.invoke", "chatgpt.tokens.use.direct"];
+pub const PLAN_SCOPES: [&str; 3] = [
+    "offline_access",
+    "resource.invoke",
+    "chatgpt.tokens.use.direct",
+];
 /// The resource the access token is bound to.
 pub const RESOURCE: &str = "https://api.openai.com/v1";
 /// `agent_name_hint` — the app's actual name, used consistently.
@@ -288,10 +291,7 @@ pub fn full_scope() -> String {
     scopes.join(" ")
 }
 
-pub fn build_authorization_url(
-    endpoints: &ChatGptEndpoints,
-    req: &AuthorizationRequest,
-) -> String {
+pub fn build_authorization_url(endpoints: &ChatGptEndpoints, req: &AuthorizationRequest) -> String {
     let mut q = url::form_urlencoded::Serializer::new(String::new());
     q.append_pair("client_id", &req.client_id);
     if let Some(hint) = &req.agent_name_hint {
@@ -342,13 +342,16 @@ impl TokenResponse {
 }
 
 fn parse_token_response(body: &[u8]) -> Result<TokenResponse, ChatGptError> {
-    let value: serde_json::Value = serde_json::from_slice(body)
-        .map_err(|_| ChatGptError::Network("The token endpoint returned an unreadable response.".to_string()))?;
+    let value: serde_json::Value = serde_json::from_slice(body).map_err(|_| {
+        ChatGptError::Network("The token endpoint returned an unreadable response.".to_string())
+    })?;
     let access_token = value
         .get("access_token")
         .and_then(|v| v.as_str())
         .filter(|s| !s.is_empty())
-        .ok_or_else(|| ChatGptError::Network("The token endpoint returned no access token.".to_string()))?
+        .ok_or_else(|| {
+            ChatGptError::Network("The token endpoint returned no access token.".to_string())
+        })?
         .to_string();
     let token_type = value
         .get("token_type")
@@ -466,17 +469,13 @@ fn post_form(
     Ok((status, bytes))
 }
 
-fn get_json(
-    endpoints: &ChatGptEndpoints,
-    url: &str,
-) -> Result<serde_json::Value, ChatGptError> {
+fn get_json(endpoints: &ChatGptEndpoints, url: &str) -> Result<serde_json::Value, ChatGptError> {
     let base = endpoints.validated_base()?;
     // The URL is always an issuer URL (discovery / JWKS); split it
     // into the validated base + path so the transport only ever
     // talks to the validated endpoint.
-    let parsed = url::Url::parse(url).map_err(|_| {
-        ChatGptError::Network("The issuer returned an unusable URL.".to_string())
-    })?;
+    let parsed = url::Url::parse(url)
+        .map_err(|_| ChatGptError::Network("The issuer returned an unusable URL.".to_string()))?;
     if parsed.origin().ascii_serialization() != base.origin() {
         return Err(ChatGptError::Network(
             "The issuer pointed at a different origin.".to_string(),
@@ -631,7 +630,7 @@ pub fn parse_jwks(value: &serde_json::Value) -> Result<Jwks, ChatGptError> {
     for key in keys {
         let kty = key.get("kty").and_then(|v| v.as_str()).unwrap_or("");
         let alg = key.get("alg").and_then(|v| v.as_str()).unwrap_or("");
-        if kty != "RSA" || ( !alg.is_empty() && alg != "RS256") {
+        if kty != "RSA" || (!alg.is_empty() && alg != "RS256") {
             continue;
         }
         let kid = key
@@ -649,12 +648,10 @@ pub fn parse_jwks(value: &serde_json::Value) -> Result<Jwks, ChatGptError> {
             .ok_or_else(|| ChatGptError::Network("The JWKS key has no exponent.".to_string()))?;
         out.push(Jwk {
             kid,
-            n: base64url_decode(n).map_err(|_| {
-                ChatGptError::Network("The JWKS key is unreadable.".to_string())
-            })?,
-            e: base64url_decode(e).map_err(|_| {
-                ChatGptError::Network("The JWKS key is unreadable.".to_string())
-            })?,
+            n: base64url_decode(n)
+                .map_err(|_| ChatGptError::Network("The JWKS key is unreadable.".to_string()))?,
+            e: base64url_decode(e)
+                .map_err(|_| ChatGptError::Network("The JWKS key is unreadable.".to_string()))?,
         });
     }
     if out.is_empty() {
@@ -728,18 +725,15 @@ pub fn validate_id_token(
         .map_err(|_| ChatGptError::InvalidToken("payload".to_string()))?;
     let claims: serde_json::Value = serde_json::from_slice(&payload_bytes)
         .map_err(|_| ChatGptError::InvalidToken("payload".to_string()))?;
-    let issuer = claims
-        .get("iss")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
+    let issuer = claims.get("iss").and_then(|v| v.as_str()).unwrap_or("");
     if issuer != expected_issuer {
         return Err(ChatGptError::InvalidToken("issuer".to_string()));
     }
     let audience_ok = match claims.get("aud") {
         Some(serde_json::Value::String(aud)) => aud == expected_audience,
-        Some(serde_json::Value::Array(auds)) => auds
-            .iter()
-            .any(|a| a.as_str() == Some(expected_audience)),
+        Some(serde_json::Value::Array(auds)) => {
+            auds.iter().any(|a| a.as_str() == Some(expected_audience))
+        }
         _ => false,
     };
     if !audience_ok {
@@ -807,9 +801,8 @@ pub fn revoke_refresh_token(
 }
 
 fn endpoint_path(url: &str) -> Result<String, ChatGptError> {
-    let parsed = url::Url::parse(url).map_err(|_| {
-        ChatGptError::Network("The issuer returned an unusable URL.".to_string())
-    })?;
+    let parsed = url::Url::parse(url)
+        .map_err(|_| ChatGptError::Network("The issuer returned an unusable URL.".to_string()))?;
     Ok(parsed.path().to_string())
 }
 
@@ -877,9 +870,11 @@ mod tests {
     fn pkce_challenge_is_s256_base64url() {
         let verifier = new_pkce_verifier();
         assert_eq!(verifier.len(), 43);
-        assert!(verifier
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'));
+        assert!(
+            verifier
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+        );
         let challenge = pkce_challenge(&verifier);
         let digest = sha2::Sha256::digest(verifier.as_bytes());
         assert_eq!(challenge, base64url(&digest));
@@ -910,7 +905,9 @@ mod tests {
         assert!(url.contains("ext_agent_host_id=urn%3Auuid%3A0123456789abcdef0123456789abcdef"));
         assert!(url.contains("redirect_uri=http%3A%2F%2F127.0.0.1%3A1455%2Fauth%2Fcallback"));
         assert!(url.contains("response_type=code"));
-        assert!(url.contains("scope=openid+profile+email+offline_access+resource.invoke+chatgpt.tokens.use.direct"));
+        assert!(url.contains(
+            "scope=openid+profile+email+offline_access+resource.invoke+chatgpt.tokens.use.direct"
+        ));
         assert!(url.contains("resource=https%3A%2F%2Fapi.openai.com%2Fv1"));
         assert!(url.contains("code_challenge_method=S256"));
         assert!(!url.contains("localhost"));
@@ -924,10 +921,7 @@ mod tests {
         let err = resolve_endpoints().unwrap_err();
         assert!(matches!(err, ChatGptError::InvalidRequest(_)));
         unsafe {
-            std::env::set_var(
-                "ANANSI_CHATGPT_TEST_ISSUER",
-                "http://127.0.0.1:9",
-            );
+            std::env::set_var("ANANSI_CHATGPT_TEST_ISSUER", "http://127.0.0.1:9");
         }
         let endpoints = resolve_endpoints().unwrap();
         assert_eq!(endpoints.issuer_base, "http://127.0.0.1:9");

@@ -821,8 +821,7 @@ fn sweep(state: &mut BackendState) {
     // than its TTL is dropped; its listener thread notices the
     // missing attempt and exits.
     state.chatgpt_attempts.retain(|_, attempt| {
-        attempt.created.elapsed()
-            < Duration::from_secs(crate::chatgpt_signin::ATTEMPT_TTL_SECS)
+        attempt.created.elapsed() < Duration::from_secs(crate::chatgpt_signin::ATTEMPT_TTL_SECS)
     });
 }
 
@@ -1296,10 +1295,7 @@ fn chatgpt_host_file_path(root: &std::path::Path) -> std::path::PathBuf {
     root.join("provider-config").join("chatgpt-host.json")
 }
 
-fn chatgpt_registrations_path(
-    root: &std::path::Path,
-    workspace_id: &str,
-) -> std::path::PathBuf {
+fn chatgpt_registrations_path(root: &std::path::Path, workspace_id: &str) -> std::path::PathBuf {
     let safe: String = workspace_id
         .chars()
         .map(|c| {
@@ -1348,8 +1344,8 @@ fn load_or_create_host_id(root: &std::path::Path) -> Result<String, CommandError
     }
     let dir = chatgpt_provider_config_dir(root)?;
     let id = crate::chatgpt_signin::new_host_id();
-    let json = serde_json::to_string(&serde_json::json!({ "ext_agent_host_id": id }))
-        .unwrap_or_default();
+    let json =
+        serde_json::to_string(&serde_json::json!({ "ext_agent_host_id": id })).unwrap_or_default();
     persist_text_file_atomic(&dir, &path, &json)?;
     Ok(id)
 }
@@ -1488,14 +1484,11 @@ fn chatgpt_handle_callback(
     let mut outcome = "This sign-in link is not valid. Start a new sign-in in ANANSI.".to_string();
     let mut consumed = false;
     if method == "GET" && target.starts_with(crate::chatgpt_signin::CALLBACK_PATH) {
-        let query = target
-            .split_once('?')
-            .map(|(_, q)| q)
-            .unwrap_or("");
-        let params: HashMap<String, String> =
-            url::form_urlencoded::parse(query.as_bytes()).into_owned().collect();
-        let (outcome_text, was_consumed) =
-            chatgpt_complete_callback(scope, attempt_id, &params);
+        let query = target.split_once('?').map(|(_, q)| q).unwrap_or("");
+        let params: HashMap<String, String> = url::form_urlencoded::parse(query.as_bytes())
+            .into_owned()
+            .collect();
+        let (outcome_text, was_consumed) = chatgpt_complete_callback(scope, attempt_id, &params);
         outcome = outcome_text;
         consumed = was_consumed;
     }
@@ -1539,10 +1532,14 @@ fn chatgpt_complete_callback(
     }
     let taken = with_backend(scope, |state| {
         let Some(attempt) = state.chatgpt_attempts.get_mut(attempt_id) else {
-            return Err(invalid("This sign-in attempt has expired. Start a new sign-in."));
+            return Err(invalid(
+                "This sign-in attempt has expired. Start a new sign-in.",
+            ));
         };
         if attempt.consumed {
-            return Err(invalid("This sign-in reply was already used. Start a new sign-in."));
+            return Err(invalid(
+                "This sign-in reply was already used. Start a new sign-in.",
+            ));
         }
         let state_ok = params
             .get("state")
@@ -1563,7 +1560,9 @@ fn chatgpt_complete_callback(
                 "error".to_string()
             });
             if error == "access_denied" {
-                return Err(invalid("ChatGPT sign-in was declined. Nothing was connected."));
+                return Err(invalid(
+                    "ChatGPT sign-in was declined. Nothing was connected.",
+                ));
             }
             return Err(invalid("ChatGPT sign-in failed. Start a new sign-in."));
         }
@@ -1571,7 +1570,9 @@ fn chatgpt_complete_callback(
         if code.is_empty() {
             attempt.consumed = true;
             attempt.status = ChatGptAttemptStatus::Failed("missing-code".to_string());
-            return Err(invalid("The sign-in reply carried no code. Start a new sign-in."));
+            return Err(invalid(
+                "The sign-in reply carried no code. Start a new sign-in.",
+            ));
         }
         // Client ID: a new registration must supply one; a
         // reauthorization may omit it (retain the attempt's) but
@@ -1591,19 +1592,14 @@ fn chatgpt_complete_callback(
             None if attempt.client_id == crate::chatgpt_signin::DYNAMIC_CLIENT_ID => {
                 attempt.consumed = true;
                 attempt.status = ChatGptAttemptStatus::Failed("missing-client-id".to_string());
-                return Err(invalid(
-                    "Registration did not return an issued client ID.",
-                ));
+                return Err(invalid("Registration did not return an issued client ID."));
             }
             None => attempt.client_id.clone(),
-            _ => unreachable!(),
         };
         if issued_client_id == crate::chatgpt_signin::DYNAMIC_CLIENT_ID {
             attempt.consumed = true;
             attempt.status = ChatGptAttemptStatus::Failed("missing-client-id".to_string());
-            return Err(invalid(
-                "Registration did not return an issued client ID.",
-            ));
+            return Err(invalid("Registration did not return an issued client ID."));
         }
         attempt.consumed = true;
         attempt.status = ChatGptAttemptStatus::CallbackReceived;
@@ -1706,8 +1702,7 @@ fn chatgpt_complete_callback(
                 Err(e) => {
                     let _ = with_backend(scope, |state| {
                         if let Some(attempt) = state.chatgpt_attempts.get_mut(attempt_id) {
-                            attempt.status =
-                                ChatGptAttemptStatus::Failed("store".to_string());
+                            attempt.status = ChatGptAttemptStatus::Failed("store".to_string());
                         }
                         Ok(())
                     });
@@ -2026,7 +2021,11 @@ fn record_verification_if_unchanged(
         return;
     };
     let current = connection_fingerprint(p);
-    if snapshot.get(provider).map(|s| *s == current).unwrap_or(false) {
+    if snapshot
+        .get(provider)
+        .map(|s| *s == current)
+        .unwrap_or(false)
+    {
         state.verified.insert(provider.to_string(), current);
     }
 }
@@ -2063,7 +2062,8 @@ fn minted_file_path(root: &std::path::Path, workspace_id: &str) -> std::path::Pa
             }
         })
         .collect();
-    root.join("provider-config").join(format!("{safe}.minted.json"))
+    root.join("provider-config")
+        .join(format!("{safe}.minted.json"))
 }
 
 /// Read the minted-reference ledger: missing file means no
@@ -2087,7 +2087,9 @@ fn load_minted_file(
         let provider = provider.as_str().ok_or_else(crate::storage::unavailable)?;
         if reference.is_empty()
             || reference.len() > 128
-            || reference.chars().any(|c| c.is_control() || c.is_whitespace())
+            || reference
+                .chars()
+                .any(|c| c.is_control() || c.is_whitespace())
             || provider.is_empty()
             || provider.len() > 64
         {
@@ -2155,8 +2157,7 @@ fn persist_text_file_atomic(
         file.write_all(text.as_bytes()).map_err(|_| unavailable())?;
         file.sync_all().map_err(|_| unavailable())?;
         drop(file);
-        crate::storage::private_permissions(&tmp_path, false, false)
-            .map_err(|_| unavailable())?;
+        crate::storage::private_permissions(&tmp_path, false, false).map_err(|_| unavailable())?;
         crate::storage::reject_links(&tmp_path).map_err(|_| unavailable())?;
         std::fs::rename(&tmp_path, path).map_err(|_| unavailable())?;
         // Best-effort directory sync for durability of the rename
@@ -2176,10 +2177,7 @@ fn persist_text_file_atomic(
 /// Lazy-load the minted-reference ledger into backend state
 /// (first use in this process), inside the caller's
 /// `with_backend` closure. No storage root means no ledger.
-fn load_minted_locked(
-    state: &mut BackendState,
-    scope: &CallerScope,
-) -> Result<(), CommandError> {
+fn load_minted_locked(state: &mut BackendState, scope: &CallerScope) -> Result<(), CommandError> {
     if state.minted_loaded {
         return Ok(());
     }
@@ -2202,9 +2200,9 @@ fn prune_minted_locked(state: &mut BackendState) {
         .flat_map(|c| c.providers.iter())
         .filter_map(|p| p.config.credential.as_ref().map(|cr| cr.reference.clone()))
         .collect();
-    state.minted_references.retain(|reference, _| {
-        resolver.exists(reference) || referenced.contains(reference)
-    });
+    state
+        .minted_references
+        .retain(|reference, _| resolver.exists(reference) || referenced.contains(reference));
 }
 
 pub fn install_persisted_config(scope: &CallerScope, json: &str) -> Result<bool, CommandError> {
@@ -3050,9 +3048,9 @@ pub fn providers_command(
             let registrations = load_chatgpt_registrations(&root, &wid)?;
             let (client_id, agent_name_hint, id_token_hint, login_hint) = match &req.client_id {
                 Some(id) => {
-                    let reg = registrations.get(id).ok_or_else(|| {
-                        invalid("No saved ChatGPT account with that client ID.")
-                    })?;
+                    let reg = registrations
+                        .get(id)
+                        .ok_or_else(|| invalid("No saved ChatGPT account with that client ID."))?;
                     let resolver = shared_chatgpt_resolver();
                     let hint = load_chatgpt_record(&resolver, id).and_then(|r| r.id_token);
                     (id.clone(), None, hint, reg.email.clone())
@@ -3071,8 +3069,8 @@ pub fn providers_command(
             // Bind the loopback listener BEFORE the URL is
             // returned, so the port in `redirect_uri` is the
             // bound port, never a guess.
-            let listener =
-                std::net::TcpListener::bind("127.0.0.1:0").map_err(|_| crate::storage::unavailable())?;
+            let listener = std::net::TcpListener::bind("127.0.0.1:0")
+                .map_err(|_| crate::storage::unavailable())?;
             let port = listener
                 .local_addr()
                 .map_err(|_| crate::storage::unavailable())?
@@ -3176,15 +3174,11 @@ pub fn providers_command(
                     .max_by_key(|a| a.created)
                     .map(|a| {
                         let (status, reason) = match &a.status {
-                            ChatGptAttemptStatus::Pending => {
-                                ("pending".to_string(), None)
-                            }
+                            ChatGptAttemptStatus::Pending => ("pending".to_string(), None),
                             ChatGptAttemptStatus::CallbackReceived => {
                                 ("callback_received".to_string(), None)
                             }
-                            ChatGptAttemptStatus::Succeeded => {
-                                ("succeeded".to_string(), None)
-                            }
+                            ChatGptAttemptStatus::Succeeded => ("succeeded".to_string(), None),
                             ChatGptAttemptStatus::Failed(r) => {
                                 ("failed".to_string(), Some(r.clone()))
                             }
@@ -3468,8 +3462,7 @@ mod tests {
         let mut endpoint_changed = base.clone();
         endpoint_changed.config.base_url = "https://other.example/v1".into();
         let mut credential_changed = base.clone();
-        credential_changed.config.credential =
-            Some(CredentialRef::new("openai", "openai-bbbb"));
+        credential_changed.config.credential = Some(CredentialRef::new("openai", "openai-bbbb"));
         assert_eq!(connection_fingerprint(&base), connection_fingerprint(&same));
         assert_eq!(
             connection_fingerprint(&base),

@@ -242,7 +242,7 @@ test('vault view exposes native and paired-browser controls plus encrypted backu
   assert.doesNotMatch(browserHtml, /type="password"/);
 });
 
-import {Providers, UnusedCredentials, DisclosurePanel, deriveLocality, defaultFlowModels} from '../src/Providers';
+import {Providers, UnusedCredentials, DisclosurePanel, ChatGptSigninPrototype, deriveLocality, defaultFlowModels} from '../src/Providers';
 
 test('providers screen renders the guided Connect AI flow: catalog step, connected list, zero-cost lock, routing modes, usage',()=>{
   const html=renderToStaticMarkup(<Providers client={{providersCatalog:async()=>({contractVersion:1,providers:[]}),providersUsage:async()=>({contractVersion:1,totalRequests:0,totalInputTokens:0,totalOutputTokens:0,totalEstimatedCostMicroUsd:0,reservedRequests:0,reservedTokens:0,reservedEstimatedCostMicroUsd:0,providers:[]}),providersSessionAccess:async()=>({contractVersion:1,pending:[],grants:[]})} as any} workspaceId="ws1"/>);
@@ -264,6 +264,30 @@ test('providers screen renders the guided Connect AI flow: catalog step, connect
 
 test('connect AI flow starts new models as cost-unknown, never free',()=>{
   assert.deepEqual(defaultFlowModels(),[{id:'',cost:'unknown'}]);
+});
+
+test('chatgpt sign-in prototype is absent by default: no Continue with ChatGPT button in any build',()=>{
+  const html=renderToStaticMarkup(<Providers client={{providersCatalog:async()=>({contractVersion:1,providers:[]}),providersUsage:async()=>({contractVersion:1,totalRequests:0,totalInputTokens:0,totalOutputTokens:0,totalEstimatedCostMicroUsd:0,reservedRequests:0,reservedTokens:0,reservedEstimatedCostMicroUsd:0,providers:[]}),providersSessionAccess:async()=>({contractVersion:1,pending:[],grants:[]})} as any} workspaceId="ws1"/>);
+  assert.doesNotMatch(html,/Continue with ChatGPT/);
+  assert.equal(renderToStaticMarkup(<ChatGptSigninPrototype status={null}/>),'');
+});
+
+test('chatgpt sign-in prototype renders behind the dev flag with sign-in disabled and status labels',()=>{
+  (globalThis as any).__ANANSI_CHATGPT_SIGNIN_DEV__=true;
+  try {
+    const html=renderToStaticMarkup(<Providers client={{providersCatalog:async()=>({contractVersion:1,providers:[]}),providersUsage:async()=>({contractVersion:1,totalRequests:0,totalInputTokens:0,totalOutputTokens:0,totalEstimatedCostMicroUsd:0,reservedRequests:0,reservedTokens:0,reservedEstimatedCostMicroUsd:0,providers:[]}),providersSessionAccess:async()=>({contractVersion:1,pending:[],grants:[]}),chatgptSigninStatus:async()=>({contractVersion:1,signedIn:false,planUsage:false,accounts:[]})} as any} workspaceId="ws1"/>);
+    assert.match(html,/Continue with ChatGPT \(prototype\)/);
+    assert.match(html,/Live sign-in is not yet available/);
+    // The only sign-in control is disabled: no enabled button ships.
+    assert.match(html,/<button[^>]*disabled[^>]*>\s*Continue with ChatGPT\s*<\/button>/);
+    assert.doesNotMatch(html,/<button(?![^>]*disabled)[^>]*>\s*Continue with ChatGPT/);
+    const signedIn=renderToStaticMarkup(<ChatGptSigninPrototype status={{contractVersion:1,signedIn:true,planUsage:true,email:'user@example.com',accounts:[{clientId:'oaiapp_test',email:'user@example.com',planUsage:true}]}}/>);
+    assert.match(signedIn,/user@example.com/);
+    assert.match(signedIn,/ChatGPT plan usage: enabled/);
+    assert.match(signedIn,/<button[^>]*disabled[^>]*>/);
+  } finally {
+    delete (globalThis as any).__ANANSI_CHATGPT_SIGNIN_DEV__;
+  }
 });
 
 test('unused credentials list names the orphaned key and offers removal, and renders nothing when empty',()=>{

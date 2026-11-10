@@ -352,8 +352,7 @@ fn start_fake_issuer() -> FakeIssuer {
                         revoke_hits.fetch_add(1, Ordering::SeqCst);
                         let form: HashMap<String, String> =
                             url::form_urlencoded::parse(&body).into_owned().collect();
-                        *last_revoke_token.lock().unwrap() =
-                            form.get("token").cloned();
+                        *last_revoke_token.lock().unwrap() = form.get("token").cloned();
                         let status = mode.lock().unwrap().revoke_status;
                         write_http(&mut stream, status, "");
                     }
@@ -440,7 +439,12 @@ fn stamped(session_id: &str, mut body: Value) -> Value {
     body
 }
 
-fn signin_op(core: &Core, op: &str, ws: &str, client_id: Option<&str>) -> Result<Value, CommandError> {
+fn signin_op(
+    core: &Core,
+    op: &str,
+    ws: &str,
+    client_id: Option<&str>,
+) -> Result<Value, CommandError> {
     let mut body = json!({ "workspaceId": ws });
     if let Some(id) = client_id {
         body["clientId"] = json!(id);
@@ -462,7 +466,12 @@ fn status(core: &Core, ws: &str) -> Value {
 }
 
 /// Poll status until `predicate` holds or the timeout elapses.
-fn poll_status(core: &Core, ws: &str, timeout: Duration, predicate: impl Fn(&Value) -> bool) -> Value {
+fn poll_status(
+    core: &Core,
+    ws: &str,
+    timeout: Duration,
+    predicate: impl Fn(&Value) -> bool,
+) -> Value {
     let start = Instant::now();
     loop {
         let s = status(core, ws);
@@ -493,14 +502,11 @@ fn callback_get(url: &str) -> (u16, String) {
     stream
         .set_read_timeout(Some(Duration::from_secs(30)))
         .unwrap();
-    let target = format!(
-        "{}?{}",
-        parsed.path(),
-        parsed.query().unwrap_or("")
-    );
+    let target = format!("{}?{}", parsed.path(), parsed.query().unwrap_or(""));
     stream
         .write_all(
-            format!("GET {target} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n").as_bytes(),
+            format!("GET {target} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n")
+                .as_bytes(),
         )
         .unwrap();
     let mut raw = Vec::new();
@@ -526,12 +532,7 @@ fn callback_get(url: &str) -> (u16, String) {
 /// nonce from the authorization URL, arm the issuer with the
 /// nonce, and deliver the callback for `issued_client_id`.
 /// Returns the start response.
-fn drive_signin(
-    core: &Core,
-    ws: &str,
-    issuer: &FakeIssuer,
-    issued_client_id: &str,
-) -> Value {
+fn drive_signin(core: &Core, ws: &str, issuer: &FakeIssuer, issued_client_id: &str) -> Value {
     let start = signin_op(core, "chatgpt-signin-start", ws, None).unwrap();
     let url = start["authorizationUrl"].as_str().unwrap().to_string();
     let params = parse_query(&url);
@@ -539,9 +540,8 @@ fn drive_signin(
     let nonce = params.get("nonce").cloned().unwrap();
     issuer.set_mode(|m| m.expected_nonce = Some(nonce));
     let redirect_uri = start["redirectUri"].as_str().unwrap();
-    let callback = format!(
-        "{redirect_uri}?code=code-test-0001&state={state}&client_id={issued_client_id}"
-    );
+    let callback =
+        format!("{redirect_uri}?code=code-test-0001&state={state}&client_id={issued_client_id}");
     let (http_status, _body) = callback_get(&callback);
     assert_eq!(http_status, 200);
     start
@@ -672,7 +672,9 @@ fn signin_start_returns_documented_authorization_url() {
     assert!(url.contains("agent_name_hint=ANANSI"));
     assert!(url.contains("ext_agent_host_id=urn%3Auuid%3A"));
     assert!(url.contains("response_type=code"));
-    assert!(url.contains("scope=openid+profile+email+offline_access+resource.invoke+chatgpt.tokens.use.direct"));
+    assert!(url.contains(
+        "scope=openid+profile+email+offline_access+resource.invoke+chatgpt.tokens.use.direct"
+    ));
     assert!(url.contains("resource=https%3A%2F%2Fapi.openai.com%2Fv1"));
     assert!(url.contains("code_challenge_method=S256"));
     assert!(!url.contains("localhost"));
@@ -685,7 +687,10 @@ fn signin_start_returns_documented_authorization_url() {
         .parse()
         .unwrap();
     let probe = std::net::TcpStream::connect(("127.0.0.1", port));
-    assert!(probe.is_ok(), "loopback listener is not bound before the URL is returned");
+    assert!(
+        probe.is_ok(),
+        "loopback listener is not bound before the URL is returned"
+    );
     // The host id is persisted (labels only) under provider-config.
     let host_path = _dir
         .path()
@@ -694,10 +699,12 @@ fn signin_start_returns_documented_authorization_url() {
     assert!(host_path.exists());
     let host_json: Value =
         serde_json::from_str(&std::fs::read_to_string(&host_path).unwrap()).unwrap();
-    assert!(host_json["ext_agent_host_id"]
-        .as_str()
-        .unwrap()
-        .starts_with("urn:uuid:"));
+    assert!(
+        host_json["ext_agent_host_id"]
+            .as_str()
+            .unwrap()
+            .starts_with("urn:uuid:")
+    );
     // A second start reuses the same host id.
     let start2 = signin_op(&core, "chatgpt-signin-start", &ws, None).unwrap();
     assert_eq!(
@@ -735,9 +742,19 @@ fn signin_full_flow_stores_tokens_in_keyring_only() {
     assert_eq!(last.grant_type, "authorization_code");
     assert_eq!(last.client_id, client_id);
     assert_eq!(last.code.as_deref(), Some("code-test-0001"));
-    assert!(last.code_verifier.as_deref().map(|v| v.len() >= 43).unwrap_or(false));
+    assert!(
+        last.code_verifier
+            .as_deref()
+            .map(|v| v.len() >= 43)
+            .unwrap_or(false)
+    );
     assert_eq!(last.resource.as_deref(), Some("https://api.openai.com/v1"));
-    assert!(last.redirect_uri.as_deref().unwrap().starts_with("http://127.0.0.1:"));
+    assert!(
+        last.redirect_uri
+            .as_deref()
+            .unwrap()
+            .starts_with("http://127.0.0.1:")
+    );
     // No token material anywhere on disk: the provider-config
     // files hold labels only (host id, registration stub).
     let mut found_token = false;
@@ -841,9 +858,8 @@ fn signin_replayed_callback_is_rejected() {
     let nonce = params.get("nonce").cloned().unwrap();
     issuer.set_mode(|m| m.expected_nonce = Some(nonce));
     let redirect_uri = start["redirectUri"].as_str().unwrap();
-    let callback = format!(
-        "{redirect_uri}?code=code-test-0001&state={state}&client_id={client_id}"
-    );
+    let callback =
+        format!("{redirect_uri}?code=code-test-0001&state={state}&client_id={client_id}");
     let (http_status, _) = callback_get(&callback);
     assert_eq!(http_status, 200);
     poll_status(&core, &ws, Duration::from_secs(10), |s| {
@@ -870,8 +886,7 @@ fn signin_denied_consent_stops_before_exchange() {
     let params = parse_query(start["authorizationUrl"].as_str().unwrap());
     let state = params.get("state").cloned().unwrap();
     let redirect_uri = start["redirectUri"].as_str().unwrap();
-    let callback =
-        format!("{redirect_uri}?error=access_denied&state={state}");
+    let callback = format!("{redirect_uri}?error=access_denied&state={state}");
     let (http_status, body) = callback_get(&callback);
     assert_eq!(http_status, 200);
     assert!(body.contains("declined"));
@@ -922,9 +937,7 @@ fn signin_callback_client_id_mismatch_is_rejected() {
     let state = params.get("state").cloned().unwrap();
     let redirect_uri = start["redirectUri"].as_str().unwrap();
     let other = fresh_client_id();
-    let callback = format!(
-        "{redirect_uri}?code=code-test-0001&state={state}&client_id={other}"
-    );
+    let callback = format!("{redirect_uri}?code=code-test-0001&state={state}&client_id={other}");
     callback_get(&callback);
     let s = poll_status(&core, &ws, Duration::from_secs(10), |s| {
         s["pendingAttempt"]["status"] == "failed"
@@ -1151,10 +1164,7 @@ fn signin_refresh_is_serialized() {
     }
     assert_eq!(successes, 1);
     assert_eq!(refusals, 1);
-    let refresh_grants = issuer
-        .token_hits
-        .load(Ordering::SeqCst)
-        .saturating_sub(1); // minus the code exchange
+    let refresh_grants = issuer.token_hits.load(Ordering::SeqCst).saturating_sub(1); // minus the code exchange
     assert_eq!(refresh_grants, 1);
 }
 
@@ -1235,7 +1245,9 @@ fn browser_cannot_start_refresh_or_disconnect() {
         .unwrap();
     let pending = access["pending"].as_array().unwrap();
     assert!(
-        pending.iter().any(|p| p["session"] == "browser-1" && p["attempts"].as_u64().unwrap() >= 3),
+        pending
+            .iter()
+            .any(|p| p["session"] == "browser-1" && p["attempts"].as_u64().unwrap() >= 3),
         "browser refusals not recorded: {pending:?}"
     );
 }
@@ -1295,13 +1307,7 @@ fn failed_signin_leaves_local_and_apikey_flows_working() {
         )
         .unwrap();
     let permit_id = permit["permitId"].as_str().unwrap().to_string();
-    let out = dispatch(
-        &core,
-        &ws,
-        json!({ "permitId": permit_id }),
-        "hello",
-    )
-    .unwrap();
+    let out = dispatch(&core, &ws, json!({ "permitId": permit_id }), "hello").unwrap();
     assert_eq!(out["response"]["text"], "core reply");
     assert_eq!(fake.hits.load(Ordering::SeqCst), 1);
     // API-key setup still works: reference, prompt store, add,
