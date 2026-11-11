@@ -10,12 +10,15 @@
 //! system browser would deliver after the user consents.
 
 use anansi_core::{CommandError, Core, ErrorCode};
+use keyring::credential::{
+    Credential, CredentialApi, CredentialBuilder, CredentialBuilderApi, CredentialPersistence,
+};
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpListener;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard, Once};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, Once};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 // ---------------------------------------------------------------------------
@@ -147,6 +150,41 @@ struct IssuerMode {
     refresh_invalid_grant: bool,
     /// HTTP status for revocation (default 200).
     revoke_status: u16,
+    /// When set, the token endpoint waits on this gate after
+    /// recording the request, so a test can disconnect mid-exchange
+    /// (AC-L2/L3). Bounded: a stuck test fails rather than hanging
+    /// the suite.
+    token_gate: Option<Arc<TokenGate>>,
+}
+
+/// A one-shot gate the synthetic issuer waits on while serving a
+/// token grant.
+#[derive(Debug)]
+struct TokenGate {
+    released: Mutex<bool>,
+    condvar: Condvar,
+}
+
+impl TokenGate {
+    fn new() -> Self {
+        Self {
+            released: Mutex::new(false),
+            condvar: Condvar::new(),
+        }
+    }
+
+    fn wait(&self) {
+        let released = self.released.lock().unwrap();
+        let _ = self
+            .condvar
+            .wait_timeout_while(released, Duration::from_secs(10), |r| !*r)
+            .unwrap();
+    }
+
+    fn release(&self) {
+        *self.released.lock().unwrap() = true;
+        self.condvar.notify_all();
+    }
 }
 
 impl Default for IssuerMode {
@@ -170,6 +208,7 @@ impl Default for IssuerMode {
             expires_in: 3600,
             refresh_invalid_grant: false,
             revoke_status: 200,
+            token_gate: None,
         }
     }
 }
@@ -313,6 +352,9 @@ fn start_fake_issuer() -> FakeIssuer {
                         };
                         *last_token_request.lock().unwrap() = Some(request.clone());
                         let mode = mode.lock().unwrap().clone();
+                        if let Some(gate) = &mode.token_gate {
+                            gate.wait();
+                        }
                         if request.grant_type == "refresh_token" && mode.refresh_invalid_grant {
                             write_http(
                                 &mut stream,
@@ -391,10 +433,113 @@ fn issuer_lock() -> MutexGuard<'static, ()> {
 
 /// Install the keyring mock once per test process (same pattern as
 /// the provider-dispatch tests) and the credential test hook.
+/// Install the keyring mock once per test process (same pattern as
+/// the provider-dispatch tests) and the credential test hook.
+///
+/// The builder is a shared-mock builder, not the plain mock: the
+/// plain mock creates a fresh credential per `Entry::new` and its
+/// one-shot `set_error` is consumed by the disconnect's own load
+/// before the delete, so neither can inject a keyring delete
+/// failure. Here one `MockCredential` is shared per
+/// `(service, user)` and carries a persistent `fail_delete` flag
+/// (AC-L1): while set, deletes fail and the secret stays put;
+/// gets/sets are unaffected. Default behaviour is identical to the
+/// plain mock.
+struct SharedMockState {
+    credential: Arc<keyring::mock::MockCredential>,
+    fail_delete: Arc<AtomicBool>,
+}
+
+static MOCK_STORE: std::sync::LazyLock<Mutex<HashMap<(String, String), Arc<SharedMockState>>>> =
+    std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
+
+struct SharedMockCredential {
+    state: Arc<SharedMockState>,
+}
+
+impl CredentialApi for SharedMockCredential {
+    fn set_secret(&self, secret: &[u8]) -> keyring::Result<()> {
+        self.state.credential.set_secret(secret)
+    }
+
+    fn get_secret(&self) -> keyring::Result<Vec<u8>> {
+        self.state.credential.get_secret()
+    }
+
+    fn delete_credential(&self) -> keyring::Result<()> {
+        if self.state.fail_delete.load(Ordering::SeqCst) {
+            return Err(keyring::Error::Invalid(
+                "mock delete failure".to_string(),
+                "fail_delete is set".to_string(),
+            ));
+        }
+        self.state.credential.delete_credential()
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn debug_fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "SharedMockCredential")
+    }
+}
+
+struct SharedMockBuilder;
+
+impl CredentialBuilderApi for SharedMockBuilder {
+    fn build(
+        &self,
+        _target: Option<&str>,
+        service: &str,
+        user: &str,
+    ) -> keyring::Result<Box<Credential>> {
+        let key = (service.to_string(), user.to_string());
+        let state = MOCK_STORE
+            .lock()
+            .unwrap()
+            .entry(key)
+            .or_insert_with(|| {
+                Arc::new(SharedMockState {
+                    credential: Arc::new(keyring::mock::MockCredential::default()),
+                    fail_delete: Arc::new(AtomicBool::new(false)),
+                })
+            })
+            .clone();
+        Ok(Box::new(SharedMockCredential { state }))
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn persistence(&self) -> CredentialPersistence {
+        CredentialPersistence::EntryOnly
+    }
+}
+
+/// Make keyring deletes fail (persistently, until the returned flag
+/// is cleared) for one entry. The entry must already exist — sign
+/// in first. Returns the flag so the test can clear it for the
+/// retry.
+fn fail_keyring_delete(service: &str, user: &str) -> Arc<AtomicBool> {
+    let key = (service.to_string(), user.to_string());
+    let state = MOCK_STORE
+        .lock()
+        .unwrap()
+        .get(&key)
+        .expect("no mock entry yet — sign in first")
+        .clone();
+    state.fail_delete.store(true, Ordering::SeqCst);
+    state.fail_delete.clone()
+}
+
 fn test_env_once() {
     static ONCE: Once = Once::new();
     ONCE.call_once(|| {
-        keyring::set_default_credential_builder(keyring::mock::default_credential_builder());
+        keyring::set_default_credential_builder(
+            Box::new(SharedMockBuilder) as Box<CredentialBuilder>
+        );
         unsafe {
             std::env::set_var("ANANSI_PROVIDER_TEST_CREDENTIAL", "<redacted>");
         }
@@ -526,6 +671,33 @@ fn callback_get(url: &str) -> (u16, String) {
         .unwrap_or(0);
     let body = text.split("\r\n\r\n").nth(1).unwrap_or("").to_string();
     (status, body)
+}
+
+/// Wait until the synthetic issuer has served `n` token grants.
+fn wait_token_hits(issuer: &FakeIssuer, n: usize) {
+    let start = Instant::now();
+    while issuer.token_hits.load(Ordering::SeqCst) < n {
+        if start.elapsed() > Duration::from_secs(10) {
+            panic!(
+                "token endpoint not reached ({}/{n} hits)",
+                issuer.token_hits.load(Ordering::SeqCst)
+            );
+        }
+        std::thread::sleep(Duration::from_millis(25));
+    }
+}
+
+/// Start a re-authorization for a saved account and return
+/// (state, nonce, redirect_uri) for driving the callback.
+fn begin_reauth(core: &Core, ws: &str, client_id: &str) -> (String, String, String) {
+    let start = signin_op(core, "chatgpt-signin-start", ws, Some(client_id)).unwrap();
+    let params = parse_query(start["authorizationUrl"].as_str().unwrap());
+    assert_eq!(params["client_id"], client_id);
+    (
+        params.get("state").cloned().unwrap(),
+        params.get("nonce").cloned().unwrap(),
+        start["redirectUri"].as_str().unwrap().to_string(),
+    )
 }
 
 /// Start a sign-in and drive the browser half: extract state +
@@ -1215,6 +1387,171 @@ fn signin_disconnect_unconfirmed_revocation_is_reported() {
     // Local tokens are cleared even when revocation cannot be
     // confirmed.
     let s = status(&core, &ws);
+    assert_eq!(s["signedIn"], false);
+}
+
+// ---------------------------------------------------------------------------
+// Tests: token-lifecycle repair (AC-L1..L6)
+//
+// Each test below fails on the delivered tip 5026f29f8 for the defect
+// it names (reproduced before the fix) and passes after it.
+
+#[test]
+fn disconnect_keyring_deletion_failure_is_reported_and_retry_succeeds() {
+    let _lock = issuer_lock();
+    test_env_once();
+    let issuer = start_fake_issuer();
+    let _guard = IssuerGuard::set(&issuer.base_url);
+    let (_dir, core, ws) = core();
+    let client_id = fresh_client_id();
+    drive_signin(&core, &ws, &issuer, &client_id);
+    poll_status(&core, &ws, Duration::from_secs(10), |s| {
+        s["pendingAttempt"]["status"] == "succeeded"
+    });
+    // The keyring delete fails from here until the flag clears.
+    let flag = fail_keyring_delete(
+        anansi_core::chatgpt_signin::CHATGPT_KEYRING_SERVICE,
+        &format!("chatgpt-{client_id}"),
+    );
+    let out = signin_op(&core, "chatgpt-signin-disconnect", &ws, Some(&client_id)).unwrap();
+    // The local outcome is the failure; the remote revocation is
+    // reported separately and did succeed.
+    assert_eq!(out["disconnected"], false);
+    assert_eq!(out["localDeletion"], "failed");
+    assert_eq!(out["remoteRevocationConfirmed"], true);
+    // Status still shows the session that is still there — and the
+    // stub was left untouched, so the labels agree.
+    let s = status(&core, &ws);
+    assert_eq!(s["signedIn"], true);
+    assert_eq!(s["planUsage"], true);
+    assert_eq!(s["accounts"][0]["planUsage"], true);
+    // Successful retry once the keyring fault clears.
+    flag.store(false, Ordering::SeqCst);
+    let out = signin_op(&core, "chatgpt-signin-disconnect", &ws, Some(&client_id)).unwrap();
+    assert_eq!(out["disconnected"], true);
+    assert_eq!(out["localDeletion"], "deleted");
+    assert_eq!(out["remoteRevocationConfirmed"], true);
+    let s = status(&core, &ws);
+    assert_eq!(s["signedIn"], false);
+    // A further disconnect has nothing local to delete.
+    let out = signin_op(&core, "chatgpt-signin-disconnect", &ws, Some(&client_id)).unwrap();
+    assert_eq!(out["disconnected"], true);
+    assert_eq!(out["localDeletion"], "absent");
+    assert_eq!(out["remoteRevocationConfirmed"], false);
+}
+
+#[test]
+fn disconnect_during_callback_exchange_does_not_recreate_session() {
+    let _lock = issuer_lock();
+    test_env_once();
+    let issuer = start_fake_issuer();
+    let _guard = IssuerGuard::set(&issuer.base_url);
+    let (_dir, core, ws) = core();
+    let client_id = fresh_client_id();
+    drive_signin(&core, &ws, &issuer, &client_id);
+    poll_status(&core, &ws, Duration::from_secs(10), |s| {
+        s["pendingAttempt"]["status"] == "succeeded"
+    });
+    assert_eq!(issuer.token_hits.load(Ordering::SeqCst), 1);
+    // Gate the re-authorization exchange, then deliver the
+    // callback on a thread: the exchange parks at the token
+    // endpoint while disconnect runs on the main thread.
+    let gate = Arc::new(TokenGate::new());
+    issuer.set_mode(|m| m.token_gate = Some(gate.clone()));
+    let (state, nonce, redirect_uri) = begin_reauth(&core, &ws, &client_id);
+    issuer.set_mode(|m| m.expected_nonce = Some(nonce));
+    let callback = format!("{redirect_uri}?code=code-test-0002&state={state}");
+    let callback_thread = std::thread::spawn(move || callback_get(&callback));
+    wait_token_hits(&issuer, 2);
+    let out = signin_op(&core, "chatgpt-signin-disconnect", &ws, Some(&client_id)).unwrap();
+    assert_eq!(out["disconnected"], true);
+    assert_eq!(out["localDeletion"], "deleted");
+    assert_eq!(out["remoteRevocationConfirmed"], true);
+    gate.release();
+    let (http_status, body) = callback_thread.join().unwrap();
+    assert_eq!(http_status, 200);
+    assert!(body.contains("disconnected"), "callback page: {body}");
+    // The late store was discarded: no session, exactly one
+    // exchange for the re-authorization, attempt failed.
+    assert_eq!(issuer.token_hits.load(Ordering::SeqCst), 2);
+    let s = poll_status(&core, &ws, Duration::from_secs(10), |s| {
+        s["pendingAttempt"]["status"] == "failed"
+    });
+    assert_eq!(s["pendingAttempt"]["reason"], "disconnected");
+    assert_eq!(s["signedIn"], false);
+}
+
+#[test]
+fn disconnect_during_refresh_does_not_recreate_session() {
+    let _lock = issuer_lock();
+    test_env_once();
+    let issuer = start_fake_issuer();
+    issuer.set_mode(|m| m.expires_in = 60);
+    let _guard = IssuerGuard::set(&issuer.base_url);
+    let (_dir, core, ws) = core();
+    let client_id = fresh_client_id();
+    drive_signin(&core, &ws, &issuer, &client_id);
+    poll_status(&core, &ws, Duration::from_secs(10), |s| {
+        s["pendingAttempt"]["status"] == "succeeded"
+    });
+    assert_eq!(issuer.token_hits.load(Ordering::SeqCst), 1);
+    // Gate the refresh grant, run the refresh on a thread, and
+    // disconnect while it is parked at the token endpoint.
+    let gate = Arc::new(TokenGate::new());
+    issuer.set_mode(|m| m.token_gate = Some(gate.clone()));
+    let core = Arc::new(core);
+    let ws_arc = Arc::new(ws.clone());
+    let client_arc = Arc::new(client_id.clone());
+    let refresh_thread = {
+        let core = core.clone();
+        let ws = ws_arc.clone();
+        let client_id = client_arc.clone();
+        std::thread::spawn(move || {
+            signin_op(&core, "chatgpt-signin-refresh", &ws, Some(&client_id))
+        })
+    };
+    wait_token_hits(&issuer, 2);
+    let out = signin_op(&core, "chatgpt-signin-disconnect", &ws, Some(&client_id)).unwrap();
+    assert_eq!(out["disconnected"], true);
+    assert_eq!(out["localDeletion"], "deleted");
+    gate.release();
+    let err = refresh_thread.join().unwrap().unwrap_err();
+    assert_eq!(err.code, ErrorCode::InvalidRequest);
+    assert!(err.message.contains("session ended"), "{}", err.message);
+    // The late store was discarded: no session, exactly one
+    // refresh grant, no rotated tokens left behind.
+    assert_eq!(issuer.token_hits.load(Ordering::SeqCst), 2);
+    let s = status(&core, &ws);
+    assert_eq!(s["signedIn"], false);
+}
+
+#[test]
+fn late_callback_after_disconnect_is_refused() {
+    let _lock = issuer_lock();
+    test_env_once();
+    let issuer = start_fake_issuer();
+    let _guard = IssuerGuard::set(&issuer.base_url);
+    let (_dir, core, ws) = core();
+    let client_id = fresh_client_id();
+    drive_signin(&core, &ws, &issuer, &client_id);
+    poll_status(&core, &ws, Duration::from_secs(10), |s| {
+        s["pendingAttempt"]["status"] == "succeeded"
+    });
+    let (state, nonce, redirect_uri) = begin_reauth(&core, &ws, &client_id);
+    issuer.set_mode(|m| m.expected_nonce = Some(nonce));
+    // Disconnect first: the pending attempt is invalidated.
+    let out = signin_op(&core, "chatgpt-signin-disconnect", &ws, Some(&client_id)).unwrap();
+    assert_eq!(out["disconnected"], true);
+    // The late callback must not exchange or store anything.
+    let callback = format!("{redirect_uri}?code=code-test-0002&state={state}");
+    let (http_status, body) = callback_get(&callback);
+    assert_eq!(http_status, 200);
+    assert!(body.contains("disconnected"), "callback page: {body}");
+    assert_eq!(issuer.token_hits.load(Ordering::SeqCst), 1);
+    let s = poll_status(&core, &ws, Duration::from_secs(10), |s| {
+        s["pendingAttempt"]["status"] == "failed"
+    });
+    assert_eq!(s["pendingAttempt"]["reason"], "disconnected");
     assert_eq!(s["signedIn"], false);
 }
 
