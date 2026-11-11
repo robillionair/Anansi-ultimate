@@ -533,6 +533,98 @@ static PROCESS_WORKER: std::sync::Mutex<WorkerQueue> = std::sync::Mutex::new(Wor
     running: false,
     pending: VecDeque::new(),
 });
+
+/// Forced claim failures for fault-injection tests, keyed by
+/// storage-root path: remaining failures + the error code to
+/// return. Test builds only; compiled out of shipped builds.
+#[cfg(test)]
+static CLAIM_FAULTS: std::sync::Mutex<Vec<(std::path::PathBuf, u32, ErrorCode)>> =
+    std::sync::Mutex::new(Vec::new());
+/// Roots the worker parked after a claim failure (test builds
+/// only). Lets tests wait on the parking condition instead of
+/// polling process-global worker state, which parallel tests
+/// would make flaky.
+#[cfg(test)]
+static CLAIM_PARKED: std::sync::Mutex<Vec<std::path::PathBuf>> = std::sync::Mutex::new(Vec::new());
+
+/// Arm forced claim failures for one storage root (test builds
+/// only). Each worker claim for that root consumes one failure
+/// and returns the armed code instead of touching the store.
+/// Scoped by root so parallel tests cannot interfere.
+#[cfg(test)]
+pub(crate) fn arm_claim_faults(root: &std::path::Path, failures: u32, code: ErrorCode) {
+    let mut faults = CLAIM_FAULTS
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    if let Some(entry) = faults
+        .iter_mut()
+        .find(|(entry, _, _)| entry.as_path() == root)
+    {
+        entry.1 = failures;
+        entry.2 = code;
+    } else {
+        faults.push((root.to_path_buf(), failures, code));
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn remaining_claim_faults(root: &std::path::Path) -> u32 {
+    CLAIM_FAULTS
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .iter()
+        .find(|(entry, _, _)| entry.as_path() == root)
+        .map(|(_, remaining, _)| *remaining)
+        .unwrap_or(0)
+}
+
+#[cfg(test)]
+pub(crate) fn clear_claim_faults(root: &std::path::Path) {
+    CLAIM_FAULTS
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .retain(|(entry, _, _)| entry.as_path() != root);
+}
+
+#[cfg(test)]
+pub(crate) fn claim_parked(root: &std::path::Path) -> bool {
+    CLAIM_PARKED
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .iter()
+        .any(|entry| entry.as_path() == root)
+}
+
+#[cfg(test)]
+pub(crate) fn clear_claim_parked(root: &std::path::Path) {
+    CLAIM_PARKED
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .retain(|entry| entry.as_path() != root);
+}
+
+/// The worker loop's claim call. In test builds a fault table can
+/// force failures for one storage root, so recovery behavior is
+/// exercised deterministically without filesystem races. In
+/// shipped builds this delegates directly to `claim_export`.
+fn claim_for_worker(storage: &Storage) -> Result<Option<JobLease>, CommandError> {
+    #[cfg(test)]
+    {
+        let mut faults = CLAIM_FAULTS
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        if let Some((_, remaining, code)) = faults
+            .iter_mut()
+            .find(|(entry, _, _)| *entry == storage.root)
+        {
+            if *remaining > 0 {
+                *remaining -= 1;
+                return Err(CommandError::new(code.clone(), "Injected claim fault."));
+            }
+        }
+    }
+    storage.claim_export()
+}
 impl crate::Core {
     /// One background export worker per process. Cross-process work is fenced by SQLite.
     pub fn wake_export_worker(&self) {
@@ -561,7 +653,7 @@ impl crate::Core {
                         None => return,
                     }
                 };
-                while let Ok(Some(lease)) = storage.claim_export() {
+                while let Ok(Some(lease)) = claim_for_worker(&storage) {
                     let result = match &lease.job.selection {
                         ExportSelection::Backup { .. } => storage.execute_backup(&lease),
                         ExportSelection::Ingestion { .. } => storage.execute_ingestion(&lease),

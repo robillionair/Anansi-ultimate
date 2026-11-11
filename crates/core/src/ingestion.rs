@@ -798,6 +798,74 @@ mod tests {
         .unwrap()
     }
 
+    fn root_of(core: &Core) -> std::path::PathBuf {
+        core.storage().unwrap().root_path().to_path_buf()
+    }
+
+    /// Wait until the worker parks this root after a claim
+    /// failure. Bounded and condition-based: it polls the parked
+    /// signal the worker records, never a timing assumption.
+    /// Panics with the job's state on timeout.
+    fn wait_for_parked(core: &Core, ws: &str, id: &str, root: &std::path::Path) {
+        let start = std::time::Instant::now();
+        let bound = std::time::Duration::from_secs(10);
+        loop {
+            if crate::jobs::claim_parked(root) {
+                return;
+            }
+            if start.elapsed() >= bound {
+                let job = read_job(core, ws, id);
+                panic!(
+                    "root {root:?} was never parked within {bound:?}; job state {:?} v{} log={:?}",
+                    job.state, job.version, job.log
+                );
+            }
+            std::thread::sleep(std::time::Duration::from_millis(25));
+        }
+    }
+
+    fn create_project(core: &Core, ws: &str) -> String {
+        core.memory_command(
+            "create",
+            json!({
+                "contractVersion": 1, "workspaceId": ws, "kind": "project",
+                "draft": { "title": "Harbor App", "body": "Product project.", "privacy": "private",
+                           "eventDate": null, "validFrom": null, "validUntil": null,
+                           "confidence": null, "sourceReferences": [] }
+            }),
+        )
+        .unwrap()["memory"]["id"]
+            .as_str()
+            .unwrap()
+            .to_string()
+    }
+
+    fn begin_project(
+        core: &Core,
+        ws: &str,
+        name: &str,
+        bytes: &[u8],
+        sha: &str,
+        pid: &str,
+    ) -> serde_json::Value {
+        core.job_command(
+            "ingest-begin",
+            json!({"contractVersion":1,"workspaceId":ws,"fileName":name,"bytes":bytes.len(),"sha256":sha,"privacy":"private","projectId":pid}),
+        )
+        .unwrap()
+    }
+
+    /// Wake the worker for this core's storage without touching
+    /// any job: a plain list is a user action that re-arms a
+    /// parked root.
+    fn wake(core: &Core, ws: &str) {
+        core.job_command(
+            "list",
+            json!({"contractVersion":1,"workspaceId":ws,"offset":0}),
+        )
+        .unwrap();
+    }
+
     #[test]
     fn happy_path_publishes_document_with_provenance() {
         let (_temp, core, ws) = setup();
@@ -1557,5 +1625,166 @@ mod tests {
                 1
             );
         }
+    }
+
+    #[test]
+    fn transient_claim_failure_recovers_without_another_wake() {
+        let (_temp, core, ws) = setup();
+        let bytes = b"Transient recovery.";
+        let sha = content::hash(bytes);
+        let opened = begin(&core, &ws, "transient.txt", bytes, &sha, "private");
+        let id = opened["id"].as_str().unwrap().to_string();
+        let root = root_of(&core);
+        crate::jobs::arm_claim_faults(&root, 2, crate::ErrorCode::StorageUnavailable);
+        part(&core, &ws, &id, 0, bytes, true).unwrap();
+        // No further user action: the worker's own retries must
+        // carry the job to completion.
+        let job = wait_for_terminal(&core, &ws, &id);
+        assert_eq!(job.state, crate::jobs::JobState::Completed);
+        assert_eq!(crate::jobs::remaining_claim_faults(&root), 0);
+        assert!(!crate::jobs::claim_parked(&root));
+        let docs = list_documents(&core, &ws)["memories"]
+            .as_array()
+            .unwrap()
+            .clone();
+        assert_eq!(docs.len(), 1);
+        assert_eq!(docs[0]["privacy"].as_str().unwrap(), "private");
+    }
+
+    #[test]
+    fn failing_root_does_not_block_other_roots() {
+        let (_temp_a, core_a, ws_a) = setup();
+        let (_temp_b, core_b, ws_b) = setup();
+        let bytes_a = b"Stranded import.";
+        let sha_a = content::hash(bytes_a);
+        let opened_a = begin(&core_a, &ws_a, "a.txt", bytes_a, &sha_a, "private");
+        let id_a = opened_a["id"].as_str().unwrap().to_string();
+        let bytes_b = b"Healthy import.";
+        let sha_b = content::hash(bytes_b);
+        let opened_b = begin(&core_b, &ws_b, "b.txt", bytes_b, &sha_b, "private");
+        let id_b = opened_b["id"].as_str().unwrap().to_string();
+        let root_a = root_of(&core_a);
+        crate::jobs::arm_claim_faults(&root_a, 1_000_000, crate::ErrorCode::StorageUnavailable);
+        part(&core_a, &ws_a, &id_a, 0, bytes_a, true).unwrap();
+        part(&core_b, &ws_b, &id_b, 0, bytes_b, true).unwrap();
+        // B completes while A is still failing.
+        let job_b = wait_for_terminal(&core_b, &ws_b, &id_b);
+        assert_eq!(job_b.state, crate::jobs::JobState::Completed);
+        // A is parked, its job still Queued and observable, after
+        // exactly the design's budget of 3 attempts.
+        wait_for_parked(&core_a, &ws_a, &id_a, &root_a);
+        let job_a = read_job(&core_a, &ws_a, &id_a);
+        assert_eq!(job_a.state, crate::jobs::JobState::Queued);
+        assert_eq!(crate::jobs::remaining_claim_faults(&root_a), 1_000_000 - 3);
+        crate::jobs::clear_claim_faults(&root_a);
+    }
+
+    #[test]
+    fn persistent_claim_failure_is_bounded_and_parks() {
+        let (_temp, core, ws) = setup();
+        let bytes = b"Persistent failure.";
+        let sha = content::hash(bytes);
+        let opened = begin(&core, &ws, "persistent.txt", bytes, &sha, "private");
+        let id = opened["id"].as_str().unwrap().to_string();
+        let root = root_of(&core);
+        crate::jobs::arm_claim_faults(&root, 1_000_000, crate::ErrorCode::StorageUnavailable);
+        part(&core, &ws, &id, 0, bytes, true).unwrap();
+        wait_for_parked(&core, &ws, &id, &root);
+        // Exactly the design's budget of 3 attempts, never a spin.
+        assert_eq!(crate::jobs::remaining_claim_faults(&root), 1_000_000 - 3);
+        let job = read_job(&core, &ws, &id);
+        assert_eq!(job.state, crate::jobs::JobState::Queued);
+        // Recovery after the fault clears, via an ordinary user wake.
+        crate::jobs::clear_claim_faults(&root);
+        crate::jobs::clear_claim_parked(&root);
+        wake(&core, &ws);
+        let job = wait_for_terminal(&core, &ws, &id);
+        assert_eq!(job.state, crate::jobs::JobState::Completed);
+    }
+
+    #[test]
+    fn corrupt_claim_failure_parks_immediately_and_recovers_on_wake() {
+        let (_temp, core, ws) = setup();
+        let bytes = b"Corrupt catalog.";
+        let sha = content::hash(bytes);
+        let opened = begin(&core, &ws, "corrupt.txt", bytes, &sha, "private");
+        let id = opened["id"].as_str().unwrap().to_string();
+        let root = root_of(&core);
+        crate::jobs::arm_claim_faults(&root, 1_000_000, crate::ErrorCode::CorruptStorage);
+        part(&core, &ws, &id, 0, bytes, true).unwrap();
+        wait_for_parked(&core, &ws, &id, &root);
+        // One attempt only: a corrupt catalog is never retried.
+        assert_eq!(crate::jobs::remaining_claim_faults(&root), 1_000_000 - 1);
+        let job = read_job(&core, &ws, &id);
+        assert_eq!(job.state, crate::jobs::JobState::Queued);
+        crate::jobs::clear_claim_faults(&root);
+        crate::jobs::clear_claim_parked(&root);
+        wake(&core, &ws);
+        let job = wait_for_terminal(&core, &ws, &id);
+        assert_eq!(job.state, crate::jobs::JobState::Completed);
+    }
+
+    #[test]
+    fn cancel_during_claim_retries_stays_cancelled() {
+        let (_temp, core, ws) = setup();
+        let bytes = b"Cancel me during retries.";
+        let sha = content::hash(bytes);
+        let opened = begin(&core, &ws, "cancel-retry.txt", bytes, &sha, "private");
+        let id = opened["id"].as_str().unwrap().to_string();
+        let root = root_of(&core);
+        crate::jobs::arm_claim_faults(&root, 1_000_000, crate::ErrorCode::StorageUnavailable);
+        part(&core, &ws, &id, 0, bytes, true).unwrap();
+        // Cancel while the worker is mid-retry: the control path
+        // runs on this thread and must stay responsive. The claim
+        // faults mean the worker can hold no lease, so the version
+        // read here cannot race the worker.
+        let job = read_job(&core, &ws, &id);
+        core.job_command(
+            "control",
+            json!({"contractVersion":1,"workspaceId":ws,"id":id,"expectedVersion":job.version,"action":"cancel"}),
+        )
+        .unwrap();
+        let job = read_job(&core, &ws, &id);
+        assert_eq!(job.state, crate::jobs::JobState::Cancelled);
+        // The worker parks; clearing the fault and waking must
+        // never resurrect the cancelled job. No sleep is needed:
+        // a claim selects Queued jobs only, so a Cancelled job is
+        // unreachable by recovery whatever the worker's timing.
+        wait_for_parked(&core, &ws, &id, &root);
+        crate::jobs::clear_claim_faults(&root);
+        crate::jobs::clear_claim_parked(&root);
+        wake(&core, &ws);
+        let job = read_job(&core, &ws, &id);
+        assert_eq!(job.state, crate::jobs::JobState::Cancelled);
+        assert_eq!(
+            list_documents(&core, &ws)["memories"]
+                .as_array()
+                .unwrap()
+                .len(),
+            0
+        );
+    }
+
+    #[test]
+    fn recovery_publishes_once_with_declared_privacy_and_project() {
+        let (_temp, core, ws) = setup();
+        let pid = create_project(&core, &ws);
+        let bytes = b"Project import under faults.";
+        let sha = content::hash(bytes);
+        let opened = begin_project(&core, &ws, "project.txt", bytes, &sha, &pid);
+        let id = opened["id"].as_str().unwrap().to_string();
+        let root = root_of(&core);
+        crate::jobs::arm_claim_faults(&root, 2, crate::ErrorCode::StorageUnavailable);
+        part(&core, &ws, &id, 0, bytes, true).unwrap();
+        let job = wait_for_terminal(&core, &ws, &id);
+        assert_eq!(job.state, crate::jobs::JobState::Completed);
+        assert!(job.artifact_id.is_some());
+        let docs = list_documents(&core, &ws)["memories"]
+            .as_array()
+            .unwrap()
+            .clone();
+        assert_eq!(docs.len(), 1);
+        assert_eq!(docs[0]["privacy"].as_str().unwrap(), "private");
+        assert_eq!(docs[0]["projectId"].as_str().unwrap(), pid);
     }
 }
