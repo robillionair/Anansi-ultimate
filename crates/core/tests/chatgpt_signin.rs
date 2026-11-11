@@ -150,6 +150,10 @@ struct IssuerMode {
     refresh_invalid_grant: bool,
     /// HTTP status for revocation (default 200).
     revoke_status: u16,
+    /// When set, the revocation endpoint waits on this gate after
+    /// recording the request, so a test can sign in mid-revocation
+    /// (AC-J1/J2). Bounded like `token_gate`.
+    revoke_gate: Option<Arc<TokenGate>>,
     /// When set, the token endpoint waits on this gate after
     /// recording the request, so a test can disconnect mid-exchange
     /// (AC-L2/L3). Bounded: a stuck test fails rather than hanging
@@ -218,6 +222,7 @@ impl Default for IssuerMode {
             expires_in: 3600,
             refresh_invalid_grant: false,
             revoke_status: 200,
+            revoke_gate: None,
             token_gate: None,
             token_gate_grant: None,
             token_gate_code: None,
@@ -422,7 +427,11 @@ fn start_fake_issuer() -> FakeIssuer {
                         let form: HashMap<String, String> =
                             url::form_urlencoded::parse(&body).into_owned().collect();
                         *last_revoke_token.lock().unwrap() = form.get("token").cloned();
-                        let status = mode.lock().unwrap().revoke_status;
+                        let mode = mode.lock().unwrap().clone();
+                        if let Some(gate) = &mode.revoke_gate {
+                            gate.wait();
+                        }
+                        let status = mode.revoke_status;
                         write_http(&mut stream, status, "");
                     }
                     _ => write_http(&mut stream, 404, &json!({"error": "not_found"}).to_string()),
@@ -759,6 +768,20 @@ fn wait_token_hits(issuer: &FakeIssuer, n: usize) {
             panic!(
                 "token endpoint not reached ({}/{n} hits)",
                 issuer.token_hits.load(Ordering::SeqCst)
+            );
+        }
+        std::thread::sleep(Duration::from_millis(25));
+    }
+}
+
+/// Wait until the synthetic issuer has served `n` revocations.
+fn wait_revoke_hits(issuer: &FakeIssuer, n: usize) {
+    let start = Instant::now();
+    while issuer.revoke_hits.load(Ordering::SeqCst) < n {
+        if start.elapsed() > Duration::from_secs(10) {
+            panic!(
+                "revocation endpoint not reached ({}/{n} hits)",
+                issuer.revoke_hits.load(Ordering::SeqCst)
             );
         }
         std::thread::sleep(Duration::from_millis(25));
@@ -1941,6 +1964,137 @@ fn stale_invalid_grant_does_not_delete_newer_signin() {
     assert_eq!(record["refresh_token"], "rt-test-refresh-0002");
     let s = status(&core, &ws);
     assert_eq!(s["signedIn"], true);
+}
+
+// ---------------------------------------------------------------------------
+// Tests: lifecycle repair 4 (AC-J1..J2)
+//
+// Each test below fails on the repair-3 tip 1dfd312e0 for the
+// defect it names (reproduced before the fix) and passes after it.
+
+#[test]
+fn disconnect_during_revocation_does_not_delete_newer_signin() {
+    let _lock = issuer_lock();
+    test_env_once();
+    let issuer = start_fake_issuer();
+    issuer.set_mode(|m| m.expires_in = 60);
+    let _guard = IssuerGuard::set(&issuer.base_url);
+    let (_dir, core, ws) = core();
+    let client_id = fresh_client_id();
+    let service = anansi_core::chatgpt_signin::CHATGPT_KEYRING_SERVICE;
+    let user = format!("chatgpt-{client_id}");
+    drive_signin(&core, &ws, &issuer, &client_id);
+    poll_status(&core, &ws, Duration::from_secs(10), |s| {
+        s["pendingAttempt"]["status"] == "succeeded"
+    });
+    assert_eq!(issuer.token_hits.load(Ordering::SeqCst), 1);
+    // Distinct tokens for the newer sign-in.
+    issuer.set_mode(|m| {
+        m.access_token = "at-test-access-0003".to_string();
+        m.refresh_token = "rt-test-refresh-0003".to_string();
+    });
+    // 1. Gate the revocation call; start disconnect on a thread.
+    let gate = Arc::new(TokenGate::new());
+    issuer.set_mode(|m| m.revoke_gate = Some(gate.clone()));
+    let core = Arc::new(core);
+    let ws_arc = Arc::new(ws.clone());
+    let client_arc = Arc::new(client_id.clone());
+    let disconnect_thread = {
+        let core = core.clone();
+        let ws = ws_arc.clone();
+        let client_id = client_arc.clone();
+        std::thread::spawn(move || {
+            signin_op(&core, "chatgpt-signin-disconnect", &ws, Some(&client_id))
+        })
+    };
+    wait_revoke_hits(&issuer, 1);
+    // 2. Complete a new sign-in for the same account while
+    // revocation is pending.
+    let (state, nonce, redirect_uri) = begin_reauth(&core, &ws, &client_id);
+    issuer.set_mode(|m| m.expected_nonce = Some(nonce));
+    let callback = format!("{redirect_uri}?code=code-test-0002&state={state}");
+    let (http_status, body) = callback_get(&callback);
+    assert_eq!(http_status, 200);
+    assert!(body.contains("Signed in with ChatGPT"));
+    poll_status(&core, &ws, Duration::from_secs(10), |s| {
+        s["pendingAttempt"]["status"] == "succeeded"
+    });
+    // 3. Release revocation.
+    gate.release();
+    let out = disconnect_thread.join().unwrap().unwrap();
+    // 4. The older disconnect cannot delete the newer credential
+    // or registration metadata: the old session's revocation is
+    // reported honestly, without claiming the newer session is
+    // disconnected.
+    assert_eq!(out["disconnected"], false);
+    assert_eq!(out["localDeletion"], "superseded");
+    assert_eq!(out["remoteRevocationConfirmed"], true);
+    assert_eq!(
+        issuer.last_revoke_token.lock().unwrap().as_deref(),
+        Some("rt-test-refresh-0001")
+    );
+    let record = read_mock_record(service, &user).expect("record survives");
+    assert_eq!(record["access_token"], "at-test-access-0003");
+    assert_eq!(record["refresh_token"], "rt-test-refresh-0003");
+    let s = status(&core, &ws);
+    assert_eq!(s["signedIn"], true);
+    assert_eq!(s["planUsage"], true);
+    assert_eq!(s["accounts"][0]["planUsage"], true);
+    assert_eq!(issuer.token_hits.load(Ordering::SeqCst), 2);
+    assert_eq!(issuer.revoke_hits.load(Ordering::SeqCst), 1);
+    // ... and the newer session is usable: a follow-up refresh
+    // with the surviving token succeeds and rotates it.
+    let out = signin_op(&core, "chatgpt-signin-refresh", &ws, Some(&client_id)).unwrap();
+    assert_eq!(out["refreshed"], true);
+    assert_eq!(issuer.token_hits.load(Ordering::SeqCst), 3);
+    let record = read_mock_record(service, &user).expect("record survives");
+    assert_eq!(record["refresh_token"], "rt-test-refresh-0002");
+}
+
+#[test]
+fn second_disconnect_after_first_reports_absent_not_failed() {
+    let _lock = issuer_lock();
+    test_env_once();
+    let issuer = start_fake_issuer();
+    let _guard = IssuerGuard::set(&issuer.base_url);
+    let (_dir, core, ws) = core();
+    let client_id = fresh_client_id();
+    drive_signin(&core, &ws, &issuer, &client_id);
+    poll_status(&core, &ws, Duration::from_secs(10), |s| {
+        s["pendingAttempt"]["status"] == "succeeded"
+    });
+    // Gate the first disconnect's revocation; start it on a thread.
+    let gate = Arc::new(TokenGate::new());
+    issuer.set_mode(|m| m.revoke_gate = Some(gate.clone()));
+    let core = Arc::new(core);
+    let ws_arc = Arc::new(ws.clone());
+    let client_arc = Arc::new(client_id.clone());
+    let disconnect_thread = {
+        let core = core.clone();
+        let ws = ws_arc.clone();
+        let client_id = client_arc.clone();
+        std::thread::spawn(move || {
+            signin_op(&core, "chatgpt-signin-disconnect", &ws, Some(&client_id))
+        })
+    };
+    wait_revoke_hits(&issuer, 1);
+    // Clear the gate so the second disconnect's revocation passes
+    // through while the first stays parked (its handler already
+    // cloned the mode with the gate set).
+    issuer.set_mode(|m| m.revoke_gate = None);
+    let out2 = signin_op(&core, "chatgpt-signin-disconnect", &ws, Some(&client_id)).unwrap();
+    assert_eq!(out2["disconnected"], true);
+    assert_eq!(out2["localDeletion"], "deleted");
+    assert_eq!(out2["remoteRevocationConfirmed"], true);
+    // Release the first disconnect: its record is already gone.
+    gate.release();
+    let out1 = disconnect_thread.join().unwrap().unwrap();
+    assert_eq!(out1["disconnected"], true);
+    assert_eq!(out1["localDeletion"], "absent");
+    assert_eq!(out1["remoteRevocationConfirmed"], true);
+    assert_eq!(issuer.revoke_hits.load(Ordering::SeqCst), 2);
+    let s = status(&core, &ws);
+    assert_eq!(s["signedIn"], false);
 }
 
 // ---------------------------------------------------------------------------
