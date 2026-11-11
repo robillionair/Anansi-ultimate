@@ -3492,12 +3492,40 @@ pub fn providers_command(
                     }
                 }
                 Err(crate::chatgpt_signin::ChatGptError::InvalidGrant) => {
-                    // Unusable refresh token: clear the record
-                    // (the docs' rule) and report that a fresh
-                    // sign-in is needed. The registration stub
-                    // survives, so re-sign-in reuses the issued
-                    // client ID.
-                    let _ = resolver.delete(&record.reference());
+                    // Destructive failure handling follows the same
+                    // epoch discipline as a successful store: the
+                    // version comparison and the deletion happen
+                    // under one lock hold, so a callback commit
+                    // cannot land between them. Only a genuinely
+                    // current invalid token clears the record (the
+                    // docs' rule); a stale failure deletes nothing.
+                    // The registration stub survives, so re-sign-in
+                    // reuses the issued client ID.
+                    let (epoch, expiry) = with_backend(scope, |state| {
+                        let epoch = state
+                            .chatgpt_epochs
+                            .get(&client_id)
+                            .copied()
+                            .unwrap_or_default();
+                        if epoch.version != epoch_version {
+                            let expiry = load_chatgpt_record(&resolver, &client_id)
+                                .record()
+                                .map(|r| r.expires_at_ms());
+                            return Ok((epoch, expiry));
+                        }
+                        let _ = resolver.delete(&record.reference());
+                        Ok((epoch, None))
+                    })?;
+                    if !epoch.ended && epoch.version != epoch_version {
+                        // Superseded: a newer sign-in committed
+                        // while this refresh was pending. Its record
+                        // is untouched and the session is alive.
+                        return to_value(&ChatGptSigninRefreshResponse {
+                            contract_version: 1,
+                            refreshed: false,
+                            expires_at_ms: expiry,
+                        });
+                    }
                     Err(invalid("The ChatGPT session ended. Sign in again."))
                 }
                 Err(e) => Err(chatgpt_error_to_command(e)),
