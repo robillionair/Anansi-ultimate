@@ -492,19 +492,43 @@ struct WorkerQueue {
     /// previous Vec+pop served LIFO, which stalled an early
     /// ingestion job past a fixed poll window on a contended
     /// broad run.
-    pending: VecDeque<Storage>,
+    pending: VecDeque<PendingRoot>,
+}
+
+/// Consecutive `StorageUnavailable` claim failures tolerated per
+/// arming before the worker parks the root. Each attempt already
+/// runs through SQLite with a 5 s busy timeout, so three attempts
+/// span real contention; more would only delay parking a
+/// persistently sick root.
+const MAX_CLAIM_FAILURES: u32 = 3;
+/// Kindness delay before re-claiming a root that already failed
+/// a claim. The attempt bound — not this delay — is what
+/// prevents a busy loop; the delay only spares a sick store
+/// from immediate re-probing.
+const CLAIM_RETRY_DELAY: std::time::Duration = std::time::Duration::from_millis(100);
+
+struct PendingRoot {
+    storage: Storage,
+    claim_failures: u32,
 }
 
 impl WorkerQueue {
     /// Queue a storage root for the worker, deduplicated by root.
+    /// A re-wake of a pending root resets its failure count: a
+    /// fresh user action earns a fresh budget.
     /// Returns true when the caller must start the worker thread.
     fn wake(&mut self, storage: Storage) -> bool {
-        if !self
+        if let Some(pending) = self
             .pending
-            .iter()
-            .any(|pending| pending.root == storage.root)
+            .iter_mut()
+            .find(|pending| pending.storage.root == storage.root)
         {
-            self.pending.push_back(storage);
+            pending.claim_failures = 0;
+        } else {
+            self.pending.push_back(PendingRoot {
+                storage,
+                claim_failures: 0,
+            });
         }
         if self.running {
             return false;
@@ -518,13 +542,27 @@ impl WorkerQueue {
     /// stops the thread. Taking work and deciding to stop share the
     /// caller's lock hold, so a wake-up committed during shutdown
     /// cannot be lost.
-    fn take_next(&mut self) -> Option<Storage> {
+    fn take_next(&mut self) -> Option<PendingRoot> {
         match self.pending.pop_front() {
-            Some(storage) => Some(storage),
+            Some(pending) => Some(pending),
             None => {
                 self.running = false;
                 None
             }
+        }
+    }
+
+    /// Re-queue a root whose claim failed, at the back, so other
+    /// roots are served before the retry. If a fresh wake already
+    /// re-pended the root while it was being served, the requeue
+    /// is dropped and the pending entry (fresh budget) wins.
+    fn requeue(&mut self, pending: PendingRoot) {
+        if !self
+            .pending
+            .iter()
+            .any(|entry| entry.storage.root == pending.storage.root)
+        {
+            self.pending.push_back(pending);
         }
     }
 }
@@ -603,6 +641,21 @@ pub(crate) fn clear_claim_parked(root: &std::path::Path) {
         .retain(|entry| entry.as_path() != root);
 }
 
+/// Record that the worker parked a root (test builds only; a
+/// no-op in shipped builds, where the observable state is the
+/// jobs left Queued and the next user wake re-arming the root).
+#[cfg(test)]
+fn record_claim_parked(storage: &Storage) {
+    let mut parked = CLAIM_PARKED
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    if !parked.iter().any(|entry| *entry == storage.root) {
+        parked.push(storage.root.clone());
+    }
+}
+#[cfg(not(test))]
+fn record_claim_parked(_storage: &Storage) {}
+
 /// The worker loop's claim call. In test builds a fault table can
 /// force failures for one storage root, so recovery behavior is
 /// exercised deterministically without filesystem races. In
@@ -644,23 +697,60 @@ impl crate::Core {
             loop {
                 // Taking pending work and deciding to stop share the wake-up mutex.
                 // A request committed during shutdown therefore cannot lose its wake-up.
-                let storage = {
+                let mut pending = {
                     let mut queue = PROCESS_WORKER
                         .lock()
                         .unwrap_or_else(|error| error.into_inner());
                     match queue.take_next() {
-                        Some(storage) => storage,
+                        Some(pending) => pending,
                         None => return,
                     }
                 };
-                while let Ok(Some(lease)) = claim_for_worker(&storage) {
-                    let result = match &lease.job.selection {
-                        ExportSelection::Backup { .. } => storage.execute_backup(&lease),
-                        ExportSelection::Ingestion { .. } => storage.execute_ingestion(&lease),
-                        _ => storage.execute_export(&lease),
-                    };
-                    if result.is_err() {
-                        let _ = storage.fail_export(&lease);
+                if pending.claim_failures > 0 {
+                    std::thread::sleep(CLAIM_RETRY_DELAY);
+                }
+                loop {
+                    match claim_for_worker(&pending.storage) {
+                        Ok(Some(lease)) => {
+                            pending.claim_failures = 0;
+                            let result = match &lease.job.selection {
+                                ExportSelection::Backup { .. } => {
+                                    pending.storage.execute_backup(&lease)
+                                }
+                                ExportSelection::Ingestion { .. } => {
+                                    pending.storage.execute_ingestion(&lease)
+                                }
+                                _ => pending.storage.execute_export(&lease),
+                            };
+                            if result.is_err() {
+                                let _ = pending.storage.fail_export(&lease);
+                            }
+                        }
+                        Ok(None) => break,
+                        Err(error) => {
+                            // Only StorageUnavailable is retried, and
+                            // only within the budget. Any other code
+                            // (a corrupt catalog above all) needs user
+                            // action: park immediately without
+                            // consuming retries.
+                            if error.code != ErrorCode::StorageUnavailable {
+                                record_claim_parked(&pending.storage);
+                                break;
+                            }
+                            pending.claim_failures += 1;
+                            if pending.claim_failures >= MAX_CLAIM_FAILURES {
+                                record_claim_parked(&pending.storage);
+                                break;
+                            }
+                            // Re-queue at the back so other roots
+                            // make progress before this root is
+                            // retried.
+                            let mut queue = PROCESS_WORKER
+                                .lock()
+                                .unwrap_or_else(|error| error.into_inner());
+                            queue.requeue(pending);
+                            break;
+                        }
                     }
                 }
             }
@@ -774,9 +864,9 @@ mod tests {
         assert!(queue.wake(storage("a")));
         assert!(!queue.wake(storage("b")));
         assert!(!queue.wake(storage("c")));
-        assert_eq!(queue.take_next().unwrap().root, PathBuf::from("a"));
-        assert_eq!(queue.take_next().unwrap().root, PathBuf::from("b"));
-        assert_eq!(queue.take_next().unwrap().root, PathBuf::from("c"));
+        assert_eq!(queue.take_next().unwrap().storage.root, PathBuf::from("a"));
+        assert_eq!(queue.take_next().unwrap().storage.root, PathBuf::from("b"));
+        assert_eq!(queue.take_next().unwrap().storage.root, PathBuf::from("c"));
         assert!(queue.take_next().is_none());
         assert!(!queue.running);
     }
@@ -787,8 +877,8 @@ mod tests {
         queue.wake(storage("a"));
         queue.wake(storage("b"));
         queue.wake(storage("a"));
-        assert_eq!(queue.take_next().unwrap().root, PathBuf::from("a"));
-        assert_eq!(queue.take_next().unwrap().root, PathBuf::from("b"));
+        assert_eq!(queue.take_next().unwrap().storage.root, PathBuf::from("a"));
+        assert_eq!(queue.take_next().unwrap().storage.root, PathBuf::from("b"));
         assert!(queue.take_next().is_none());
     }
 
@@ -796,11 +886,68 @@ mod tests {
     fn worker_queue_restarts_after_going_idle() {
         let mut queue = WorkerQueue::default();
         assert!(queue.wake(storage("a")));
-        assert_eq!(queue.take_next().unwrap().root, PathBuf::from("a"));
+        assert_eq!(queue.take_next().unwrap().storage.root, PathBuf::from("a"));
         assert!(queue.take_next().is_none());
         assert!(!queue.running);
         assert!(queue.wake(storage("b")));
-        assert_eq!(queue.take_next().unwrap().root, PathBuf::from("b"));
+        assert_eq!(queue.take_next().unwrap().storage.root, PathBuf::from("b"));
         assert!(queue.take_next().is_none());
+    }
+
+    #[test]
+    fn worker_queue_requeue_goes_to_the_back() {
+        let mut queue = WorkerQueue::default();
+        queue.wake(storage("a"));
+        queue.wake(storage("b"));
+        let pending = queue.take_next().unwrap();
+        assert_eq!(pending.storage.root, PathBuf::from("a"));
+        queue.requeue(pending);
+        assert_eq!(queue.take_next().unwrap().storage.root, PathBuf::from("b"));
+        assert_eq!(queue.take_next().unwrap().storage.root, PathBuf::from("a"));
+        assert!(queue.take_next().is_none());
+    }
+
+    #[test]
+    fn worker_queue_rewake_resets_failure_count() {
+        let mut queue = WorkerQueue::default();
+        queue.wake(storage("a"));
+        let mut pending = queue.take_next().unwrap();
+        pending.claim_failures = 2;
+        queue.requeue(pending);
+        queue.wake(storage("a"));
+        let pending = queue.take_next().unwrap();
+        assert_eq!(pending.claim_failures, 0);
+        assert!(queue.take_next().is_none());
+    }
+
+    #[test]
+    fn worker_queue_requeue_drops_when_fresh_wake_pending() {
+        let mut queue = WorkerQueue::default();
+        queue.wake(storage("a"));
+        let pending = queue.take_next().unwrap();
+        // A fresh wake arrives while the root is being served.
+        queue.wake(storage("a"));
+        queue.requeue(pending);
+        // Exactly one entry, with the fresh budget.
+        let pending = queue.take_next().unwrap();
+        assert_eq!(pending.claim_failures, 0);
+        assert!(queue.take_next().is_none());
+    }
+
+    #[test]
+    fn worker_queue_drains_after_parking() {
+        let mut queue = WorkerQueue::default();
+        queue.wake(storage("a"));
+        let mut pending = queue.take_next().unwrap();
+        pending.claim_failures = 2;
+        queue.requeue(pending);
+        let pending = queue.take_next().unwrap();
+        assert_eq!(pending.claim_failures, 2);
+        // Parked: no requeue. The queue reports idle and a later
+        // wake restarts the worker.
+        assert!(queue.take_next().is_none());
+        assert!(!queue.running);
+        assert!(queue.wake(storage("b")));
+        assert_eq!(queue.take_next().unwrap().storage.root, PathBuf::from("b"));
     }
 }
