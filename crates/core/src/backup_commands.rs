@@ -187,7 +187,7 @@ impl Core {
             _ => return Err(invalid()),
         }
         .map_err(|_| unavailable())?;
-        self.wake_export_worker();
+        self.wake_export_worker(crate::jobs::WakeKind::Deliberate);
         Ok(response)
     }
     pub(crate) fn start_backup_scheduler(&self) {
@@ -200,7 +200,7 @@ impl Core {
                         .unwrap_or(0)
                         > 0
                 {
-                    core.wake_export_worker();
+                    core.wake_export_worker(crate::jobs::WakeKind::Deliberate);
                 }
                 std::thread::sleep(std::time::Duration::from_secs(30));
             }

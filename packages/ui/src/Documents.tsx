@@ -227,6 +227,15 @@ export function Documents({
     });
   }
 
+  async function recover(job: Job) {
+    await run(async () => {
+      const updated = await client.controlJob(workspaceId, job.id, job.version, 'recover');
+      setActiveJob(updated.job);
+      setNotice('Recovery requested. The import will be retried.');
+      await refreshJobs();
+    });
+  }
+
   async function search() {
     if (!query.trim()) {
       setSearchResults(null);
@@ -384,10 +393,21 @@ export function Documents({
           <p>
             Checkpoint {activeJob.checkpointVersion}: {activeJob.checkpoint}. {activeJob.log}
           </p>
+          {activeJob.recoveryDiagnostic && (
+            <p role="alert" className="error">
+              {activeJob.recoveryDiagnostic.message} Attempts used:{' '}
+              {activeJob.recoveryDiagnostic.attempts}.
+            </p>
+          )}
           <div className="actions">
             {['Queued', 'Running', 'Paused'].includes(activeJob.state) && (
               <button disabled={busy} onClick={() => void cancel(activeJob)}>
                 Cancel import
+              </button>
+            )}
+            {activeJob.recoveryDiagnostic && activeJob.state === 'Queued' && (
+              <button disabled={busy} onClick={() => void recover(activeJob)}>
+                Retry recovery
               </button>
             )}
             <button disabled={busy} className="secondary" onClick={() => void refreshJobs()}>

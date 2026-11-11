@@ -57,11 +57,12 @@ export function Jobs({client,workspaceId,native}:{client:Client;workspaceId:stri
       {scope!=='workspace'&&choiceOffset!==null&&<button type="button" disabled={busy} onClick={()=>void run(()=>loadChoices(choiceOffset))}>Load more choices</button>}
       <button disabled={busy||(scope!=='workspace'&&!ids.length)} type="submit">Create knowledge export</button>
     </form><div className="actions"><button disabled={busy} onClick={()=>void refresh()}>Refresh jobs</button><button disabled={busy||offset===0} onClick={()=>setOffset(Math.max(0,offset-50))}>Newer jobs</button><button disabled={busy||next===null} onClick={()=>setOffset(next!)}>Older jobs</button></div>
-    <ul>{jobs.map(job=><li key={job.id} data-job-id={job.id}><h3>{ingestionJobLabel(job)}</h3>{job.id===createdJob&&<p>Your latest export request.</p>}<p>Created {new Date(job.createdAt).toLocaleString()}</p><p>State: <strong>{job.state}</strong> · Records processed: {job.progress}</p><p>Checkpoint {job.checkpointVersion}: {job.checkpoint}. {job.log}</p><div className="actions">
+    <ul>{jobs.map(job=><li key={job.id} data-job-id={job.id}><h3>{ingestionJobLabel(job)}</h3>{job.id===createdJob&&<p>Your latest export request.</p>}<p>Created {new Date(job.createdAt).toLocaleString()}</p><p>State: <strong>{job.state}</strong> · Records processed: {job.progress}</p><p>Checkpoint {job.checkpointVersion}: {job.checkpoint}. {job.log}</p>{job.recoveryDiagnostic&&<p role="alert" className="error">{job.recoveryDiagnostic.message} Attempts used: {job.recoveryDiagnostic.attempts}.</p>}<div className="actions">
       {['Queued','Running'].includes(job.state)&&<button disabled={busy} onClick={()=>void run(()=>control(job,'pause'))}>Pause export</button>}
       {job.state==='Paused'&&<button disabled={busy} onClick={()=>void run(()=>control(job,'resume'))}>Resume export</button>}
       {['Queued','Running','Paused'].includes(job.state)&&<button disabled={busy} onClick={()=>void run(()=>control(job,'cancel'))}>Cancel export</button>}
       {['Failed','Cancelled'].includes(job.state)&&<button disabled={busy} onClick={()=>void run(()=>control(job,'retry'))}>Retry export</button>}
+      {job.recoveryDiagnostic&&job.state==='Queued'&&<button disabled={busy} onClick={()=>void run(()=>control(job,'recover'))}>Retry recovery</button>}
       {job.state==='Completed'&&<button disabled={busy} onClick={()=>void run(()=>download(job))}>{native?'Save complete export':'Download complete export'}</button>}
     </div>{job.state==='Paused'&&<p>Resume explicitly. An interrupted snapshot stage is rebuilt safely; partial files are never downloadable.</p>}</li>)}</ul>{!jobs.length&&<p>No export jobs on this page.</p>}
   </section>;

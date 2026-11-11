@@ -4942,13 +4942,22 @@
   "ControlJobRequest": {
     "$defs": {
       "JobAction": {
-        "enum": [
-          "pause",
-          "resume",
-          "cancel",
-          "retry"
-        ],
-        "type": "string"
+        "oneOf": [
+          {
+            "enum": [
+              "pause",
+              "resume",
+              "cancel",
+              "retry"
+            ],
+            "type": "string"
+          },
+          {
+            "const": "recover",
+            "description": "Deliberate re-arm of an exhausted root for a Queued job.\nValid from Queued only; clears the root's exhaustion and\nwakes the worker. Harmless on a healthy root.",
+            "type": "string"
+          }
+        ]
       }
     },
     "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -9138,6 +9147,17 @@
             "minimum": 0,
             "type": "integer"
           },
+          "recoveryDiagnostic": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/JobRecoveryDiagnostic"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Present only for Queued jobs whose storage root exhausted\nclaim recovery. Computed at read time from in-memory\nworker state — never stored on the durable job row."
+          },
           "selection": {
             "$ref": "#/$defs/ExportSelection"
           },
@@ -9172,6 +9192,38 @@
           "log"
         ],
         "type": "object"
+      },
+      "JobRecoveryDiagnostic": {
+        "additionalProperties": false,
+        "description": "Actionable production diagnostic for a Queued job stranded by\nexhausted claim recovery. Attached at read time by `list_jobs`\nand `control_job` when the job's storage root is exhausted.",
+        "properties": {
+          "attempts": {
+            "description": "Claim attempts consumed in the arming that exhausted\nrecovery (3 for unavailable storage, 1 for corrupt).",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "message": {
+            "type": "string"
+          },
+          "reason": {
+            "$ref": "#/$defs/JobRecoveryReason"
+          }
+        },
+        "required": [
+          "reason",
+          "attempts",
+          "message"
+        ],
+        "type": "object"
+      },
+      "JobRecoveryReason": {
+        "description": "Why claim recovery was exhausted for a storage root. Bounded\nby construction: only the two failure kinds `claim_export`\ncan produce. The diagnostic message is fixed per reason and\ncarries no filesystem detail.",
+        "enum": [
+          "storageUnavailable",
+          "corruptStorage"
+        ],
+        "type": "string"
       },
       "JobState": {
         "enum": [
@@ -9349,6 +9401,38 @@
           }
         ]
       },
+      "JobRecoveryDiagnostic": {
+        "additionalProperties": false,
+        "description": "Actionable production diagnostic for a Queued job stranded by\nexhausted claim recovery. Attached at read time by `list_jobs`\nand `control_job` when the job's storage root is exhausted.",
+        "properties": {
+          "attempts": {
+            "description": "Claim attempts consumed in the arming that exhausted\nrecovery (3 for unavailable storage, 1 for corrupt).",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "message": {
+            "type": "string"
+          },
+          "reason": {
+            "$ref": "#/$defs/JobRecoveryReason"
+          }
+        },
+        "required": [
+          "reason",
+          "attempts",
+          "message"
+        ],
+        "type": "object"
+      },
+      "JobRecoveryReason": {
+        "description": "Why claim recovery was exhausted for a storage root. Bounded\nby construction: only the two failure kinds `claim_export`\ncan produce. The diagnostic message is fixed per reason and\ncarries no filesystem detail.",
+        "enum": [
+          "storageUnavailable",
+          "corruptStorage"
+        ],
+        "type": "string"
+      },
       "JobState": {
         "enum": [
           "Queued",
@@ -9424,6 +9508,17 @@
         "format": "uint32",
         "minimum": 0,
         "type": "integer"
+      },
+      "recoveryDiagnostic": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/JobRecoveryDiagnostic"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "Present only for Queued jobs whose storage root exhausted\nclaim recovery. Computed at read time from in-memory\nworker state — never stored on the durable job row."
       },
       "selection": {
         "$ref": "#/$defs/ExportSelection"
@@ -9635,6 +9730,17 @@
             "minimum": 0,
             "type": "integer"
           },
+          "recoveryDiagnostic": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/JobRecoveryDiagnostic"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Present only for Queued jobs whose storage root exhausted\nclaim recovery. Computed at read time from in-memory\nworker state — never stored on the durable job row."
+          },
           "selection": {
             "$ref": "#/$defs/ExportSelection"
           },
@@ -9669,6 +9775,38 @@
           "log"
         ],
         "type": "object"
+      },
+      "JobRecoveryDiagnostic": {
+        "additionalProperties": false,
+        "description": "Actionable production diagnostic for a Queued job stranded by\nexhausted claim recovery. Attached at read time by `list_jobs`\nand `control_job` when the job's storage root is exhausted.",
+        "properties": {
+          "attempts": {
+            "description": "Claim attempts consumed in the arming that exhausted\nrecovery (3 for unavailable storage, 1 for corrupt).",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "message": {
+            "type": "string"
+          },
+          "reason": {
+            "$ref": "#/$defs/JobRecoveryReason"
+          }
+        },
+        "required": [
+          "reason",
+          "attempts",
+          "message"
+        ],
+        "type": "object"
+      },
+      "JobRecoveryReason": {
+        "description": "Why claim recovery was exhausted for a storage root. Bounded\nby construction: only the two failure kinds `claim_export`\ncan produce. The diagnostic message is fixed per reason and\ncarries no filesystem detail.",
+        "enum": [
+          "storageUnavailable",
+          "corruptStorage"
+        ],
+        "type": "string"
       },
       "JobState": {
         "enum": [
@@ -9885,6 +10023,17 @@
             "minimum": 0,
             "type": "integer"
           },
+          "recoveryDiagnostic": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/JobRecoveryDiagnostic"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Present only for Queued jobs whose storage root exhausted\nclaim recovery. Computed at read time from in-memory\nworker state — never stored on the durable job row."
+          },
           "selection": {
             "$ref": "#/$defs/ExportSelection"
           },
@@ -9919,6 +10068,38 @@
           "log"
         ],
         "type": "object"
+      },
+      "JobRecoveryDiagnostic": {
+        "additionalProperties": false,
+        "description": "Actionable production diagnostic for a Queued job stranded by\nexhausted claim recovery. Attached at read time by `list_jobs`\nand `control_job` when the job's storage root is exhausted.",
+        "properties": {
+          "attempts": {
+            "description": "Claim attempts consumed in the arming that exhausted\nrecovery (3 for unavailable storage, 1 for corrupt).",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "message": {
+            "type": "string"
+          },
+          "reason": {
+            "$ref": "#/$defs/JobRecoveryReason"
+          }
+        },
+        "required": [
+          "reason",
+          "attempts",
+          "message"
+        ],
+        "type": "object"
+      },
+      "JobRecoveryReason": {
+        "description": "Why claim recovery was exhausted for a storage root. Bounded\nby construction: only the two failure kinds `claim_export`\ncan produce. The diagnostic message is fixed per reason and\ncarries no filesystem detail.",
+        "enum": [
+          "storageUnavailable",
+          "corruptStorage"
+        ],
+        "type": "string"
       },
       "JobState": {
         "enum": [
@@ -28916,6 +29097,17 @@
             "minimum": 0,
             "type": "integer"
           },
+          "recoveryDiagnostic": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/JobRecoveryDiagnostic"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Present only for Queued jobs whose storage root exhausted\nclaim recovery. Computed at read time from in-memory\nworker state — never stored on the durable job row."
+          },
           "selection": {
             "$ref": "#/$defs/ExportSelection"
           },
@@ -28950,6 +29142,38 @@
           "log"
         ],
         "type": "object"
+      },
+      "JobRecoveryDiagnostic": {
+        "additionalProperties": false,
+        "description": "Actionable production diagnostic for a Queued job stranded by\nexhausted claim recovery. Attached at read time by `list_jobs`\nand `control_job` when the job's storage root is exhausted.",
+        "properties": {
+          "attempts": {
+            "description": "Claim attempts consumed in the arming that exhausted\nrecovery (3 for unavailable storage, 1 for corrupt).",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "message": {
+            "type": "string"
+          },
+          "reason": {
+            "$ref": "#/$defs/JobRecoveryReason"
+          }
+        },
+        "required": [
+          "reason",
+          "attempts",
+          "message"
+        ],
+        "type": "object"
+      },
+      "JobRecoveryReason": {
+        "description": "Why claim recovery was exhausted for a storage root. Bounded\nby construction: only the two failure kinds `claim_export`\ncan produce. The diagnostic message is fixed per reason and\ncarries no filesystem detail.",
+        "enum": [
+          "storageUnavailable",
+          "corruptStorage"
+        ],
+        "type": "string"
       },
       "JobState": {
         "enum": [

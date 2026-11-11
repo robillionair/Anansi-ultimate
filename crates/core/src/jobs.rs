@@ -134,6 +134,61 @@ pub struct Job {
     pub created_at: String,
     pub updated_at: String,
     pub log: String,
+    /// Present only for Queued jobs whose storage root exhausted
+    /// claim recovery. Computed at read time from in-memory
+    /// worker state — never stored on the durable job row.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recovery_diagnostic: Option<JobRecoveryDiagnostic>,
+}
+
+/// Why claim recovery was exhausted for a storage root. Bounded
+/// by construction: only the two failure kinds `claim_export`
+/// can produce. The diagnostic message is fixed per reason and
+/// carries no filesystem detail.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum JobRecoveryReason {
+    StorageUnavailable,
+    CorruptStorage,
+}
+
+impl JobRecoveryReason {
+    fn from_claim_error(code: &ErrorCode) -> Self {
+        match code {
+            ErrorCode::StorageUnavailable => Self::StorageUnavailable,
+            // The only other code `claim_export` can produce is
+            // `CorruptStorage` from `connection()`; anything else
+            // is unreachable in practice and is treated the same
+            // conservative way: user action required, no retry.
+            _ => Self::CorruptStorage,
+        }
+    }
+
+    /// Fixed sanitized instruction. Never interpolates paths,
+    /// SQLite text, or record contents.
+    fn message(&self) -> &'static str {
+        match self {
+            Self::StorageUnavailable => {
+                "Recovery stopped because storage was unavailable. Check the storage folder and permissions, then choose Retry recovery."
+            }
+            Self::CorruptStorage => {
+                "Recovery stopped because storage could not be read. Keep the original files and restore a verified backup, then choose Retry recovery."
+            }
+        }
+    }
+}
+
+/// Actionable production diagnostic for a Queued job stranded by
+/// exhausted claim recovery. Attached at read time by `list_jobs`
+/// and `control_job` when the job's storage root is exhausted.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct JobRecoveryDiagnostic {
+    pub reason: JobRecoveryReason,
+    /// Claim attempts consumed in the arming that exhausted
+    /// recovery (3 for unavailable storage, 1 for corrupt).
+    pub attempts: u32,
+    pub message: String,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema)]
@@ -143,6 +198,20 @@ pub enum JobAction {
     Resume,
     Cancel,
     Retry,
+    /// Deliberate re-arm of an exhausted root for a Queued job.
+    /// Valid from Queued only; clears the root's exhaustion and
+    /// wakes the worker. Harmless on a healthy root.
+    Recover,
+}
+
+/// Whether a worker wake-up is a deliberate user action (new
+/// work, an explicit control, startup) or passive status
+/// observation (polling). Only deliberate wakes re-arm an
+/// exhausted root; passive wakes never reset a budget.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WakeKind {
+    Deliberate,
+    Passive,
 }
 
 pub(crate) fn invalid() -> CommandError {
@@ -232,6 +301,9 @@ pub(crate) fn read(
         created_at,
         updated_at,
         log,
+        // The diagnostic is attached at the API boundary
+        // (`list_jobs` / `control_job`), never from the row.
+        recovery_diagnostic: None,
     })
 }
 
@@ -314,6 +386,29 @@ impl Storage {
         read(&connection, workspace, id)
     }
 
+    /// Attach the recovery diagnostic to a Queued job when this
+    /// storage root exhausted claim recovery. Read-time only: the
+    /// durable row is never written, and only this root's own
+    /// exhaustion is ever exposed.
+    fn attach_recovery_diagnostic(&self, job: &mut Job) {
+        if job.state != JobState::Queued {
+            return;
+        }
+        let record = {
+            let queue = PROCESS_WORKER
+                .lock()
+                .unwrap_or_else(|error| error.into_inner());
+            queue.exhaustion_for(&self.root)
+        };
+        if let Some(record) = record {
+            job.recovery_diagnostic = Some(JobRecoveryDiagnostic {
+                reason: record.reason,
+                attempts: record.attempts,
+                message: record.reason.message().to_string(),
+            });
+        }
+    }
+
     /// Newest first, bounded page; state changes always require the observed version.
     pub fn list_jobs(&self, workspace: &str, offset: u32) -> Result<Vec<Job>, CommandError> {
         validate_id(workspace)?;
@@ -327,7 +422,11 @@ impl Storage {
             .collect::<rusqlite::Result<Vec<_>>>()
             .map_err(|_| unavailable())?;
         ids.iter()
-            .map(|id| read(&connection, workspace, id))
+            .map(|id| {
+                let mut job = read(&connection, workspace, id)?;
+                self.attach_recovery_diagnostic(&mut job);
+                Ok(job)
+            })
             .collect()
     }
 
@@ -356,6 +455,7 @@ impl Storage {
                 JobState::Cancelled
             }
             (JobAction::Retry, JobState::Failed | JobState::Cancelled) => JobState::Queued,
+            (JobAction::Recover, JobState::Queued) => JobState::Queued,
             _ => return Err(invalid()),
         };
         // An ingestion job whose upload has not finished cannot be queued:
@@ -371,9 +471,31 @@ impl Storage {
                 "This import's upload is incomplete; resume the upload instead of the job.",
             ));
         }
-        tx.execute("UPDATE jobs SET state=?1,version=version+1,owner=NULL,lease_until=NULL,updated_at=?2,log=?3 WHERE workspace_id=?4 AND id=?5",params![state_name(&next),now(),match next { JobState::Queued=>"Export queued explicitly",JobState::Paused=>"Export paused explicitly",_=>"Export cancelled explicitly" },workspace,id]).map_err(|_| unavailable())?;
-        let result = read(&tx, workspace, id)?;
+        let log = match action {
+            JobAction::Recover => "Export recovery requested explicitly",
+            _ => match next {
+                JobState::Queued => "Export queued explicitly",
+                JobState::Paused => "Export paused explicitly",
+                _ => "Export cancelled explicitly",
+            },
+        };
+        tx.execute("UPDATE jobs SET state=?1,version=version+1,owner=NULL,lease_until=NULL,updated_at=?2,log=?3 WHERE workspace_id=?4 AND id=?5",params![state_name(&next),now(),log,workspace,id]).map_err(|_| unavailable())?;
+        let mut result = read(&tx, workspace, id)?;
         tx.commit().map_err(|_| unavailable())?;
+        // A successful deliberate action that queues work clears
+        // the root's exhaustion, so the response below — and the
+        // following deliberate wake — see the re-armed state.
+        // Failed controls clear nothing. Pause/Cancel never clear.
+        if matches!(
+            action,
+            JobAction::Retry | JobAction::Resume | JobAction::Recover
+        ) {
+            let mut queue = PROCESS_WORKER
+                .lock()
+                .unwrap_or_else(|error| error.into_inner());
+            queue.clear_exhausted(&self.root);
+        }
+        self.attach_recovery_diagnostic(&mut result);
         // Cancelling an import abandons its staged bytes. Best effort and
         // after the commit: a failed delete never blocks the cancellation,
         // and the upload-begin sweep removes any leftover later.
@@ -493,6 +615,23 @@ struct WorkerQueue {
     /// ingestion job past a fixed poll window on a contended
     /// broad run.
     pending: VecDeque<PendingRoot>,
+    /// Roots whose claim recovery is exhausted, with the reason
+    /// and attempts consumed. Passive wakes never touch this
+    /// record; only a deliberate wake or a successful queueing
+    /// control clears it. In-memory only: a restart recovers.
+    exhausted: Vec<ExhaustedRoot>,
+}
+
+/// A parked root's production exhaustion record: the reason
+/// recovery stopped and the attempts consumed in the arming
+/// that exhausted it. This is the state behind the
+/// `recoveryDiagnostic` on Queued jobs — deliberately separate
+/// from the test-only parked signal.
+#[derive(Debug, Clone)]
+struct ExhaustedRoot {
+    root: std::path::PathBuf,
+    reason: JobRecoveryReason,
+    attempts: u32,
 }
 
 /// Consecutive `StorageUnavailable` claim failures tolerated per
@@ -514,27 +653,84 @@ struct PendingRoot {
 
 impl WorkerQueue {
     /// Queue a storage root for the worker, deduplicated by root.
-    /// A re-wake of a pending root resets its failure count: a
-    /// fresh user action earns a fresh budget.
+    /// A deliberate wake clears any exhaustion record and resets
+    /// a pending root's failure count: a fresh user action earns
+    /// a fresh budget. A passive wake (status polling) never
+    /// touches an exhausted root and never resets a pending
+    /// root's count — observation must not re-arm recovery.
     /// Returns true when the caller must start the worker thread.
-    fn wake(&mut self, storage: Storage) -> bool {
-        if let Some(pending) = self
-            .pending
-            .iter_mut()
-            .find(|pending| pending.storage.root == storage.root)
-        {
-            pending.claim_failures = 0;
-        } else {
-            self.pending.push_back(PendingRoot {
-                storage,
-                claim_failures: 0,
-            });
+    fn wake(&mut self, storage: Storage, kind: WakeKind) -> bool {
+        match kind {
+            WakeKind::Deliberate => {
+                self.clear_exhausted(&storage.root);
+                if let Some(pending) = self
+                    .pending
+                    .iter_mut()
+                    .find(|pending| pending.storage.root == storage.root)
+                {
+                    pending.claim_failures = 0;
+                } else {
+                    self.pending.push_back(PendingRoot {
+                        storage,
+                        claim_failures: 0,
+                    });
+                }
+            }
+            WakeKind::Passive => {
+                if self
+                    .exhausted
+                    .iter()
+                    .any(|entry| entry.root == storage.root)
+                {
+                    return false;
+                }
+                if !self
+                    .pending
+                    .iter()
+                    .any(|pending| pending.storage.root == storage.root)
+                {
+                    self.pending.push_back(PendingRoot {
+                        storage,
+                        claim_failures: 0,
+                    });
+                }
+            }
         }
         if self.running {
             return false;
         }
         self.running = true;
         true
+    }
+
+    /// Record that a root's claim recovery is exhausted. Replaces
+    /// any earlier record for the root.
+    fn mark_exhausted(
+        &mut self,
+        root: std::path::PathBuf,
+        reason: JobRecoveryReason,
+        attempts: u32,
+    ) {
+        self.exhausted.retain(|entry| entry.root != root);
+        self.exhausted.push(ExhaustedRoot {
+            root,
+            reason,
+            attempts,
+        });
+    }
+
+    /// Clear a root's exhaustion record (deliberate re-arm).
+    fn clear_exhausted(&mut self, root: &std::path::Path) {
+        self.exhausted.retain(|entry| entry.root.as_path() != root);
+    }
+
+    /// A copy of a root's exhaustion record, if any. The
+    /// diagnostic attach path reads through this.
+    fn exhaustion_for(&self, root: &std::path::Path) -> Option<ExhaustedRoot> {
+        self.exhausted
+            .iter()
+            .find(|entry| entry.root.as_path() == root)
+            .cloned()
     }
 
     /// Take the next storage to serve. When the queue is empty the
@@ -570,6 +766,7 @@ impl WorkerQueue {
 static PROCESS_WORKER: std::sync::Mutex<WorkerQueue> = std::sync::Mutex::new(WorkerQueue {
     running: false,
     pending: VecDeque::new(),
+    exhausted: Vec::new(),
 });
 
 /// Forced claim failures for fault-injection tests, keyed by
@@ -656,6 +853,20 @@ fn record_claim_parked(storage: &Storage) {
 #[cfg(not(test))]
 fn record_claim_parked(_storage: &Storage) {}
 
+/// Park a root: record its production exhaustion (reason +
+/// attempts) under the queue lock, and record the test-only
+/// parked signal. The two records are deliberately separate:
+/// tests may clear the signal without re-arming the root.
+fn park_root(storage: &Storage, reason: JobRecoveryReason, attempts: u32) {
+    {
+        let mut queue = PROCESS_WORKER
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        queue.mark_exhausted(storage.root.clone(), reason, attempts);
+    }
+    record_claim_parked(storage);
+}
+
 /// The worker loop's claim call. In test builds a fault table can
 /// force failures for one storage root, so recovery behavior is
 /// exercised deterministically without filesystem races. In
@@ -680,7 +891,9 @@ fn claim_for_worker(storage: &Storage) -> Result<Option<JobLease>, CommandError>
 }
 impl crate::Core {
     /// One background export worker per process. Cross-process work is fenced by SQLite.
-    pub fn wake_export_worker(&self) {
+    /// A deliberate wake re-arms an exhausted root; a passive wake
+    /// (status polling) never does.
+    pub fn wake_export_worker(&self, kind: WakeKind) {
         let Ok(storage) = self.storage() else {
             return;
         };
@@ -688,7 +901,7 @@ impl crate::Core {
             let mut queue = PROCESS_WORKER
                 .lock()
                 .unwrap_or_else(|error| error.into_inner());
-            queue.wake(storage.clone())
+            queue.wake(storage.clone(), kind)
         };
         if !start {
             return;
@@ -734,12 +947,20 @@ impl crate::Core {
                             // action: park immediately without
                             // consuming retries.
                             if error.code != ErrorCode::StorageUnavailable {
-                                record_claim_parked(&pending.storage);
+                                park_root(
+                                    &pending.storage,
+                                    JobRecoveryReason::from_claim_error(&error.code),
+                                    pending.claim_failures + 1,
+                                );
                                 break;
                             }
                             pending.claim_failures += 1;
                             if pending.claim_failures >= MAX_CLAIM_FAILURES {
-                                record_claim_parked(&pending.storage);
+                                park_root(
+                                    &pending.storage,
+                                    JobRecoveryReason::StorageUnavailable,
+                                    pending.claim_failures,
+                                );
                                 break;
                             }
                             // Re-queue at the back so other roots
@@ -784,6 +1005,12 @@ impl crate::Core {
         ) {
             return self.backup_operation(command, input);
         }
+        // The wake kind is decided per command: only deliberate
+        // actions re-arm an exhausted root. Status polling ("list")
+        // and non-queueing controls ("pause"/"cancel") wake
+        // passively, so observation can never grant a fresh
+        // recovery budget.
+        let mut wake_kind = None;
         let response = match command {
             "export" => {
                 let request: EnqueueExportRequest =
@@ -791,6 +1018,7 @@ impl crate::Core {
                 if matches!(request.selection, ExportSelection::Backup { .. }) {
                     return Err(invalid());
                 }
+                wake_kind = Some(WakeKind::Deliberate);
                 serde_json::to_value(JobDetails {
                     contract_version: 1,
                     job: storage.enqueue_export(&request.workspace_id, request.selection)?,
@@ -805,6 +1033,7 @@ impl crate::Core {
                 } else {
                     None
                 };
+                wake_kind = Some(WakeKind::Passive);
                 serde_json::to_value(JobList {
                     contract_version: 1,
                     jobs,
@@ -814,6 +1043,12 @@ impl crate::Core {
             "control" => {
                 let request: ControlJobRequest =
                     serde_json::from_value(input).map_err(|_| invalid())?;
+                wake_kind = Some(match request.action {
+                    JobAction::Retry | JobAction::Resume | JobAction::Recover => {
+                        WakeKind::Deliberate
+                    }
+                    JobAction::Pause | JobAction::Cancel => WakeKind::Passive,
+                });
                 serde_json::to_value(JobDetails {
                     contract_version: 1,
                     job: storage.control_job(
@@ -840,8 +1075,8 @@ impl crate::Core {
             _ => return Err(invalid()),
         }
         .map_err(|_| unavailable())?;
-        if command != "artifact" {
-            self.wake_export_worker();
+        if let Some(kind) = wake_kind {
+            self.wake_export_worker(kind);
         }
         Ok(response)
     }
@@ -861,9 +1096,9 @@ mod tests {
     #[test]
     fn worker_queue_serves_storages_in_wake_order() {
         let mut queue = WorkerQueue::default();
-        assert!(queue.wake(storage("a")));
-        assert!(!queue.wake(storage("b")));
-        assert!(!queue.wake(storage("c")));
+        assert!(queue.wake(storage("a"), WakeKind::Deliberate));
+        assert!(!queue.wake(storage("b"), WakeKind::Deliberate));
+        assert!(!queue.wake(storage("c"), WakeKind::Deliberate));
         assert_eq!(queue.take_next().unwrap().storage.root, PathBuf::from("a"));
         assert_eq!(queue.take_next().unwrap().storage.root, PathBuf::from("b"));
         assert_eq!(queue.take_next().unwrap().storage.root, PathBuf::from("c"));
@@ -874,9 +1109,9 @@ mod tests {
     #[test]
     fn worker_queue_dedup_keeps_first_position() {
         let mut queue = WorkerQueue::default();
-        queue.wake(storage("a"));
-        queue.wake(storage("b"));
-        queue.wake(storage("a"));
+        queue.wake(storage("a"), WakeKind::Deliberate);
+        queue.wake(storage("b"), WakeKind::Deliberate);
+        queue.wake(storage("a"), WakeKind::Deliberate);
         assert_eq!(queue.take_next().unwrap().storage.root, PathBuf::from("a"));
         assert_eq!(queue.take_next().unwrap().storage.root, PathBuf::from("b"));
         assert!(queue.take_next().is_none());
@@ -885,11 +1120,11 @@ mod tests {
     #[test]
     fn worker_queue_restarts_after_going_idle() {
         let mut queue = WorkerQueue::default();
-        assert!(queue.wake(storage("a")));
+        assert!(queue.wake(storage("a"), WakeKind::Deliberate));
         assert_eq!(queue.take_next().unwrap().storage.root, PathBuf::from("a"));
         assert!(queue.take_next().is_none());
         assert!(!queue.running);
-        assert!(queue.wake(storage("b")));
+        assert!(queue.wake(storage("b"), WakeKind::Deliberate));
         assert_eq!(queue.take_next().unwrap().storage.root, PathBuf::from("b"));
         assert!(queue.take_next().is_none());
     }
@@ -897,8 +1132,8 @@ mod tests {
     #[test]
     fn worker_queue_requeue_goes_to_the_back() {
         let mut queue = WorkerQueue::default();
-        queue.wake(storage("a"));
-        queue.wake(storage("b"));
+        queue.wake(storage("a"), WakeKind::Deliberate);
+        queue.wake(storage("b"), WakeKind::Deliberate);
         let pending = queue.take_next().unwrap();
         assert_eq!(pending.storage.root, PathBuf::from("a"));
         queue.requeue(pending);
@@ -910,11 +1145,11 @@ mod tests {
     #[test]
     fn worker_queue_rewake_resets_failure_count() {
         let mut queue = WorkerQueue::default();
-        queue.wake(storage("a"));
+        queue.wake(storage("a"), WakeKind::Deliberate);
         let mut pending = queue.take_next().unwrap();
         pending.claim_failures = 2;
         queue.requeue(pending);
-        queue.wake(storage("a"));
+        queue.wake(storage("a"), WakeKind::Deliberate);
         let pending = queue.take_next().unwrap();
         assert_eq!(pending.claim_failures, 0);
         assert!(queue.take_next().is_none());
@@ -923,10 +1158,10 @@ mod tests {
     #[test]
     fn worker_queue_requeue_drops_when_fresh_wake_pending() {
         let mut queue = WorkerQueue::default();
-        queue.wake(storage("a"));
+        queue.wake(storage("a"), WakeKind::Deliberate);
         let pending = queue.take_next().unwrap();
         // A fresh wake arrives while the root is being served.
-        queue.wake(storage("a"));
+        queue.wake(storage("a"), WakeKind::Deliberate);
         queue.requeue(pending);
         // Exactly one entry, with the fresh budget.
         let pending = queue.take_next().unwrap();
@@ -937,7 +1172,7 @@ mod tests {
     #[test]
     fn worker_queue_drains_after_parking() {
         let mut queue = WorkerQueue::default();
-        queue.wake(storage("a"));
+        queue.wake(storage("a"), WakeKind::Deliberate);
         let mut pending = queue.take_next().unwrap();
         pending.claim_failures = 2;
         queue.requeue(pending);
@@ -947,7 +1182,71 @@ mod tests {
         // wake restarts the worker.
         assert!(queue.take_next().is_none());
         assert!(!queue.running);
-        assert!(queue.wake(storage("b")));
+        assert!(queue.wake(storage("b"), WakeKind::Deliberate));
         assert_eq!(queue.take_next().unwrap().storage.root, PathBuf::from("b"));
+    }
+
+    #[test]
+    fn worker_queue_passive_wake_ignores_exhausted_root() {
+        let mut queue = WorkerQueue::default();
+        queue.mark_exhausted(PathBuf::from("a"), JobRecoveryReason::StorageUnavailable, 3);
+        // Passive observation must not re-add the root, must not
+        // start the worker, and must keep the exhaustion record.
+        assert!(!queue.wake(storage("a"), WakeKind::Passive));
+        assert!(queue.take_next().is_none());
+        assert!(!queue.running);
+        let record = queue
+            .exhaustion_for(&PathBuf::from("a"))
+            .expect("exhaustion kept");
+        assert_eq!(record.reason, JobRecoveryReason::StorageUnavailable);
+        assert_eq!(record.attempts, 3);
+        // A deliberate wake re-arms: the record clears and the
+        // root is served with a fresh budget.
+        assert!(queue.wake(storage("a"), WakeKind::Deliberate));
+        assert!(queue.exhaustion_for(&PathBuf::from("a")).is_none());
+        let pending = queue.take_next().unwrap();
+        assert_eq!(pending.claim_failures, 0);
+    }
+
+    #[test]
+    fn worker_queue_passive_wake_keeps_failure_count() {
+        let mut queue = WorkerQueue::default();
+        queue.wake(storage("a"), WakeKind::Deliberate);
+        let mut pending = queue.take_next().unwrap();
+        pending.claim_failures = 2;
+        queue.requeue(pending);
+        queue.wake(storage("a"), WakeKind::Passive);
+        let pending = queue.take_next().unwrap();
+        assert_eq!(pending.claim_failures, 2);
+        assert!(queue.take_next().is_none());
+    }
+
+    #[test]
+    fn worker_queue_passive_wake_adds_healthy_root() {
+        let mut queue = WorkerQueue::default();
+        // A root that is neither pending nor exhausted is served
+        // by a passive wake exactly as before.
+        assert!(queue.wake(storage("a"), WakeKind::Passive));
+        assert_eq!(queue.take_next().unwrap().storage.root, PathBuf::from("a"));
+        assert!(queue.take_next().is_none());
+    }
+
+    #[test]
+    fn worker_queue_exhaustion_record_round_trip() {
+        let mut queue = WorkerQueue::default();
+        assert!(queue.exhaustion_for(&PathBuf::from("a")).is_none());
+        queue.mark_exhausted(PathBuf::from("a"), JobRecoveryReason::StorageUnavailable, 3);
+        let record = queue.exhaustion_for(&PathBuf::from("a")).unwrap();
+        assert_eq!(record.reason, JobRecoveryReason::StorageUnavailable);
+        assert_eq!(record.attempts, 3);
+        // Re-marking replaces the record.
+        queue.mark_exhausted(PathBuf::from("a"), JobRecoveryReason::CorruptStorage, 1);
+        let record = queue.exhaustion_for(&PathBuf::from("a")).unwrap();
+        assert_eq!(record.reason, JobRecoveryReason::CorruptStorage);
+        assert_eq!(record.attempts, 1);
+        // Other roots are unaffected.
+        assert!(queue.exhaustion_for(&PathBuf::from("b")).is_none());
+        queue.clear_exhausted(&PathBuf::from("a"));
+        assert!(queue.exhaustion_for(&PathBuf::from("a")).is_none());
     }
 }

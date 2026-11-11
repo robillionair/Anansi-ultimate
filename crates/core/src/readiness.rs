@@ -93,7 +93,7 @@ impl Core {
             }
         });
         let core = root.map(Self::with_storage_root).unwrap_or_default();
-        core.wake_export_worker();
+        core.wake_export_worker(crate::jobs::WakeKind::Deliberate);
         core.start_backup_scheduler();
         core
     }

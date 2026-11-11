@@ -1373,7 +1373,7 @@ export interface ContextCompilationRequest {
   userPrompt: string;
   workspaceId: string;
 }
-export type JobAction = "pause" | "resume" | "cancel" | "retry";
+export type JobAction = ("pause" | "resume" | "cancel" | "retry") | "recover";
 
 export interface ControlJobRequest {
   action: JobAction;
@@ -2490,6 +2490,13 @@ export interface IngestionPart {
   offset: number;
   workspaceId: string;
 }
+/**
+ * Why claim recovery was exhausted for a storage root. Bounded
+ * by construction: only the two failure kinds `claim_export`
+ * can produce. The diagnostic message is fixed per reason and
+ * carries no filesystem detail.
+ */
+export type JobRecoveryReason = "storageUnavailable" | "corruptStorage";
 export type JobState = "Queued" | "Running" | "Paused" | "Completed" | "Failed" | "Cancelled";
 
 export interface IngestionStatus {
@@ -2510,12 +2517,38 @@ export interface Job {
   maxBytes: number;
   maxRecords: number;
   progress: number;
+  /**
+   * Present only for Queued jobs whose storage root exhausted
+   * claim recovery. Computed at read time from in-memory
+   * worker state — never stored on the durable job row.
+   */
+  recoveryDiagnostic?: JobRecoveryDiagnostic | null;
   selection: ExportSelection;
   state: JobState;
   updatedAt: string;
   version: number;
   workspaceId: string;
 }
+/**
+ * Actionable production diagnostic for a Queued job stranded by
+ * exhausted claim recovery. Attached at read time by `list_jobs`
+ * and `control_job` when the job's storage root is exhausted.
+ */
+export interface JobRecoveryDiagnostic {
+  /**
+   * Claim attempts consumed in the arming that exhausted
+   * recovery (3 for unavailable storage, 1 for corrupt).
+   */
+  attempts: number;
+  message: string;
+  reason: JobRecoveryReason;
+}
+/**
+ * Why claim recovery was exhausted for a storage root. Bounded
+ * by construction: only the two failure kinds `claim_export`
+ * can produce. The diagnostic message is fixed per reason and
+ * carries no filesystem detail.
+ */
 
 export interface Job {
   artifactBytes?: number | null;
@@ -2529,12 +2562,38 @@ export interface Job {
   maxBytes: number;
   maxRecords: number;
   progress: number;
+  /**
+   * Present only for Queued jobs whose storage root exhausted
+   * claim recovery. Computed at read time from in-memory
+   * worker state — never stored on the durable job row.
+   */
+  recoveryDiagnostic?: JobRecoveryDiagnostic | null;
   selection: ExportSelection;
   state: JobState;
   updatedAt: string;
   version: number;
   workspaceId: string;
 }
+/**
+ * Actionable production diagnostic for a Queued job stranded by
+ * exhausted claim recovery. Attached at read time by `list_jobs`
+ * and `control_job` when the job's storage root is exhausted.
+ */
+export interface JobRecoveryDiagnostic {
+  /**
+   * Claim attempts consumed in the arming that exhausted
+   * recovery (3 for unavailable storage, 1 for corrupt).
+   */
+  attempts: number;
+  message: string;
+  reason: JobRecoveryReason;
+}
+/**
+ * Why claim recovery was exhausted for a storage root. Bounded
+ * by construction: only the two failure kinds `claim_export`
+ * can produce. The diagnostic message is fixed per reason and
+ * carries no filesystem detail.
+ */
 
 export interface JobDetails {
   contractVersion: number;
@@ -2552,12 +2611,38 @@ export interface Job {
   maxBytes: number;
   maxRecords: number;
   progress: number;
+  /**
+   * Present only for Queued jobs whose storage root exhausted
+   * claim recovery. Computed at read time from in-memory
+   * worker state — never stored on the durable job row.
+   */
+  recoveryDiagnostic?: JobRecoveryDiagnostic | null;
   selection: ExportSelection;
   state: JobState;
   updatedAt: string;
   version: number;
   workspaceId: string;
 }
+/**
+ * Actionable production diagnostic for a Queued job stranded by
+ * exhausted claim recovery. Attached at read time by `list_jobs`
+ * and `control_job` when the job's storage root is exhausted.
+ */
+export interface JobRecoveryDiagnostic {
+  /**
+   * Claim attempts consumed in the arming that exhausted
+   * recovery (3 for unavailable storage, 1 for corrupt).
+   */
+  attempts: number;
+  message: string;
+  reason: JobRecoveryReason;
+}
+/**
+ * Why claim recovery was exhausted for a storage root. Bounded
+ * by construction: only the two failure kinds `claim_export`
+ * can produce. The diagnostic message is fixed per reason and
+ * carries no filesystem detail.
+ */
 
 export interface JobList {
   contractVersion: number;
@@ -2576,11 +2661,31 @@ export interface Job {
   maxBytes: number;
   maxRecords: number;
   progress: number;
+  /**
+   * Present only for Queued jobs whose storage root exhausted
+   * claim recovery. Computed at read time from in-memory
+   * worker state — never stored on the durable job row.
+   */
+  recoveryDiagnostic?: JobRecoveryDiagnostic | null;
   selection: ExportSelection;
   state: JobState;
   updatedAt: string;
   version: number;
   workspaceId: string;
+}
+/**
+ * Actionable production diagnostic for a Queued job stranded by
+ * exhausted claim recovery. Attached at read time by `list_jobs`
+ * and `control_job` when the job's storage root is exhausted.
+ */
+export interface JobRecoveryDiagnostic {
+  /**
+   * Claim attempts consumed in the arming that exhausted
+   * recovery (3 for unavailable storage, 1 for corrupt).
+   */
+  attempts: number;
+  message: string;
+  reason: JobRecoveryReason;
 }
 export interface ListJobsRequest {
   contractVersion: number;
@@ -7986,6 +8091,12 @@ export interface UploadPart {
   offset: number;
   workspaceId: string;
 }
+/**
+ * Why claim recovery was exhausted for a storage root. Bounded
+ * by construction: only the two failure kinds `claim_export`
+ * can produce. The diagnostic message is fixed per reason and
+ * carries no filesystem detail.
+ */
 
 export interface UploadStatus {
   contractVersion: number;
@@ -8005,11 +8116,31 @@ export interface Job {
   maxBytes: number;
   maxRecords: number;
   progress: number;
+  /**
+   * Present only for Queued jobs whose storage root exhausted
+   * claim recovery. Computed at read time from in-memory
+   * worker state — never stored on the durable job row.
+   */
+  recoveryDiagnostic?: JobRecoveryDiagnostic | null;
   selection: ExportSelection;
   state: JobState;
   updatedAt: string;
   version: number;
   workspaceId: string;
+}
+/**
+ * Actionable production diagnostic for a Queued job stranded by
+ * exhausted claim recovery. Attached at read time by `list_jobs`
+ * and `control_job` when the job's storage root is exhausted.
+ */
+export interface JobRecoveryDiagnostic {
+  /**
+   * Claim attempts consumed in the arming that exhausted
+   * recovery (3 for unavailable storage, 1 for corrupt).
+   */
+  attempts: number;
+  message: string;
+  reason: JobRecoveryReason;
 }
 
 export interface WorkspaceDetails {

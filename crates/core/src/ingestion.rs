@@ -655,7 +655,7 @@ impl Core {
         // A finished upload queued the job: wake the worker (this op
         // returns early from `job_command`, before its shared wake call).
         if r.finish {
-            self.wake_export_worker();
+            self.wake_export_worker(crate::jobs::WakeKind::Deliberate);
         }
         serde_json::to_value(IngestionStatus {
             contract_version: 1,
@@ -855,15 +855,47 @@ mod tests {
         .unwrap()
     }
 
-    /// Wake the worker for this core's storage without touching
-    /// any job: a plain list is a user action that re-arms a
-    /// parked root.
+    /// The public polling path: a plain job list. Passive
+    /// observation only — it must never re-arm an exhausted
+    /// root (CR-01). Tests that need a deliberate re-arm use
+    /// `recover` instead.
     fn wake(core: &Core, ws: &str) {
         core.job_command(
             "list",
             json!({"contractVersion":1,"workspaceId":ws,"offset":0}),
         )
         .unwrap();
+    }
+
+    /// The explicit recovery path (CR-02): a version-fenced
+    /// control that re-arms an exhausted root. Returns the
+    /// control response job.
+    fn recover(core: &Core, ws: &str, id: &str) -> crate::jobs::Job {
+        let job = read_job(core, ws, id);
+        let response = core
+            .job_command(
+                "control",
+                json!({"contractVersion":1,"workspaceId":ws,"id":id,"expectedVersion":job.version,"action":"recover"}),
+            )
+            .unwrap();
+        serde_json::from_value(response["job"].clone()).unwrap()
+    }
+
+    /// The job as the public polling path sees it, including any
+    /// recovery diagnostic.
+    fn listed_job(core: &Core, ws: &str, id: &str) -> crate::jobs::Job {
+        let response = core
+            .job_command(
+                "list",
+                json!({"contractVersion":1,"workspaceId":ws,"offset":0}),
+            )
+            .unwrap();
+        let jobs = response["jobs"].as_array().unwrap();
+        let found = jobs
+            .iter()
+            .find(|job| job["id"].as_str() == Some(id))
+            .expect("job present in list");
+        serde_json::from_value(found.clone()).unwrap()
     }
 
     #[test]
@@ -1746,10 +1778,11 @@ mod tests {
         assert_eq!(crate::jobs::remaining_claim_faults(&root), 1_000_000 - 3);
         let job = read_job(&core, &ws, &id);
         assert_eq!(job.state, crate::jobs::JobState::Queued);
-        // Recovery after the fault clears, via an ordinary user wake.
+        // Recovery after the fault clears, via the explicit
+        // recovery action (a plain poll must not re-arm).
         crate::jobs::clear_claim_faults(&root);
         crate::jobs::clear_claim_parked(&root);
-        wake(&core, &ws);
+        recover(&core, &ws, &id);
         let job = wait_for_terminal(&core, &ws, &id);
         assert_eq!(job.state, crate::jobs::JobState::Completed);
     }
@@ -1769,9 +1802,11 @@ mod tests {
         assert_eq!(crate::jobs::remaining_claim_faults(&root), 1_000_000 - 1);
         let job = read_job(&core, &ws, &id);
         assert_eq!(job.state, crate::jobs::JobState::Queued);
+        // Recovery after the fault clears, via the explicit
+        // recovery action (a plain poll must not re-arm).
         crate::jobs::clear_claim_faults(&root);
         crate::jobs::clear_claim_parked(&root);
-        wake(&core, &ws);
+        recover(&core, &ws, &id);
         let job = wait_for_terminal(&core, &ws, &id);
         assert_eq!(job.state, crate::jobs::JobState::Completed);
     }
@@ -1798,7 +1833,7 @@ mod tests {
         .unwrap();
         let job = read_job(&core, &ws, &id);
         assert_eq!(job.state, crate::jobs::JobState::Cancelled);
-        // The worker parks; clearing the fault and waking must
+        // The worker parks; clearing the fault and polling must
         // never resurrect the cancelled job. No sleep is needed:
         // a claim selects Queued jobs only, so a Cancelled job is
         // unreachable by recovery whatever the worker's timing.
@@ -1838,5 +1873,375 @@ mod tests {
         assert_eq!(docs.len(), 1);
         assert_eq!(docs[0]["privacy"].as_str().unwrap(), "private");
         assert_eq!(docs[0]["projectId"].as_str().unwrap(), pid);
+    }
+
+    #[test]
+    fn repeated_polls_do_not_rearm_persistent_claim_failure() {
+        let (_temp, core, ws) = setup();
+        let (_fence_temp, fence_core, fence_ws) = setup();
+        let bytes = b"Repeated polling must not restart recovery.";
+        let sha = content::hash(bytes);
+        let opened = begin(&core, &ws, "poll-many.txt", bytes, &sha, "private");
+        let id = opened["id"].as_str().unwrap().to_string();
+        let root = root_of(&core);
+        crate::jobs::arm_claim_faults(&root, 1_000_000, crate::ErrorCode::StorageUnavailable);
+        part(&core, &ws, &id, 0, bytes, true).unwrap();
+        wait_for_parked(&core, &ws, &id, &root);
+        assert_eq!(crate::jobs::remaining_claim_faults(&root), 1_000_000 - 3);
+        // Three ordinary polls, as Documents would issue them.
+        wake(&core, &ws);
+        wake(&core, &ws);
+        wake(&core, &ws);
+        // Worker-progress fence: a healthy root completes, proving
+        // the worker is still serving others while this root
+        // stays parked.
+        let fence_bytes = b"Healthy fence for repeated polls.";
+        let fence_sha = content::hash(fence_bytes);
+        let fence_opened = begin(
+            &fence_core,
+            &fence_ws,
+            "fence.txt",
+            fence_bytes,
+            &fence_sha,
+            "private",
+        );
+        let fence_id = fence_opened["id"].as_str().unwrap().to_string();
+        part(&fence_core, &fence_ws, &fence_id, 0, fence_bytes, true).unwrap();
+        assert_eq!(
+            wait_for_terminal(&fence_core, &fence_ws, &fence_id).state,
+            crate::jobs::JobState::Completed,
+        );
+        let after = crate::jobs::remaining_claim_faults(&root);
+        crate::jobs::clear_claim_faults(&root);
+        crate::jobs::clear_claim_parked(&root);
+        assert_eq!(after, 1_000_000 - 3);
+    }
+
+    #[test]
+    fn polls_do_not_rearm_non_retryable_claim_failure() {
+        let (_temp, core, ws) = setup();
+        let (_fence_temp, fence_core, fence_ws) = setup();
+        let bytes = b"Corrupt parking survives polling.";
+        let sha = content::hash(bytes);
+        let opened = begin(&core, &ws, "poll-corrupt.txt", bytes, &sha, "private");
+        let id = opened["id"].as_str().unwrap().to_string();
+        let root = root_of(&core);
+        crate::jobs::arm_claim_faults(&root, 1_000_000, crate::ErrorCode::CorruptStorage);
+        part(&core, &ws, &id, 0, bytes, true).unwrap();
+        wait_for_parked(&core, &ws, &id, &root);
+        assert_eq!(crate::jobs::remaining_claim_faults(&root), 1_000_000 - 1);
+        wake(&core, &ws);
+        wake(&core, &ws);
+        wake(&core, &ws);
+        let fence_bytes = b"Healthy fence for corrupt polls.";
+        let fence_sha = content::hash(fence_bytes);
+        let fence_opened = begin(
+            &fence_core,
+            &fence_ws,
+            "fence.txt",
+            fence_bytes,
+            &fence_sha,
+            "private",
+        );
+        let fence_id = fence_opened["id"].as_str().unwrap().to_string();
+        part(&fence_core, &fence_ws, &fence_id, 0, fence_bytes, true).unwrap();
+        assert_eq!(
+            wait_for_terminal(&fence_core, &fence_ws, &fence_id).state,
+            crate::jobs::JobState::Completed,
+        );
+        let after = crate::jobs::remaining_claim_faults(&root);
+        crate::jobs::clear_claim_faults(&root);
+        crate::jobs::clear_claim_parked(&root);
+        assert_eq!(after, 1_000_000 - 1);
+    }
+
+    #[test]
+    fn new_work_rearms_exhausted_root_and_serves_stranded_job() {
+        let (_temp, core, ws) = setup();
+        let bytes = b"Stranded by exhaustion.";
+        let sha = content::hash(bytes);
+        let opened = begin(&core, &ws, "stranded.txt", bytes, &sha, "private");
+        let id = opened["id"].as_str().unwrap().to_string();
+        let root = root_of(&core);
+        crate::jobs::arm_claim_faults(&root, 1_000_000, crate::ErrorCode::StorageUnavailable);
+        part(&core, &ws, &id, 0, bytes, true).unwrap();
+        wait_for_parked(&core, &ws, &id, &root);
+        crate::jobs::clear_claim_faults(&root);
+        crate::jobs::clear_claim_parked(&root);
+        // Genuinely new work on the same root is a deliberate
+        // wake: it re-arms the root and the worker serves the
+        // stranded job too, in FIFO order.
+        let second = b"New work re-arms.";
+        let second_sha = content::hash(second);
+        let opened2 = begin(&core, &ws, "second.txt", second, &second_sha, "private");
+        let id2 = opened2["id"].as_str().unwrap().to_string();
+        part(&core, &ws, &id2, 0, second, true).unwrap();
+        assert_eq!(
+            wait_for_terminal(&core, &ws, &id).state,
+            crate::jobs::JobState::Completed
+        );
+        assert_eq!(
+            wait_for_terminal(&core, &ws, &id2).state,
+            crate::jobs::JobState::Completed
+        );
+    }
+
+    #[test]
+    fn deliberate_wake_rearms_exhausted_root() {
+        let (_temp, core, ws) = setup();
+        let bytes = b"Deliberate wake re-arms.";
+        let sha = content::hash(bytes);
+        let opened = begin(&core, &ws, "deliberate.txt", bytes, &sha, "private");
+        let id = opened["id"].as_str().unwrap().to_string();
+        let root = root_of(&core);
+        crate::jobs::arm_claim_faults(&root, 1_000_000, crate::ErrorCode::StorageUnavailable);
+        part(&core, &ws, &id, 0, bytes, true).unwrap();
+        wait_for_parked(&core, &ws, &id, &root);
+        crate::jobs::clear_claim_faults(&root);
+        crate::jobs::clear_claim_parked(&root);
+        // The deliberate wake API (startup, new work, explicit
+        // controls) re-arms; polling alone never does.
+        core.wake_export_worker(crate::jobs::WakeKind::Deliberate);
+        let job = wait_for_terminal(&core, &ws, &id);
+        assert_eq!(job.state, crate::jobs::JobState::Completed);
+    }
+
+    #[test]
+    fn diagnostic_shown_for_exhausted_queued_job_without_row_mutation() {
+        let (_temp, core, ws) = setup();
+        let bytes = b"Diagnosed exhaustion.";
+        let sha = content::hash(bytes);
+        let opened = begin(&core, &ws, "diagnosed.txt", bytes, &sha, "private");
+        let id = opened["id"].as_str().unwrap().to_string();
+        let root = root_of(&core);
+        crate::jobs::arm_claim_faults(&root, 1_000_000, crate::ErrorCode::StorageUnavailable);
+        part(&core, &ws, &id, 0, bytes, true).unwrap();
+        wait_for_parked(&core, &ws, &id, &root);
+        // The durable row is byte-identical to the pre-parking
+        // state: parking wrote nothing without a lease.
+        let row = read_job(&core, &ws, &id);
+        assert_eq!(row.state, crate::jobs::JobState::Queued);
+        assert_eq!(row.version, 2);
+        assert_eq!(row.checkpoint, "staged");
+        assert_eq!(row.checkpoint_version, 2);
+        assert_eq!(row.progress, 100);
+        assert_eq!(row.log, "Upload complete; queued for import");
+        assert!(row.recovery_diagnostic.is_none());
+        // The public polling path carries the diagnostic, with
+        // the exact fixed message (sanitization by equality).
+        let listed = listed_job(&core, &ws, &id);
+        let diagnostic = listed.recovery_diagnostic.expect("diagnostic present");
+        assert_eq!(
+            diagnostic.reason,
+            crate::jobs::JobRecoveryReason::StorageUnavailable
+        );
+        assert_eq!(diagnostic.attempts, 3);
+        assert_eq!(
+            diagnostic.message,
+            "Recovery stopped because storage was unavailable. Check the storage folder and permissions, then choose Retry recovery."
+        );
+        assert!(!diagnostic.message.contains(root.to_str().unwrap()));
+        crate::jobs::clear_claim_faults(&root);
+        crate::jobs::clear_claim_parked(&root);
+    }
+
+    #[test]
+    fn diagnostic_for_corrupt_exhaustion_names_restore() {
+        let (_temp, core, ws) = setup();
+        let bytes = b"Corrupt diagnosis.";
+        let sha = content::hash(bytes);
+        let opened = begin(&core, &ws, "corrupt-diagnosis.txt", bytes, &sha, "private");
+        let id = opened["id"].as_str().unwrap().to_string();
+        let root = root_of(&core);
+        crate::jobs::arm_claim_faults(&root, 1_000_000, crate::ErrorCode::CorruptStorage);
+        part(&core, &ws, &id, 0, bytes, true).unwrap();
+        wait_for_parked(&core, &ws, &id, &root);
+        let listed = listed_job(&core, &ws, &id);
+        let diagnostic = listed.recovery_diagnostic.expect("diagnostic present");
+        assert_eq!(
+            diagnostic.reason,
+            crate::jobs::JobRecoveryReason::CorruptStorage
+        );
+        assert_eq!(diagnostic.attempts, 1);
+        assert_eq!(
+            diagnostic.message,
+            "Recovery stopped because storage could not be read. Keep the original files and restore a verified backup, then choose Retry recovery."
+        );
+        crate::jobs::clear_claim_faults(&root);
+        crate::jobs::clear_claim_parked(&root);
+    }
+
+    #[test]
+    fn diagnostic_absent_for_other_states_and_roots() {
+        let (_temp, core, ws) = setup();
+        let (_other_temp, other_core, other_ws) = setup();
+        // A Paused job on the exhausted root: the upload never
+        // finished, so it is not stranded by claim recovery.
+        let paused_bytes = b"Paused upload.";
+        let paused_sha = content::hash(paused_bytes);
+        let paused_opened = begin(
+            &core,
+            &ws,
+            "paused.txt",
+            paused_bytes,
+            &paused_sha,
+            "private",
+        );
+        let paused_id = paused_opened["id"].as_str().unwrap().to_string();
+        let bytes = b"Exhausted root job.";
+        let sha = content::hash(bytes);
+        let opened = begin(&core, &ws, "exhausted.txt", bytes, &sha, "private");
+        let id = opened["id"].as_str().unwrap().to_string();
+        let root = root_of(&core);
+        crate::jobs::arm_claim_faults(&root, 1_000_000, crate::ErrorCode::StorageUnavailable);
+        part(&core, &ws, &id, 0, bytes, true).unwrap();
+        wait_for_parked(&core, &ws, &id, &root);
+        // The Queued job carries the diagnostic; the Paused job
+        // on the same root does not.
+        assert!(listed_job(&core, &ws, &id).recovery_diagnostic.is_some());
+        assert_eq!(
+            listed_job(&core, &ws, &paused_id).state,
+            crate::jobs::JobState::Paused
+        );
+        assert!(
+            listed_job(&core, &ws, &paused_id)
+                .recovery_diagnostic
+                .is_none()
+        );
+        // A job on a healthy root never sees another root's
+        // diagnostic.
+        let healthy_bytes = b"Healthy root job.";
+        let healthy_sha = content::hash(healthy_bytes);
+        let healthy_opened = begin(
+            &other_core,
+            &other_ws,
+            "healthy.txt",
+            healthy_bytes,
+            &healthy_sha,
+            "private",
+        );
+        let healthy_id = healthy_opened["id"].as_str().unwrap().to_string();
+        assert!(
+            listed_job(&other_core, &other_ws, &healthy_id)
+                .recovery_diagnostic
+                .is_none()
+        );
+        crate::jobs::clear_claim_faults(&root);
+        crate::jobs::clear_claim_parked(&root);
+    }
+
+    #[test]
+    fn recover_action_recovers_and_clears_diagnostic() {
+        let (_temp, core, ws) = setup();
+        let bytes = b"Explicit recovery.";
+        let sha = content::hash(bytes);
+        let opened = begin(&core, &ws, "recover.txt", bytes, &sha, "private");
+        let id = opened["id"].as_str().unwrap().to_string();
+        let root = root_of(&core);
+        crate::jobs::arm_claim_faults(&root, 1_000_000, crate::ErrorCode::StorageUnavailable);
+        part(&core, &ws, &id, 0, bytes, true).unwrap();
+        wait_for_parked(&core, &ws, &id, &root);
+        assert!(listed_job(&core, &ws, &id).recovery_diagnostic.is_some());
+        crate::jobs::clear_claim_faults(&root);
+        crate::jobs::clear_claim_parked(&root);
+        let recovered = recover(&core, &ws, &id);
+        assert_eq!(recovered.state, crate::jobs::JobState::Queued);
+        assert_eq!(recovered.log, "Export recovery requested explicitly");
+        assert!(recovered.recovery_diagnostic.is_none());
+        // The diagnostic is gone on the next poll too, and the
+        // job completes through the ordinary claim path.
+        assert!(listed_job(&core, &ws, &id).recovery_diagnostic.is_none());
+        let job = wait_for_terminal(&core, &ws, &id);
+        assert_eq!(job.state, crate::jobs::JobState::Completed);
+    }
+
+    #[test]
+    fn recover_action_is_version_fenced_and_state_bounded() {
+        let (_temp, core, ws) = setup();
+        let bytes = b"Fenced recovery.";
+        let sha = content::hash(bytes);
+        let opened = begin(&core, &ws, "fenced.txt", bytes, &sha, "private");
+        let id = opened["id"].as_str().unwrap().to_string();
+        // Wrong version conflicts.
+        let stale = core.job_command(
+            "control",
+            json!({"contractVersion":1,"workspaceId":ws,"id":id,"expectedVersion":999,"action":"recover"}),
+        );
+        assert!(stale.is_err());
+        // Recover on a Paused job is refused.
+        let job = read_job(&core, &ws, &id);
+        assert_eq!(job.state, crate::jobs::JobState::Paused);
+        let refused = core.job_command(
+            "control",
+            json!({"contractVersion":1,"workspaceId":ws,"id":id,"expectedVersion":job.version,"action":"recover"}),
+        );
+        assert!(refused.is_err());
+        // (Recover on a healthy Queued job is exercised through
+        // the exhausted-root path in
+        // `recover_action_recovers_and_clears_diagnostic`: a
+        // Queued job on a healthy root is served immediately,
+        // so no deterministic healthy-Queued state exists to
+        // call Recover on. Recover only clears a possibly
+        // absent exhaustion record and wakes deliberately —
+        // both no-ops on a healthy root.)
+    }
+
+    #[test]
+    fn cancel_of_diagnosed_job_stays_cancelled_with_nothing_published() {
+        let (_temp, core, ws) = setup();
+        let bytes = b"Cancel the diagnosed job.";
+        let sha = content::hash(bytes);
+        let opened = begin(&core, &ws, "cancel-diagnosed.txt", bytes, &sha, "private");
+        let id = opened["id"].as_str().unwrap().to_string();
+        let root = root_of(&core);
+        crate::jobs::arm_claim_faults(&root, 1_000_000, crate::ErrorCode::StorageUnavailable);
+        part(&core, &ws, &id, 0, bytes, true).unwrap();
+        wait_for_parked(&core, &ws, &id, &root);
+        assert!(listed_job(&core, &ws, &id).recovery_diagnostic.is_some());
+        let job = read_job(&core, &ws, &id);
+        core.job_command(
+            "control",
+            json!({"contractVersion":1,"workspaceId":ws,"id":id,"expectedVersion":job.version,"action":"cancel"}),
+        )
+        .unwrap();
+        // Terminal jobs carry no diagnostic.
+        let listed = listed_job(&core, &ws, &id);
+        assert_eq!(listed.state, crate::jobs::JobState::Cancelled);
+        assert!(listed.recovery_diagnostic.is_none());
+        // Clearing the fault and deliberately re-arming must
+        // never publish the cancelled job.
+        crate::jobs::clear_claim_faults(&root);
+        crate::jobs::clear_claim_parked(&root);
+        core.wake_export_worker(crate::jobs::WakeKind::Deliberate);
+        // A fence proves the worker ran after the deliberate
+        // wake: the cancelled job is still unreachable.
+        let fence_bytes = b"Fence after cancel.";
+        let fence_sha = content::hash(fence_bytes);
+        let (_fence_temp, fence_core, fence_ws) = setup();
+        let fence_opened = begin(
+            &fence_core,
+            &fence_ws,
+            "fence.txt",
+            fence_bytes,
+            &fence_sha,
+            "private",
+        );
+        let fence_id = fence_opened["id"].as_str().unwrap().to_string();
+        part(&fence_core, &fence_ws, &fence_id, 0, fence_bytes, true).unwrap();
+        assert_eq!(
+            wait_for_terminal(&fence_core, &fence_ws, &fence_id).state,
+            crate::jobs::JobState::Completed,
+        );
+        assert_eq!(
+            read_job(&core, &ws, &id).state,
+            crate::jobs::JobState::Cancelled
+        );
+        assert_eq!(
+            list_documents(&core, &ws)["memories"]
+                .as_array()
+                .unwrap()
+                .len(),
+            0
+        );
     }
 }
