@@ -10,6 +10,7 @@ use chrono::{SecondsFormat, Utc};
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use std::collections::VecDeque;
 
 pub const MAX_RECORDS: u32 = 10_000;
 pub const MAX_BYTES: u64 = 256 * 1024 * 1024;
@@ -486,7 +487,12 @@ pub struct ArtifactChunk {
 #[derive(Default)]
 struct WorkerQueue {
     running: bool,
-    pending: Vec<Storage>,
+    /// Storages are served in wake order (FIFO): a storage woken
+    /// early must not be starved by storages woken later. The
+    /// previous Vec+pop served LIFO, which stalled an early
+    /// ingestion job past a fixed poll window on a contended
+    /// broad run.
+    pending: VecDeque<Storage>,
 }
 
 impl WorkerQueue {
@@ -498,7 +504,7 @@ impl WorkerQueue {
             .iter()
             .any(|pending| pending.root == storage.root)
         {
-            self.pending.push(storage);
+            self.pending.push_back(storage);
         }
         if self.running {
             return false;
@@ -513,7 +519,7 @@ impl WorkerQueue {
     /// caller's lock hold, so a wake-up committed during shutdown
     /// cannot be lost.
     fn take_next(&mut self) -> Option<Storage> {
-        match self.pending.pop() {
+        match self.pending.pop_front() {
             Some(storage) => Some(storage),
             None => {
                 self.running = false;
@@ -525,7 +531,7 @@ impl WorkerQueue {
 
 static PROCESS_WORKER: std::sync::Mutex<WorkerQueue> = std::sync::Mutex::new(WorkerQueue {
     running: false,
-    pending: Vec::new(),
+    pending: VecDeque::new(),
 });
 impl crate::Core {
     /// One background export worker per process. Cross-process work is fenced by SQLite.

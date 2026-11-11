@@ -718,11 +718,32 @@ mod tests {
     }
 
     /// Wait for the background worker (woken by the finish op) to
-    /// drive the job to a terminal state. The worker runs on its own
-    /// thread, so tests must poll rather than race a manual claim.
+    /// drive the job to a terminal state. The worker runs on its
+    /// own thread and serves every storage in the process, so the
+    /// wait is condition-based: it polls the job state until
+    /// terminal, up to a bound, recording every state transition.
+    /// On timeout it panics with the full history, so a failure
+    /// names what the job did instead of only its last state. The
+    /// wait observes only — it never re-wakes the worker, which
+    /// would mask a lost wake-up, and never forces completion.
     fn wait_for_terminal(core: &Core, ws: &str, id: &str) -> Job {
-        for _ in 0..200 {
+        let start = std::time::Instant::now();
+        let bound = std::time::Duration::from_secs(60);
+        let mut history: Vec<String> = Vec::new();
+        let mut last_state: Option<crate::jobs::JobState> = None;
+        loop {
             let job = read_job(core, ws, id);
+            if last_state.as_ref() != Some(&job.state) {
+                history.push(format!(
+                    "{:?}ms {:?} v{} checkpoint={:?} log={:?}",
+                    start.elapsed().as_millis(),
+                    job.state,
+                    job.version,
+                    job.checkpoint,
+                    job.log
+                ));
+                last_state = Some(job.state.clone());
+            }
             if matches!(
                 job.state,
                 crate::jobs::JobState::Completed
@@ -731,9 +752,14 @@ mod tests {
             ) {
                 return job;
             }
+            if start.elapsed() >= bound {
+                panic!(
+                    "job {id} in workspace {ws} never reached a terminal state within {bound:?}; transitions:\n{}",
+                    history.join("\n")
+                );
+            }
             std::thread::sleep(std::time::Duration::from_millis(25));
         }
-        read_job(core, ws, id)
     }
 
     /// Fabricate a staged, Queued ingestion job without waking the
@@ -1497,5 +1523,39 @@ mod tests {
                 .len(),
             1
         );
+    }
+
+    #[test]
+    fn burst_of_storages_all_complete() {
+        // Eight fresh storages, one ingestion job each, all woken in
+        // a tight burst: the single process-global worker must serve
+        // every pending storage. This is the deterministic probe for
+        // the broad-run scheduling condition (Windows finding: a job
+        // stuck Queued past a fixed poll window while siblings
+        // completed). No timing assumption beyond the bounded
+        // diagnostic wait.
+        let mut fixtures = Vec::new();
+        for _ in 0..8 {
+            let (temp, core, ws) = setup();
+            let bytes = b"Burst import.";
+            let sha = content::hash(bytes);
+            let opened = begin(&core, &ws, "burst.txt", bytes, &sha, "private");
+            let id = opened["id"].as_str().unwrap().to_string();
+            part(&core, &ws, &id, 0, bytes, true).unwrap();
+            fixtures.push((temp, core, ws, id));
+        }
+        for (_temp, core, ws, id) in &fixtures {
+            let job = wait_for_terminal(core, ws, id);
+            assert_eq!(job.state, crate::jobs::JobState::Completed);
+        }
+        for (_temp, core, ws, _id) in &fixtures {
+            assert_eq!(
+                list_documents(core, ws)["memories"]
+                    .as_array()
+                    .unwrap()
+                    .len(),
+                1
+            );
+        }
     }
 }
