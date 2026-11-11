@@ -1628,6 +1628,58 @@ mod tests {
     }
 
     #[test]
+    fn reviewer_status_poll_does_not_rearm_exhausted_claim_budget() {
+        let (_temp, core, ws) = setup();
+        let (_fence_temp, fence_core, fence_ws) = setup();
+        let bytes = b"Read-only polling must not restart exhausted recovery.";
+        let sha = content::hash(bytes);
+        let opened = begin(&core, &ws, "poll.txt", bytes, &sha, "private");
+        let id = opened["id"].as_str().unwrap().to_string();
+        let root = root_of(&core);
+        crate::jobs::arm_claim_faults(&root, 1_000_000, crate::ErrorCode::StorageUnavailable);
+        part(&core, &ws, &id, 0, bytes, true).unwrap();
+        wait_for_parked(&core, &ws, &id, &root);
+        let before = crate::jobs::remaining_claim_faults(&root);
+        assert_eq!(before, 1_000_000 - 3);
+        crate::jobs::clear_claim_parked(&root);
+        // This is the public operation Documents calls automatically every 4s.
+        let response = core
+            .job_command(
+                "list",
+                json!({"contractVersion":1,"workspaceId":ws,"offset":0}),
+            )
+            .unwrap();
+        println!("status response after exhausted recovery: {response}");
+        // A healthy root queued after the read is a worker-progress fence. If
+        // the read re-armed the failed root, FIFO must attempt that root before
+        // completing the fence. A corrected read can leave the root parked and
+        // still complete the fence; no sleep or second parking event is needed.
+        let fence_bytes = b"Healthy worker progress fence.";
+        let fence_sha = content::hash(fence_bytes);
+        let fence_opened = begin(
+            &fence_core,
+            &fence_ws,
+            "fence.txt",
+            fence_bytes,
+            &fence_sha,
+            "private",
+        );
+        let fence_id = fence_opened["id"].as_str().unwrap().to_string();
+        part(&fence_core, &fence_ws, &fence_id, 0, fence_bytes, true).unwrap();
+        assert_eq!(
+            wait_for_terminal(&fence_core, &fence_ws, &fence_id).state,
+            crate::jobs::JobState::Completed,
+        );
+        let after = crate::jobs::remaining_claim_faults(&root);
+        crate::jobs::clear_claim_faults(&root);
+        crate::jobs::clear_claim_parked(&root);
+        assert_eq!(
+            after, before,
+            "read-only job polling re-armed an exhausted claim budget"
+        );
+    }
+
+    #[test]
     fn transient_claim_failure_recovers_without_another_wake() {
         let (_temp, core, ws) = setup();
         let bytes = b"Transient recovery.";
