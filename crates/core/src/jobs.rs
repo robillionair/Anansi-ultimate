@@ -483,10 +483,46 @@ pub struct ArtifactChunk {
     pub bytes: Vec<u8>,
 }
 
+#[derive(Default)]
 struct WorkerQueue {
     running: bool,
     pending: Vec<Storage>,
 }
+
+impl WorkerQueue {
+    /// Queue a storage root for the worker, deduplicated by root.
+    /// Returns true when the caller must start the worker thread.
+    fn wake(&mut self, storage: Storage) -> bool {
+        if !self
+            .pending
+            .iter()
+            .any(|pending| pending.root == storage.root)
+        {
+            self.pending.push(storage);
+        }
+        if self.running {
+            return false;
+        }
+        self.running = true;
+        true
+    }
+
+    /// Take the next storage to serve. When the queue is empty the
+    /// worker is marked idle and None is returned, so the caller
+    /// stops the thread. Taking work and deciding to stop share the
+    /// caller's lock hold, so a wake-up committed during shutdown
+    /// cannot be lost.
+    fn take_next(&mut self) -> Option<Storage> {
+        match self.pending.pop() {
+            Some(storage) => Some(storage),
+            None => {
+                self.running = false;
+                None
+            }
+        }
+    }
+}
+
 static PROCESS_WORKER: std::sync::Mutex<WorkerQueue> = std::sync::Mutex::new(WorkerQueue {
     running: false,
     pending: Vec::new(),
@@ -497,21 +533,15 @@ impl crate::Core {
         let Ok(storage) = self.storage() else {
             return;
         };
-        let mut queue = PROCESS_WORKER
-            .lock()
-            .unwrap_or_else(|error| error.into_inner());
-        if !queue
-            .pending
-            .iter()
-            .any(|pending| pending.root == storage.root)
-        {
-            queue.pending.push(storage.clone());
-        }
-        if queue.running {
+        let start = {
+            let mut queue = PROCESS_WORKER
+                .lock()
+                .unwrap_or_else(|error| error.into_inner());
+            queue.wake(storage.clone())
+        };
+        if !start {
             return;
         }
-        queue.running = true;
-        drop(queue);
         std::thread::spawn(|| {
             loop {
                 // Taking pending work and deciding to stop share the wake-up mutex.
@@ -520,12 +550,9 @@ impl crate::Core {
                     let mut queue = PROCESS_WORKER
                         .lock()
                         .unwrap_or_else(|error| error.into_inner());
-                    match queue.pending.pop() {
+                    match queue.take_next() {
                         Some(storage) => storage,
-                        None => {
-                            queue.running = false;
-                            return;
-                        }
+                        None => return,
                     }
                 };
                 while let Ok(Some(lease)) = storage.claim_export() {
@@ -629,5 +656,53 @@ impl crate::Core {
             self.wake_export_worker();
         }
         Ok(response)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    fn storage(name: &str) -> Storage {
+        Storage {
+            root: PathBuf::from(name),
+        }
+    }
+
+    #[test]
+    fn worker_queue_serves_storages_in_wake_order() {
+        let mut queue = WorkerQueue::default();
+        assert!(queue.wake(storage("a")));
+        assert!(!queue.wake(storage("b")));
+        assert!(!queue.wake(storage("c")));
+        assert_eq!(queue.take_next().unwrap().root, PathBuf::from("a"));
+        assert_eq!(queue.take_next().unwrap().root, PathBuf::from("b"));
+        assert_eq!(queue.take_next().unwrap().root, PathBuf::from("c"));
+        assert!(queue.take_next().is_none());
+        assert!(!queue.running);
+    }
+
+    #[test]
+    fn worker_queue_dedup_keeps_first_position() {
+        let mut queue = WorkerQueue::default();
+        queue.wake(storage("a"));
+        queue.wake(storage("b"));
+        queue.wake(storage("a"));
+        assert_eq!(queue.take_next().unwrap().root, PathBuf::from("a"));
+        assert_eq!(queue.take_next().unwrap().root, PathBuf::from("b"));
+        assert!(queue.take_next().is_none());
+    }
+
+    #[test]
+    fn worker_queue_restarts_after_going_idle() {
+        let mut queue = WorkerQueue::default();
+        assert!(queue.wake(storage("a")));
+        assert_eq!(queue.take_next().unwrap().root, PathBuf::from("a"));
+        assert!(queue.take_next().is_none());
+        assert!(!queue.running);
+        assert!(queue.wake(storage("b")));
+        assert_eq!(queue.take_next().unwrap().root, PathBuf::from("b"));
+        assert!(queue.take_next().is_none());
     }
 }
