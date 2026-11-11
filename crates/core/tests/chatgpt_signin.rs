@@ -1862,6 +1862,88 @@ fn second_concurrent_signin_is_superseded_not_overwritten() {
 }
 
 // ---------------------------------------------------------------------------
+// Tests: lifecycle repair 3 (AC-I1..I3)
+//
+// The test below fails on the repair-2 tip 1a4529f76 for the defect
+// it names (reproduced before the fix) and passes after it.
+
+#[test]
+fn stale_invalid_grant_does_not_delete_newer_signin() {
+    let _lock = issuer_lock();
+    test_env_once();
+    let issuer = start_fake_issuer();
+    issuer.set_mode(|m| m.expires_in = 60);
+    let _guard = IssuerGuard::set(&issuer.base_url);
+    let (_dir, core, ws) = core();
+    let client_id = fresh_client_id();
+    let service = anansi_core::chatgpt_signin::CHATGPT_KEYRING_SERVICE;
+    let user = format!("chatgpt-{client_id}");
+    drive_signin(&core, &ws, &issuer, &client_id);
+    poll_status(&core, &ws, Duration::from_secs(10), |s| {
+        s["pendingAttempt"]["status"] == "succeeded"
+    });
+    assert_eq!(issuer.token_hits.load(Ordering::SeqCst), 1);
+    // Distinct tokens for the newer sign-in, and the old refresh
+    // fails with InvalidGrant when it is released.
+    issuer.set_mode(|m| {
+        m.access_token = "at-test-access-0003".to_string();
+        m.refresh_token = "rt-test-refresh-0003".to_string();
+        m.refresh_invalid_grant = true;
+    });
+    // 1. Gate the old refresh.
+    let gate = Arc::new(TokenGate::new());
+    issuer.set_mode(|m| {
+        m.token_gate = Some(gate.clone());
+        m.token_gate_grant = Some("refresh_token".to_string());
+    });
+    let core = Arc::new(core);
+    let ws_arc = Arc::new(ws.clone());
+    let client_arc = Arc::new(client_id.clone());
+    let refresh_thread = {
+        let core = core.clone();
+        let ws = ws_arc.clone();
+        let client_id = client_arc.clone();
+        std::thread::spawn(move || {
+            signin_op(&core, "chatgpt-signin-refresh", &ws, Some(&client_id))
+        })
+    };
+    wait_token_hits(&issuer, 2);
+    // 2. Complete a newer sign-in for the same account while the
+    // old refresh is parked (its code grant passes the gate).
+    let (state, nonce, redirect_uri) = begin_reauth(&core, &ws, &client_id);
+    issuer.set_mode(|m| m.expected_nonce = Some(nonce));
+    let callback = format!("{redirect_uri}?code=code-test-0002&state={state}");
+    let (http_status, _body) = callback_get(&callback);
+    assert_eq!(http_status, 200);
+    poll_status(&core, &ws, Duration::from_secs(10), |s| {
+        s["pendingAttempt"]["status"] == "succeeded"
+    });
+    // 3. Release the old refresh with InvalidGrant.
+    gate.release();
+    let out = refresh_thread.join().unwrap().unwrap();
+    // 4. The newer credential remains unchanged: the stale failure
+    // reports the newer session instead of ending it.
+    assert_eq!(out["refreshed"], false);
+    let record = read_mock_record(service, &user).expect("record survives");
+    let expected_expiry = record["saved_at_ms"].as_u64().unwrap()
+        + record["expires_in"].as_u64().unwrap() * 1000;
+    assert_eq!(out["expiresAtMs"], expected_expiry);
+    assert_eq!(issuer.token_hits.load(Ordering::SeqCst), 3);
+    assert_eq!(record["access_token"], "at-test-access-0003");
+    assert_eq!(record["refresh_token"], "rt-test-refresh-0003");
+    // ... and usable: a follow-up refresh with the surviving
+    // refresh token succeeds and rotates it.
+    issuer.set_mode(|m| m.refresh_invalid_grant = false);
+    let out = signin_op(&core, "chatgpt-signin-refresh", &ws, Some(&client_id)).unwrap();
+    assert_eq!(out["refreshed"], true);
+    assert_eq!(issuer.token_hits.load(Ordering::SeqCst), 4);
+    let record = read_mock_record(service, &user).expect("record survives");
+    assert_eq!(record["refresh_token"], "rt-test-refresh-0002");
+    let s = status(&core, &ws);
+    assert_eq!(s["signedIn"], true);
+}
+
+// ---------------------------------------------------------------------------
 // Tests: browser boundaries (AC-S8)
 
 #[test]
