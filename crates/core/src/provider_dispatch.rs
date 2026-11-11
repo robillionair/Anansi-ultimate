@@ -70,7 +70,6 @@ use anansi_providers::gates::{Budget, PaidInferencePermit, QuotaLedger, ZeroCost
 use anansi_providers::http::CancellationToken;
 use anansi_providers::routing::{DisclosureRecord, RoutingMode, RoutingRequest};
 use anansi_providers::runtime::{LocalityConfig, ProviderRuntime, RuntimeConfig, RuntimeProvider};
-use anansi_providers::secrets::SecretResolver;
 use anansi_providers::types::{CompletionRequest, CostClass, StreamEvent, Usage};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -722,13 +721,12 @@ struct BackendState {
     /// concurrent refresh is refused so two callers cannot race
     /// a rotating refresh token.
     chatgpt_refresh_in_flight: bool,
-    /// Per-account ChatGPT sign-in generation (epoch), bumped only
-    /// by disconnect. A callback exchange or refresh that started
-    /// under an older generation must not store tokens for a
-    /// session disconnect has ended. Absent means generation 0.
-    /// In-memory only: in-flight exchanges do not survive a
-    /// restart.
-    chatgpt_generations: HashMap<String, u64>,
+    /// Per-account ChatGPT sign-in epoch, bumped by disconnect
+    /// and by a newly committed sign-in. A callback exchange or
+    /// refresh that started under an older version must not store
+    /// tokens for it. Absent means version 0, live. In-memory
+    /// only: in-flight exchanges do not survive a restart.
+    chatgpt_epochs: HashMap<String, ChatGptEpoch>,
 }
 
 /// Backend key for a logical workspace that has been validated
@@ -1400,20 +1398,64 @@ fn persist_chatgpt_registrations(
 /// Load a stored credential record from the keyring, if present
 /// and parseable. A corrupt entry is treated as absent (the next
 /// sign-in replaces it); the bytes are never logged.
+/// One account's ChatGPT sign-in epoch: the version a callback
+/// exchange or refresh captured when it started, and whether the
+/// latest bump ended the session (disconnect) or committed a new
+/// one (sign-in). A version mismatch at store time discards stale
+/// tokens; `ended` says why — a disconnect-then-sign-in sequence
+/// ends live (`ended = false`), so stale work is superseded, not
+/// disconnected.
+#[derive(Debug, Clone, Copy, Default)]
+struct ChatGptEpoch {
+    version: u64,
+    ended: bool,
+}
+
+/// The outcome of a generation-checked store: the tokens were
+/// written, or discarded because the session ended (disconnect)
+/// or was replaced by a newer sign-in.
+enum ChatGptStoreOutcome {
+    Stored,
+    Superseded,
+    Disconnected,
+}
+
 fn load_chatgpt_record(
     resolver: &anansi_providers::keyring_resolver::KeyringSecretResolver,
     client_id: &str,
-) -> Option<crate::chatgpt_signin::ChatGptCredentialRecord> {
+) -> ChatGptRecordLoad {
     let reference = format!("chatgpt-{client_id}");
-    let credential = anansi_providers::secrets::CredentialRef::new("chatgpt", reference);
-    let material = resolver.resolve(&credential).ok()?;
-    let anansi_providers::secrets::AuthMaterial::ApiKey(secret) = material else {
-        return None;
-    };
-    serde_json::from_slice::<crate::chatgpt_signin::ChatGptCredentialRecord>(
-        secret.expose().as_bytes(),
-    )
-    .ok()
+    match resolver.read_bytes(&reference) {
+        Ok(None) => ChatGptRecordLoad::Absent,
+        Ok(Some(bytes)) => {
+            match serde_json::from_slice::<crate::chatgpt_signin::ChatGptCredentialRecord>(&bytes) {
+                Ok(record) => ChatGptRecordLoad::Present(record),
+                Err(_) => ChatGptRecordLoad::Malformed,
+            }
+        }
+        Err(_) => ChatGptRecordLoad::Unreadable,
+    }
+}
+
+/// What a keyring read established about one ChatGPT record.
+/// Only `Absent` establishes that nothing is stored;
+/// `Malformed` and `Unreadable` do not — the entry may still hold
+/// (possibly live) material, so disconnect must not report
+/// removal on their strength alone.
+enum ChatGptRecordLoad {
+    Present(crate::chatgpt_signin::ChatGptCredentialRecord),
+    Absent,
+    Malformed,
+    Unreadable,
+}
+
+impl ChatGptRecordLoad {
+    fn record(self) -> Option<crate::chatgpt_signin::ChatGptCredentialRecord> {
+        match self {
+            ChatGptRecordLoad::Present(record) => Some(record),
+            _ => None,
+        }
+    }
 }
 
 fn store_chatgpt_record(
@@ -1543,9 +1585,10 @@ fn chatgpt_complete_callback(
         ext_agent_host_id: String,
         code: String,
         issued_client_id: String,
-        /// The account's generation at validation time: the store
-        /// step refuses to write if disconnect has bumped it since.
-        generation: u64,
+        /// The account's epoch version at validation time: the
+        /// store step refuses to write if disconnect or a newer
+        /// sign-in bumped it since.
+        epoch_version: u64,
     }
     let taken = with_backend(scope, |state| {
         let Some(attempt) = state.chatgpt_attempts.get_mut(attempt_id) else {
@@ -1554,12 +1597,20 @@ fn chatgpt_complete_callback(
             ));
         };
         if attempt.consumed {
-            // An attempt invalidated by disconnect names the cause
-            // instead of looking like a replay.
-            if matches!(&attempt.status, ChatGptAttemptStatus::Failed(r) if r == "disconnected") {
-                return Err(invalid(
-                    "The ChatGPT session was disconnected before sign-in finished. Sign in again.",
-                ));
+            // An attempt invalidated by disconnect, or superseded
+            // by a newer sign-in, names the cause instead of
+            // looking like a replay.
+            if let ChatGptAttemptStatus::Failed(reason) = &attempt.status {
+                if reason == "disconnected" {
+                    return Err(invalid(
+                        "The ChatGPT session was disconnected before sign-in finished. Sign in again.",
+                    ));
+                }
+                if reason == "superseded" {
+                    return Err(invalid(
+                        "A newer ChatGPT sign-in already completed. You can close this tab and return to ANANSI.",
+                    ));
+                }
             }
             return Err(invalid(
                 "This sign-in reply was already used. Start a new sign-in.",
@@ -1627,11 +1678,12 @@ fn chatgpt_complete_callback(
         }
         attempt.consumed = true;
         attempt.status = ChatGptAttemptStatus::CallbackReceived;
-        let generation = state
-            .chatgpt_generations
+        let epoch_version = state
+            .chatgpt_epochs
             .get(&issued_client_id)
             .copied()
-            .unwrap_or(0);
+            .unwrap_or_default()
+            .version;
         Ok(Taken {
             client_id: attempt.client_id.clone(),
             nonce: attempt.nonce.clone(),
@@ -1640,7 +1692,7 @@ fn chatgpt_complete_callback(
             ext_agent_host_id: attempt.ext_agent_host_id.clone(),
             code,
             issued_client_id,
-            generation,
+            epoch_version,
         })
     });
     let taken = match taken {
@@ -1685,10 +1737,13 @@ fn chatgpt_complete_callback(
             saved_at_ms: crate::chatgpt_signin::now_unix_ms(),
         })
     })();
-    // Store the result under the lock. The generation re-check
-    // and the store happen in one lock hold: if disconnect bumped
-    // the generation while the exchange was in flight, the tokens
-    // are discarded instead of recreating the session. The work
+    // Store the result under the lock. The epoch re-check and
+    // the store happen in one lock hold: if disconnect or a newer
+    // sign-in bumped the version while the exchange was in
+    // flight, the tokens are discarded instead of recreating or
+    // overwriting the session. A successful store bumps the
+    // epoch (version + 1, live) in the same hold, so work that
+    // started under the old version is invalidated. The work
     // under the lock is local-only (keyring + atomic file write),
     // never network.
     match result {
@@ -1696,15 +1751,24 @@ fn chatgpt_complete_callback(
             let plan_usage = record.plan_usage();
             let stored = with_backend(scope, |state| {
                 let current = state
-                    .chatgpt_generations
+                    .chatgpt_epochs
                     .get(&record.client_id)
                     .copied()
-                    .unwrap_or(0);
-                if current != taken.generation {
+                    .unwrap_or_default();
+                if current.version != taken.epoch_version {
+                    let reason = if current.ended {
+                        "disconnected"
+                    } else {
+                        "superseded"
+                    };
                     if let Some(attempt) = state.chatgpt_attempts.get_mut(attempt_id) {
-                        attempt.status = ChatGptAttemptStatus::Failed("disconnected".to_string());
+                        attempt.status = ChatGptAttemptStatus::Failed(reason.to_string());
                     }
-                    return Ok(false);
+                    return Ok(if current.ended {
+                        ChatGptStoreOutcome::Disconnected
+                    } else {
+                        ChatGptStoreOutcome::Superseded
+                    });
                 }
                 let resolver = shared_chatgpt_resolver();
                 store_chatgpt_record(&resolver, &record)?;
@@ -1721,15 +1785,26 @@ fn chatgpt_complete_callback(
                     );
                     persist_chatgpt_registrations(root, wid, &registrations)?;
                 }
-                Ok(true)
+                let epoch = state
+                    .chatgpt_epochs
+                    .entry(record.client_id.clone())
+                    .or_default();
+                epoch.version += 1;
+                epoch.ended = false;
+                Ok(ChatGptStoreOutcome::Stored)
             });
             match stored {
-                Ok(false) => (
+                Ok(ChatGptStoreOutcome::Disconnected) => (
                     "The ChatGPT session was disconnected before sign-in finished. Sign in again."
                         .to_string(),
                     true,
                 ),
-                Ok(true) => {
+                Ok(ChatGptStoreOutcome::Superseded) => (
+                    "A newer ChatGPT sign-in already completed. You can close this tab and return to ANANSI."
+                        .to_string(),
+                    true,
+                ),
+                Ok(ChatGptStoreOutcome::Stored) => {
                     let _ = with_backend(scope, |state| {
                         if let Some(attempt) = state.chatgpt_attempts.get_mut(attempt_id) {
                             attempt.status = ChatGptAttemptStatus::Succeeded;
@@ -3103,7 +3178,9 @@ pub fn providers_command(
                         .get(id)
                         .ok_or_else(|| invalid("No saved ChatGPT account with that client ID."))?;
                     let resolver = shared_chatgpt_resolver();
-                    let hint = load_chatgpt_record(&resolver, id).and_then(|r| r.id_token);
+                    let hint = load_chatgpt_record(&resolver, id)
+                        .record()
+                        .and_then(|r| r.id_token);
                     (id.clone(), None, hint, reg.email.clone())
                 }
                 None => (
@@ -3194,7 +3271,7 @@ pub fn providers_command(
                     email: reg.email.clone(),
                     plan_usage: reg.plan_usage,
                 });
-                if let Some(record) = load_chatgpt_record(&resolver, client_id) {
+                if let Some(record) = load_chatgpt_record(&resolver, client_id).record() {
                     // The record with the latest expiry is the
                     // active one when several accounts are saved.
                     if expires_at_ms
@@ -3274,8 +3351,24 @@ pub fn providers_command(
                     .ok_or_else(|| invalid("No ChatGPT account is signed in."))?,
             };
             let resolver = shared_chatgpt_resolver();
-            let record = load_chatgpt_record(&resolver, &client_id)
-                .ok_or_else(|| invalid("No ChatGPT account is signed in."))?;
+            // A failed read or a damaged record is not "no
+            // account": say which it is, so the caller can act on
+            // it instead of silently re-signing into a session
+            // that may still exist.
+            let record = match load_chatgpt_record(&resolver, &client_id) {
+                ChatGptRecordLoad::Present(record) => record,
+                ChatGptRecordLoad::Absent => {
+                    return Err(invalid("No ChatGPT account is signed in."));
+                }
+                ChatGptRecordLoad::Malformed => {
+                    return Err(invalid(
+                        "The stored ChatGPT session is damaged. Sign in again.",
+                    ));
+                }
+                ChatGptRecordLoad::Unreadable => {
+                    return Err(crate::storage::unavailable());
+                }
+            };
             let now_ms = crate::chatgpt_signin::now_unix_ms();
             if !record.needs_refresh(now_ms) {
                 return to_value(&ChatGptSigninRefreshResponse {
@@ -3291,19 +3384,21 @@ pub fn providers_command(
             };
             // Serialize: a second concurrent refresh is refused
             // so two callers cannot race a rotating refresh token.
-            // The generation is captured with the flag: a
-            // disconnect that lands during the exchange bumps it,
-            // and the store below refuses the stale tokens.
-            let generation = with_backend(scope, |state| {
+            // The epoch version is captured with the flag: a
+            // disconnect or a newer sign-in that lands during the
+            // exchange bumps it, and the store below refuses the
+            // stale tokens.
+            let epoch_version = with_backend(scope, |state| {
                 if state.chatgpt_refresh_in_flight {
                     return Err(invalid("A ChatGPT refresh is already running."));
                 }
                 state.chatgpt_refresh_in_flight = true;
                 Ok(state
-                    .chatgpt_generations
+                    .chatgpt_epochs
                     .get(&client_id)
                     .copied()
-                    .unwrap_or(0))
+                    .unwrap_or_default()
+                    .version)
             })?;
             let outcome = (|| -> Result<
                 crate::chatgpt_signin::TokenResponse,
@@ -3335,18 +3430,31 @@ pub fn providers_command(
             });
             match outcome {
                 Ok(tokens) => {
-                    // Store under the lock with the generation
-                    // re-check: if disconnect bumped the generation
+                    // Store under the lock with the epoch
+                    // re-check: if disconnect bumped the version
                     // during the exchange, the rotated tokens are
-                    // discarded instead of recreating the session.
+                    // discarded instead of recreating the session;
+                    // if a newer sign-in committed, they are
+                    // discarded instead of overwriting it, and the
+                    // refresh reports the newer session's expiry.
                     let stored = with_backend(scope, |state| {
                         let current = state
-                            .chatgpt_generations
+                            .chatgpt_epochs
                             .get(&client_id)
                             .copied()
-                            .unwrap_or(0);
-                        if current != generation {
-                            return Ok(None);
+                            .unwrap_or_default();
+                        if current.version != epoch_version {
+                            let expiry = load_chatgpt_record(&resolver, &client_id)
+                                .record()
+                                .map(|r| r.expires_at_ms());
+                            return Ok((
+                                if current.ended {
+                                    ChatGptStoreOutcome::Disconnected
+                                } else {
+                                    ChatGptStoreOutcome::Superseded
+                                },
+                                expiry,
+                            ));
                         }
                         let mut new_record = record.clone();
                         new_record.access_token = tokens.access_token;
@@ -3363,16 +3471,25 @@ pub fn providers_command(
                             reg.last_verified_ms = crate::chatgpt_signin::now_unix_ms();
                             persist_chatgpt_registrations(&root, &wid, &registrations)?;
                         }
-                        Ok(Some(expires_at_ms))
+                        Ok((ChatGptStoreOutcome::Stored, Some(expires_at_ms)))
                     })?;
-                    let Some(expires_at_ms) = stored else {
-                        return Err(invalid("The ChatGPT session ended. Sign in again."));
-                    };
-                    to_value(&ChatGptSigninRefreshResponse {
-                        contract_version: 1,
-                        refreshed: true,
-                        expires_at_ms: Some(expires_at_ms),
-                    })
+                    match stored {
+                        (ChatGptStoreOutcome::Stored, Some(expires_at_ms)) => {
+                            to_value(&ChatGptSigninRefreshResponse {
+                                contract_version: 1,
+                                refreshed: true,
+                                expires_at_ms: Some(expires_at_ms),
+                            })
+                        }
+                        (ChatGptStoreOutcome::Superseded, expires_at_ms) => {
+                            to_value(&ChatGptSigninRefreshResponse {
+                                contract_version: 1,
+                                refreshed: false,
+                                expires_at_ms,
+                            })
+                        }
+                        _ => Err(invalid("The ChatGPT session ended. Sign in again.")),
+                    }
                 }
                 Err(crate::chatgpt_signin::ChatGptError::InvalidGrant) => {
                     // Unusable refresh token: clear the record
@@ -3409,17 +3526,16 @@ pub fn providers_command(
             };
             let resolver = shared_chatgpt_resolver();
             // Invalidate pending work for this account FIRST: bump
-            // its generation (a callback exchange or refresh that
-            // started under the old generation must not store
-            // tokens for it) and mark its pending attempts
-            // disconnected, so a late callback is refused before
-            // any exchange. Disconnect always wins over in-flight
-            // work; it never waits for a refresh.
+            // its epoch (version + 1, ended) — a callback exchange
+            // or refresh that started under the old version must
+            // not store tokens for it — and mark its pending
+            // attempts disconnected, so a late callback is refused
+            // before any exchange. Disconnect always wins over
+            // in-flight work; it never waits for a refresh.
             with_backend(scope, |state| {
-                *state
-                    .chatgpt_generations
-                    .entry(client_id.clone())
-                    .or_default() += 1;
+                let epoch = state.chatgpt_epochs.entry(client_id.clone()).or_default();
+                epoch.version += 1;
+                epoch.ended = true;
                 for attempt in state.chatgpt_attempts.values_mut() {
                     if attempt.client_id == client_id
                         && matches!(
@@ -3433,9 +3549,13 @@ pub fn providers_command(
                 }
                 Ok(())
             })?;
-            let record = load_chatgpt_record(&resolver, &client_id);
+            let load = load_chatgpt_record(&resolver, &client_id);
             let mut confirmed = false;
-            if let Some(record) = &record
+            // Revocation needs a readable refresh token: only a
+            // present record can be revoked. A malformed record or
+            // a failed read cannot be revoked — that is reported,
+            // not hidden.
+            if let ChatGptRecordLoad::Present(record) = &load
                 && let Some(refresh_token) = &record.refresh_token
             {
                 let endpoints =
@@ -3447,15 +3567,18 @@ pub fn providers_command(
                 )
                 .unwrap_or(false);
             }
-            // Local deletion is reported as it actually went, and
-            // kept separate from the remote revocation above: either
-            // can succeed while the other fails. On a failed delete
-            // the session is still there — the registration stub is
-            // left untouched so status keeps showing it, and the
-            // caller retries disconnect.
-            let (local_deletion, disconnected) = match &record {
-                None => ("absent".to_string(), true),
-                Some(_) => match resolver.delete(&format!("chatgpt-{client_id}")) {
+            // Local removal is reported only when it is
+            // established. Absence (established by the load) needs
+            // no delete. A present, malformed, or unreadable
+            // record is removed by the delete — a succeeding delete
+            // establishes removal even when the read could not, and
+            // a failing delete establishes nothing. On a failed
+            // delete the session is still there — the registration
+            // stub is left untouched so status keeps showing it,
+            // and the caller retries disconnect.
+            let (local_deletion, disconnected) = match &load {
+                ChatGptRecordLoad::Absent => ("absent".to_string(), true),
+                _ => match resolver.delete(&format!("chatgpt-{client_id}")) {
                     Ok(()) => ("deleted".to_string(), true),
                     Err(_) => ("failed".to_string(), false),
                 },

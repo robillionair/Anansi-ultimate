@@ -118,6 +118,27 @@ impl KeyringSecretResolver {
         }
     }
 
+    /// Read the stored bytes for a reference, distinguishing a
+    /// missing entry from a store failure: `Ok(None)` means no
+    /// entry exists; `Err` means the store failed to answer (as
+    /// opposed to answering "absent"). Callers that must report
+    /// removal honestly need this distinction — `resolve` and
+    /// `exists` both collapse the two cases.
+    pub fn read_bytes(&self, reference: &str) -> Result<Option<Vec<u8>>, ProviderError> {
+        match self.entry(reference)?.get_secret() {
+            Ok(bytes) => Ok(Some(bytes)),
+            Err(keyring::Error::NoEntry) => Ok(None),
+            Err(e) => Err(ProviderError::new(
+                ProviderErrorCode::AuthFailed,
+                format!(
+                    "could not read credential for reference {reference}: {}",
+                    bounded(&e.to_string())
+                ),
+            )
+            .pre_send()),
+        }
+    }
+
     /// Remove a stored credential (provider removal / key rotation).
     pub fn delete(&self, reference: &str) -> Result<(), ProviderError> {
         let result = self.entry(reference)?.delete_credential().map_err(|e| {
@@ -273,5 +294,18 @@ mod tests {
             .resolve(&CredentialRef::new("openai", "real-ref"))
             .unwrap();
         assert!(!format!("{material:?}").contains("sk-fake-must-not-leak"));
+    }
+
+    #[test]
+    fn read_bytes_distinguishes_missing_from_present() {
+        let resolver = mock_resolver();
+        assert_eq!(resolver.read_bytes("never-stored").unwrap(), None);
+        resolver
+            .store_api_key("present", b"sk-fake-present")
+            .unwrap();
+        assert_eq!(
+            resolver.read_bytes("present").unwrap(),
+            Some(b"sk-fake-present".to_vec())
+        );
     }
 }
