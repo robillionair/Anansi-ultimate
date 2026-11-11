@@ -371,14 +371,25 @@ pub struct ChatGptSigninRefreshResponse {
 #[serde(rename_all = "camelCase")]
 pub struct ChatGptSigninDisconnectResponse {
     pub contract_version: u8,
-    /// True only when no local record remains after this call
-    /// (deleted, or there was none).
+    /// True only when the account has no live ChatGPT session as
+    /// a result of this call (the old record was deleted by this
+    /// call, or there was none and no newer sign-in committed).
+    /// False when a newer session is live ("superseded") or the
+    /// delete failed ("failed" — retry disconnect).
     pub disconnected: bool,
     /// The keyring outcome, independent of remote revocation:
-    /// "deleted" (a record existed and was removed), "absent"
-    /// (no record existed), or "failed" (a record existed and
-    /// the delete failed — the session is still there).
+    /// "deleted" (this call removed the old record), "absent" (no
+    /// record existed when the delete decision was made, and no
+    /// newer sign-in committed), "failed" (the delete was
+    /// attempted and failed — the old session is still there), or
+    /// "superseded" (a newer sign-in committed before the delete
+    /// ran; this call deleted nothing and changed no registration
+    /// metadata).
     pub local_deletion: String,
+    /// Whether the old session's refresh token revocation was
+    /// confirmed. Independent of the local outcome and of any
+    /// newer session: a superseded disconnect can report the old
+    /// token revoked while a newer session is live.
     pub remote_revocation_confirmed: bool,
 }
 
@@ -3559,8 +3570,10 @@ pub fn providers_command(
             // not store tokens for it — and mark its pending
             // attempts disconnected, so a late callback is refused
             // before any exchange. Disconnect always wins over
-            // in-flight work; it never waits for a refresh.
-            with_backend(scope, |state| {
+            // in-flight work; it never waits for a refresh. The
+            // bumped version is captured for the delete decision
+            // below.
+            let bumped_version = with_backend(scope, |state| {
                 let epoch = state.chatgpt_epochs.entry(client_id.clone()).or_default();
                 epoch.version += 1;
                 epoch.ended = true;
@@ -3575,14 +3588,17 @@ pub fn providers_command(
                         attempt.status = ChatGptAttemptStatus::Failed("disconnected".to_string());
                     }
                 }
-                Ok(())
+                Ok(epoch.version)
             })?;
             let load = load_chatgpt_record(&resolver, &client_id);
             let mut confirmed = false;
             // Revocation needs a readable refresh token: only a
             // present record can be revoked. A malformed record or
             // a failed read cannot be revoked — that is reported,
-            // not hidden.
+            // not hidden. Revocation runs over the network with no
+            // lock held, so a sign-in can commit while it is
+            // pending — the local destructive changes below are
+            // serialized against it by the epoch re-check.
             if let ChatGptRecordLoad::Present(record) = &load
                 && let Some(refresh_token) = &record.refresh_token
             {
@@ -3596,26 +3612,43 @@ pub fn providers_command(
                 .unwrap_or(false);
             }
             // Local removal is reported only when it is
-            // established. Absence (established by the load) needs
-            // no delete. A present, malformed, or unreadable
-            // record is removed by the delete — a succeeding delete
-            // establishes removal even when the read could not, and
-            // a failing delete establishes nothing. On a failed
-            // delete the session is still there — the registration
-            // stub is left untouched so status keeps showing it,
-            // and the caller retries disconnect.
-            let (local_deletion, disconnected) = match &load {
-                ChatGptRecordLoad::Absent => ("absent".to_string(), true),
-                _ => match resolver.delete(&format!("chatgpt-{client_id}")) {
-                    Ok(()) => ("deleted".to_string(), true),
-                    Err(_) => ("failed".to_string(), false),
-                },
-            };
-            let mut registrations = load_chatgpt_registrations(&root, &wid)?;
-            if disconnected && let Some(reg) = registrations.get_mut(&client_id) {
-                reg.plan_usage = false;
-                persist_chatgpt_registrations(&root, &wid, &registrations)?;
-            }
+            // established, and only for the session this disconnect
+            // targeted. The delete decision happens under one lock
+            // hold with the epoch re-check: if a newer sign-in
+            // committed during revocation, this call deletes
+            // nothing and touches no registration metadata. The
+            // record is re-read in the same hold — another
+            // disconnect may have removed it already — so the
+            // second disconnect reports "absent", not "failed".
+            // On a failed delete the session is still there — the
+            // registration stub is left untouched so status keeps
+            // showing it, and the caller retries disconnect.
+            let (local_deletion, disconnected) = with_backend(scope, |state| {
+                let current = state
+                    .chatgpt_epochs
+                    .get(&client_id)
+                    .copied()
+                    .unwrap_or_default();
+                if current.version != bumped_version && !current.ended {
+                    return Ok(("superseded".to_string(), false));
+                }
+                let (local_deletion, disconnected) =
+                    match load_chatgpt_record(&resolver, &client_id) {
+                        ChatGptRecordLoad::Absent => ("absent".to_string(), true),
+                        _ => match resolver.delete(&format!("chatgpt-{client_id}")) {
+                            Ok(()) => ("deleted".to_string(), true),
+                            Err(_) => ("failed".to_string(), false),
+                        },
+                    };
+                if disconnected {
+                    let mut registrations = load_chatgpt_registrations(&root, &wid)?;
+                    if let Some(reg) = registrations.get_mut(&client_id) {
+                        reg.plan_usage = false;
+                        persist_chatgpt_registrations(&root, &wid, &registrations)?;
+                    }
+                }
+                Ok((local_deletion, disconnected))
+            })?;
             to_value(&ChatGptSigninDisconnectResponse {
                 contract_version: 1,
                 disconnected,

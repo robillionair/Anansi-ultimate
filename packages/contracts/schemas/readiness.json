@@ -1875,14 +1875,15 @@
         "type": "integer"
       },
       "disconnected": {
-        "description": "True only when no local record remains after this call\n(deleted, or there was none).",
+        "description": "True only when the account has no live ChatGPT session as\na result of this call (the old record was deleted by this\ncall, or there was none and no newer sign-in committed).\nFalse when a newer session is live (\"superseded\") or the\ndelete failed (\"failed\" — retry disconnect).",
         "type": "boolean"
       },
       "localDeletion": {
-        "description": "The keyring outcome, independent of remote revocation:\n\"deleted\" (a record existed and was removed), \"absent\"\n(no record existed), or \"failed\" (a record existed and\nthe delete failed — the session is still there).",
+        "description": "The keyring outcome, independent of remote revocation:\n\"deleted\" (this call removed the old record), \"absent\" (no\nrecord existed when the delete decision was made, and no\nnewer sign-in committed), \"failed\" (the delete was\nattempted and failed — the old session is still there), or\n\"superseded\" (a newer sign-in committed before the delete\nran; this call deleted nothing and changed no registration\nmetadata).",
         "type": "string"
       },
       "remoteRevocationConfirmed": {
+        "description": "Whether the old session's refresh token revocation was\nconfirmed. Independent of the local outcome and of any\nnewer session: a superseded disconnect can report the old\ntoken revoked while a newer session is live.",
         "type": "boolean"
       }
     },

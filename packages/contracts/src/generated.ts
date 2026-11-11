@@ -451,17 +451,30 @@ export interface ChatGptSigninAccountRequest {
 export interface ChatGptSigninDisconnectResponse {
   contractVersion: number;
   /**
-   * True only when no local record remains after this call
-   * (deleted, or there was none).
+   * True only when the account has no live ChatGPT session as
+   * a result of this call (the old record was deleted by this
+   * call, or there was none and no newer sign-in committed).
+   * False when a newer session is live ("superseded") or the
+   * delete failed ("failed" — retry disconnect).
    */
   disconnected: boolean;
   /**
    * The keyring outcome, independent of remote revocation:
-   * "deleted" (a record existed and was removed), "absent"
-   * (no record existed), or "failed" (a record existed and
-   * the delete failed — the session is still there).
+   * "deleted" (this call removed the old record), "absent" (no
+   * record existed when the delete decision was made, and no
+   * newer sign-in committed), "failed" (the delete was
+   * attempted and failed — the old session is still there), or
+   * "superseded" (a newer sign-in committed before the delete
+   * ran; this call deleted nothing and changed no registration
+   * metadata).
    */
   localDeletion: string;
+  /**
+   * Whether the old session's refresh token revocation was
+   * confirmed. Independent of the local outcome and of any
+   * newer session: a superseded disconnect can report the old
+   * token revoked while a newer session is live.
+   */
   remoteRevocationConfirmed: boolean;
 }
 export interface ChatGptSigninRefreshResponse {
