@@ -450,7 +450,18 @@ export interface ChatGptSigninAccountRequest {
 }
 export interface ChatGptSigninDisconnectResponse {
   contractVersion: number;
+  /**
+   * True only when no local record remains after this call
+   * (deleted, or there was none).
+   */
   disconnected: boolean;
+  /**
+   * The keyring outcome, independent of remote revocation:
+   * "deleted" (a record existed and was removed), "absent"
+   * (no record existed), or "failed" (a record existed and
+   * the delete failed — the session is still there).
+   */
+  localDeletion: string;
   remoteRevocationConfirmed: boolean;
 }
 export interface ChatGptSigninRefreshResponse {

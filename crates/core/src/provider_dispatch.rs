@@ -372,7 +372,14 @@ pub struct ChatGptSigninRefreshResponse {
 #[serde(rename_all = "camelCase")]
 pub struct ChatGptSigninDisconnectResponse {
     pub contract_version: u8,
+    /// True only when no local record remains after this call
+    /// (deleted, or there was none).
     pub disconnected: bool,
+    /// The keyring outcome, independent of remote revocation:
+    /// "deleted" (a record existed and was removed), "absent"
+    /// (no record existed), or "failed" (a record existed and
+    /// the delete failed — the session is still there).
+    pub local_deletion: String,
     pub remote_revocation_confirmed: bool,
 }
 
@@ -715,6 +722,13 @@ struct BackendState {
     /// concurrent refresh is refused so two callers cannot race
     /// a rotating refresh token.
     chatgpt_refresh_in_flight: bool,
+    /// Per-account ChatGPT sign-in generation (epoch), bumped only
+    /// by disconnect. A callback exchange or refresh that started
+    /// under an older generation must not store tokens for a
+    /// session disconnect has ended. Absent means generation 0.
+    /// In-memory only: in-flight exchanges do not survive a
+    /// restart.
+    chatgpt_generations: HashMap<String, u64>,
 }
 
 /// Backend key for a logical workspace that has been validated
@@ -1529,6 +1543,9 @@ fn chatgpt_complete_callback(
         ext_agent_host_id: String,
         code: String,
         issued_client_id: String,
+        /// The account's generation at validation time: the store
+        /// step refuses to write if disconnect has bumped it since.
+        generation: u64,
     }
     let taken = with_backend(scope, |state| {
         let Some(attempt) = state.chatgpt_attempts.get_mut(attempt_id) else {
@@ -1537,6 +1554,13 @@ fn chatgpt_complete_callback(
             ));
         };
         if attempt.consumed {
+            // An attempt invalidated by disconnect names the cause
+            // instead of looking like a replay.
+            if matches!(&attempt.status, ChatGptAttemptStatus::Failed(r) if r == "disconnected") {
+                return Err(invalid(
+                    "The ChatGPT session was disconnected before sign-in finished. Sign in again.",
+                ));
+            }
             return Err(invalid(
                 "This sign-in reply was already used. Start a new sign-in.",
             ));
@@ -1603,6 +1627,11 @@ fn chatgpt_complete_callback(
         }
         attempt.consumed = true;
         attempt.status = ChatGptAttemptStatus::CallbackReceived;
+        let generation = state
+            .chatgpt_generations
+            .get(&issued_client_id)
+            .copied()
+            .unwrap_or(0);
         Ok(Taken {
             client_id: attempt.client_id.clone(),
             nonce: attempt.nonce.clone(),
@@ -1611,6 +1640,7 @@ fn chatgpt_complete_callback(
             ext_agent_host_id: attempt.ext_agent_host_id.clone(),
             code,
             issued_client_id,
+            generation,
         })
     });
     let taken = match taken {
@@ -1655,11 +1685,27 @@ fn chatgpt_complete_callback(
             saved_at_ms: crate::chatgpt_signin::now_unix_ms(),
         })
     })();
-    // Store the result under the lock.
+    // Store the result under the lock. The generation re-check
+    // and the store happen in one lock hold: if disconnect bumped
+    // the generation while the exchange was in flight, the tokens
+    // are discarded instead of recreating the session. The work
+    // under the lock is local-only (keyring + atomic file write),
+    // never network.
     match result {
         Ok(record) => {
             let plan_usage = record.plan_usage();
-            let stored = (|| -> Result<(), CommandError> {
+            let stored = with_backend(scope, |state| {
+                let current = state
+                    .chatgpt_generations
+                    .get(&record.client_id)
+                    .copied()
+                    .unwrap_or(0);
+                if current != taken.generation {
+                    if let Some(attempt) = state.chatgpt_attempts.get_mut(attempt_id) {
+                        attempt.status = ChatGptAttemptStatus::Failed("disconnected".to_string());
+                    }
+                    return Ok(false);
+                }
                 let resolver = shared_chatgpt_resolver();
                 store_chatgpt_record(&resolver, &record)?;
                 if let (Some(root), Some(wid)) = (&scope.storage_root, &scope.logical_workspace) {
@@ -1675,10 +1721,15 @@ fn chatgpt_complete_callback(
                     );
                     persist_chatgpt_registrations(root, wid, &registrations)?;
                 }
-                Ok(())
-            })();
+                Ok(true)
+            });
             match stored {
-                Ok(()) => {
+                Ok(false) => (
+                    "The ChatGPT session was disconnected before sign-in finished. Sign in again."
+                        .to_string(),
+                    true,
+                ),
+                Ok(true) => {
                     let _ = with_backend(scope, |state| {
                         if let Some(attempt) = state.chatgpt_attempts.get_mut(attempt_id) {
                             attempt.status = ChatGptAttemptStatus::Succeeded;
@@ -3240,12 +3291,19 @@ pub fn providers_command(
             };
             // Serialize: a second concurrent refresh is refused
             // so two callers cannot race a rotating refresh token.
-            with_backend(scope, |state| {
+            // The generation is captured with the flag: a
+            // disconnect that lands during the exchange bumps it,
+            // and the store below refuses the stale tokens.
+            let generation = with_backend(scope, |state| {
                 if state.chatgpt_refresh_in_flight {
                     return Err(invalid("A ChatGPT refresh is already running."));
                 }
                 state.chatgpt_refresh_in_flight = true;
-                Ok(())
+                Ok(state
+                    .chatgpt_generations
+                    .get(&client_id)
+                    .copied()
+                    .unwrap_or(0))
             })?;
             let outcome = (|| -> Result<
                 crate::chatgpt_signin::TokenResponse,
@@ -3277,24 +3335,43 @@ pub fn providers_command(
             });
             match outcome {
                 Ok(tokens) => {
-                    let mut new_record = record.clone();
-                    new_record.access_token = tokens.access_token;
-                    new_record.refresh_token = tokens.refresh_token.or(record.refresh_token);
-                    new_record.id_token = tokens.id_token.or(record.id_token);
-                    new_record.expires_in = tokens.expires_in;
-                    new_record.scopes = tokens.scopes;
-                    new_record.saved_at_ms = crate::chatgpt_signin::now_unix_ms();
-                    store_chatgpt_record(&resolver, &new_record)?;
-                    let mut registrations = load_chatgpt_registrations(&root, &wid)?;
-                    if let Some(reg) = registrations.get_mut(&client_id) {
-                        reg.plan_usage = new_record.plan_usage();
-                        reg.last_verified_ms = crate::chatgpt_signin::now_unix_ms();
-                        persist_chatgpt_registrations(&root, &wid, &registrations)?;
-                    }
+                    // Store under the lock with the generation
+                    // re-check: if disconnect bumped the generation
+                    // during the exchange, the rotated tokens are
+                    // discarded instead of recreating the session.
+                    let stored = with_backend(scope, |state| {
+                        let current = state
+                            .chatgpt_generations
+                            .get(&client_id)
+                            .copied()
+                            .unwrap_or(0);
+                        if current != generation {
+                            return Ok(None);
+                        }
+                        let mut new_record = record.clone();
+                        new_record.access_token = tokens.access_token;
+                        new_record.refresh_token = tokens.refresh_token.or(record.refresh_token);
+                        new_record.id_token = tokens.id_token.or(record.id_token);
+                        new_record.expires_in = tokens.expires_in;
+                        new_record.scopes = tokens.scopes;
+                        new_record.saved_at_ms = crate::chatgpt_signin::now_unix_ms();
+                        let expires_at_ms = new_record.expires_at_ms();
+                        store_chatgpt_record(&resolver, &new_record)?;
+                        let mut registrations = load_chatgpt_registrations(&root, &wid)?;
+                        if let Some(reg) = registrations.get_mut(&client_id) {
+                            reg.plan_usage = new_record.plan_usage();
+                            reg.last_verified_ms = crate::chatgpt_signin::now_unix_ms();
+                            persist_chatgpt_registrations(&root, &wid, &registrations)?;
+                        }
+                        Ok(Some(expires_at_ms))
+                    })?;
+                    let Some(expires_at_ms) = stored else {
+                        return Err(invalid("The ChatGPT session ended. Sign in again."));
+                    };
                     to_value(&ChatGptSigninRefreshResponse {
                         contract_version: 1,
                         refreshed: true,
-                        expires_at_ms: Some(new_record.expires_at_ms()),
+                        expires_at_ms: Some(expires_at_ms),
                     })
                 }
                 Err(crate::chatgpt_signin::ChatGptError::InvalidGrant) => {
@@ -3331,6 +3408,31 @@ pub fn providers_command(
                     .ok_or_else(|| invalid("No ChatGPT account is signed in."))?,
             };
             let resolver = shared_chatgpt_resolver();
+            // Invalidate pending work for this account FIRST: bump
+            // its generation (a callback exchange or refresh that
+            // started under the old generation must not store
+            // tokens for it) and mark its pending attempts
+            // disconnected, so a late callback is refused before
+            // any exchange. Disconnect always wins over in-flight
+            // work; it never waits for a refresh.
+            with_backend(scope, |state| {
+                *state
+                    .chatgpt_generations
+                    .entry(client_id.clone())
+                    .or_default() += 1;
+                for attempt in state.chatgpt_attempts.values_mut() {
+                    if attempt.client_id == client_id
+                        && matches!(
+                            attempt.status,
+                            ChatGptAttemptStatus::Pending | ChatGptAttemptStatus::CallbackReceived
+                        )
+                    {
+                        attempt.consumed = true;
+                        attempt.status = ChatGptAttemptStatus::Failed("disconnected".to_string());
+                    }
+                }
+                Ok(())
+            })?;
             let record = load_chatgpt_record(&resolver, &client_id);
             let mut confirmed = false;
             if let Some(record) = &record
@@ -3345,18 +3447,28 @@ pub fn providers_command(
                 )
                 .unwrap_or(false);
             }
-            // Local tokens are cleared whether or not revocation
-            // was confirmed; an unconfirmed revocation is
-            // reported, not hidden.
-            let _ = resolver.delete(&format!("chatgpt-{client_id}"));
+            // Local deletion is reported as it actually went, and
+            // kept separate from the remote revocation above: either
+            // can succeed while the other fails. On a failed delete
+            // the session is still there — the registration stub is
+            // left untouched so status keeps showing it, and the
+            // caller retries disconnect.
+            let (local_deletion, disconnected) = match &record {
+                None => ("absent".to_string(), true),
+                Some(_) => match resolver.delete(&format!("chatgpt-{client_id}")) {
+                    Ok(()) => ("deleted".to_string(), true),
+                    Err(_) => ("failed".to_string(), false),
+                },
+            };
             let mut registrations = load_chatgpt_registrations(&root, &wid)?;
-            if let Some(reg) = registrations.get_mut(&client_id) {
+            if disconnected && let Some(reg) = registrations.get_mut(&client_id) {
                 reg.plan_usage = false;
                 persist_chatgpt_registrations(&root, &wid, &registrations)?;
             }
             to_value(&ChatGptSigninDisconnectResponse {
                 contract_version: 1,
-                disconnected: true,
+                disconnected,
+                local_deletion,
                 remote_revocation_confirmed: confirmed,
             })
         }
