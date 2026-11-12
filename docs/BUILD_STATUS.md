@@ -2079,3 +2079,7 @@ Exact delivery `606450202a735e565f6721fa78caab38d539704b` passes both former par
 ## 2026-11-12 — WR-REC-WITNESS-01 focused Windows acceptance
 
 Runtime `4b6b75938fb625659e892fdc108151857a824943`: independent default-concurrency workspace library run **416/416** (API 4, core 348, desktop 1, providers 63), zero failures. Queue/mirror/gate 24/24, reviewer probes 2/2, exact witness three additional 1/1 runs. The outstanding clean aggregate and witness finding are closed in this focused scope. Review: `docs/reviews/windows-wr-rec-witness-gate-review.md`. No production changes or pilot promotion; native/installer acceptance remains separate, OAuth deferred.
+
+## 2026-11-12 — v1 pilot RC focused Windows journey acceptance
+
+Source `8931d34b06faf16806a089a587ebd58e6b26f9a5`: incoming ZIP and all 16 manifest hashes verified, published baseline and accepted recovery reviewer preserved, app code unchanged. Windows TypeScript/web/API builds passed; doctor prerequisites detected; docs/hygiene 27/27. Unmodified synthetic pilot journey **1/1 in 2.4 minutes**, including restart, backup, fresh restore, and reopen. Review: `docs/reviews/windows-v1-pilot-rc-review.md`. Installer/native acceptance and promotion remain open; historical 416/416 belongs to reviewer 8453f649 and was not rerun here. OAuth deferred.
