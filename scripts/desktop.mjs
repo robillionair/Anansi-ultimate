@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
+if(!process.env.npm_execpath)throw Error('Run desktop commands via pnpm (for example: pnpm build:installer). Direct node invocation has no package-manager entry point.');
 const bin=path.join(process.env.CARGO_HOME||path.join(os.homedir(),'.cargo'),'bin');
 const env={...process.env,PATH:bin+path.delimiter+process.env.PATH};
 if(process.argv[2]==='installer'&&process.env.TAURI_CONFIG)throw Error('Release packaging refuses a test configuration override.');

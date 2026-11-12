@@ -11,6 +11,7 @@ import {
   findMakensis,
 } from './common.mjs';
 import { nsisPayloadHash } from '../installer-artifact.mjs';
+import { collect as collectDoctor, toolchainIdentity } from '../doctor.mjs';
 
 function getGitMetadata() {
   try {
@@ -85,6 +86,17 @@ export function buildRelease(options = {}) {
   };
 
   const gitMeta = getGitMetadata();
+  // Installer identity comes from the Tauri configuration, never from a
+  // hardcoded version: a version bump must not silently drop the installer.
+  const tauriConfig = JSON.parse(fs.readFileSync(path.join(repoRoot, 'apps', 'desktop', 'src-tauri', 'tauri.conf.json'), 'utf8'));
+  const installerFilename = `${tauriConfig.productName}_${tauriConfig.version}_x64-setup.exe`;
+  // Toolchain identity is captured before the build, version-only (no paths).
+  const toolchain = { ...toolchainIdentity(collectDoctor()), makensis: null };
+  const makensisInfo = findMakensis();
+  if (makensisInfo?.path) {
+    const versionResult = spawnSync(makensisInfo.path, ['/VERSION'], { encoding: 'utf8', windowsHide: true });
+    if (versionResult.status === 0) toolchain.makensis = versionResult.stdout?.trim() || null;
+  }
   const steps = [];
   const logFilePath = path.join(artifactsBase, 'build-execution.log');
   const logStream = fs.createWriteStream(logFilePath, { flags: 'w', encoding: 'utf8' });
@@ -218,12 +230,12 @@ export function buildRelease(options = {}) {
   let installerArtifact = null;
   if (shouldBuildInstaller) {
     const installerCandidates = [
-      path.join(buildCache, 'release', 'bundle', 'nsis', 'ANANSI Ultimate_0.1.0_x64-setup.exe'),
-      path.join(repoRoot, 'target', 'release', 'bundle', 'nsis', 'ANANSI Ultimate_0.1.0_x64-setup.exe'),
+      path.join(buildCache, 'release', 'bundle', 'nsis', installerFilename),
+      path.join(repoRoot, 'target', 'release', 'bundle', 'nsis', installerFilename),
     ];
     const builtInstaller = installerCandidates.find(p => fs.existsSync(p));
     if (builtInstaller) {
-      const destInstaller = path.join(artifactsBase, 'ANANSI Ultimate_0.1.0_x64-setup.exe');
+      const destInstaller = path.join(artifactsBase, installerFilename);
       fs.copyFileSync(builtInstaller, destInstaller);
       const instStats = fs.statSync(destInstaller);
       const instHash = hashFile(destInstaller);
@@ -236,7 +248,7 @@ export function buildRelease(options = {}) {
       }
 
       installerArtifact = {
-        filename: 'ANANSI Ultimate_0.1.0_x64-setup.exe',
+        filename: installerFilename,
         path: destInstaller,
         sizeBytes: instStats.size,
         sizeFormatted: formatBytes(instStats.size),
@@ -244,6 +256,12 @@ export function buildRelease(options = {}) {
         nsisPayloadSha256: payloadHash,
         signingStatus: 'Unsigned (Development Build)',
       };
+    } else {
+      // A requested installer build that produced no artifact fails closed:
+      // a manifest without the installer must never read as a success.
+      log('Error: installer build requested but no installer artifact was found.');
+      logStream.end();
+      return { ok: false, failedStep: 'installer-location', error: 'installer artifact missing', steps, logFilePath };
     }
   }
 
@@ -254,7 +272,7 @@ export function buildRelease(options = {}) {
     schemaVersion: 1,
     kind: 'unsigned-development-release',
     productName: 'ANANSI Ultimate',
-    version: '0.1.0',
+    version: tauriConfig.version,
     architecture: 'x64',
     platform: 'win32',
     timestamp: new Date().toISOString(),
@@ -264,6 +282,7 @@ export function buildRelease(options = {}) {
       commit: gitMeta.commit,
       dirty: gitMeta.dirty,
     },
+    toolchain,
     paths: {
       buildCache,
       tempDir,

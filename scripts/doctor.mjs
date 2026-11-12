@@ -29,6 +29,24 @@ function run(command, args) {
   const result = spawnSync(command,args,{encoding:'utf8',timeout:20000,windowsHide:true});
   return {ok:result.status===0,output:result.stdout?.trim() || null};
 }
+// Version-only build identity for artifact manifests. Records no filesystem
+// paths, usernames, or host details: only the toolchain versions that
+// determine what was built. Missing probes degrade to null/empty, never to
+// invented values.
+export function toolchainIdentity(report) {
+  const rustOutput = report.rust?.output ?? '';
+  return {
+    node: report.node ?? null,
+    pnpm: report.pnpm ?? null,
+    git: report.git?.output?.split('\n')[0] ?? null,
+    rustc: rustOutput.split('\n')[0] || null,
+    rustcHost: rustOutput.match(/^host: (.+)$/m)?.[1]?.trim() ?? null,
+    rustcCommit: rustOutput.match(/^commit-hash: (.+)$/m)?.[1]?.trim() ?? null,
+    cargo: report.cargo?.output?.split('\n')[0] ?? null,
+    windowsSdk: report.native?.sdkEvidence?.version ?? null,
+    webviewVersions: Array.isArray(report.native?.webviewVersions) ? [...report.native.webviewVersions] : [],
+  };
+}
 export function rustCandidates(tool, platform, cargoHome, userHome) {
   return [tool, path.join(cargoHome || path.join(userHome,'.cargo'),'bin',tool + (platform==='win32' ? '.exe' : ''))];
 }
