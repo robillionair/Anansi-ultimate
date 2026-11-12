@@ -2083,3 +2083,7 @@ Runtime `4b6b75938fb625659e892fdc108151857a824943`: independent default-concurre
 ## 2026-11-12 — v1 pilot RC focused Windows journey acceptance
 
 Source `8931d34b06faf16806a089a587ebd58e6b26f9a5`: incoming ZIP and all 16 manifest hashes verified, published baseline and accepted recovery reviewer preserved, app code unchanged. Windows TypeScript/web/API builds passed; doctor prerequisites detected; docs/hygiene 27/27. Unmodified synthetic pilot journey **1/1 in 2.4 minutes**, including restart, backup, fresh restore, and reopen. Review: `docs/reviews/windows-v1-pilot-rc-review.md`. Installer/native acceptance and promotion remain open; historical 416/416 belongs to reviewer 8453f649 and was not rerun here. OAuth deferred.
+
+## 2026-11-12 — v1 installer qualification tooling Windows checks
+
+Source `7c3af5eb5575aca1388e3c924dbfe6fff2a52ffc`: package/sidecar and six MANIFEST hashes verified; product diff empty. Windows Node checks **61/61**, serial release-tooling checks **54/54**, fixture generate/verify PASS, PowerShell syntax clean. Release build HELD: final preflight exit 1, free RAM **3.07 GiB < 4 GiB**. No installer/native acceptance or promotion claimed. Review: `docs/reviews/windows-v1-installer-qualification-review.md`. No source repair requested; rerun preflight after memory is available, then proceed with isolated build/native checklist.
