@@ -51,7 +51,8 @@ workflow evidence.
 a named workflow (browser spec and/or Windows review),
 and within the pilot conditions below. The v1 pilot
 journey walk (`tests/e2e/pilot-journey.spec.ts`,
-2/2 on Linux, 2026-11-12) covers the first-time path
+1/1 on Linux across three green runs (runs 5–7,
+2026-11-12) covers the first-time path
 end to end with synthetic data and zero external
 requests.
 
