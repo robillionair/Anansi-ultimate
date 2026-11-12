@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([switch]$SkipUi)
+param([switch]$SkipUi,[string]$TestRoot)
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 if (-not $IsWindows) { throw 'Installer verification requires Windows PowerShell 7.' }
@@ -21,11 +21,28 @@ if ($manifest.kind -ne 'unsigned-development-nsis' -or $manifest.installer -ne [
 $signature=(Get-AuthenticodeSignature -LiteralPath $installer).Status.ToString()
 if($signature -ne 'NotSigned'){throw 'Expected the explicitly unsigned development installer.'}
 $tempBase=[IO.Path]::GetFullPath([IO.Path]::GetTempPath())
-$testRoot=Join-Path $tempBase ('anansi-installer-'+[Guid]::NewGuid().ToString('N'))
+if($TestRoot){
+  if(-not [IO.Path]::IsPathRooted($TestRoot)){throw 'TestRoot must be an absolute path.'}
+  $testRoot=[IO.Path]::GetFullPath($TestRoot)
+  $testParent=[IO.Path]::GetDirectoryName($testRoot)
+  if(-not $testParent -or -not (Test-Path -LiteralPath $testParent)){throw 'TestRoot parent directory must already exist.'}
+  if($env:LOCALAPPDATA){
+    foreach($guarded in @((Join-Path $env:LOCALAPPDATA 'ANANSI'),(Join-Path $env:LOCALAPPDATA 'ANANSI-Preview'))){
+      $guardedFull=[IO.Path]::GetFullPath($guarded)
+      if($testRoot.Equals($guardedFull,[StringComparison]::OrdinalIgnoreCase) -or $testRoot.StartsWith($guardedFull+[IO.Path]::DirectorySeparatorChar,[StringComparison]::OrdinalIgnoreCase)){throw 'TestRoot must stay outside owner-data roots.'}
+    }
+  }
+  $containedBase=$testRoot
+  $escapeMessage='Test path escaped the specified test root.'
+}else{
+  $testRoot=Join-Path $tempBase ('anansi-installer-'+[Guid]::NewGuid().ToString('N'))
+  $containedBase=$tempBase
+  $escapeMessage='Test path escaped the temporary root.'
+}
 $installRoot=Join-Path $testRoot 'installed application'
 if($testRoot.StartsWith($repository+[IO.Path]::DirectorySeparatorChar,[StringComparison]::OrdinalIgnoreCase)){throw 'Installer fixtures must stay outside source.'}
 foreach($target in @($testRoot,$installRoot)){
-  if(-not [IO.Path]::GetFullPath($target).StartsWith($tempBase,[StringComparison]::OrdinalIgnoreCase)){throw 'Test path escaped the temporary root.'}
+  if(-not [IO.Path]::GetFullPath($target).StartsWith($containedBase,[StringComparison]::OrdinalIgnoreCase)){throw $escapeMessage}
   $cursor=$target
   while($cursor){if(Test-Path -LiteralPath (Join-Path $cursor '.git')){throw 'Installer fixtures cannot use Git ancestry.'};if(Test-Path -LiteralPath $cursor){if((Get-Item -LiteralPath $cursor -Force).Attributes -band [IO.FileAttributes]::ReparsePoint){throw 'Linked test path refused.'}};$parent=[IO.Path]::GetDirectoryName($cursor);if($parent -eq $cursor){break};$cursor=$parent}
 }
@@ -33,7 +50,7 @@ if(Test-Path -LiteralPath $testRoot){throw 'Test directory already exists.'}
 New-Item -ItemType Directory -Path $testRoot | Out-Null
 $installedExe=Join-Path $installRoot 'anansi-desktop.exe'
 $uninstaller=Join-Path $installRoot 'uninstall.exe'
-$record=[ordered]@{schemaVersion=1;installerSha256=$installerHash;signature=$signature;installPassed=$false;installedBinaryMatches=$false;uiWorkflowPassed=$false;uninstallPassed=$false;dataPreserved=$false;uiSkipped=[bool]$SkipUi}
+$record=[ordered]@{schemaVersion=1;gitCommit=$manifest.gitCommit;dirtySource=$manifest.dirtySource;version=$manifest.version;toolchain=$manifest.toolchain;unbundledApplicationSha256=$manifest.unbundledApplicationSha256;testRoot=$testRoot;installerSha256=$installerHash;signature=$signature;installPassed=$false;installedBinaryMatches=$false;uiWorkflowPassed=$false;uninstallPassed=$false;dataPreserved=$false;uiSkipped=[bool]$SkipUi}
 $previousVerifierRoot=$env:ANANSI_VERIFIER_ROOT
 try{
   # NSIS requires /D to be the final, unquoted remainder (including spaces).
@@ -77,9 +94,9 @@ try{
   }
 }finally{
   $env:ANANSI_VERIFIER_ROOT=$previousVerifierRoot
-  $record | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $testRoot 'installer-verification.json')
+  $record | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath (Join-Path $testRoot 'installer-verification.json')
   $artifactRecord=Join-Path $repository 'target/release/bundle/nsis/installer-verification.json'
-  $record | ConvertTo-Json | Set-Content -LiteralPath $artifactRecord
+  $record | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath $artifactRecord
   Write-Output ('Synthetic installer evidence retained: '+$testRoot)
 }
 if($SkipUi){Write-Output 'PASS: release package install/binary identity/uninstall/data-sentinel preservation. Installed UI explicitly NOT tested by this CI mode.'}
