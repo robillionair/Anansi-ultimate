@@ -29,13 +29,13 @@ export async function prepareBackup(page,label,createData=true){
   await expect.poll(async()=>{await button(page,'Refresh backups').click();return row.innerText();},{timeout:180000}).toContain('Completed');
   return id;
 }
-export async function restoreBackup(page,jobId,name){
+export async function restoreBackup(page,jobId,name,expected={records:'12 records',relationships:'9 relationships'}){
   await button(page,'Backups').click();
   const row=page.locator(`[data-backup-job="${jobId}"]`);
   await row.getByRole('button',{name:'Preview restore',exact:true}).click();
   const preview=page.getByRole('region',{name:'Restore preview'});
-  await expect(preview).toContainText('12 records');
-  await expect(preview).toContainText('9 relationships');
+  await expect(preview).toContainText(expected.records);
+  await expect(preview).toContainText(expected.relationships);
   await expect(preview).toContainText('Sealed and credentials excluded');
   await expect(button(page,'Restore verified backup')).toBeDisabled();
   await page.getByLabel('Restored workspace name',{exact:true}).fill(name);
