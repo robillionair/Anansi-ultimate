@@ -1,5 +1,20 @@
 # ANANSI v1 pilot release candidate — Windows release handoff
 
+**Revision 2026-11-12 (installer-qualification
+checkpoint):** the Windows browser journey passed
+1/1 on this runtime (reviewer `57029b2e`; see the
+checklist). This handoff is revised on branch
+`muse/v1-pilot-installer-qualification`: §§1–6 now
+describe the isolated `build-verify` path, explicit
+candidate locations, complete build identity, and
+the `-TestRoot` installer option. The per-item
+qualification checklist is
+`docs/handoffs/v1-pilot-installer-checklist.md`; the
+script audit is
+`docs/handoffs/v1-installer-qualification-audit.md`.
+Product code is unchanged vs the runtime below
+(empty diff over `crates/`, `apps/`, `packages/`).
+
 Branch: `muse/v1-pilot-release-candidate`.
 Baseline: `dff9bb16688f3af075c395ad8fd5b179af9c3a9d`
 (GitHub `origin/master`, 2026-11-12, "docs: plan ANANSI
@@ -36,7 +51,15 @@ worktree, PowerShell 7 for the installer scripts):
 
 ```powershell
 node scripts/doctor.mjs --require-native
+node scripts/windows-release/preflight.mjs
 ```
+
+The doctor checks the toolchain; preflight checks
+the whole host (RAM/disk, toolchain incl. makensis,
+running target processes, shared-test-lease state)
+and exits non-zero unless it prints `VERDICT: PASS`.
+A preflight failure blocks the build — reconcile it
+first; never steal an occupied lease.
 
 Required:
 
@@ -51,6 +74,10 @@ Required:
 - Git (bundle fetch + `rev-parse` verification).
 - PowerShell 7 (`pwsh`) for `verify-installer.ps1`
   / `verify-native.ps1`.
+- NSIS (`makensis.exe`) for installer bundling
+  (preflight warns when it is missing; standalone
+  desktop builds work without it, installer
+  bundling fails).
 - A non-elevated host for the installer UI workflow
   (the script refuses elevated runs unless `-SkipUi`
   is explicitly selected).
@@ -70,17 +97,26 @@ locations:
 
 ```
 E:\Anansi\worktrees\v1-pilot-rc\        (fetched source; build here)
-E:\Anansi\previews\v1-pilot-rc\         (candidate binary + test data)
+E:\Anansi\previews\v1-pilot-rc\         (candidate test data)
 E:\Anansi\previews\v1-pilot-rc\data\    (isolated synthetic storage root)
 E:\Anansi\previews\v1-pilot-rc\webview-udf\ (isolated WebView2 user data)
+E:\Anansi\qualification\build-cache\    (isolated CARGO_TARGET_DIR)
+E:\Anansi\qualification\tmp\            (isolated temp root)
+E:\Anansi\qualification\artifacts\      (build outputs + release-manifest.json)
+E:\Anansi\qualification\fixtures\       (deterministic fixture set)
+E:\Anansi\qualification\installer-test\ (installer verification root)
 ```
 
 - Fetch the bundle into a FRESH clone/worktree at
   the path above; never fetch into the running
   pilot's tree.
-- Builds and temp files stay on E: (the installer
-  verification script uses its own GUID temp root
-  under `%TEMP%` and removes it).
+- Builds and temp files stay on E:. The installer
+  verification script accepts an explicit `-TestRoot`
+  under `E:\Anansi\qualification\`; without it, it
+  uses its own GUID temp root under `%TEMP%`.
+- One build at a time into a `CARGO_TARGET_DIR`;
+  never share one target dir across concurrent
+  builds or worktrees (cargo fingerprint collision).
 - `ANANSI_STORAGE_ROOT` must point at the isolated
   `data\` directory for every manual run; never at
   a production or shared storage root.
@@ -103,22 +139,47 @@ node scripts/doctor.mjs --require-native
 # 2. Dependencies (frozen lockfile)
 pnpm install --frozen-lockfile
 
-# 3. Release installer (web build + Tauri NSIS + checksum manifest)
-pnpm build:installer
+# 3. Isolated release build (web + API + desktop + NSIS installer)
+node scripts/windows-release/build-verify.mjs build --installer --cargo-target-dir E:\Anansi\qualification\build-cache --artifacts-dir E:\Anansi\qualification\artifacts --temp-dir E:\Anansi\qualification\tmp
+
+# 4. Verify the build manifest offline
+node scripts/windows-release/build-verify.mjs verify --manifest E:\Anansi\qualification\artifacts\release-manifest.json
+
+# 5. Installer identity record for the isolated build
+$env:CARGO_TARGET_DIR = 'E:\Anansi\qualification\build-cache'
+node scripts/installer-checksums.mjs
 ```
 
-`pnpm build:installer` runs `pnpm build:web`, then
-`node scripts/desktop.mjs installer` (Tauri build,
-`--bundles nsis --ci --no-sign`), then
-`node scripts/installer-checksums.mjs`. The installer
-script REFUSES a `TAURI_CONFIG` override and refuses
-to run off Windows. Expected output:
+`build-verify.mjs` is the primary isolated build:
+it compiles the web client, the API, and the desktop
+app with `CARGO_TARGET_DIR`, `TEMP`/`TMP`, and
+artifacts all on E:, copies the executables, web
+assets, and installer to the artifacts directory,
+and writes `release-manifest.json` (source commit,
+dirty state, toolchain, artifact hashes, unsigned
+status) plus `SHA256SUMS` and `build-execution.log`.
+The separate `installer-checksums.mjs` step writes
+`packaging.json` + `SHA256SUMS` into the build-cache
+bundle directory (it honors the absolute
+`CARGO_TARGET_DIR`); cross-check its installer hash
+against `release-manifest.json` — the checklist
+gives the exact comparisons.
+
+Alternative in-repo path (only if the isolated path
+is unavailable): unset `CARGO_TARGET_DIR` and run
+`pnpm build:installer` (web build + Tauri NSIS +
+checksum manifest). The installer script REFUSES a
+`TAURI_CONFIG` override and refuses to run off
+Windows. Expected output:
 
 ```
 target\release\bundle\nsis\ANANSI Ultimate_0.1.0_x64-setup.exe
 target\release\bundle\nsis\SHA256SUMS
 target\release\bundle\nsis\packaging.json
 ```
+
+Record which build path was used; do not mix
+artifacts between paths.
 
 For a run-from-source desktop check instead of the
 installer:
@@ -138,22 +199,38 @@ pnpm dev:web        # http://127.0.0.1:1420, pair with the token
 
 ## 4. Version / build identification
 
-What the tester can see, and its limits:
+What the tester can see, and its limits. The generic
+app version `0.1.0` is NEVER sufficient build
+identification on its own. The full identity tuple
+is: source commit, clean/dirty source state,
+installer SHA-256, application SHA-256, config
+SHA-256, toolchain versions, and unsigned status.
+Every defect report cites the tuple, from the
+identity records below — never from memory and
+never the app version alone.
 
 - **In the app:** the Dashboard readiness panel
   shows Application name, Core version, Application
   version (all `0.1.0`), Contract version **1**, OS,
   and Core uptime. The API reports `apiVersion`
   `0.1.0`.
+- **With the isolated build:** `release-manifest.json`
+  is the primary record — `git.commit`, `git.dirty`,
+  `toolchain` (Node, pnpm, Git, rustc + host +
+  commit, Cargo, Windows SDK, WebView2, makensis),
+  artifact hashes + sizes, installer
+  `signingStatus: "Unsigned (Development Build)"`.
 - **With the installer:** `packaging.json` is the
   build identity — `gitCommit` (exact source),
-  `dirtySource` (must be `false`), `installerSha256`,
-  `applicationSha256` (bundle-marker-adjusted),
+  `dirtySource` (must be `false`), `toolchain`,
+  `installerSha256`, `applicationSha256`
+  (bundle-marker-adjusted),
   `unbundledApplicationSha256`, `configSha256`,
   `kind: "unsigned-development-nsis"`, `version`,
   `architecture: "x64"`. `SHA256SUMS` carries the
   installer hash. **Keep `packaging.json` with the
-  installer; it is the only source-commit record.**
+  installer; it is the only source-commit record
+  that travels with the artifact.**
 - **Known limitation:** no git commit hash is
   embedded in the built binary (no vergen /
   git-version in the build). A tester looking only
@@ -167,10 +244,17 @@ What the tester can see, and its limits:
 Do NOT create parallel installer tooling. Use:
 
 ```powershell
-pnpm verify:installer
+$env:CARGO_TARGET_DIR = 'E:\Anansi\qualification\build-cache'
+pwsh -NoProfile -File scripts/verify-installer.ps1 -TestRoot 'E:\Anansi\qualification\installer-test'
 ```
 
-(`pwsh -NoProfile -File scripts/verify-installer.ps1`.)
+(`pnpm verify:installer` runs the same script with
+the default GUID `%TEMP%` root and the in-repo
+target dir.) The script honors an absolute
+`CARGO_TARGET_DIR` to find the installer +
+`packaging.json` produced by the isolated build;
+without it, it reads the in-repo
+`target\release\bundle\nsis\` directory.
 
 Preconditions enforced by the script: the installer
 identity must be `ANANSI Ultimate` / `Robillionair` /
@@ -181,10 +265,13 @@ registration or the `HKCU:\Software\Robillionair\
 ANANSI Ultimate` product key already exists (do not
 run it on a machine with the pilot installed — use a
 clean machine or VM); UI mode requires a non-elevated
-host.
+host; an explicit `-TestRoot` must be absolute, have
+an existing parent, and stay outside the repository
+and owner-data roots, with no `.git` ancestry or
+reparse points.
 
 What it verifies: installer hash vs `packaging.json`;
-silent install to a fresh GUID temp target; installed
+silent install to the fresh test target; installed
 exe hash vs the manifest `applicationSha256`;
 registration `InstallLocation` inside the synthetic
 target; the `scripts/verify-workspace.mjs` UI workflow
@@ -192,7 +279,10 @@ target; the `scripts/verify-workspace.mjs` UI workflow
 installed UI untested); uninstall; app, uninstaller,
 and registration gone afterwards; synthetic data
 byte-identical; only the test-owned remembered-location
-key removed.
+key removed. The verification record
+(`installer-verification.json`, in the test root and
+the bundle directory) carries the build identity
+(commit, dirty state, version, toolchain).
 
 **Record the outcome verbatim** (PASS line or the
 first failing assertion). A `-SkipUi` run does NOT
@@ -204,30 +294,45 @@ qualify the installed UI — say so in the report.
 7-step CDP suite (startup/readiness, shell-execution
 denial, workspace create, memory create+search,
 project+artifact register, backup job + process-
-restart survival, screenshot). It is currently
-hardcoded to the `7e24859e6` candidate paths. Adapt
-ONLY the three path constants at the top of the file
-to this candidate — do not fork the suite:
+restart survival, screenshot). Candidate locations
+are explicit environment variables — no defaults,
+no editing the script:
 
-```js
-const binaryPath = path.resolve('E:/Anansi/previews/v1-pilot-rc/ANANSI-Candidate-v1-pilot-rc.exe');
-const storageRoot = path.resolve('E:/Anansi/previews/v1-pilot-rc/data');
-const udfPath = path.resolve('E:/Anansi/previews/v1-pilot-rc/webview-udf');
+```powershell
+$env:ANANSI_CANDIDATE_BINARY = 'E:\Anansi\qualification\artifacts\anansi-desktop.exe'
+$env:ANANSI_CANDIDATE_STORAGE_ROOT = 'E:\Anansi\previews\v1-pilot-rc\data'
+$env:ANANSI_CANDIDATE_WEBVIEW_UDF = 'E:\Anansi\previews\v1-pilot-rc\webview-udf'
+$env:ANANSI_CANDIDATE_EXPECTED_SHA256 = '<release-manifest.json artifacts.executable.sha256>'
+node scripts/native-candidate-acceptance.mjs
 ```
 
+The script refuses to run when locations are
+missing/relative, storage or UDF dirs are non-empty,
+paths touch owner-data roots or the repository, the
+CDP port is occupied, target processes are running,
+or the shared test lease is held by another identity;
+it prints the binary SHA-256 + size and refuses on
+hash mismatch when the expected hash is set.
+Optional `ANANSI_CANDIDATE_CDP_PORT` overrides the
+default 19323.
+
 Notes: the suite sets `ANANSI_VAULT_TEST_PROVIDER=1`
-(synthetic credential provider for the harness) and
-uses CDP port 19323. Its pass does NOT constitute
-native credential-store acceptance (see §7) — the
-vault test provider is a harness substitute, and
-synthetic credentials never prove production native-
-control behavior.
+(synthetic credential provider for the harness).
+Its pass does NOT constitute native credential-store
+acceptance (see §7) — the vault test provider is a
+harness substitute, and synthetic credentials never
+prove production native-control behavior. The
+per-item commands and evidence list are in the
+checklist (step F).
 
 ## 7. Native credential-store and file-dialog acceptance
 
 These are OPEN gates. No Linux result covers them.
 Perform them manually on the candidate build with
-synthetic credentials, and record each step:
+synthetic credentials, and record each step. The
+per-item commands, fixture set, and evidence list
+are in the checklist (steps I–J); this section
+summarizes the gates:
 
 **Credential store (CredUI / OS keyring):**
 
@@ -273,6 +378,10 @@ synthetic credentials, and record each step:
    to the tester.
 
 ## 8. Installation / upgrade / restart / backup-restore / uninstall
+
+The per-item checklist (steps H, K–M) is
+authoritative for commands and evidence; this
+section summarizes the gates:
 
 - **Install:** §5 script on a clean machine (or VM).
   Record SmartScreen / reputation behavior exactly
@@ -325,7 +434,17 @@ synthetic credentials, and record each step:
   record them, not bypass them with fake signing.
   Signed releases are M15 work.
 - **No commit hash in the binary** (§4). Build
-  identity lives in `packaging.json` only.
+  identity lives in `release-manifest.json` /
+  `packaging.json` only.
+- **Qualification-script limits (this checkpoint).**
+  The PowerShell changes (`-TestRoot`, identity
+  record, `CARGO_TARGET_DIR` bundle dir) were
+  reviewed line-by-line but could not execute on
+  Linux — step E of the checklist is their first
+  execution. `launch-acceptance.mjs` uses the
+  default WebView2 user-data folder; its
+  running-process refusal is the mitigation. One
+  build at a time per `CARGO_TARGET_DIR`.
 - **Windows review outstanding** for: Connect AI
   API-key setup + verification repair; M13 PDF
   integration; M13 DOCX ingestion; SOMNIA compaction
@@ -471,31 +590,48 @@ include API keys or real private content.
 
 ## 13. What the Windows reviewer must do next
 
+Work the per-item checklist
+(`docs/handoffs/v1-pilot-installer-checklist.md`)
+in order; this section summarizes it:
+
 1. Verify the delivery (MANIFEST hashes, bundle
-   fetch, exact tip, clean tree) per the delivery
-   message.
-2. Build per §3 in the isolated E:\Anansi layout
-   (§2); record `packaging.json` identity.
-3. Run §5 installer qualification on a clean
-   machine/VM; record SmartScreen behavior.
-4. Run §6 native candidate acceptance with the
-   adapted path constants.
-5. Perform §7 credential-store + file-dialog
-   acceptance manually; record each step.
-6. Perform §8 install/upgrade/restart/backup-
-   restore/uninstall + the concurrent-ingest probe.
-7. Report: exact commit + installer hash, PASS/FAIL
+   fetch, exact tip, clean tree, empty
+   product-code diff vs `8931d34b`) per the
+   delivery message (checklist step A).
+2. Run preflight + doctor (step B); build per §3
+   in the isolated E:\Anansi layout (§2); record
+   the full identity tuple and cross-checks
+   (step C).
+3. Generate + verify the deterministic fixtures
+   (step D).
+4. Run §5 installer qualification on a clean
+   machine/VM with `-TestRoot` (step E); record
+   the verification record.
+5. Run §6 native candidate acceptance with the
+   explicit env-var locations + expected hash
+   (step F); optional guarded launch (step G).
+6. Perform the fresh install + SmartScreen
+   observation (step H), credential-store (step I),
+   and file-dialog + concurrent-import probe
+   (step J) manually; record each step verbatim.
+7. Perform upgrade (step K), restart/backup/fresh
+   restore (step L), and uninstall preserving
+   storage (step M).
+8. Report: exact commit + installer hash, PASS/FAIL
    per checklist item with verbatim evidence, and
    any findings as new review items — do NOT restart
    the closed WR-REC repair loop (416/416 focused
    acceptance stands).
-8. Proposed global status updates for Antigravity
+9. Proposed global status updates for Antigravity
    (do not edit on Muse's behalf): README's stale
    fault-test/acceptance paragraph (superseded by
    the 416/416 aggregate at `8453f649`); matrix rows
    AN-008 and AN-026 (implemented, not `planned`);
    a BUILD_STATUS entry for this checkpoint once the
-   Windows verdict is known.
+   Windows verdict is known. The release-script
+   changes in this checkpoint are flagged for
+   reviewer acceptance (see the audit's ownership
+   note).
 
 ## 14. Boundaries respected
 
