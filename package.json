@@ -5,7 +5,7 @@
   "packageManager": "pnpm@11.25.0",
   "scripts": {
     "check": "node scripts/validate-docs.mjs",
-    "test": "node --test tests/docs-validation.test.mjs tests/repository-hygiene.test.mjs tests/doctor.test.mjs tests/native-setup.test.mjs tests/installer.test.mjs tests/candidate-locations.test.mjs tests/qualification-fixtures.test.mjs && pnpm test:backup",
+    "test": "node --test tests/docs-validation.test.mjs tests/repository-hygiene.test.mjs tests/doctor.test.mjs tests/native-setup.test.mjs tests/installer.test.mjs tests/candidate-locations.test.mjs tests/qualification-fixtures.test.mjs tests/native-artifact-acceptance.test.mjs && pnpm test:backup",
     "check:docs": "node scripts/validate-docs.mjs",
     "test:docs": "node --test tests/docs-validation.test.mjs",
     "backup:source": "pwsh -NoProfile -File scripts/backup-source.ps1",
