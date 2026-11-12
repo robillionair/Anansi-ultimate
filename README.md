@@ -2,16 +2,26 @@
 
 ANANSI Ultimate is a local-first workspace for researching a product idea, building a prototype plan, testing assumptions, and preserving the evidence behind each decision. It has a Windows desktop application built with Tauri 2 and a React browser interface paired to a local API. Both interfaces use the same Rust domain logic and generated contracts.
 
-This README describes the Windows preview integration branch. The verified source checkpoint is `4e4e970af8ad0c406cfae35fc3da55f99662b174`. It also includes Antigravity's focused Windows acceptance checkpoint and Muse's SOMNIA compaction integration. See the [build status ledger](docs/BUILD_STATUS.md) for test details and scope.
+**Development status — 12 November 2026.** This repository includes the latest delivered application source at `8df1fcf3d69f6d1da532bb890234a7db0352efff`, its independent Windows review at `4ffdd4316`, and documentation updates. It is a development build approaching a controlled Windows pilot. The installed preview and older installer are separate checkpoints. The latest recovery fixes pass focused Windows checks, but two fault tests still time out in the broad Windows library run. See [current verification](#current-verification-and-remaining-work) and the [build status ledger](docs/BUILD_STATUS.md).
 
+- [Who it’s for](#who-its-for)
 - [Screenshots](#screenshots)
 - [What you can do](#what-you-can-do)
+- [Current verification and remaining work](#current-verification-and-remaining-work)
 - [Windows preview](#windows-preview)
 - [SOMNIA compaction](#somnia-compaction)
 - [Run from source](#run-from-source)
 - [Development and verification](#development-and-verification)
 - [Repository map](#repository-map)
 - [Project roadmap](#project-roadmap)
+
+## Who it’s for
+
+- **Founders and indie builders** can turn research into product concepts, compare ideas, draft specifications, and export prototypes and launch materials for review.
+- **Product and research teams** can keep source documents, assumptions, decisions, and versioned artifacts together, then revisit the evidence behind a recommendation.
+- **Developers and AI practitioners** can inspect what context reaches a model, compare original and compacted histories in SOMNIA, and review generated source before handing it off.
+
+Start with a project and add a few notes or documents. Use **Ask ANANSI** to get a cited answer, **Opportunity Discovery** to explore ideas, **Product Forge** to draft a prototype, and **SwarmTank** to test assumptions against synthetic buyer scenarios. You can reopen the saved inputs and results as the project evolves.
 
 ## Screenshots
 
@@ -51,6 +61,7 @@ The reviewed Three.js view of a saved synthetic experiment.
 | **Home and Projects** | Resume recent work, open a project or guided lifecycle step, and see local status, queued jobs, and backup health. |
 | **Memory and search** | Capture and revise records, link them to projects and other records, archive and restore them, and search through lexical and configured semantic retrieval. |
 | **Ask ANANSI** | Ask questions against approved workspace material. Review the grounding evidence and citations alongside the answer. |
+| **Connect AI** | Add API-key provider connections through the desktop-owned credential flow while preserving existing connections and budgets. Paired browsers receive status and directions to the desktop owner. |
 | **Opportunity Discovery** | Supply problems, observations, excerpts, and selected memories. Generate hypotheses with sources and assumptions, save them as project artifacts, and compare them against a rubric. |
 | **Product Forge** | Turn an opportunity into a specification or implementation plan, review proposed revisions, and export a prototype package. |
 | **LEXI-COLLIDER** | Combine prompts, concepts, and selected project context. Review the result before transferring it into Forge. |
@@ -58,10 +69,40 @@ The reviewed Three.js view of a saved synthetic experiment.
 | **SOMNIA** | Replay isolated scenarios, inspect failures, compare two reviewed model inputs, and save comparison evidence in a private project artifact. |
 | **GHOST-PROMPT** | Explore prompt drafts, revisions, and alternative formulations through an explicit opt-in workflow. |
 | **Launch Studio** | Follow the product lifecycle, review its deliverables, and package an export for handoff. |
-| **Documents and MCP** | Ingest text, Markdown, and supported PDF text. Review MCP tools, resources, and prompts, with scoped approval for mutations. |
+| **Documents and MCP** | Import text, Markdown, supported PDF text, and text-bearing DOCX with provenance, resumable uploads, search, and citations. Review MCP tools, resources, and prompts, with scoped approval for mutations. |
 | **Backups and recovery** | Create and inspect a backup, preview a restore, and recover into a fresh workspace. |
 
 A typical session starts with a workspace and project. Add source material, explore an opportunity, move a candidate into Forge, then test the assumptions in SwarmTank or SOMNIA. Save the inputs and results as project artifacts so you can inspect the evidence behind a decision later.
+
+## Current verification and remaining work
+
+These results belong to the exact source and workflows named below. They do not certify an installer or every product requirement.
+
+| Latest focused Windows check at `8df1fcf3d` | Result |
+| --- | --- |
+| Original exhausted-root polling probe and in-flight retry-budget probe | 2/2 passed unchanged |
+| Worker queue tests | 19/19 passed |
+| Shared UI and contracts tests | 347/347 passed |
+| Synthetic ChatGPT token lifecycle | 32/32 passed |
+| Provider dispatch and authorization | 38/38 passed; the Unix-only case is excluded on Windows |
+| Browser workflows | 24/24 across recovery controls, Connect AI, DOCX, PDF, TXT/MD, and Ask |
+| TypeScript, generated-contract drift, API build, web build | Passed |
+| Broad Windows library acceptance | **Held: two fault-test parking timeouts remain in the quieter rerun** |
+
+The first broad run passed 331 core tests and failed four. After other builds and browser runs finished, the unchanged default-concurrency command passed 333 core tests and failed two: `deliberate_wake_rearms_exhausted_root` and `diagnostic_absent_for_other_states_and_roots`. Both expired in the 10-second parked-state helper and passed individually. The precise scheduling cause remains under investigation. **There is no clean 403-test Windows acceptance claim.** [Full Windows review](docs/reviews/windows-claim-recovery-cr01b-review.md) · [Raw verification logs](docs/evidence/windows-recovery-2026-11-12/index.md)
+
+The preceding ingestion-reliability checkpoint `3e86af6b4` passed the complete Windows library suite, 370/370, plus 23 browser tests. Those historical results remain scoped to that checkpoint; they are not substituted for the latest run. [Accepted-checkpoint handoff](docs/handoffs/windows-ingestion-test-reliability.md)
+
+Recent work now in source:
+
+- **DOCX ingestion:** bounded ZIP/XML extraction, heading provenance, inert text display, restart/resume, backup/restore, and section-aware Ask citations. Macros, encrypted files, unsupported structures, and oversized input are refused. OCR is separate work. [DOCX handoff](docs/handoffs/m13-docx-ingestion.md)
+- **SQLite dependency repair:** bundled SQLite updated to 3.54.1, with linked-version verification and old-workspace reopen/search/write/restore evidence. [Dependency repair](docs/handoffs/pilot-sqlite-security-repair.md)
+- **SOMNIA target binding:** approval-bound requests pin the selected provider/model and relevant connection configuration; configuration changes cannot silently redirect an approved comparison. [Expected-target contract](docs/handoffs/expected-target-contract-repair.md)
+- **Connect AI:** additive provider setup, connection-bound verification status, and removable orphaned credential references. [Setup](docs/handoffs/connect-ai-api-key-setup.md) · [Verification repair](docs/handoffs/connect-ai-verification-repair.md)
+- **ChatGPT sign-in prototype:** synthetic OAuth and token-lifecycle coverage, typed credential-store failures, and guarded callback/refresh/disconnect races. The sign-in control remains disabled and dev-gated. Real account eligibility and native credential-store acceptance are open. [Prototype](docs/handoffs/connect-ai-chatgpt-signin.md) · [Lifecycle review](docs/handoffs/connect-ai-chatgpt-signin-lifecycle-repair-4.md)
+- **Background-job recovery:** FIFO scheduling, bounded retries for unavailable storage, non-retryable parking, sanitized recovery diagnostics, and explicit Retry recovery controls. Passive polling preserves retry budgets, including in-flight work. The new Jobs recovery interaction is browser-tested against a synthetic API; the remaining broad-test issue is described above. [Recovery handoff](docs/handoffs/claim-recovery-cr01b.md)
+
+Before a wider Windows pilot, finish the remaining test-reliability work, qualify one integrated installer on a clean machine, and complete native file-dialog and credential-store acceptance. Real ChatGPT eligibility, live-provider qualification, generated-code execution, and broader production gates are tracked separately. No new model or provider is installed automatically.
 
 ### SwarmTank v2
 
@@ -81,7 +122,7 @@ The verified comparison flow handles cancellation between dispatches, project ch
 
 ### Document ingestion and MCP
 
-Document ingestion accepts text, Markdown, and supported text-bearing PDFs. The PDF path limits extraction, tracks source pages and line information, and supports page navigation, search, and grounded Ask ANANSI citations. Scanned, encrypted, malformed, and unsupported PDFs can be rejected without publishing a partial document. [PDF ingestion handoff](docs/handoffs/m13-pdf-integration.md)
+Document ingestion accepts text, Markdown, supported text-bearing PDFs, and text-bearing DOCX. The PDF path limits extraction, tracks source pages and line information, and supports page navigation, search, and grounded Ask ANANSI citations. DOCX headings become Markdown section lines with source ranges and hashes. Uploads use the existing resumable job and publication guards. Scanned PDFs, encrypted files, malformed input, and unsupported structures can be rejected without publishing a partial document. [PDF ingestion](docs/handoffs/m13-pdf-integration.md) · [DOCX ingestion](docs/handoffs/m13-docx-ingestion.md)
 
 The MCP integration includes a stdio client for reviewing tools, resources, and prompts, and an authenticated server surface with scoped operations. The product treats proposed tool mutations as separate from read-only exploration. [Architecture and trust boundaries](docs/ARCHITECTURE.md)
 
@@ -113,7 +154,7 @@ Scene **08** presents the SwarmTank persona matrix and scenario controls. Scene 
 
 ## Windows preview
 
-The verified preview combines SwarmTank v2, PDF text ingestion, LARP scenes 08 and 09, SOMNIA model comparison, and the OpenRouter reasoning fix. It is a development preview. Signed production installers, updater qualification, and broader release certification are tracked under M15. [Build status](docs/BUILD_STATUS.md) · [Roadmap](docs/ROADMAP.md)
+The historical verified preview at `4e4e970af8ad0c406cfae35fc3da55f99662b174` combines SwarmTank v2, PDF text ingestion, LARP scenes 08 and 09, SOMNIA model comparison, and the OpenRouter reasoning fix. The table below records that older checkpoint, not the latest source. Signed production installers, updater qualification, and broader release certification remain separate. [Current source status](#current-verification-and-remaining-work) · [Build status](docs/BUILD_STATUS.md)
 
 | Recorded check at the verified preview | Result |
 | --- | --- |
@@ -129,6 +170,8 @@ The verified preview combines SwarmTank v2, PDF text ingestion, LARP scenes 08 a
 The native smoke test checked startup, Windows platform detection, the shell capability boundary, contract error parity, status refresh, and rendering. The browser run covered the listed product workflows. These counts refer to the recorded Windows verification at the source checkpoint above. [Verification ledger](docs/BUILD_STATUS.md)
 
 Antigravity's Windows acceptance checkpoint `20664e187` adds a native Forge source review and revision run, a browser backup and fresh-restore check, focused Collider picker and lineage coverage, and document/PDF and MCP regressions. WebView2 file-event injection covers the application's picker handling. Interactive Windows file-dialog acceptance and the owner-led credential and vault checks are tracked separately. [Acceptance ledger](docs/BUILD_STATUS.md) · [Manual security checklist](docs/reviews/owner-manual-security-checklist.md)
+
+A later unsigned development NSIS installer was built locally from candidate `9eec1c2f6` with DOCX and SQLite 3.54.1. Its [source and qualification report](https://github.com/robillionair/Anansi-ultimate/tree/codex/windows-preview-candidate) are preserved separately. Clean-machine installer execution and native manual checks remain pending. This candidate predates the latest Connect AI and recovery changes; publishing its source does not update an installed app or create a public binary release.
 
 ## SOMNIA compaction
 
@@ -148,10 +191,10 @@ The live benchmark included 36 synthetic file excerpts with broken OCR, stale ex
 
 ## Run from source
 
-For the verified preview, clone the Windows integration branch.
+To inspect the latest published development source, clone the default branch. Read the open verification items above before using it with important data.
 
 ```powershell
-git clone --branch codex/windows-preview-integration https://github.com/robillionair/Anansi-ultimate.git
+git clone https://github.com/robillionair/Anansi-ultimate.git
 Set-Location Anansi-ultimate
 node scripts/doctor.mjs --require-native
 pnpm install --frozen-lockfile --ignore-scripts
@@ -226,5 +269,7 @@ For the focused Windows desktop smoke test, pass the built executable path to `n
 ## Project roadmap
 
 The preview carries the desktop and web foundation, local memory and retrieval, model dispatch controls, opportunity discovery, Forge and LEXI-COLLIDER workflows, SwarmTank, SOMNIA, GHOST-PROMPT, the product lifecycle, and the Home and LARP interfaces. Remaining roadmap work includes broader document and connector coverage, release qualification, and the live-model qualification of SOMNIA compaction. The requirements matrix tracks scope and evidence at a finer level than the feature list.
+
+**ANANSI Ultimate 2.0 is planned after the primary release.** Its proposed scope includes Nanzi AI teammates, an OpenJEV-inspired structured decision layer, opt-in computer scanning into reviewable Second Brain bubbles, a conversation-first interface, and institution-managed Enterprise Workspaces with compartmented access and audit logs. These are plans, not shipped capabilities. [2.0 scope](plans/post-v1-nanzi.md) · [Enterprise design](plans/post-v1-enterprise-workspaces.md) · [Provider onboarding](plans/v1-provider-onboarding.md)
 
 Start with the [master specification](docs/MASTER_SPEC.md) for behavior, [roadmap](docs/ROADMAP.md) for sequencing, [requirements matrix](docs/REQUIREMENTS_MATRIX.md) for scope, [architecture](docs/ARCHITECTURE.md) and [decisions](docs/DECISIONS.md) for design, and [build status](docs/BUILD_STATUS.md) for verification.

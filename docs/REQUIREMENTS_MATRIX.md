@@ -4,6 +4,13 @@ AN-013 remains in progress. URL/document beam input gains [focused Windows evide
 
 # ANANSI Ultimate — Requirements Matrix
 
+## Post-v1 scope
+
+| Feature | Status | Dependency and acceptance |
+| --- | --- | --- |
+| ANANSI Ultimate 2.0 | deferred | Starts after the primary release. Covers Nanzi teammates, structured decisions, opt-in computer scanning into Second Brain bubbles, and conversation-led workflows. [2.0 scope and acceptance](../plans/post-v1-nanzi.md) |
+| 2.0 Enterprise Workspaces | deferred | Institution-managed models and storage, compartmented information access, and protected activity logs. Read-only synthetic pilot and independent isolation review before sensitive data. Relates to AN-018 and AN-021. [Enterprise design and pilot gates](../plans/post-v1-enterprise-workspaces.md) |
+
 ## M8 lineage focused Windows acceptance — 2026-10-30
 
 AN-013/018/019/024 gain [verified lineage/compatibility evidence](reviews/windows-m8-lineage.md): prior forgery/resumed-work probes, new-work-at-multiple-generations chain, genuine v10 import to v11 with history intact, migration/vault and affected UI/browser checks pass. These rows remain in progress for their full scope. No native/G1/remote-CI/release certification or completion of deferred M8 document/URL/3D features is implied.

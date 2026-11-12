@@ -1,0 +1,108 @@
+{
+  "runtimeTip": "8df1fcf3d69f6d1da532bb890234a7db0352efff",
+  "reviewTip": "4ffdd431664a6e9258d1066cae97280ef61ad4b7",
+  "encoding": "UTF-8; LF-normalized text",
+  "verdict": "focused checks pass; broad Windows fault-test acceptance held",
+  "files": [
+    {
+      "file": "claim-recovery-final-windows-api-build.txt",
+      "sha256": "7b89f9d8b45896e66051e0a6a0854f36f5acdc9e450391ac977c70c47d4c66e3"
+    },
+    {
+      "file": "claim-recovery-final-windows-browser-api-build.txt",
+      "sha256": "29d41c8d2592df9a29e3067db424e31f83a2da1164be144588f8f2b78a853de4"
+    },
+    {
+      "file": "claim-recovery-final-windows-browser-ask_anansi.txt",
+      "sha256": "98626d758bc8e67ee032e18bec41fa62d9f9558450a8b3b8e872cd1e9f4b1a2c"
+    },
+    {
+      "file": "claim-recovery-final-windows-browser-connect-ai.txt",
+      "sha256": "f2303702880211412199d26140e86bbd23346b017fe5fe312d9dbe372c871a6d"
+    },
+    {
+      "file": "claim-recovery-final-windows-browser-documents-docx.txt",
+      "sha256": "e9733cba31553257098b803e3fcc997b4c9dae9282e0a31721558554d60f95fd"
+    },
+    {
+      "file": "claim-recovery-final-windows-browser-documents-ingestion.txt",
+      "sha256": "92790c77111037545751fa5cd14605d23eb1e14e9a74494dfe2fbe21d4bf5cc4"
+    },
+    {
+      "file": "claim-recovery-final-windows-browser-documents-pdf.txt",
+      "sha256": "9521b9d4a864aad91222a4f569028da0be9286622edd700a85cdab6b9e6e5dc1"
+    },
+    {
+      "file": "claim-recovery-final-windows-browser-job-recovery.txt",
+      "sha256": "c5a88279eb118484fb7502eb4cd8fdd9640c953b4a70d0296443f1c250852f2b"
+    },
+    {
+      "file": "claim-recovery-final-windows-contracts.txt",
+      "sha256": "0084940060b9472e741173045a6f9e5b73d9f3779708e747bf12377158f54602"
+    },
+    {
+      "file": "claim-recovery-final-windows-docs-tests.txt",
+      "sha256": "1d72dc82e05c4b477af7fbebd180ef688c64f9bff2957168edd06a4d7fc15cc9"
+    },
+    {
+      "file": "claim-recovery-final-windows-docs.txt",
+      "sha256": "f6291a72a6a552fa057c9b08d10a8673276c52c16eb2db9ceca58fedf3ffd27c"
+    },
+    {
+      "file": "claim-recovery-final-windows-install.txt",
+      "sha256": "371ff518006f2af35b5d9c0cf064900b030423914b70c776c461bbc6e7ec7e4d"
+    },
+    {
+      "file": "claim-recovery-final-windows-isolated-corrupt_claim_failure_parks_immediately_and_recovers_on_wake.txt",
+      "sha256": "694643ff27c4a961bb4c0190575b6da252bb9d442ad38d76b90c64b047a3ed3e"
+    },
+    {
+      "file": "claim-recovery-final-windows-isolated-deliberate_wake_rearms_exhausted_root.txt",
+      "sha256": "ced9738f2007e3efef31364e9b61ebe0904ee62f9ab02159decbf3fa3e008bc0"
+    },
+    {
+      "file": "claim-recovery-final-windows-isolated-diagnostic_absent_for_other_states_and_roots.txt",
+      "sha256": "7ceb5332e4cef1459162beb7fccbf6e2a8f08b62878d38f2a3887f22cf60bcd8"
+    },
+    {
+      "file": "claim-recovery-final-windows-isolated-diagnostic_shown_for_exhausted_queued_job_without_row_mutation.txt",
+      "sha256": "70fe55720d8791e1da8f9f91466aca3a2cc69b0d3e81a7fa1e8ce56d3efd093d"
+    },
+    {
+      "file": "claim-recovery-final-windows-lib-quiet-rerun.txt",
+      "sha256": "20c45291523303d3c7ddcf2fd3828bb6df14f3ccc17d0df28ffbb2efd7bef0e4"
+    },
+    {
+      "file": "claim-recovery-final-windows-lib.txt",
+      "sha256": "aff203a8e28d63649bb09a217495703476eaaa6b9a619e5ec9efa310bba286dd"
+    },
+    {
+      "file": "claim-recovery-final-windows-provider-regressions.txt",
+      "sha256": "b67c8304bc14f31f79539f82f73e8c1356c800681a2c12fb0a95dd5cee9c5014"
+    },
+    {
+      "file": "claim-recovery-final-windows-queue-isolated.txt",
+      "sha256": "5f9cb19ae19e37bde585f95d8788d3e47b8f6b45ae1d7990ac7f586a19c013d9"
+    },
+    {
+      "file": "claim-recovery-final-windows-review-docs-tests.txt",
+      "sha256": "0b654be5fb54db2b46bb1f732100c629b4fb2288c4abb06325455dae06c54610"
+    },
+    {
+      "file": "claim-recovery-final-windows-reviewer-probes-isolated.txt",
+      "sha256": "f08c1c9e7cfe7321f8788c20307f41aec2d98758d2613801d400496dfc2f31c4"
+    },
+    {
+      "file": "claim-recovery-final-windows-tsc.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "claim-recovery-final-windows-ui.txt",
+      "sha256": "e3a193099c724366ddfda1d9483d1a00543ee214cf4174295374b4a168a56c50"
+    },
+    {
+      "file": "claim-recovery-final-windows-web-build.txt",
+      "sha256": "6663b21dd75f6e35d9d0429aad21f9c751f0a1d46951547dcd85738374bc35ca"
+    }
+  ]
+}

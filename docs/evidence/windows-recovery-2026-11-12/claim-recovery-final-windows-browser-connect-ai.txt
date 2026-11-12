@@ -1,0 +1,10 @@
+[WebServer] (node:100420) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 1 test using 1 worker
+
+(node:44068) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok 1 tests\e2e\connect-ai.spec.ts:25:5 › connect AI: guided flow prefill, browser refusal with desktop direction, restart keeps both providers and budget (10.9s)
+
+  1 passed (13.5s)

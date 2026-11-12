@@ -1,0 +1,85 @@
+Scope: all 5 workspace projects
+✓ Lockfile passes supply-chain policies (verified 11d ago)
+Lockfile is up to date, resolution step is skipped
+Progress: resolved 1, reused 0, downloaded 0, added 0
+Packages: +59
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Progress: resolved 59, reused 0, downloaded 0, added 0
+Progress: resolved 59, reused 1, downloaded 0, added 0
+Progress: resolved 59, reused 2, downloaded 0, added 0
+Progress: resolved 59, reused 3, downloaded 0, added 0
+Progress: resolved 59, reused 4, downloaded 0, added 0
+Progress: resolved 59, reused 5, downloaded 0, added 0
+Progress: resolved 59, reused 6, downloaded 0, added 0
+Progress: resolved 59, reused 7, downloaded 0, added 0
+Progress: resolved 59, reused 8, downloaded 0, added 0
+Progress: resolved 59, reused 9, downloaded 0, added 0
+Progress: resolved 59, reused 10, downloaded 0, added 0
+Progress: resolved 59, reused 11, downloaded 0, added 0
+Progress: resolved 59, reused 12, downloaded 0, added 0
+Progress: resolved 59, reused 13, downloaded 0, added 0
+Progress: resolved 59, reused 14, downloaded 0, added 0
+Progress: resolved 59, reused 15, downloaded 0, added 0
+Progress: resolved 59, reused 16, downloaded 0, added 0
+Progress: resolved 59, reused 17, downloaded 0, added 0
+Progress: resolved 59, reused 18, downloaded 0, added 0
+Progress: resolved 59, reused 19, downloaded 0, added 0
+Progress: resolved 59, reused 20, downloaded 0, added 0
+Progress: resolved 59, reused 21, downloaded 0, added 0
+Progress: resolved 59, reused 22, downloaded 0, added 0
+Progress: resolved 59, reused 23, downloaded 0, added 0
+Progress: resolved 59, reused 24, downloaded 0, added 0
+Progress: resolved 59, reused 25, downloaded 0, added 0
+Progress: resolved 59, reused 26, downloaded 0, added 0
+Progress: resolved 59, reused 27, downloaded 0, added 0
+Progress: resolved 59, reused 28, downloaded 0, added 0
+Progress: resolved 59, reused 29, downloaded 0, added 0
+Progress: resolved 59, reused 30, downloaded 0, added 0
+Progress: resolved 59, reused 31, downloaded 0, added 0
+Progress: resolved 59, reused 32, downloaded 0, added 0
+Progress: resolved 59, reused 33, downloaded 0, added 0
+Progress: resolved 59, reused 34, downloaded 0, added 0
+Progress: resolved 59, reused 35, downloaded 0, added 0
+Progress: resolved 59, reused 36, downloaded 0, added 0
+Progress: resolved 59, reused 37, downloaded 0, added 0
+Progress: resolved 59, reused 38, downloaded 0, added 0
+Progress: resolved 59, reused 39, downloaded 0, added 0
+Progress: resolved 59, reused 42, downloaded 0, added 0
+Progress: resolved 59, reused 43, downloaded 0, added 0
+Progress: resolved 59, reused 44, downloaded 0, added 0
+Progress: resolved 59, reused 45, downloaded 0, added 0
+Progress: resolved 59, reused 46, downloaded 0, added 0
+Progress: resolved 59, reused 47, downloaded 0, added 0
+Progress: resolved 59, reused 48, downloaded 0, added 0
+Progress: resolved 59, reused 52, downloaded 0, added 0
+Progress: resolved 59, reused 53, downloaded 0, added 0
+Progress: resolved 59, reused 54, downloaded 0, added 0
+Packages are hard linked from the content-addressable store to the virtual store.
+  Content-addressable store is at: E:\.pnpm-store\v11
+  Virtual store is at:             node_modules/.pnpm
+Progress: resolved 59, reused 57, downloaded 0, added 4
+Progress: resolved 59, reused 57, downloaded 0, added 12
+Progress: resolved 59, reused 57, downloaded 0, added 13
+Progress: resolved 59, reused 57, downloaded 0, added 14
+Progress: resolved 59, reused 58, downloaded 0, added 17
+Progress: resolved 59, reused 58, downloaded 0, added 18
+Progress: resolved 59, reused 58, downloaded 0, added 22
+Progress: resolved 59, reused 58, downloaded 0, added 23
+Progress: resolved 59, reused 58, downloaded 0, added 34
+Progress: resolved 59, reused 58, downloaded 0, added 35
+Progress: resolved 59, reused 58, downloaded 0, added 57
+Progress: resolved 59, reused 58, downloaded 0, added 58
+Progress: resolved 59, reused 59, downloaded 0, added 58
+Progress: resolved 59, reused 59, downloaded 0, added 59, done
+
+devDependencies:
++ @playwright/test 1.64.1
++ @types/node 26.6.5
++ @types/react 19.3.0
++ @types/react-dom 19.3.0
++ ajv 8.20.0
++ json-schema-to-typescript 16.0.0
++ tsx 4.23.15
++ typescript 7.0.2
+
+Done in 6m 53.2s using pnpm v11.25.0

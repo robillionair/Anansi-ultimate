@@ -1,0 +1,24 @@
+
+running 19 tests
+test jobs::tests::reviewer_worker_queue_passive_wake_preserves_inflight_budget ... ok
+test jobs::tests::worker_queue_deliberate_fresh_entry_keeps_fifo_position ... ok
+test jobs::tests::worker_queue_dedup_keeps_first_position ... ok
+test jobs::tests::worker_queue_deliberate_wake_of_active_root_adds_fresh_entry ... ok
+test jobs::tests::worker_queue_drains_after_parking ... ok
+test jobs::tests::worker_queue_duplicate_wakes_never_duplicate_active_entries ... ok
+test jobs::tests::worker_queue_exhaustion_record_round_trip ... ok
+test jobs::tests::worker_queue_finish_clears_active_mark ... ok
+test jobs::tests::worker_queue_mark_exhausted_without_pending_entry_marks ... ok
+test jobs::tests::worker_queue_passive_wake_adds_healthy_root ... ok
+test jobs::tests::worker_queue_passive_wake_ignores_exhausted_root ... ok
+test jobs::tests::worker_queue_passive_wake_keeps_failure_count ... ok
+test jobs::tests::worker_queue_repeated_passive_wakes_of_active_root_add_nothing ... ok
+test jobs::tests::worker_queue_requeue_drops_when_fresh_wake_pending ... ok
+test jobs::tests::worker_queue_requeue_goes_to_the_back ... ok
+test jobs::tests::worker_queue_restarts_after_going_idle ... ok
+test jobs::tests::worker_queue_rewake_resets_failure_count ... ok
+test jobs::tests::worker_queue_serves_storages_in_wake_order ... ok
+test jobs::tests::worker_queue_stale_park_suppressed_by_deliberate_fresh_entry ... ok
+
+test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 316 filtered out; finished in 0.00s
+

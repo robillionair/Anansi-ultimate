@@ -43,6 +43,23 @@ Dependencies follow section 82: each milestone requires the preceding foundation
 
 M1 includes a buildable/installable development Windows NSIS `.exe` and working browser foundation. It does not satisfy signed production release, updates or clean-machine certification, retained in M15. M1 also includes SQLite/workspace foundations from section 82, not merely a navigation mockup.
 
+## Windows v1 pilot usability
+
+[Easier AI provider onboarding](../plans/v1-provider-onboarding.md) tracks an API-key setup flow that preserves existing provider connections. The separate ChatGPT sign-in and Codex path depends on verified OpenAI eligibility and account authorization.
+
+## First update after v1
+
+**ANANSI Ultimate 2.0** is the first feature package after the primary release. Implementation starts after 1.0 ships.
+
+- **Nanzi** · Persistent, project-scoped AI teammates with assigned roles, approved context, and inspectable work history.
+- **OpenJEV-inspired decision layer** · Structured workflow routing, classification, and clarification decisions.
+- **Second Brain computer scan** · Opt-in folder, drive, or whole-computer scanning, optional AI analysis of supported files and photos, and reviewable organization into separate bubbles.
+- **Conversation-first Ask ANANSI** · A simple chat interface for coordinating the workflows and asking for missing information or approval.
+
+[ANANSI Ultimate 2.0 master plan addendum](../plans/post-v1-nanzi.md)
+
+**Enterprise Workspaces** is a 2.0 design track for institution-controlled inference, compartmented Second Brain collections, delegated access administration, and AI activity auditing. The first pilot is read-only and limited to one institution. [Enterprise plan](../plans/post-v1-enterprise-workspaces.md)
+
 ## Previous roadmap mapping
 
 | Previous docs/ROADMAP milestone | Canonical milestones | Resolution |

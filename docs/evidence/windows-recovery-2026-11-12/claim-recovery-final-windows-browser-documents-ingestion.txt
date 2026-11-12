@@ -1,0 +1,18 @@
+[WebServer] (node:105552) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 9 tests using 1 worker
+
+(node:91252) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok 1 tests\e2e\documents-ingestion.spec.ts:70:5 › documents UI: import a text file, open it, provenance visible, search finds it (10.6s)
+  ok 2 tests\e2e\documents-ingestion.spec.ts:108:5 › documents UI: markdown renders inertly and a malformed PDF pick fails the job, publishing nothing (13.9s)
+  ok 3 tests\e2e\documents-ingestion.spec.ts:146:5 › documents API: invalid UTF-8 forced through the API fails the job and publishes nothing (10.0s)
+  ok 4 tests\e2e\documents-ingestion.spec.ts:177:5 › documents API: oversize, sealed, hash-mismatch and unsupported-format refusals (9.7s)
+  ok 5 tests\e2e\documents-ingestion.spec.ts:232:5 › documents API: cancel during upload publishes nothing and removes staging (7.3s)
+  ok 6 tests\e2e\documents-ingestion.spec.ts:277:5 › documents API: concurrent duplicate imports create exactly one record (11.2s)
+  ok 7 tests\e2e\documents-ingestion.spec.ts:319:5 › documents API: killing the API mid-upload, restarting, and resuming imports once (10.0s)
+  ok 8 tests\e2e\documents-ingestion.spec.ts:360:5 › documents API: backup and fresh restore preserves the import (31.8s)
+  ok 9 tests\e2e\documents-ingestion.spec.ts:445:5 › documents Ask: imported content is cited, and a missing topic is honest (13.0s)
+
+  9 passed (2.0m)

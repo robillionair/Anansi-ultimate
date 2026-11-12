@@ -2048,3 +2048,18 @@ Runtime `b5dc7fcb4c589777bb1e65bde28fa484c77687c4` passes the original exhausted
 ## 2026-11-12 — CR-01b focused fixes verified; broad Windows acceptance held
 
 Runtime `8df1fcf3d69f6d1da532bb890234a7db0352efff` passes both unchanged reviewer probes (2/2), queue tests (19/19), UI 347/347, provider integrations 32/32 and 38/38, contracts/TypeScript/builds and 24/24 browser tests, including the new recovery interaction. Two default-concurrency broad Windows runs fail recovery fixture parking waits: first core 331 passed/4 failed, quieter rerun 333 passed/2 failed; both repeated failures use the 10-second wait at ingestion.rs:818 and pass in isolation. [Review](reviews/windows-claim-recovery-cr01b-review.md) records WR-REC-TEST-01 and limits. No production regression is established, but no clean 403-test Windows acceptance or promotion is claimed. The previous fully accepted 370-test checkpoint is preserved.
+
+## Post-v1 planning — ANANSI Ultimate 2.0
+
+The [2.0 master plan addendum](../plans/post-v1-nanzi.md) groups Nanzi, an OpenJEV-inspired decision layer, opt-in computer scanning into Second Brain bubbles, and a conversation-first Ask ANANSI interface. Implementation begins after the primary release. Status is planning only.
+
+The [Enterprise Workspaces plan](../plans/post-v1-enterprise-workspaces.md) adds an institution-managed deployment, scoped Second Brain collections, separate operator and auditor permissions, and staged pilot acceptance. Status is proposed design for 2.0.
+
+## Windows v1 planning — easier AI provider onboarding
+
+The [provider onboarding plan](../plans/v1-provider-onboarding.md) defines a guided API-key connection that preserves existing providers and budgets, plus a separate eligibility and verification gate for ChatGPT sign-in. The plan records the current single-provider replacement behavior and the acceptance checks for a safe add flow.
+
+
+## 2026-11-12 — publish current development source, reviews, and roadmap
+
+The publication combines reviewed application runtime `8df1fcf3d` and review `4ffdd4316` with the existing README/screenshots and the owner-requested v1/2.0 planning documents. Application, contract, script and test files are byte-identical to the reviewed runtime tree; this merge changes documentation and adds recorded evidence only. [Windows logs](evidence/windows-recovery-2026-11-12/index.md) retain both broad-run failures, isolated passes, and the 24 passing browser tests. README distinguishes implemented work, disabled ChatGPT sign-in, historical installers, deferred 2.0 capabilities, and the remaining two Windows fault-test timeouts. Publishing source does not promote an installed preview or certify release readiness.

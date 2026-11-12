@@ -1,0 +1,29 @@
+✔ actual repository documentation and state validate (61.1616ms)
+✔ rejects missing master section (47.9828ms)
+✔ rejects duplicate coverage (47.1989ms)
+✔ rejects missing owner (47.7709ms)
+✔ rejects missing plan (48.0128ms)
+✔ rejects missing link (44.277ms)
+✔ rejects traversal (51.3031ms)
+✔ rejects absolute path (43.1856ms)
+✔ rejects bad encoding (42.9336ms)
+✔ rejects bad anchor (43.8214ms)
+✔ rejects bad reference (43.7661ms)
+✔ rejects invalid requirement status (44.4368ms)
+✔ rejects missing requirement (46.2611ms)
+✔ rejects invalid JSON (44.004ms)
+✔ rejects missing state key (43.5372ms)
+✔ rejects invalid state type (45.5949ms)
+✔ rejects missing evidence (48.9934ms)
+✔ rejects invalid checkpoint (43.1929ms)
+✔ rejects invalid milestone (43.8317ms)
+✔ fences and inline examples are ignored; real anchors, duplicates, assets and references resolve (46.7502ms)
+✔ longer fenced blocks require a matching closing fence (0.1762ms)
+ℹ tests 21
+ℹ suites 0
+ℹ pass 21
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1256.2498

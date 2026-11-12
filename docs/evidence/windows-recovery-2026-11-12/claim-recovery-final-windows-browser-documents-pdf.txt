@@ -1,0 +1,14 @@
+[WebServer] (node:104260) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 5 tests using 1 worker
+
+(node:82320) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok 1 tests\e2e\documents-pdf.spec.ts:67:5 › documents PDF UI: import, page navigation, provenance, plain-text only (12.1s)
+  ok 2 tests\e2e\documents-pdf.spec.ts:110:5 › documents PDF search: a term names the page it lives on (12.9s)
+  ok 3 tests\e2e\documents-pdf.spec.ts:135:5 › documents PDF Ask: imported content is cited as Page N (line M) (11.8s)
+  ok 4 tests\e2e\documents-pdf.spec.ts:162:5 › documents PDF API: backup and fresh restore preserves the import and its pages (31.9s)
+  ok 5 tests\e2e\documents-pdf.spec.ts:251:5 › documents PDF API: encrypted, scanned, bomb and malformed PDFs fail and publish nothing (17.2s)
+
+  5 passed (1.5m)

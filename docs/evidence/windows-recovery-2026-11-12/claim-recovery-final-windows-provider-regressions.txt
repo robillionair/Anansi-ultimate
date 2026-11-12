@@ -1,0 +1,101 @@
+    Blocking waiting for file lock on build directory
+   Compiling anansi-providers v0.1.0 (E:\Anansi\worktrees\review-claim-recovery-final\crates\providers)
+   Compiling anansi-core v0.1.0 (E:\Anansi\worktrees\review-claim-recovery-final\crates\core)
+warning: unused import: `BufReader`
+  --> crates\core\tests\chatgpt_signin.rs:18:24
+   |
+18 | use std::io::{BufRead, BufReader, Read, Write};
+   |                        ^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `BufRead`
+  --> crates\core\tests\chatgpt_signin.rs:18:15
+   |
+18 | use std::io::{BufRead, BufReader, Read, Write};
+   |               ^^^^^^^
+
+warning: `anansi-core` (test "chatgpt_signin") generated 2 warnings (run `cargo fix --test "chatgpt_signin" -p anansi-core` to apply 1 suggestion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 10m 43s
+     Running tests\chatgpt_signin.rs (E:\Anansi\target\debug\deps\chatgpt_signin-d777c77f870b56d2.exe)
+
+running 32 tests
+test browser_cannot_start_refresh_or_disconnect ... ok
+test browser_status_shows_labels_only ... ok
+test disconnect_during_callback_exchange_does_not_recreate_session ... ok
+test disconnect_during_refresh_does_not_recreate_session ... ok
+test disconnect_during_revocation_does_not_delete_newer_signin ... ok
+test disconnect_keyring_deletion_failure_is_reported_and_retry_succeeds ... ok
+test disconnect_malformed_storage_is_removed_and_retry_succeeds ... ok
+test disconnect_read_failure_does_not_claim_removal_and_retry_succeeds ... ok
+test failed_signin_leaves_local_and_apikey_flows_working ... ok
+test late_callback_after_disconnect_is_refused ... ok
+test refresh_during_resignin_does_not_overwrite_newer_session ... ok
+test second_concurrent_signin_is_superseded_not_overwritten ... ok
+test second_disconnect_after_first_reports_absent_not_failed ... ok
+test signin_callback_client_id_mismatch_is_rejected ... ok
+test signin_denied_consent_stops_before_exchange ... ok
+test signin_disconnect_revokes_and_clears ... ok
+test signin_disconnect_unconfirmed_revocation_is_reported ... ok
+test signin_expired_id_token_is_refused ... ok
+test signin_full_flow_stores_tokens_in_keyring_only ... ok
+test signin_missing_plan_scope_is_identity_only ... ok
+test signin_new_registration_without_client_id_is_incomplete ... ok
+test signin_reauthorization_uses_saved_client_id_and_hint ... ok
+test signin_refresh_invalid_grant_clears_record ... ok
+test signin_refresh_is_serialized ... ok
+test signin_refresh_nothing_to_do_when_token_is_fresh ... ok
+test signin_refresh_rotates_tokens ... ok
+test signin_replayed_callback_is_rejected ... ok
+test signin_start_returns_documented_authorization_url ... ok
+test signin_tampered_signature_is_refused ... ok
+test signin_wrong_nonce_is_refused ... ok
+test signin_wrong_state_is_refused_without_exchange ... ok
+test stale_invalid_grant_does_not_delete_newer_signin ... ok
+
+test result: ok. 32 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 220.38s
+
+     Running tests\provider_dispatch.rs (E:\Anansi\target\debug\deps\provider_dispatch-b8a69a36fb2d14b7.exe)
+
+running 38 tests
+test browser_cannot_set_or_remove_credentials ... ok
+test budget_comes_from_trusted_config_and_cannot_be_raised_by_the_caller ... ok
+test catalog_answers_without_configuration ... ok
+test cloud_endpoint_cannot_masquerade_as_local_or_free ... ok
+test browser_refusal_leaves_state_unchanged ... ok
+test configuration_persists_across_real_process_restarts ... ok
+test cancelled_prompt_stores_nothing_and_leaves_config_unchanged ... ok
+test configure_add_is_atomic_on_persist_failure ... ok
+test concurrent_configures_serialize_and_leave_no_temp_files ... ok
+test configure_and_authorize_require_owner_authorization ... ok
+test configure_add_preserves_providers_budget_and_accounting ... ok
+test consumed_permit_cannot_be_replayed_across_config_changes ... ok
+test configure_add_survives_restart ... ok
+test delayed_stream_success_never_verifies_new_connection ... ok
+test cross_session_stream_access_is_denied ... ok
+test expected_target_with_auto_routing_is_refused_before_traffic ... ok
+test expected_target_with_auto_routing_and_chosen_is_refused_before_traffic ... ok
+test delayed_success_never_verifies_new_connection ... ok
+test credential_lifecycle_prompt_keyring_resolver_wire ... ok
+test expected_target_with_choose_model_dispatches_to_the_exact_target ... ok
+test inline_config_in_dispatch_is_rejected_with_zero_traffic ... ok
+test failed_save_leaves_key_orphaned_and_removable ... ok
+test permits_cannot_be_minted_borrowed_or_embedded ... ok
+test persistence_failure_leaves_memory_and_disk_consistent ... ok
+test orphaned_credential_listed_and_survives_restart ... ok
+test refused_browser_attempts_queue_for_host_approval ... ok
+test status_is_readable_by_a_browser_and_shows_no_secrets ... ok
+test orphaned_credential_removed_through_guarded_op ... ok
+test slow_dispatch_does_not_block_poll_cancel_or_other_workspaces ... ok
+test strict_request_bounds_are_enforced_before_traffic ... ok
+test referenced_credential_cannot_be_removed ... ok
+test stream_start_refuses_expected_target_before_traffic ... ok
+test two_workspaces_in_one_root_are_fully_isolated ... ok
+test verified_does_not_survive_endpoint_change ... ok
+test unchanged_provider_keeps_verification_when_other_changes ... ok
+test workflow_runs_on_backend_state_not_caller_json ... ok
+test verified_does_not_survive_new_reference_rotation ... ok
+test verified_does_not_survive_rotation_under_same_reference ... ok
+
+test result: ok. 38 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 97.25s
+
