@@ -1,5 +1,7 @@
 # ANANSI Ultimate
 
+> Historical installer candidate source: application checkpoint `9eec1c2f6d2a648e64d6c219013098b2f2ae81ef` (9 November 2026), with documentation publication on top. See the [candidate qualification report](docs/reviews/windows-pilot-candidate-qualification-2026-11-09.md). The local installer is an unsigned development build; clean-machine installation and native manual acceptance remain pending. This branch does not include later Connect AI and job-recovery work. [Latest development source and current status](https://github.com/robillionair/Anansi-ultimate).
+
 ANANSI Ultimate is a local-first workspace for researching a product idea, building a prototype plan, testing assumptions, and preserving the evidence behind each decision. It has a Windows desktop application built with Tauri 2 and a React browser interface paired to a local API. Both interfaces use the same Rust domain logic and generated contracts.
 
 This README describes the Windows preview integration branch. The verified source checkpoint is `4e4e970af8ad0c406cfae35fc3da55f99662b174`. It also includes Antigravity's focused Windows acceptance checkpoint and Muse's SOMNIA compaction integration. See the [build status ledger](docs/BUILD_STATUS.md) for test details and scope.
