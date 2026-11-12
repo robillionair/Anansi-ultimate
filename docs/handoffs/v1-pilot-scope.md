@@ -116,7 +116,9 @@ requests.
   (Linux-verified, DOCX e2e 7/7; **Windows review
   outstanding**). Resumable chunked upload, restart
   resume, cancellation cleanup, strict refusals
-  (format, size 1–65536 bytes, encoding, empty).
+  (format, per-kind size limits — TXT/MD 1–65,536
+  bytes, PDF/DOCX 1–1,048,576 bytes — encoding,
+  empty).
   OCR, scanned PDFs, broad connectors, and
   background ingestion remain planned.
 - **Jobs, export, recovery (§66/§79–§80, AN-029
@@ -290,7 +292,8 @@ above are usable; the remainder is not claimed.
   their historical evidence only.
 - **Journey walk result:** no reproducible
   pilot-blocking product defect was found on the
-  2026-11-12 walk (2/2 green). Walk-harness issues
+  2026-11-12 walk (1/1 across three green runs,
+  runs 5–7). Walk-harness issues
   found along the way (dashboard landing, search
   default mode, Ollama path selection, fixture
   record counts) were diagnosed against code and
@@ -355,7 +358,7 @@ Windows side).
 
 1. Synthetic or non-important data first; the app
    itself discloses "development preview, not
-   production-certified" on the Dashboard.
+   production-certified" in the workspace footer.
 2. Local models and API-key providers only, each
    explicitly configured and authorized; Zero-Cost
    Lock stays on unless the tester explicitly

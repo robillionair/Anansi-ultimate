@@ -209,11 +209,11 @@ Every defect report cites the tuple, from the
 identity records below — never from memory and
 never the app version alone.
 
-- **In the app:** the Dashboard readiness panel
-  shows Application name, Core version, Application
-  version (all `0.1.0`), Contract version **1**, OS,
-  and Core uptime. The API reports `apiVersion`
-  `0.1.0`.
+- **In the app:** the Core connection panel
+  (Connection view) shows Application name, Core
+  version, Application version (all `0.1.0`),
+  Contract version **1**, OS, and Core uptime.
+  The API reports `apiVersion` `0.1.0`.
 - **With the isolated build:** `release-manifest.json`
   is the primary record — `git.commit`, `git.dirty`,
   `toolchain` (Node, pnpm, Git, rustc + host +
@@ -467,9 +467,12 @@ section summarizes the gates:
   or configured provider.** Without one, Ask reports
   Offline with citations — that is correct behavior,
   not a defect.
-- **Limits:** document uploads 1–65536 bytes;
-  4,000-char Ask context budget; single-user local
-  deployment; no multi-machine sync; no macOS build.
+- **Limits:** document uploads TXT/MD 1–65,536
+  bytes and PDF/DOCX 1–1,048,576 bytes
+  (extracted text TXT/MD 1–8,000 chars, PDF/DOCX
+  1–32,000 chars); 4,000-char Ask context budget;
+  single-user local deployment; no multi-machine
+  sync; no macOS build.
 
 ## 10. Rollback
 
