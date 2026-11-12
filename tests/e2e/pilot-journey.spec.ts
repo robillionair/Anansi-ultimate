@@ -4,7 +4,9 @@ import http from 'node:http';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+// @ts-expect-error shared executable acceptance workflow
 import { prepareBackup, restoreBackup, checkBackup } from '../../scripts/backup-workflow.mjs';
+// @ts-expect-error shared executable acceptance workflow
 import { roundTripSavedBackup } from '../../scripts/backup-file-workflow.mjs';
 
 // Pilot journey walk (v1 RC, AC-V1-04): first-time-user path over
@@ -26,7 +28,10 @@ test('pilot journey: fresh start to restored reopen with synthetic data', async 
   // --- fake Ollama: 'answer' replies at once; 'hold' waits for the
   // test to release the gate, so cancellation is deterministic. ---
   let fakeMode: 'answer' | 'hold' = 'answer';
-  let releaseGate: (() => void) | null = null;
+  // Holder object: the release function is assigned inside the fake
+  // server's request handler, and a plain `let` would be narrowed
+  // to `null` at the call sites below. Property access is not.
+  const gate: { release: (() => void) | null } = { release: null };
   let gatePromise: Promise<void> | null = null;
   let fakeHits = 0;
   const fake = http.createServer((req, res) => {
@@ -44,7 +49,7 @@ test('pilot journey: fresh start to restored reopen with synthetic data', async 
       void body;
       if (fakeMode === 'hold') {
         gatePromise = new Promise<void>((resolve) => {
-          releaseGate = resolve;
+          gate.release = resolve;
         });
         await gatePromise;
       }
@@ -260,7 +265,7 @@ test('pilot journey: fresh start to restored reopen with synthetic data', async 
     await page.getByRole('button', { name: 'Cancel generation' }).click();
     await expect(page.getByRole('button', { name: 'Ask Question', exact: true })).toBeEnabled();
     await expect(page.locator('.status-banner.status-answered')).toHaveCount(0);
-    releaseGate?.();
+    gate.release?.();
     await page.waitForTimeout(500);
     await expect(page.locator('.status-banner.status-answered')).toHaveCount(0);
 
@@ -300,7 +305,7 @@ test('pilot journey: fresh start to restored reopen with synthetic data', async 
     expect(external).toBe(0);
     await page.screenshot({ path: 'test-results/browser-pilot-journey.png', fullPage: true });
   } finally {
-    releaseGate?.();
+    gate.release?.();
     fake.close();
     await stopApi();
   }
