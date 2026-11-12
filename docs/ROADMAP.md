@@ -58,7 +58,9 @@ M1 includes a buildable/installable development Windows NSIS `.exe` and working 
 
 [ANANSI Ultimate 2.0 master plan addendum](../plans/post-v1-nanzi.md)
 
-**Enterprise Workspaces** is a 2.0 design track for institution-controlled inference, compartmented Second Brain collections, delegated access administration, and AI activity auditing. The first pilot is read-only and limited to one institution. [Enterprise plan](../plans/post-v1-enterprise-workspaces.md)
+**ANANSI Corporate** is the 2.0 company workspace track: permission-aware system/shared-drive discovery, a catalog of file contents and locations, CRM-style companies/contacts/pipelines/tasks, and chat-driven authorized actions. Conventional boards and the chatbot use the same records. [Corporate scope, delivery sequence and acceptance](../plans/post-v1-anansi-corporate.md)
+
+**Enterprise Workspaces** supplies Corporate's institution-controlled inference, compartmented Second Brain collections, delegated access administration, and AI activity auditing. The first pilot is read-only and limited to one institution. [Enterprise foundation](../plans/post-v1-enterprise-workspaces.md)
 
 ## Previous roadmap mapping
 

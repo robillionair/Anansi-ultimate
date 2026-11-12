@@ -2,6 +2,8 @@
 
 Status · Proposed post-v1 design track under the [2.0 master plan](post-v1-nanzi.md). Begin after 1.0 ships. The first target is one institution operating one private ANANSI deployment. Shared hosting across institutions and disconnected installations need separate designs and acceptance.
 
+This is the security and deployment foundation for [ANANSI Corporate](post-v1-anansi-corporate.md). Corporate adds the permission-aware company file catalog, CRM-style pipelines, tasks and chat-driven actions on this same boundary. It does not introduce a parallel permission system or grant an AI blanket access to company files.
+
 ## Product model
 
 Give employees the conversation-first Ask ANANSI interface and give the institution an administration console. Employees search approved material, ask a local model for cited answers, and assign work to approved Nanzis. Administrators grant access through groups and manage AI policies. Auditors review what the system accessed, what it sent to inference, and who approved exceptions.

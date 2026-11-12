@@ -46,7 +46,9 @@ Make Ask ANANSI a simple front door for the 2.0 workflows. A user can say, “Or
 - Verify conversation → approved scan → grouped preview → Second Brain import on a synthetic dataset containing documents, photos, duplicates, unreadable files, and intentionally excluded content. Check cancellation, resume, rescans, manual group corrections, and import undo. Confirm source files are preserved and excluded content never enters model inputs.
 - Test the decision layer on ambiguous requests, unsupported actions, and low-confidence grouping. Check that clarification or review happens before an action requiring user input or authorization.
 
-## Enterprise track
+## ANANSI Corporate and Enterprise Workspaces
+
+[ANANSI Corporate](post-v1-anansi-corporate.md) is the owner-requested company workspace edition for 2.0: an approved system/shared-drive file inventory with content and location provenance, permission-filtered Second Brain bubbles, CRM-style companies/contacts/pipelines/tasks, and Ask ANANSI as the primary interface for finding information and completing authorized work. Conventional boards and chat operate on the same records. It is planning only after v1.
 
 [Enterprise Workspaces](post-v1-enterprise-workspaces.md) extends the same Ask ANANSI and Nanzi experience to institution-managed deployment with department isolation, approved internal models, and a separate audit boundary. Start with a read-only institutional pilot after 1.0.
 

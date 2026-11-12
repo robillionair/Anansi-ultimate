@@ -10,6 +10,7 @@ AN-013 remains in progress. URL/document beam input gains [focused Windows evide
 | --- | --- | --- |
 | ANANSI Ultimate 2.0 | deferred | Starts after the primary release. Covers Nanzi teammates, structured decisions, opt-in computer scanning into Second Brain bubbles, and conversation-led workflows. [2.0 scope and acceptance](../plans/post-v1-nanzi.md) |
 | 2.0 Enterprise Workspaces | deferred | Institution-managed models and storage, compartmented information access, and protected activity logs. Read-only synthetic pilot and independent isolation review before sensitive data. Relates to AN-018 and AN-021. [Enterprise design and pilot gates](../plans/post-v1-enterprise-workspaces.md) |
+| ANANSI Corporate 2.0 | deferred | Extends Enterprise Workspaces with approved company file inventory/location knowledge, CRM-style pipelines and activities, and chat-driven authorized work. Starts after v1; CORP-01..08 define inventory, isolation, grounding, chat/board parity, approvals, delegation, recovery and scale acceptance. [Corporate product plan](../plans/post-v1-anansi-corporate.md) |
 
 ## M8 lineage focused Windows acceptance — 2026-10-30
 

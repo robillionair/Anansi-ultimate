@@ -2,6 +2,8 @@
 
 Status · API-key setup and its connection-verification repair are implemented; [setup evidence](../docs/handoffs/connect-ai-api-key-setup.md) and [verification repair](../docs/handoffs/connect-ai-verification-repair.md) record the scope. The [ChatGPT prototype](../docs/handoffs/connect-ai-chatgpt-signin.md) and lifecycle repairs are implemented behind a disabled dev gate, with real eligibility and native credential-store acceptance still open. The requirements below preserve the original slice design. The pilot can use local models and API-key connections while sign-in is evaluated.
 
+Owner decision, 12 November 2026: defer ChatGPT OAuth for the first pilot and keep its control disabled. Local-model and API-key workflows remain the pilot path. Future Corporate organizational identity/SSO is a separate 2.0 design, not authority to enable ChatGPT sign-in.
+
 ## Slice 1 · Add an AI provider
 
 Put one **Connect AI** entry in onboarding and Settings. Let users skip it and use local workflows. For the first slice, reuse the existing adapters and provider catalog. Present OpenAI, OpenRouter, Anthropic, Gemini, and local Ollama as choices. Show provider-specific help, use the catalog endpoint where available, and let advanced users enter a custom endpoint separately.
