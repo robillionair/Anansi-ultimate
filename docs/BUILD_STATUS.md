@@ -2036,3 +2036,12 @@ The preview combines the Windows acceptance checkpoint `20664e187` and Muse's SO
 Windows verification on the combined tree passed TypeScript, generated contract drift, the web and API builds, 335 UI/contract tests and 9 focused browser tests under the shared lease. The browser run covered the six compaction workflows, the synthetic frozen benchmark, and both LARP SOMNIA instrument/fallback tests. The instrument test reported failing on Muse's Linux environment passed on this Windows run. The benchmark reproduced 21/50 correct in each arm, zero failed pairs and 1,600 synthetic usage tokens. [Delivered Linux per-pair evidence](evidence/somnia-compaction-checkpoint2-synthetic.json)
 
 The live automatic-compaction benchmark remains pending. The current UI does not supply the required cloud permit. Native interactive file-dialog testing, owner-led credential and vault checks, external audit and production release qualification remain separate gates.
+## Post-v1 planning — ANANSI Ultimate 2.0
+
+The [2.0 master plan addendum](../plans/post-v1-nanzi.md) groups Nanzi, an OpenJEV-inspired decision layer, opt-in computer scanning into Second Brain bubbles, and a conversation-first Ask ANANSI interface. Implementation begins after the primary release. Status is planning only.
+
+The [Enterprise Workspaces plan](../plans/post-v1-enterprise-workspaces.md) adds an institution-managed deployment, scoped Second Brain collections, separate operator and auditor permissions, and staged pilot acceptance. Status is proposed design for 2.0.
+
+## Windows v1 planning — easier AI provider onboarding
+
+The [provider onboarding plan](../plans/v1-provider-onboarding.md) defines a guided API-key connection that preserves existing providers and budgets, plus a separate eligibility and verification gate for ChatGPT sign-in. The plan records the current single-provider replacement behavior and the acceptance checks for a safe add flow.
