@@ -773,7 +773,26 @@ impl WorkerQueue {
     /// caller's lock hold, so a wake-up committed during
     /// shutdown cannot be lost.
     fn take_next(&mut self) -> Option<PendingRoot> {
-        match self.pending.pop_front() {
+        #[cfg(test)]
+        let taken = {
+            // Gated roots stay pending: serve the first
+            // ungated entry, leaving gated entries in place
+            // and in order. Never blocks: a pure scan under
+            // the lock hold. When every entry is gated the
+            // worker goes idle, exactly as for an empty
+            // queue; the gate release re-wakes it.
+            match self
+                .pending
+                .iter()
+                .position(|entry| !admissions_gated(&entry.storage.root))
+            {
+                Some(index) => self.pending.remove(index),
+                None => None,
+            }
+        };
+        #[cfg(not(test))]
+        let taken = self.pending.pop_front();
+        match taken {
             Some(pending) => {
                 #[cfg(test)]
                 record_worker_state(&pending.storage.root, |state| {
@@ -949,6 +968,50 @@ pub(crate) fn worker_test_state(root: &std::path::Path) -> WorkerTestState {
         .find(|(entry, _)| entry.as_path() == root)
         .map(|(_, state)| *state)
         .unwrap_or_default()
+}
+
+/// Roots whose admission is held by a test-only gate (test
+/// builds only). A gated root keeps its pending queue entry
+/// but is never taken by the worker, so a test can start an
+/// observer against a root that is provably pending with
+/// zero admissions, then release the gate and watch it
+/// complete. Never consulted in shipped builds.
+#[cfg(test)]
+static ADMISSION_GATES: std::sync::Mutex<Vec<std::path::PathBuf>> =
+    std::sync::Mutex::new(Vec::new());
+
+/// Hold a root pending: the worker will not admit it until
+/// released (test builds only). Idempotent.
+#[cfg(test)]
+pub(crate) fn gate_admissions(root: &std::path::Path) {
+    let mut gates = ADMISSION_GATES
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    if !gates.iter().any(|entry| entry.as_path() == root) {
+        gates.push(root.to_path_buf());
+    }
+}
+
+/// Release a held root (test builds only). Idempotent; the
+/// caller re-wakes the root so an idle worker restarts.
+#[cfg(test)]
+pub(crate) fn release_admissions(root: &std::path::Path) {
+    ADMISSION_GATES
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .retain(|entry| entry.as_path() != root);
+}
+
+/// Whether a root's admission is held (test builds only).
+/// A plain mutex scan: never blocks, so it is safe to call
+/// while holding the queue mutex.
+#[cfg(test)]
+fn admissions_gated(root: &std::path::Path) -> bool {
+    ADMISSION_GATES
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .iter()
+        .any(|entry| entry.as_path() == root)
 }
 
 /// Arm forced claim failures for one storage root (test builds
@@ -1380,6 +1443,54 @@ mod tests {
                 active: false,
                 ever_registered: true,
             }
+        );
+    }
+
+    // Gate tests use root names no other test touches, for
+    // the same process-global-table reason as the mirror
+    // tests above.
+    #[test]
+    fn admission_gate_holds_front_entry_and_serves_next_root() {
+        let mut queue = WorkerQueue::default();
+        queue.wake(storage("gate-front"), WakeKind::Deliberate);
+        queue.wake(storage("gate-next"), WakeKind::Deliberate);
+        gate_admissions(&PathBuf::from("gate-front"));
+        // The gated front entry is skipped; the next root is
+        // served, and the gated entry keeps its place.
+        assert_eq!(
+            queue.take_next().unwrap().storage.root,
+            PathBuf::from("gate-next")
+        );
+        assert!(queue.take_next().is_none());
+        assert!(!queue.running);
+        // Release: the gated root is served with its entry
+        // intact, and a wake restarts the idle worker.
+        release_admissions(&PathBuf::from("gate-front"));
+        assert!(queue.wake(storage("gate-front"), WakeKind::Deliberate));
+        assert_eq!(
+            queue.take_next().unwrap().storage.root,
+            PathBuf::from("gate-front")
+        );
+        assert!(queue.take_next().is_none());
+    }
+
+    #[test]
+    fn admission_gate_is_root_scoped() {
+        let mut queue = WorkerQueue::default();
+        queue.wake(storage("gate-scoped-a"), WakeKind::Deliberate);
+        queue.wake(storage("gate-scoped-b"), WakeKind::Deliberate);
+        gate_admissions(&PathBuf::from("gate-scoped-a"));
+        assert!(admissions_gated(&PathBuf::from("gate-scoped-a")));
+        assert!(!admissions_gated(&PathBuf::from("gate-scoped-b")));
+        assert_eq!(
+            queue.take_next().unwrap().storage.root,
+            PathBuf::from("gate-scoped-b")
+        );
+        release_admissions(&PathBuf::from("gate-scoped-a"));
+        assert!(!admissions_gated(&PathBuf::from("gate-scoped-a")));
+        assert_eq!(
+            queue.take_next().unwrap().storage.root,
+            PathBuf::from("gate-scoped-a")
         );
     }
 

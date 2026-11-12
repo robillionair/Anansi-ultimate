@@ -961,6 +961,73 @@ mod tests {
             .unwrap_or_default()
     }
 
+    /// Live parking observations, published by the wait loop
+    /// after each poll so a test can synchronize on its
+    /// observer recording a state — without sleeps or timing
+    /// assumptions. The mutex guards only the wait itself;
+    /// the witness predicate reads the stashed histories.
+    static PARKING_WITNESS: (std::sync::Mutex<()>, std::sync::Condvar) =
+        (std::sync::Mutex::new(()), std::sync::Condvar::new());
+
+    fn note_parking_observation(root: &std::path::Path, history: &[(u128, bool, bool, u32, u32)]) {
+        record_parking_wait_history(root, history);
+        PARKING_WITNESS.1.notify_all();
+    }
+
+    /// Wait (bounded, no sleeps) until the parking observer
+    /// for `root` has recorded a pending observation with
+    /// zero admissions. Fails loudly on timeout; the
+    /// caller's gate guard releases the gate during
+    /// unwinding, so the observer still completes.
+    fn wait_for_parking_witness(root: &std::path::Path) {
+        let (lock, cvar) = &PARKING_WITNESS;
+        let guard = lock.lock().unwrap_or_else(|error| error.into_inner());
+        let (_guard, timed_out) = cvar
+            .wait_timeout_while(guard, std::time::Duration::from_secs(30), |_| {
+                !parking_wait_history(root)
+                    .iter()
+                    .any(|(_, pending, _, admitted, _)| *pending && *admitted == 0)
+            })
+            .unwrap_or_else(|error| error.into_inner());
+        assert!(
+            !timed_out.timed_out(),
+            "parking observer never recorded pending=true with zero admissions for {root:?}"
+        );
+    }
+
+    /// Test-only admission gate: while armed, the worker
+    /// never admits `root`, so the root stays pending with
+    /// zero admissions no matter how slow setup is or how
+    /// deep the queue runs. Dropping the guard releases the
+    /// gate and deliberately wakes the root, so a worker
+    /// that went idle restarts — cleanup runs on every exit
+    /// path, including assertion failure, panic, and witness
+    /// timeout, because `Drop` runs during unwinding and
+    /// `thread::scope` joins the observer only after the
+    /// guard has dropped.
+    struct AdmissionGate<'a> {
+        core: &'a Core,
+        root: std::path::PathBuf,
+    }
+
+    impl<'a> AdmissionGate<'a> {
+        fn arm(core: &'a Core, root: &std::path::Path) -> Self {
+            crate::jobs::gate_admissions(root);
+            AdmissionGate {
+                core,
+                root: root.to_path_buf(),
+            }
+        }
+    }
+
+    impl Drop for AdmissionGate<'_> {
+        fn drop(&mut self) {
+            crate::jobs::release_admissions(&self.root);
+            self.core
+                .wake_export_worker(crate::jobs::WakeKind::Deliberate);
+        }
+    }
+
     /// Wait until the worker parks this root after a claim
     /// failure. The wait synchronizes on the worker-state
     /// progression — registered pending, admitted, attempted,
@@ -1013,6 +1080,7 @@ mod tests {
                     wait.history(),
                 );
             }
+            note_parking_observation(root, wait.history());
             std::thread::sleep(std::time::Duration::from_millis(25));
         }
     }
@@ -2429,56 +2497,51 @@ mod tests {
 
     #[test]
     fn parking_wait_survives_pending_before_first_admission() {
-        // Thirty fault roots queue ahead of the observed root.
-        // Each root ahead costs the worker at least 200 ms of
-        // forced kindness delay across its 3 admissions, while
-        // fixture setup takes milliseconds — so the observed
-        // root provably waits pending before its first
-        // admission, and the wait must not expire the stall
-        // bound on that legitimate queueing. The assertions
-        // are on the mechanism: exact admissions, attempts,
-        // and fault consumption, plus the wait's own stashed
-        // history showing a pending observation with zero
-        // admissions. (The deterministic proof that pending
-        // survives past 10 s is the scripted phase test; this
-        // test proves the wiring: real mirror, real queue,
-        // real wait.)
-        let mut fixtures = Vec::new();
-        for i in 0..30 {
-            let (_temp, core, ws) = setup();
-            let bytes = b"Queued fault root ahead.";
-            let sha = content::hash(bytes);
-            let opened = begin(
-                &core,
-                &ws,
-                &format!("pending-ahead-{i}.txt"),
-                bytes,
-                &sha,
-                "private",
-            );
-            let id = opened["id"].as_str().unwrap().to_string();
-            let root = root_of(&core);
-            crate::jobs::arm_claim_faults(&root, 1_000_000, crate::ErrorCode::StorageUnavailable);
+        // The admission gate holds the watched root pending
+        // while its observer starts, so the
+        // pending-before-admission observation is
+        // synchronized, not timed. The previous version
+        // queued thirty roots ahead and assumed setup takes
+        // milliseconds; on Windows the worker had already
+        // admitted the root twice before the wait's first
+        // poll (WR-REC-WITNESS-01). The handshake: gate,
+        // wake, start the observer, confirm it recorded
+        // pending with zero admissions, release, verify
+        // completion and exact counts. The witness assertion
+        // is unchanged in form.
+        let (_temp, core, ws) = setup();
+        let bytes = b"Gated pending root.";
+        let sha = content::hash(bytes);
+        let opened = begin(&core, &ws, "gated.txt", bytes, &sha, "private");
+        let id = opened["id"].as_str().unwrap().to_string();
+        let root = root_of(&core);
+        crate::jobs::arm_claim_faults(&root, 1_000_000, crate::ErrorCode::StorageUnavailable);
+        std::thread::scope(|scope| {
+            let gate = AdmissionGate::arm(&core, &root);
             part(&core, &ws, &id, 0, bytes, true).unwrap();
-            fixtures.push((_temp, core, ws, id, root));
-        }
-        let (_temp, core, ws, id, root) = fixtures.last().unwrap();
-        wait_for_parked(core, ws, id, root);
-        assert_eq!(crate::jobs::claim_admissions(root), 3);
-        assert_eq!(crate::jobs::claim_attempts(root), 3);
-        assert_eq!(crate::jobs::remaining_claim_faults(root), 1_000_000 - 3);
-        let history = parking_wait_history(root);
+            // The wake registers the root synchronously and
+            // the gate holds admission: pending with zero
+            // admissions before the observer starts.
+            assert!(crate::jobs::worker_test_state(&root).pending);
+            assert_eq!(crate::jobs::claim_admissions(&root), 0);
+            let observer = scope.spawn(|| wait_for_parked(&core, &ws, &id, &root));
+            wait_for_parking_witness(&root);
+            drop(gate);
+            observer.join().expect("parking wait completed");
+        });
+        assert_eq!(crate::jobs::claim_admissions(&root), 3);
+        assert_eq!(crate::jobs::claim_attempts(&root), 3);
+        assert_eq!(crate::jobs::remaining_claim_faults(&root), 1_000_000 - 3);
+        let history = parking_wait_history(&root);
         assert!(
             history
                 .iter()
                 .any(|(_, pending, _, admitted, _)| *pending && *admitted == 0),
             "wait observed pending before first admission: {history:?}"
         );
-        for (_, _, _, _, root) in &fixtures {
-            assert!(crate::jobs::claim_parked(root));
-            crate::jobs::clear_claim_faults(root);
-            crate::jobs::clear_claim_parked(root);
-        }
+        assert!(crate::jobs::claim_parked(&root));
+        crate::jobs::clear_claim_faults(&root);
+        crate::jobs::clear_claim_parked(&root);
     }
 
     #[test]
