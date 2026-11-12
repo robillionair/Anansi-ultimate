@@ -805,10 +805,14 @@ mod tests {
     /// Wait until the worker parks this root after a claim
     /// failure. Bounded and condition-based: it polls the parked
     /// signal the worker records, never a timing assumption.
-    /// Panics with the job's state on timeout.
+    /// Panics with the job's state on timeout, plus whether the
+    /// root was admitted and attempted while waiting — the
+    /// distinction between queueing delay and a parking defect.
     fn wait_for_parked(core: &Core, ws: &str, id: &str, root: &std::path::Path) {
         let start = std::time::Instant::now();
         let bound = std::time::Duration::from_secs(10);
+        let admitted_at_entry = crate::jobs::claim_admissions(root);
+        let attempted_at_entry = crate::jobs::claim_attempts(root);
         loop {
             if crate::jobs::claim_parked(root) {
                 return;
@@ -816,8 +820,15 @@ mod tests {
             if start.elapsed() >= bound {
                 let job = read_job(core, ws, id);
                 panic!(
-                    "root {root:?} was never parked within {bound:?}; job state {:?} v{} log={:?}",
-                    job.state, job.version, job.log
+                    "root {root:?} was never parked within {bound:?}; job state {:?} v{} log={:?}; admitted {} -> {}, attempted {} -> {}, remaining faults {}",
+                    job.state,
+                    job.version,
+                    job.log,
+                    admitted_at_entry,
+                    crate::jobs::claim_admissions(root),
+                    attempted_at_entry,
+                    crate::jobs::claim_attempts(root),
+                    crate::jobs::remaining_claim_faults(root),
                 );
             }
             std::thread::sleep(std::time::Duration::from_millis(25));

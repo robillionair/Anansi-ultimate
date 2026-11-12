@@ -821,6 +821,58 @@ static CLAIM_FAULTS: std::sync::Mutex<Vec<(std::path::PathBuf, u32, ErrorCode)>>
 /// would make flaky.
 #[cfg(test)]
 static CLAIM_PARKED: std::sync::Mutex<Vec<std::path::PathBuf>> = std::sync::Mutex::new(Vec::new());
+/// Per-root worker admission counts (test builds only): how
+/// many times the worker loop took this root from the queue.
+/// Lets parking waits distinguish "never admitted" (queueing
+/// delay behind other fixtures) from "admitted and attempted
+/// but never parked" (a backend defect).
+#[cfg(test)]
+static CLAIM_ADMISSIONS: std::sync::Mutex<Vec<(std::path::PathBuf, u32)>> =
+    std::sync::Mutex::new(Vec::new());
+/// Per-root claim attempt counts (test builds only): how many
+/// times the worker loop called `claim_for_worker` for this
+/// root, whether the claim hit the fault table or the store.
+#[cfg(test)]
+static CLAIM_ATTEMPTS: std::sync::Mutex<Vec<(std::path::PathBuf, u32)>> =
+    std::sync::Mutex::new(Vec::new());
+
+#[cfg(test)]
+fn bump_counter(table: &std::sync::Mutex<Vec<(std::path::PathBuf, u32)>>, root: &std::path::Path) {
+    let mut table = table.lock().unwrap_or_else(|error| error.into_inner());
+    if let Some(entry) = table.iter_mut().find(|(entry, _)| entry.as_path() == root) {
+        entry.1 += 1;
+    } else {
+        table.push((root.to_path_buf(), 1));
+    }
+}
+
+#[cfg(test)]
+fn read_counter(
+    table: &std::sync::Mutex<Vec<(std::path::PathBuf, u32)>>,
+    root: &std::path::Path,
+) -> u32 {
+    table
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .iter()
+        .find(|(entry, _)| entry.as_path() == root)
+        .map(|(_, count)| *count)
+        .unwrap_or(0)
+}
+
+/// How many times the worker loop admitted this root (test
+/// builds only).
+#[cfg(test)]
+pub(crate) fn claim_admissions(root: &std::path::Path) -> u32 {
+    read_counter(&CLAIM_ADMISSIONS, root)
+}
+
+/// How many times the worker loop attempted a claim for this
+/// root (test builds only).
+#[cfg(test)]
+pub(crate) fn claim_attempts(root: &std::path::Path) -> u32 {
+    read_counter(&CLAIM_ATTEMPTS, root)
+}
 
 /// Arm forced claim failures for one storage root (test builds
 /// only). Each worker claim for that root consumes one failure
@@ -920,9 +972,11 @@ fn park_root(storage: &Storage, reason: JobRecoveryReason, attempts: u32) {
 /// force failures for one storage root, so recovery behavior is
 /// exercised deterministically without filesystem races. In
 /// shipped builds this delegates directly to `claim_export`.
+/// The attempt counter records every call in test builds.
 fn claim_for_worker(storage: &Storage) -> Result<Option<JobLease>, CommandError> {
     #[cfg(test)]
     {
+        bump_counter(&CLAIM_ATTEMPTS, &storage.root);
         let mut faults = CLAIM_FAULTS
             .lock()
             .unwrap_or_else(|error| error.into_inner());
@@ -968,6 +1022,8 @@ impl crate::Core {
                         None => return,
                     }
                 };
+                #[cfg(test)]
+                bump_counter(&CLAIM_ADMISSIONS, &pending.storage.root);
                 if pending.claim_failures > 0 {
                     std::thread::sleep(CLAIM_RETRY_DELAY);
                 }
