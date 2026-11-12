@@ -803,36 +803,100 @@ mod tests {
     }
 
     /// Wait until the worker parks this root after a claim
-    /// failure. Bounded and condition-based: it polls the parked
-    /// signal the worker records, never a timing assumption.
-    /// Panics with the job's state on timeout, plus whether the
-    /// root was admitted and attempted while waiting — the
-    /// distinction between queueing delay and a parking defect.
+    /// failure. The wait synchronizes on the admission ->
+    /// attempt -> parking progression instead of a blind total
+    /// bound: the single process-global worker serves every
+    /// fixture FIFO, and a fault root's 3 attempts are spread
+    /// across 2 requeue cycles behind whatever else is
+    /// pending, so total time-to-park grows with queue depth
+    /// (measured: ~187 ms per contending fault root on Linux).
+    /// A 10 s STALL bound fails a root that makes no admission
+    /// or attempt progress (the same 10 s value as before, now
+    /// applied to stalls instead of total time), and a 60 s
+    /// overall safety bound (mirroring `wait_for_terminal`)
+    /// keeps the suite from hanging. On expiry the panic
+    /// reports whether the root was admitted and attempted,
+    /// which distinguishes queueing delay from a parking
+    /// defect. The wait observes only — it never re-wakes.
     fn wait_for_parked(core: &Core, ws: &str, id: &str, root: &std::path::Path) {
         let start = std::time::Instant::now();
-        let bound = std::time::Duration::from_secs(10);
+        let stall_bound = std::time::Duration::from_secs(10);
+        let overall_bound = std::time::Duration::from_secs(60);
         let admitted_at_entry = crate::jobs::claim_admissions(root);
         let attempted_at_entry = crate::jobs::claim_attempts(root);
+        let mut last_progress = start;
+        let mut last_seen = (admitted_at_entry, attempted_at_entry);
+        let mut history = vec![(0u128, admitted_at_entry, attempted_at_entry)];
         loop {
             if crate::jobs::claim_parked(root) {
                 return;
             }
-            if start.elapsed() >= bound {
-                let job = read_job(core, ws, id);
-                panic!(
-                    "root {root:?} was never parked within {bound:?}; job state {:?} v{} log={:?}; admitted {} -> {}, attempted {} -> {}, remaining faults {}",
-                    job.state,
-                    job.version,
-                    job.log,
+            let admitted = crate::jobs::claim_admissions(root);
+            let attempted = crate::jobs::claim_attempts(root);
+            if (admitted, attempted) != last_seen {
+                last_seen = (admitted, attempted);
+                last_progress = std::time::Instant::now();
+                history.push((start.elapsed().as_millis(), admitted, attempted));
+            }
+            if last_progress.elapsed() >= stall_bound {
+                parked_timeout(
+                    core,
+                    ws,
+                    id,
+                    root,
+                    "no admission/attempt progress within the 10s stall bound",
+                    start,
                     admitted_at_entry,
-                    crate::jobs::claim_admissions(root),
                     attempted_at_entry,
-                    crate::jobs::claim_attempts(root),
-                    crate::jobs::remaining_claim_faults(root),
+                    &history,
+                );
+            }
+            if start.elapsed() >= overall_bound {
+                parked_timeout(
+                    core,
+                    ws,
+                    id,
+                    root,
+                    "the 60s overall safety bound",
+                    start,
+                    admitted_at_entry,
+                    attempted_at_entry,
+                    &history,
                 );
             }
             std::thread::sleep(std::time::Duration::from_millis(25));
         }
+    }
+
+    /// Panic with the full parking-wait diagnostic: the bound
+    /// that expired, the job's state, whether the root was
+    /// admitted and attempted while waiting, and the progress
+    /// history.
+    #[allow(clippy::too_many_arguments)]
+    fn parked_timeout(
+        core: &Core,
+        ws: &str,
+        id: &str,
+        root: &std::path::Path,
+        kind: &str,
+        start: std::time::Instant,
+        admitted_at_entry: u32,
+        attempted_at_entry: u32,
+        history: &[(u128, u32, u32)],
+    ) -> ! {
+        let job = read_job(core, ws, id);
+        panic!(
+            "root {root:?} was never parked: {kind} after {:?}; job state {:?} v{} log={:?}; admitted {} -> {}, attempted {} -> {}, remaining faults {}; progress history (elapsed_ms, admitted, attempted): {history:?}",
+            start.elapsed(),
+            job.state,
+            job.version,
+            job.log,
+            admitted_at_entry,
+            crate::jobs::claim_admissions(root),
+            attempted_at_entry,
+            crate::jobs::claim_attempts(root),
+            crate::jobs::remaining_claim_faults(root),
+        );
     }
 
     fn create_project(core: &Core, ws: &str) -> String {
@@ -1995,6 +2059,67 @@ mod tests {
             wait_for_terminal(&core, &ws, &id2).state,
             crate::jobs::JobState::Completed
         );
+    }
+
+    #[test]
+    fn parking_completes_despite_queued_fault_roots_ahead() {
+        // Twelve fault roots queue ahead of the observed root.
+        // Each root's 3 attempts cycle through the shared FIFO
+        // worker, so the last root parks only after every root
+        // ahead has cycled — the wait must track admission /
+        // attempt progress across requeue cycles instead of
+        // expiring on total time. The assertions are on the
+        // mechanism (exact admissions, attempts, and fault
+        // consumption), never on wall-clock time.
+        let mut fixtures = Vec::new();
+        for i in 0..12 {
+            let (_temp, core, ws) = setup();
+            let bytes = b"Queued fault root.";
+            let sha = content::hash(bytes);
+            let opened = begin(
+                &core,
+                &ws,
+                &format!("queued-{i}.txt"),
+                bytes,
+                &sha,
+                "private",
+            );
+            let id = opened["id"].as_str().unwrap().to_string();
+            let root = root_of(&core);
+            crate::jobs::arm_claim_faults(&root, 1_000_000, crate::ErrorCode::StorageUnavailable);
+            part(&core, &ws, &id, 0, bytes, true).unwrap();
+            fixtures.push((_temp, core, ws, id, root));
+        }
+        let (_temp, core, ws, id, root) = fixtures.last().unwrap();
+        wait_for_parked(core, ws, id, root);
+        assert_eq!(crate::jobs::claim_admissions(root), 3);
+        assert_eq!(crate::jobs::claim_attempts(root), 3);
+        assert_eq!(crate::jobs::remaining_claim_faults(root), 1_000_000 - 3);
+        for (_, _, _, _, root) in &fixtures {
+            assert!(crate::jobs::claim_parked(root));
+            crate::jobs::clear_claim_faults(root);
+            crate::jobs::clear_claim_parked(root);
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "no admission/attempt progress within the 10s stall bound")]
+    fn parking_wait_fails_fast_when_root_is_never_admitted() {
+        // The root is never queued: setup uses with_storage_root
+        // (no startup wake) and ingest-begin never wakes — only
+        // a finished part does. The wait must fail on the 10 s
+        // stall bound with zero admissions and zero attempts,
+        // not hang until the overall safety bound. This is the
+        // bounded-failure-detection half of the progress-aware
+        // wait: a genuinely stuck root still fails fast.
+        let (_temp, core, ws) = setup();
+        let bytes = b"Never woken.";
+        let sha = content::hash(bytes);
+        let opened = begin(&core, &ws, "stuck.txt", bytes, &sha, "private");
+        let id = opened["id"].as_str().unwrap().to_string();
+        let root = root_of(&core);
+        crate::jobs::arm_claim_faults(&root, 1_000_000, crate::ErrorCode::StorageUnavailable);
+        wait_for_parked(&core, &ws, &id, &root);
     }
 
     #[test]
