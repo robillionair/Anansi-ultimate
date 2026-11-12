@@ -98,4 +98,3 @@ test verified_does_not_survive_new_reference_rotation ... ok
 test verified_does_not_survive_rotation_under_same_reference ... ok
 
 test result: ok. 38 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 97.25s
-

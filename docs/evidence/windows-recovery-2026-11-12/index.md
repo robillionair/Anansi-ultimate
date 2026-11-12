@@ -3,7 +3,7 @@
 Application code: `8df1fcf3d69f6d1da532bb890234a7db0352efff`.
 [Review and exact limitations](../../reviews/windows-claim-recovery-cr01b-review.md).
 
-These are synthetic Windows test logs, published as text files. Line endings are normalized to LF for publication; the manifest records SHA-256 values of those published UTF-8 text files. Test content and outcomes are unchanged.
+These are synthetic Windows test logs, published as text files. Line endings and trailing output whitespace are normalized for publication; the manifest records SHA-256 values of those published UTF-8 text files. Test messages and outcomes are unchanged.
 
 - [Initial broad run: four core failures](claim-recovery-final-windows-lib.txt)
 - [Quieter default-concurrency rerun: two core failures](claim-recovery-final-windows-lib-quiet-rerun.txt)
@@ -19,4 +19,3 @@ These are synthetic Windows test logs, published as text files. Line endings are
 - [Ask: 1/1](claim-recovery-final-windows-browser-ask_anansi.txt)
 
 Both broad failures and isolated passes are retained. There is no clean 403-test Windows library pass, real provider-quality benchmark, or native credential-store certification in this evidence.
-

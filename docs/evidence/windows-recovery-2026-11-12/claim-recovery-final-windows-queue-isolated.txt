@@ -21,4 +21,3 @@ test jobs::tests::worker_queue_serves_storages_in_wake_order ... ok
 test jobs::tests::worker_queue_stale_park_suppressed_by_deliberate_fresh_entry ... ok
 
 test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 316 filtered out; finished in 0.00s
-

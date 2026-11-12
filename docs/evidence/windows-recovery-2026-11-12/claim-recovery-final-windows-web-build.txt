@@ -8,7 +8,7 @@ dist/assets/anansi-entity-DMjkTALe.png  2,583.29 kB
 dist/assets/index-BaytqDFH.css             42.32 kB │ gzip:  10.23 kB
 dist/assets/index-DapUXksp.js           4,098.11 kB │ gzip: 652.60 kB
 
-[plugin builtin:vite-reporter] 
+[plugin builtin:vite-reporter]
 (!) Some chunks are larger than 500 kB after minification. Consider:
 - Using dynamic import() to code-split the application
 - Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting

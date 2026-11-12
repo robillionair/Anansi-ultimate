@@ -4,4 +4,3 @@ test jobs::tests::reviewer_worker_queue_passive_wake_preserves_inflight_budget .
 test ingestion::tests::reviewer_status_poll_does_not_rearm_exhausted_claim_budget ... ok
 
 test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 333 filtered out; finished in 9.14s
-
