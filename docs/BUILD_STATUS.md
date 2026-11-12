@@ -2087,3 +2087,7 @@ Source `8931d34b06faf16806a089a587ebd58e6b26f9a5`: incoming ZIP and all 16 manif
 ## 2026-11-12 — v1 installer qualification tooling Windows checks
 
 Source `7c3af5eb5575aca1388e3c924dbfe6fff2a52ffc`: package/sidecar and six MANIFEST hashes verified; product diff empty. Windows Node checks **61/61**, serial release-tooling checks **54/54**, fixture generate/verify PASS, PowerShell syntax clean. Release build HELD: final preflight exit 1, free RAM **3.07 GiB < 4 GiB**. No installer/native acceptance or promotion claimed. Review: `docs/reviews/windows-v1-installer-qualification-review.md`. No source repair requested; rerun preflight after memory is available, then proceed with isolated build/native checklist.
+
+## 2026-11-13 — isolated v1 Windows installer built
+
+Clean source `6f216e3224e2c855236aac5492f69b467cf8c5d5`: preflight PASS (7.13 GiB free RAM), web/API/desktop/NSIS build PASS, offline artifact verification 7/7 and packaging hashes cross-checked. Unsigned installer SHA-256 `2b0c1c7980b7cf8c62b1d9b621723276ef943208d988ea579a62494da5408d74`. Native smoke exits 0 with restart/backup/memory checks, but NQ-01 records an artifact-ID assertion gap (saved artifact independently confirmed read-only). Full installer/native approval remains open; no installation/promotion. Review: `docs/reviews/windows-v1-pilot-release-build.md`.
