@@ -673,6 +673,11 @@ impl WorkerQueue {
     fn wake(&mut self, storage: Storage, kind: WakeKind) -> bool {
         match kind {
             WakeKind::Deliberate => {
+                #[cfg(test)]
+                record_worker_state(&storage.root, |state| {
+                    state.pending = true;
+                    state.ever_registered = true;
+                });
                 self.clear_exhausted(&storage.root);
                 if let Some(pending) = self
                     .pending
@@ -701,6 +706,11 @@ impl WorkerQueue {
                     .iter()
                     .any(|pending| pending.storage.root == storage.root)
                 {
+                    #[cfg(test)]
+                    record_worker_state(&storage.root, |state| {
+                        state.pending = true;
+                        state.ever_registered = true;
+                    });
                     self.pending.push_back(PendingRoot {
                         storage,
                         claim_failures: 0,
@@ -765,6 +775,11 @@ impl WorkerQueue {
     fn take_next(&mut self) -> Option<PendingRoot> {
         match self.pending.pop_front() {
             Some(pending) => {
+                #[cfg(test)]
+                record_worker_state(&pending.storage.root, |state| {
+                    state.pending = false;
+                    state.active = true;
+                });
                 if !self.active.iter().any(|root| *root == pending.storage.root) {
                     self.active.push(pending.storage.root.clone());
                 }
@@ -781,6 +796,10 @@ impl WorkerQueue {
     /// (drained: no more jobs to claim). Clear its active mark
     /// so later wakes see it as idle again.
     fn finish(&mut self, root: &std::path::Path) {
+        #[cfg(test)]
+        record_worker_state(root, |state| {
+            state.active = false;
+        });
         self.active.retain(|entry| entry.as_path() != root);
     }
 
@@ -791,6 +810,10 @@ impl WorkerQueue {
     /// — the pending entry, fresh budget, wins and the stale
     /// in-flight count is discarded by design).
     fn requeue(&mut self, pending: PendingRoot) {
+        #[cfg(test)]
+        record_worker_state(&pending.storage.root, |state| {
+            state.pending = true;
+        });
         self.finish(&pending.storage.root.clone());
         if !self
             .pending
@@ -872,6 +895,60 @@ pub(crate) fn claim_admissions(root: &std::path::Path) -> u32 {
 #[cfg(test)]
 pub(crate) fn claim_attempts(root: &std::path::Path) -> u32 {
     read_counter(&CLAIM_ATTEMPTS, root)
+}
+
+/// Per-root worker queue state observed by parking waits (test
+/// builds only): whether the root currently has a pending
+/// queue entry, whether the worker currently holds it, and
+/// whether it was ever registered. Lets the wait distinguish
+/// registered pending work (legitimate queueing behind other
+/// fixtures) from a root that was never scheduled and from an
+/// admitted worker that stops progressing. Updated by the
+/// queue methods themselves, so the mirror tracks exactly the
+/// entries the worker serves — including a deliberate wake of
+/// an active root (pending AND active at once) and requeues
+/// (active back to pending). The mirror mutex is only ever
+/// taken while holding the queue mutex or alone, and never
+/// takes the queue mutex, so no lock order can invert.
+#[cfg(test)]
+#[derive(Clone, Copy, Default, PartialEq, Eq, Debug)]
+pub(crate) struct WorkerTestState {
+    pub pending: bool,
+    pub active: bool,
+    pub ever_registered: bool,
+}
+
+/// Per-root worker queue states (test builds only).
+#[cfg(test)]
+static WORKER_STATE: std::sync::Mutex<Vec<(std::path::PathBuf, WorkerTestState)>> =
+    std::sync::Mutex::new(Vec::new());
+
+#[cfg(test)]
+fn record_worker_state(root: &std::path::Path, update: impl FnOnce(&mut WorkerTestState)) {
+    let mut table = WORKER_STATE
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    if let Some(entry) = table.iter_mut().find(|(entry, _)| entry.as_path() == root) {
+        update(&mut entry.1);
+    } else {
+        let mut state = WorkerTestState::default();
+        update(&mut state);
+        table.push((root.to_path_buf(), state));
+    }
+}
+
+/// The worker queue state observed for one root (test builds
+/// only). A root no queue method has ever recorded reads as
+/// never registered.
+#[cfg(test)]
+pub(crate) fn worker_test_state(root: &std::path::Path) -> WorkerTestState {
+    WORKER_STATE
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .iter()
+        .find(|(entry, _)| entry.as_path() == root)
+        .map(|(_, state)| *state)
+        .unwrap_or_default()
 }
 
 /// Arm forced claim failures for one storage root (test builds
@@ -1218,6 +1295,92 @@ mod tests {
         assert_eq!(queue.take_next().unwrap().storage.root, PathBuf::from("c"));
         assert!(queue.take_next().is_none());
         assert!(!queue.running);
+    }
+
+    // Mirror tests use root names no other test touches: the
+    // mirror is process-global and keyed by root, and the
+    // queue tests above share the fake roots "a"/"b"/"c"
+    // across parallel tests. Unique keys keep these
+    // assertions deterministic.
+    #[test]
+    fn worker_test_state_tracks_wake_take_requeue_finish_cycle() {
+        let mut queue = WorkerQueue::default();
+        let root = PathBuf::from("mirror-cycle");
+        assert_eq!(worker_test_state(&root), WorkerTestState::default());
+        queue.wake(storage("mirror-cycle"), WakeKind::Deliberate);
+        assert_eq!(
+            worker_test_state(&root),
+            WorkerTestState {
+                pending: true,
+                active: false,
+                ever_registered: true,
+            }
+        );
+        let pending = queue.take_next().unwrap();
+        assert_eq!(
+            worker_test_state(&root),
+            WorkerTestState {
+                pending: false,
+                active: true,
+                ever_registered: true,
+            }
+        );
+        queue.requeue(pending);
+        assert_eq!(
+            worker_test_state(&root),
+            WorkerTestState {
+                pending: true,
+                active: false,
+                ever_registered: true,
+            }
+        );
+        let _ = queue.take_next().unwrap();
+        queue.finish(&root);
+        assert_eq!(
+            worker_test_state(&root),
+            WorkerTestState {
+                pending: false,
+                active: false,
+                ever_registered: true,
+            }
+        );
+    }
+
+    #[test]
+    fn worker_test_state_deliberate_wake_of_active_root_is_pending_and_active() {
+        let mut queue = WorkerQueue::default();
+        let root = PathBuf::from("mirror-active-fresh");
+        queue.wake(storage("mirror-active-fresh"), WakeKind::Deliberate);
+        let _ = queue.take_next().unwrap();
+        queue.wake(storage("mirror-active-fresh"), WakeKind::Deliberate);
+        assert_eq!(
+            worker_test_state(&root),
+            WorkerTestState {
+                pending: true,
+                active: true,
+                ever_registered: true,
+            }
+        );
+    }
+
+    #[test]
+    fn worker_test_state_passive_wake_of_exhausted_root_records_nothing() {
+        let mut queue = WorkerQueue::default();
+        let root = PathBuf::from("mirror-exhausted");
+        queue.mark_exhausted(root.clone(), JobRecoveryReason::StorageUnavailable, 3);
+        assert!(!queue.wake(storage("mirror-exhausted"), WakeKind::Passive));
+        assert_eq!(worker_test_state(&root), WorkerTestState::default());
+        // A passive wake of an idle root does register it.
+        let idle = PathBuf::from("mirror-passive-idle");
+        assert!(queue.wake(storage("mirror-passive-idle"), WakeKind::Passive));
+        assert_eq!(
+            worker_test_state(&idle),
+            WorkerTestState {
+                pending: true,
+                active: false,
+                ever_registered: true,
+            }
+        );
     }
 
     #[test]
