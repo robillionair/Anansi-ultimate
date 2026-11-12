@@ -9,6 +9,7 @@ import { chromium } from '@playwright/test';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import { resolveCandidateLocations, assertQualificationHostFree } from './windows-release/candidate-locations.mjs';
+import { assertArtifactDetails, assertReadiness } from './windows-release/artifact-acceptance.mjs';
 
 if (process.platform !== 'win32') throw Error('Native candidate acceptance requires Windows.');
 const { binaryPath, storageRoot, udfPath, port, binarySha256, binaryBytes } = resolveCandidateLocations(process.env);
@@ -101,7 +102,11 @@ async function invoke(command, args) {
 try {
   // Step 1: Launch Candidate & Verify Capability Boundary
   await startCandidate();
-  console.log('[1/7] Startup & Readiness verified.');
+  // NQ-01 audit: the pass line below used to be unconditional. Readiness
+  // is now actually invoked and asserted before it prints.
+  const readiness = await invoke('get_readiness', { request: { contractVersion: 1 } });
+  assertReadiness(readiness, 'readiness');
+  console.log('[1/7] Startup & Readiness verified.', readiness.applicationName, readiness.applicationVersion, 'core', readiness.coreVersion, 'os', readiness.operatingSystem);
 
   const denied = await page.evaluate(async () => {
     try {
@@ -166,6 +171,8 @@ try {
   const projId = projRes.memory.id;
   console.log('[5/7] Created project record ID:', projId);
 
+  const artifactTitle = 'Synthesized Idea Artifact';
+  const artifactBody = 'Verified idea body content\nTags: synthetic, test';
   const artRes = await invoke('artifact_command', {
     command: 'register',
     request: {
@@ -173,12 +180,52 @@ try {
       workspaceId: wsId,
       projectId: projId,
       type: 'idea',
-      title: 'Synthesized Idea Artifact',
-      body: 'Verified idea body content\nTags: synthetic, test',
+      title: artifactTitle,
+      body: artifactBody,
       privacy: 'standard'
     }
   });
-  console.log('[5/7] Registered artifact ID:', artRes.artifact.id);
+  // NQ-01: the register response carries the identifier as
+  // `artifact.artifactId` (ArtifactRecord); the old code read
+  // `artifact.id`, printed `undefined`, and asserted nothing.
+  const expectedArtifact = {
+    projectId: projId,
+    type: 'idea',
+    version: 1,
+    title: artifactTitle,
+    body: artifactBody
+  };
+  const artifactId = assertArtifactDetails(artRes, expectedArtifact, 'artifact registration');
+  console.log('[5/7] Registered artifact ID:', artifactId);
+
+  // Read the exact artifact back through native IPC and assert identity
+  // and content match the registration.
+  const readback = await invoke('artifact_command', {
+    command: 'read',
+    request: { contractVersion: 1, workspaceId: wsId, artifactId, version: 1 }
+  });
+  assertArtifactDetails(readback, { artifactId, ...expectedArtifact }, 'artifact readback');
+  console.log('[5/7] Artifact readback verified via native IPC.');
+
+  // Workspace scoping: the same artifact id must not be readable from a
+  // different workspace. (ArtifactRecord carries no workspace field, so
+  // the scoped read plus this negative probe are the workspace assertion.)
+  const ws2Res = await invoke('workspace_command', {
+    command: 'create',
+    request: { contractVersion: 1, name: wsName + ' scope probe' }
+  });
+  const ws2Id = ws2Res.workspace.id;
+  let scopeProbeFailed = false;
+  try {
+    await invoke('artifact_command', {
+      command: 'read',
+      request: { contractVersion: 1, workspaceId: ws2Id, artifactId, version: 1 }
+    });
+  } catch {
+    scopeProbeFailed = true;
+  }
+  if (!scopeProbeFailed) throw Error('FAIL: Artifact was readable from a different workspace; workspace scoping violated.');
+  console.log('[5/7] Artifact correctly unreadable from a different workspace.');
 
   // Step 4: Backup Job & Restart Persistence
   const backupRes = await invoke('job_command', {
@@ -214,6 +261,15 @@ try {
     throw Error('FAIL: Memory record did not survive desktop process restart!');
   }
   console.log('[6/7] PASS: Record persisted and survived desktop restart.');
+
+  // NQ-01: reopen the same artifact after the restart and verify its
+  // identity and content persisted.
+  const verifyArtifact = await invoke('artifact_command', {
+    command: 'read',
+    request: { contractVersion: 1, workspaceId: wsId, artifactId, version: 1 }
+  });
+  assertArtifactDetails(verifyArtifact, { artifactId, ...expectedArtifact }, 'artifact after restart');
+  console.log('[6/7] PASS: Artifact persisted and survived desktop restart.');
 
   // Step 5: Screen capture & Clean Exit
   await page.screenshot({ path: 'test-results/native-candidate-verified.png', fullPage: true });

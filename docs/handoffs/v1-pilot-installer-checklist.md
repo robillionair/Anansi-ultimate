@@ -186,6 +186,14 @@ Expected: all 7 checks pass
 create, memory create+search, project+artifact
 register, backup job + restart survival, screenshot
 at `test-results\native-candidate-verified.png`).
+NQ-01 repair: [1/7] now invokes `get_readiness` and
+asserts it; [5/7] asserts the real `artifactId`,
+reads the artifact back through native IPC, and
+probes that it is unreadable from a second
+workspace; [6/7] reopens the same artifact after
+the restart. The [5/7] line must print a 32-hex
+artifact id, never `undefined`. See
+`docs/handoffs/nq01-native-harness-repair.md`.
 Record the printed binary SHA-256 + size and the
 full output. The script refuses missing/relative
 locations, non-empty storage/UDF dirs, owner-data
