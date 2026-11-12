@@ -1209,6 +1209,25 @@ mod tests {
     }
 
     #[test]
+    fn reviewer_worker_queue_passive_wake_preserves_inflight_budget() {
+        let mut queue = WorkerQueue::default();
+        queue.wake(storage("a"), WakeKind::Deliberate);
+        let mut active = queue.take_next().unwrap();
+        active.claim_failures = 2;
+        // Status polling lands while the worker holds this root outside the
+        // pending queue, e.g. while SQLite is checking a busy catalog.
+        assert!(!queue.wake(storage("a"), WakeKind::Passive));
+        queue.requeue(active);
+        let retry = queue.take_next().unwrap();
+        assert_eq!(retry.storage.root, PathBuf::from("a"));
+        assert_eq!(
+            retry.claim_failures, 2,
+            "passive polling discarded the in-flight failure budget",
+        );
+        assert!(queue.take_next().is_none());
+    }
+
+    #[test]
     fn worker_queue_passive_wake_keeps_failure_count() {
         let mut queue = WorkerQueue::default();
         queue.wake(storage("a"), WakeKind::Deliberate);

@@ -2040,3 +2040,7 @@ The live automatic-compaction benchmark remains pending. The current UI does not
 ## 2026-11-12 — claim-export recovery focused Windows review: changes required
 
 Runtime `d287f6767d09cabb4a0ed0d9b088e05291849e13`, based on accepted `3e86af6b4`, has a Windows defect-reproduction probe showing a passive job-list read grants a new exhausted retry budget (six total injected attempts instead of three). Production parking also leaves only the ordinary queued log, with no actionable recovery diagnostic. [Focused review](reviews/windows-claim-export-recovery.md) records CR-01/CR-02 and exact limits. The full 380-test acceptance remains pending; no production code or preview changed. The previous 370-test Windows acceptance retains its recorded scope.
+
+## 2026-11-12 — recovery CR-01/CR-02 follow-up Windows review
+
+Runtime `b5dc7fcb4c589777bb1e65bde28fa484c77687c4` passes the original exhausted-root polling probe unchanged and serializes an actionable recovery diagnostic. A new deterministic Windows probe fails because a passive wake while a root is active inserts a zero-budget entry, and requeue drops the active failure count (0 observed, 2 expected). CR-01b remains changes required. [Focused evidence](reviews/windows-claim-recovery-inflight.md) records the 1-pass/1-fail probe result and 11-pass/1-fail queue run. Full Windows acceptance remains pending; production source and pilot are unchanged.
