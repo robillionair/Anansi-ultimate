@@ -2091,3 +2091,7 @@ Source `7c3af5eb5575aca1388e3c924dbfe6fff2a52ffc`: package/sidecar and six MANIF
 ## 2026-11-13 — isolated v1 Windows installer built
 
 Clean source `6f216e3224e2c855236aac5492f69b467cf8c5d5`: preflight PASS (7.13 GiB free RAM), web/API/desktop/NSIS build PASS, offline artifact verification 7/7 and packaging hashes cross-checked. Unsigned installer SHA-256 `2b0c1c7980b7cf8c62b1d9b621723276ef943208d988ea579a62494da5408d74`. Native smoke exits 0 with restart/backup/memory checks, but NQ-01 records an artifact-ID assertion gap (saved artifact independently confirmed read-only). Full installer/native approval remains open; no installation/promotion. Review: `docs/reviews/windows-v1-pilot-release-build.md`.
+
+## 2026-11-13 — NQ-01 Windows native harness acceptance
+
+Harness `b02499277cf16224a227e96a6733e362385a7a12` against unchanged standalone app built from `6f216e3224e2c855236aac5492f69b467cf8c5d5` (SHA-256 `47e1695d95325f574970331f89d514bb797669dc00021ded50646868901b2a7c`): regressions/docs/hygiene **36/36**, strengthened native smoke **7/7**, including actual readiness, exact artifact native readback, cross-workspace refusal and post-restart artifact persistence. NQ-01 closed in focused Windows scope. No rebuild or installer/manual-native acceptance. Review: `docs/reviews/windows-nq01-native-harness-review.md`.
