@@ -1,16 +1,18 @@
 // Native Candidate Acceptance Suite for ANANSI Ultimate
-// Target Binary: E:/Anansi/previews/native-candidate-7e24859e6/ANANSI-Candidate-7e24859e6.exe
-// Storage Root: E:/Anansi/previews/native-candidate-7e24859e6/data (Isolated synthetic test root)
-
+// Candidate locations are explicit environment variables with no defaults:
+// ANANSI_CANDIDATE_BINARY, ANANSI_CANDIDATE_STORAGE_ROOT,
+// ANANSI_CANDIDATE_WEBVIEW_UDF, plus optional ANANSI_CANDIDATE_CDP_PORT
+// (default 19323) and ANANSI_CANDIDATE_EXPECTED_SHA256. Locations are
+// validated and the host is checked free before anything spawns; see
+// docs/handoffs/v1-pilot-installer-checklist.md for the commands.
 import { chromium } from '@playwright/test';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
-import path from 'node:path';
+import { resolveCandidateLocations, assertQualificationHostFree } from './windows-release/candidate-locations.mjs';
 
-const port = 19323;
-const binaryPath = path.resolve('E:/Anansi/previews/native-candidate-7e24859e6/ANANSI-Candidate-7e24859e6.exe');
-const storageRoot = path.resolve('E:/Anansi/previews/native-candidate-7e24859e6/data');
-const udfPath = path.resolve('E:/Anansi/previews/native-candidate-7e24859e6/webview-udf');
+if (process.platform !== 'win32') throw Error('Native candidate acceptance requires Windows.');
+const { binaryPath, storageRoot, udfPath, port, binarySha256, binaryBytes } = resolveCandidateLocations(process.env);
+await assertQualificationHostFree({ port, env: process.env });
 
 fs.mkdirSync(storageRoot, { recursive: true });
 fs.mkdirSync(udfPath, { recursive: true });
@@ -18,12 +20,16 @@ fs.mkdirSync('test-results', { recursive: true });
 
 console.log('--- Native Candidate Acceptance Starting ---');
 console.log('Candidate Binary:', binaryPath);
+console.log('Candidate SHA-256:', binarySha256, `(${binaryBytes} bytes)`);
 console.log('Storage Root:', storageRoot);
 console.log('WebView2 UDF:', udfPath);
+console.log('CDP Port:', port);
 
 const env = {
   ...process.env,
   ANANSI_STORAGE_ROOT: storageRoot,
+  // Harness-only synthetic credential provider. A pass here never evidences
+  // native credential-store acceptance; that is a manual checklist item.
   ANANSI_VAULT_TEST_PROVIDER: '1',
   WEBVIEW2_USER_DATA_FOLDER: udfPath,
   WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${port}`

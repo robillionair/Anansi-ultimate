@@ -8,7 +8,7 @@ import { assertPortsFree } from './verify-ports.mjs';
 if(process.platform!=='win32')throw Error('Cross-adapter verification requires Windows.');
 await assertPortsFree([1420,19323]);
 const root=fs.mkdtempSync(path.join(process.env.ANANSI_VERIFIER_ROOT||os.tmpdir(),'anansi-cross-adapter-'));
-const env={...process.env,ANANSI_STORAGE_ROOT:path.join(root,'storage')};
+const env={...process.env,ANANSI_STORAGE_ROOT:path.join(root,'storage'),WEBVIEW2_USER_DATA_FOLDER:path.join(root,'webview-udf')};
 if(process.argv.includes('--configured-cdp'))delete env.WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS;
 else env.WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS='--remote-debugging-port=19323';
 const binary=process.argv.slice(2).find(argument=>!argument.startsWith('--'))||'target/debug/anansi-desktop.exe';

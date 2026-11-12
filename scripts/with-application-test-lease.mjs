@@ -1,5 +1,7 @@
 // One shared native/browser test lease outside every checkout. Never steal it
 // based on age/PID; an interrupted lease requires explicit owner reconciliation.
+// The lease identity is exported to the child so lease-aware checks can
+// recognize their own lease instead of refusing it as foreign.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -18,7 +20,7 @@ try{descriptor=fs.openSync(leasePath,'wx',0o600);}catch(error){
 }
 try{
   fs.writeFileSync(descriptor,JSON.stringify(record,null,2));fs.fsyncSync(descriptor);fs.closeSync(descriptor);
-  const child=spawn(process.execPath,[script,...args],{stdio:'inherit',windowsHide:true});
+  const child=spawn(process.execPath,[script,...args],{stdio:'inherit',windowsHide:true,env:{...process.env,ANANSI_APPLICATION_TEST_LEASE:identity}});
   const code=await new Promise((resolve,reject)=>{child.once('error',reject);child.once('exit',exit=>resolve(exit??1));});
   process.exitCode=code;
 }finally{

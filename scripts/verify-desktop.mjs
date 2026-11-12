@@ -4,13 +4,15 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { assertPortsFree } from './verify-ports.mjs';
 if(process.platform!=='win32')throw Error('Windows desktop verification requires Windows.');
 const port=19323;
 const fixture=fs.mkdtempSync(path.join(os.tmpdir(),'anansi-native-readiness-'));
-const env={...process.env,ANANSI_STORAGE_ROOT:path.join(fixture,'storage')};
+const env={...process.env,ANANSI_STORAGE_ROOT:path.join(fixture,'storage'),WEBVIEW2_USER_DATA_FOLDER:path.join(fixture,'webview-udf')};
 if(process.argv.includes('--configured-cdp'))delete env.WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS;
 else env.WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=`--remote-debugging-port=${port}`;
 const binary=process.argv.slice(2).find(argument=>!argument.startsWith('--'))||'target/debug/anansi-desktop.exe';
+await assertPortsFree([port]);
 const child=spawn(path.resolve(binary),[],{env,windowsHide:true,stdio:'ignore'});
 let browser;
 try{
