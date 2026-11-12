@@ -13,8 +13,12 @@ if (-not $SkipUi -and $principal.IsInRole([Security.Principal.WindowsBuiltInRole
 $uninstallKeys=@('HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\ANANSI Ultimate','HKCU:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\ANANSI Ultimate','HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\ANANSI Ultimate','HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\ANANSI Ultimate')
 $productKey='HKCU:\Software\Robillionair\ANANSI Ultimate'
 foreach ($key in ($uninstallKeys+@($productKey))) { if(Test-Path -LiteralPath $key){throw 'An existing ANANSI installation or remembered location is present; no installer was run.'} }
-$installer=Join-Path $repository ("target/release/bundle/nsis/ANANSI Ultimate_"+$config.version+'_x64-setup.exe')
-$manifest=Get-Content -LiteralPath 'target/release/bundle/nsis/packaging.json' -Raw | ConvertFrom-Json
+# Honor an isolated cargo target dir (absolute only) so verification reads
+# the build that was actually produced; otherwise the in-repo target dir.
+if($env:CARGO_TARGET_DIR -and -not [IO.Path]::IsPathRooted($env:CARGO_TARGET_DIR)){throw 'CARGO_TARGET_DIR must be absolute for installer verification.'}
+$bundleDir=if($env:CARGO_TARGET_DIR){Join-Path $env:CARGO_TARGET_DIR 'release\bundle\nsis'}else{Join-Path $repository 'target\release\bundle\nsis'}
+$installer=Join-Path $bundleDir ("ANANSI Ultimate_"+$config.version+'_x64-setup.exe')
+$manifest=Get-Content -LiteralPath (Join-Path $bundleDir 'packaging.json') -Raw | ConvertFrom-Json
 $installerHash=(Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($installerHash -ne $manifest.installerSha256) { throw 'Installer checksum mismatch.' }
 if ($manifest.kind -ne 'unsigned-development-nsis' -or $manifest.installer -ne [IO.Path]::GetFileName($installer)) { throw 'Unexpected installer manifest.' }
@@ -95,7 +99,7 @@ try{
 }finally{
   $env:ANANSI_VERIFIER_ROOT=$previousVerifierRoot
   $record | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath (Join-Path $testRoot 'installer-verification.json')
-  $artifactRecord=Join-Path $repository 'target/release/bundle/nsis/installer-verification.json'
+  $artifactRecord=Join-Path $bundleDir 'installer-verification.json'
   $record | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath $artifactRecord
   Write-Output ('Synthetic installer evidence retained: '+$testRoot)
 }

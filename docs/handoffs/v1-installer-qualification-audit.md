@@ -147,6 +147,27 @@ path. The checklist (AC-Q7) therefore gives exact,
 copy-pasteable commands and names the working
 directory for each step.
 
+### F11 — Checksum and installer scripts ignore CARGO_TARGET_DIR
+
+`installer-checksums.mjs` and `verify-installer.ps1`
+hardcode `target/release/...` paths, so neither
+works when the build is isolated with
+`CARGO_TARGET_DIR` on `E:` (the `build-verify.mjs`
+layout): the checksum manifest cannot be generated
+for the build that was actually produced, and the
+verifier looks for the installer in the wrong tree.
+`build-verify.mjs` itself never runs
+`installer-checksums.mjs`, so its bundle directory
+has no `packaging.json` at all. Fix: both scripts
+honor an absolute `CARGO_TARGET_DIR` (refusing a
+relative one), with identical default behavior when
+it is unset; the checklist runs the checksum step
+explicitly after a `build-verify` build and
+cross-checks the installer hash between
+`packaging.json` and `release-manifest.json`.
+(Found while drafting the checklist commands;
+within AC-Q4/Q5 scope.)
+
 ### F10 — No deterministic fixture set for manual checks
 
 TXT/MD fixtures do not exist under `tests/fixtures/`
