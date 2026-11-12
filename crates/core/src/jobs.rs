@@ -673,6 +673,11 @@ impl WorkerQueue {
     fn wake(&mut self, storage: Storage, kind: WakeKind) -> bool {
         match kind {
             WakeKind::Deliberate => {
+                #[cfg(test)]
+                record_worker_state(&storage.root, |state| {
+                    state.pending = true;
+                    state.ever_registered = true;
+                });
                 self.clear_exhausted(&storage.root);
                 if let Some(pending) = self
                     .pending
@@ -701,6 +706,11 @@ impl WorkerQueue {
                     .iter()
                     .any(|pending| pending.storage.root == storage.root)
                 {
+                    #[cfg(test)]
+                    record_worker_state(&storage.root, |state| {
+                        state.pending = true;
+                        state.ever_registered = true;
+                    });
                     self.pending.push_back(PendingRoot {
                         storage,
                         claim_failures: 0,
@@ -763,8 +773,32 @@ impl WorkerQueue {
     /// caller's lock hold, so a wake-up committed during
     /// shutdown cannot be lost.
     fn take_next(&mut self) -> Option<PendingRoot> {
-        match self.pending.pop_front() {
+        #[cfg(test)]
+        let taken = {
+            // Gated roots stay pending: serve the first
+            // ungated entry, leaving gated entries in place
+            // and in order. Never blocks: a pure scan under
+            // the lock hold. When every entry is gated the
+            // worker goes idle, exactly as for an empty
+            // queue; the gate release re-wakes it.
+            match self
+                .pending
+                .iter()
+                .position(|entry| !admissions_gated(&entry.storage.root))
+            {
+                Some(index) => self.pending.remove(index),
+                None => None,
+            }
+        };
+        #[cfg(not(test))]
+        let taken = self.pending.pop_front();
+        match taken {
             Some(pending) => {
+                #[cfg(test)]
+                record_worker_state(&pending.storage.root, |state| {
+                    state.pending = false;
+                    state.active = true;
+                });
                 if !self.active.iter().any(|root| *root == pending.storage.root) {
                     self.active.push(pending.storage.root.clone());
                 }
@@ -781,6 +815,10 @@ impl WorkerQueue {
     /// (drained: no more jobs to claim). Clear its active mark
     /// so later wakes see it as idle again.
     fn finish(&mut self, root: &std::path::Path) {
+        #[cfg(test)]
+        record_worker_state(root, |state| {
+            state.active = false;
+        });
         self.active.retain(|entry| entry.as_path() != root);
     }
 
@@ -791,6 +829,10 @@ impl WorkerQueue {
     /// — the pending entry, fresh budget, wins and the stale
     /// in-flight count is discarded by design).
     fn requeue(&mut self, pending: PendingRoot) {
+        #[cfg(test)]
+        record_worker_state(&pending.storage.root, |state| {
+            state.pending = true;
+        });
         self.finish(&pending.storage.root.clone());
         if !self
             .pending
@@ -821,6 +863,156 @@ static CLAIM_FAULTS: std::sync::Mutex<Vec<(std::path::PathBuf, u32, ErrorCode)>>
 /// would make flaky.
 #[cfg(test)]
 static CLAIM_PARKED: std::sync::Mutex<Vec<std::path::PathBuf>> = std::sync::Mutex::new(Vec::new());
+/// Per-root worker admission counts (test builds only): how
+/// many times the worker loop took this root from the queue.
+/// Lets parking waits distinguish "never admitted" (queueing
+/// delay behind other fixtures) from "admitted and attempted
+/// but never parked" (a backend defect).
+#[cfg(test)]
+static CLAIM_ADMISSIONS: std::sync::Mutex<Vec<(std::path::PathBuf, u32)>> =
+    std::sync::Mutex::new(Vec::new());
+/// Per-root claim attempt counts (test builds only): how many
+/// times the worker loop called `claim_for_worker` for this
+/// root, whether the claim hit the fault table or the store.
+#[cfg(test)]
+static CLAIM_ATTEMPTS: std::sync::Mutex<Vec<(std::path::PathBuf, u32)>> =
+    std::sync::Mutex::new(Vec::new());
+
+#[cfg(test)]
+fn bump_counter(table: &std::sync::Mutex<Vec<(std::path::PathBuf, u32)>>, root: &std::path::Path) {
+    let mut table = table.lock().unwrap_or_else(|error| error.into_inner());
+    if let Some(entry) = table.iter_mut().find(|(entry, _)| entry.as_path() == root) {
+        entry.1 += 1;
+    } else {
+        table.push((root.to_path_buf(), 1));
+    }
+}
+
+#[cfg(test)]
+fn read_counter(
+    table: &std::sync::Mutex<Vec<(std::path::PathBuf, u32)>>,
+    root: &std::path::Path,
+) -> u32 {
+    table
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .iter()
+        .find(|(entry, _)| entry.as_path() == root)
+        .map(|(_, count)| *count)
+        .unwrap_or(0)
+}
+
+/// How many times the worker loop admitted this root (test
+/// builds only).
+#[cfg(test)]
+pub(crate) fn claim_admissions(root: &std::path::Path) -> u32 {
+    read_counter(&CLAIM_ADMISSIONS, root)
+}
+
+/// How many times the worker loop attempted a claim for this
+/// root (test builds only).
+#[cfg(test)]
+pub(crate) fn claim_attempts(root: &std::path::Path) -> u32 {
+    read_counter(&CLAIM_ATTEMPTS, root)
+}
+
+/// Per-root worker queue state observed by parking waits (test
+/// builds only): whether the root currently has a pending
+/// queue entry, whether the worker currently holds it, and
+/// whether it was ever registered. Lets the wait distinguish
+/// registered pending work (legitimate queueing behind other
+/// fixtures) from a root that was never scheduled and from an
+/// admitted worker that stops progressing. Updated by the
+/// queue methods themselves, so the mirror tracks exactly the
+/// entries the worker serves — including a deliberate wake of
+/// an active root (pending AND active at once) and requeues
+/// (active back to pending). The mirror mutex is only ever
+/// taken while holding the queue mutex or alone, and never
+/// takes the queue mutex, so no lock order can invert.
+#[cfg(test)]
+#[derive(Clone, Copy, Default, PartialEq, Eq, Debug)]
+pub(crate) struct WorkerTestState {
+    pub pending: bool,
+    pub active: bool,
+    pub ever_registered: bool,
+}
+
+/// Per-root worker queue states (test builds only).
+#[cfg(test)]
+static WORKER_STATE: std::sync::Mutex<Vec<(std::path::PathBuf, WorkerTestState)>> =
+    std::sync::Mutex::new(Vec::new());
+
+#[cfg(test)]
+fn record_worker_state(root: &std::path::Path, update: impl FnOnce(&mut WorkerTestState)) {
+    let mut table = WORKER_STATE
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    if let Some(entry) = table.iter_mut().find(|(entry, _)| entry.as_path() == root) {
+        update(&mut entry.1);
+    } else {
+        let mut state = WorkerTestState::default();
+        update(&mut state);
+        table.push((root.to_path_buf(), state));
+    }
+}
+
+/// The worker queue state observed for one root (test builds
+/// only). A root no queue method has ever recorded reads as
+/// never registered.
+#[cfg(test)]
+pub(crate) fn worker_test_state(root: &std::path::Path) -> WorkerTestState {
+    WORKER_STATE
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .iter()
+        .find(|(entry, _)| entry.as_path() == root)
+        .map(|(_, state)| *state)
+        .unwrap_or_default()
+}
+
+/// Roots whose admission is held by a test-only gate (test
+/// builds only). A gated root keeps its pending queue entry
+/// but is never taken by the worker, so a test can start an
+/// observer against a root that is provably pending with
+/// zero admissions, then release the gate and watch it
+/// complete. Never consulted in shipped builds.
+#[cfg(test)]
+static ADMISSION_GATES: std::sync::Mutex<Vec<std::path::PathBuf>> =
+    std::sync::Mutex::new(Vec::new());
+
+/// Hold a root pending: the worker will not admit it until
+/// released (test builds only). Idempotent.
+#[cfg(test)]
+pub(crate) fn gate_admissions(root: &std::path::Path) {
+    let mut gates = ADMISSION_GATES
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    if !gates.iter().any(|entry| entry.as_path() == root) {
+        gates.push(root.to_path_buf());
+    }
+}
+
+/// Release a held root (test builds only). Idempotent; the
+/// caller re-wakes the root so an idle worker restarts.
+#[cfg(test)]
+pub(crate) fn release_admissions(root: &std::path::Path) {
+    ADMISSION_GATES
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .retain(|entry| entry.as_path() != root);
+}
+
+/// Whether a root's admission is held (test builds only).
+/// A plain mutex scan: never blocks, so it is safe to call
+/// while holding the queue mutex.
+#[cfg(test)]
+fn admissions_gated(root: &std::path::Path) -> bool {
+    ADMISSION_GATES
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .iter()
+        .any(|entry| entry.as_path() == root)
+}
 
 /// Arm forced claim failures for one storage root (test builds
 /// only). Each worker claim for that root consumes one failure
@@ -920,9 +1112,11 @@ fn park_root(storage: &Storage, reason: JobRecoveryReason, attempts: u32) {
 /// force failures for one storage root, so recovery behavior is
 /// exercised deterministically without filesystem races. In
 /// shipped builds this delegates directly to `claim_export`.
+/// The attempt counter records every call in test builds.
 fn claim_for_worker(storage: &Storage) -> Result<Option<JobLease>, CommandError> {
     #[cfg(test)]
     {
+        bump_counter(&CLAIM_ATTEMPTS, &storage.root);
         let mut faults = CLAIM_FAULTS
             .lock()
             .unwrap_or_else(|error| error.into_inner());
@@ -968,6 +1162,8 @@ impl crate::Core {
                         None => return,
                     }
                 };
+                #[cfg(test)]
+                bump_counter(&CLAIM_ADMISSIONS, &pending.storage.root);
                 if pending.claim_failures > 0 {
                     std::thread::sleep(CLAIM_RETRY_DELAY);
                 }
@@ -1162,6 +1358,140 @@ mod tests {
         assert_eq!(queue.take_next().unwrap().storage.root, PathBuf::from("c"));
         assert!(queue.take_next().is_none());
         assert!(!queue.running);
+    }
+
+    // Mirror tests use root names no other test touches: the
+    // mirror is process-global and keyed by root, and the
+    // queue tests above share the fake roots "a"/"b"/"c"
+    // across parallel tests. Unique keys keep these
+    // assertions deterministic.
+    #[test]
+    fn worker_test_state_tracks_wake_take_requeue_finish_cycle() {
+        let mut queue = WorkerQueue::default();
+        let root = PathBuf::from("mirror-cycle");
+        assert_eq!(worker_test_state(&root), WorkerTestState::default());
+        queue.wake(storage("mirror-cycle"), WakeKind::Deliberate);
+        assert_eq!(
+            worker_test_state(&root),
+            WorkerTestState {
+                pending: true,
+                active: false,
+                ever_registered: true,
+            }
+        );
+        let pending = queue.take_next().unwrap();
+        assert_eq!(
+            worker_test_state(&root),
+            WorkerTestState {
+                pending: false,
+                active: true,
+                ever_registered: true,
+            }
+        );
+        queue.requeue(pending);
+        assert_eq!(
+            worker_test_state(&root),
+            WorkerTestState {
+                pending: true,
+                active: false,
+                ever_registered: true,
+            }
+        );
+        let _ = queue.take_next().unwrap();
+        queue.finish(&root);
+        assert_eq!(
+            worker_test_state(&root),
+            WorkerTestState {
+                pending: false,
+                active: false,
+                ever_registered: true,
+            }
+        );
+    }
+
+    #[test]
+    fn worker_test_state_deliberate_wake_of_active_root_is_pending_and_active() {
+        let mut queue = WorkerQueue::default();
+        let root = PathBuf::from("mirror-active-fresh");
+        queue.wake(storage("mirror-active-fresh"), WakeKind::Deliberate);
+        let _ = queue.take_next().unwrap();
+        queue.wake(storage("mirror-active-fresh"), WakeKind::Deliberate);
+        assert_eq!(
+            worker_test_state(&root),
+            WorkerTestState {
+                pending: true,
+                active: true,
+                ever_registered: true,
+            }
+        );
+    }
+
+    #[test]
+    fn worker_test_state_passive_wake_of_exhausted_root_records_nothing() {
+        let mut queue = WorkerQueue::default();
+        let root = PathBuf::from("mirror-exhausted");
+        queue.mark_exhausted(root.clone(), JobRecoveryReason::StorageUnavailable, 3);
+        assert!(!queue.wake(storage("mirror-exhausted"), WakeKind::Passive));
+        assert_eq!(worker_test_state(&root), WorkerTestState::default());
+        // A passive wake of an idle root does register it.
+        let idle = PathBuf::from("mirror-passive-idle");
+        assert!(queue.wake(storage("mirror-passive-idle"), WakeKind::Passive));
+        assert_eq!(
+            worker_test_state(&idle),
+            WorkerTestState {
+                pending: true,
+                active: false,
+                ever_registered: true,
+            }
+        );
+    }
+
+    // Gate tests use root names no other test touches, for
+    // the same process-global-table reason as the mirror
+    // tests above.
+    #[test]
+    fn admission_gate_holds_front_entry_and_serves_next_root() {
+        let mut queue = WorkerQueue::default();
+        queue.wake(storage("gate-front"), WakeKind::Deliberate);
+        queue.wake(storage("gate-next"), WakeKind::Deliberate);
+        gate_admissions(&PathBuf::from("gate-front"));
+        // The gated front entry is skipped; the next root is
+        // served, and the gated entry keeps its place.
+        assert_eq!(
+            queue.take_next().unwrap().storage.root,
+            PathBuf::from("gate-next")
+        );
+        assert!(queue.take_next().is_none());
+        assert!(!queue.running);
+        // Release: the gated root is served with its entry
+        // intact, and a wake restarts the idle worker.
+        release_admissions(&PathBuf::from("gate-front"));
+        assert!(queue.wake(storage("gate-front"), WakeKind::Deliberate));
+        assert_eq!(
+            queue.take_next().unwrap().storage.root,
+            PathBuf::from("gate-front")
+        );
+        assert!(queue.take_next().is_none());
+    }
+
+    #[test]
+    fn admission_gate_is_root_scoped() {
+        let mut queue = WorkerQueue::default();
+        queue.wake(storage("gate-scoped-a"), WakeKind::Deliberate);
+        queue.wake(storage("gate-scoped-b"), WakeKind::Deliberate);
+        gate_admissions(&PathBuf::from("gate-scoped-a"));
+        assert!(admissions_gated(&PathBuf::from("gate-scoped-a")));
+        assert!(!admissions_gated(&PathBuf::from("gate-scoped-b")));
+        assert_eq!(
+            queue.take_next().unwrap().storage.root,
+            PathBuf::from("gate-scoped-b")
+        );
+        release_admissions(&PathBuf::from("gate-scoped-a"));
+        assert!(!admissions_gated(&PathBuf::from("gate-scoped-a")));
+        assert_eq!(
+            queue.take_next().unwrap().storage.root,
+            PathBuf::from("gate-scoped-a")
+        );
     }
 
     #[test]

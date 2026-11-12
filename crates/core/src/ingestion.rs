@@ -802,26 +802,323 @@ mod tests {
         core.storage().unwrap().root_path().to_path_buf()
     }
 
+    /// One sample of the worker state a parking wait
+    /// observes: the test-side queue state plus the
+    /// admission/attempt counters. Progress is any change in
+    /// any field, so registration, admission, and requeue
+    /// each reset the stall clock.
+    struct ParkingObservation {
+        pending: bool,
+        active: bool,
+        ever_registered: bool,
+        admitted: u32,
+        attempted: u32,
+    }
+
+    /// Why a parking wait expired. The stall reasons name the
+    /// worker state, so an expiry distinguishes a root that
+    /// was never scheduled from an admitted worker that
+    /// stopped progressing and from a root that left the
+    /// queue without parking.
+    #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+    enum ParkingExpiry {
+        NeverRegistered,
+        ActiveStall,
+        LeftQueue,
+        Overall,
+    }
+
+    impl ParkingExpiry {
+        fn message(self) -> &'static str {
+            match self {
+                ParkingExpiry::NeverRegistered => {
+                    "root was never registered with the worker (no pending entry, no admission) within the 10s stall bound"
+                }
+                ParkingExpiry::ActiveStall => {
+                    "worker holds the root but made no admission/attempt progress within the 10s stall bound"
+                }
+                ParkingExpiry::LeftQueue => {
+                    "root left the worker queue without parking and made no progress within the 10s stall bound"
+                }
+                ParkingExpiry::Overall => "the 60s overall safety bound",
+            }
+        }
+    }
+
+    #[derive(PartialEq, Eq, Debug)]
+    enum ParkingDecision {
+        KeepWaiting,
+        Expired(ParkingExpiry),
+    }
+
+    /// The parking-wait phase machine, driven by elapsed time
+    /// and sampled observations. A registered pending root
+    /// never expires the stall bound: the stall clock runs
+    /// only once the root leaves the pending phase (its
+    /// first admission) or when it was never registered at
+    /// all. The overall bound applies in every phase. The
+    /// parked condition itself is checked by the polling
+    /// loop before each poll, so the machine only decides
+    /// between waiting and expiring.
+    struct ParkingWait {
+        last_seen: Option<(bool, bool, bool, u32, u32)>,
+        last_progress: std::time::Duration,
+        history: Vec<(u128, bool, bool, u32, u32)>,
+    }
+
+    impl ParkingWait {
+        fn new() -> Self {
+            ParkingWait {
+                last_seen: None,
+                last_progress: std::time::Duration::ZERO,
+                history: Vec::new(),
+            }
+        }
+
+        fn poll(
+            &mut self,
+            elapsed: std::time::Duration,
+            observation: &ParkingObservation,
+        ) -> ParkingDecision {
+            let seen = (
+                observation.pending,
+                observation.active,
+                observation.ever_registered,
+                observation.admitted,
+                observation.attempted,
+            );
+            if self.last_seen != Some(seen) {
+                self.last_seen = Some(seen);
+                self.last_progress = elapsed;
+                self.history.push((
+                    elapsed.as_millis(),
+                    observation.pending,
+                    observation.active,
+                    observation.admitted,
+                    observation.attempted,
+                ));
+            }
+            // A pending root is registered work waiting its
+            // turn: the stall bound does not run. Pending
+            // resolves before active, so a fresh entry behind
+            // an in-flight attempt is legitimate queueing and
+            // the overall bound remains the backstop.
+            if !observation.pending
+                && elapsed.saturating_sub(self.last_progress) >= std::time::Duration::from_secs(10)
+            {
+                let expiry = if !observation.ever_registered {
+                    ParkingExpiry::NeverRegistered
+                } else if observation.active {
+                    ParkingExpiry::ActiveStall
+                } else {
+                    ParkingExpiry::LeftQueue
+                };
+                return ParkingDecision::Expired(expiry);
+            }
+            if elapsed >= std::time::Duration::from_secs(60) {
+                return ParkingDecision::Expired(ParkingExpiry::Overall);
+            }
+            ParkingDecision::KeepWaiting
+        }
+
+        fn history(&self) -> &[(u128, bool, bool, u32, u32)] {
+            &self.history
+        }
+    }
+
+    /// Transition histories stashed by successful parking
+    /// waits, keyed by root, so tests can assert what the
+    /// wait observed — e.g. that a root was pending before
+    /// its first admission.
+    static PARKING_WAIT_HISTORIES: std::sync::Mutex<
+        Vec<(std::path::PathBuf, Vec<(u128, bool, bool, u32, u32)>)>,
+    > = std::sync::Mutex::new(Vec::new());
+
+    fn record_parking_wait_history(
+        root: &std::path::Path,
+        history: &[(u128, bool, bool, u32, u32)],
+    ) {
+        let mut histories = PARKING_WAIT_HISTORIES
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        if let Some(entry) = histories
+            .iter_mut()
+            .find(|(entry, _)| entry.as_path() == root)
+        {
+            entry.1 = history.to_vec();
+        } else {
+            histories.push((root.to_path_buf(), history.to_vec()));
+        }
+    }
+
+    fn parking_wait_history(root: &std::path::Path) -> Vec<(u128, bool, bool, u32, u32)> {
+        PARKING_WAIT_HISTORIES
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .iter()
+            .find(|(entry, _)| entry.as_path() == root)
+            .map(|(_, history)| history.clone())
+            .unwrap_or_default()
+    }
+
+    /// Live parking observations, published by the wait loop
+    /// after each poll so a test can synchronize on its
+    /// observer recording a state — without sleeps or timing
+    /// assumptions. The mutex guards only the wait itself;
+    /// the witness predicate reads the stashed histories.
+    static PARKING_WITNESS: (std::sync::Mutex<()>, std::sync::Condvar) =
+        (std::sync::Mutex::new(()), std::sync::Condvar::new());
+
+    fn note_parking_observation(root: &std::path::Path, history: &[(u128, bool, bool, u32, u32)]) {
+        record_parking_wait_history(root, history);
+        PARKING_WITNESS.1.notify_all();
+    }
+
+    /// Wait (bounded, no sleeps) until the parking observer
+    /// for `root` has recorded a pending observation with
+    /// zero admissions. Fails loudly on timeout; the
+    /// caller's gate guard releases the gate during
+    /// unwinding, so the observer still completes.
+    fn wait_for_parking_witness(root: &std::path::Path) {
+        let (lock, cvar) = &PARKING_WITNESS;
+        let guard = lock.lock().unwrap_or_else(|error| error.into_inner());
+        let (_guard, timed_out) = cvar
+            .wait_timeout_while(guard, std::time::Duration::from_secs(30), |_| {
+                !parking_wait_history(root)
+                    .iter()
+                    .any(|(_, pending, _, admitted, _)| *pending && *admitted == 0)
+            })
+            .unwrap_or_else(|error| error.into_inner());
+        assert!(
+            !timed_out.timed_out(),
+            "parking observer never recorded pending=true with zero admissions for {root:?}"
+        );
+    }
+
+    /// Test-only admission gate: while armed, the worker
+    /// never admits `root`, so the root stays pending with
+    /// zero admissions no matter how slow setup is or how
+    /// deep the queue runs. Dropping the guard releases the
+    /// gate and deliberately wakes the root, so a worker
+    /// that went idle restarts — cleanup runs on every exit
+    /// path, including assertion failure, panic, and witness
+    /// timeout, because `Drop` runs during unwinding and
+    /// `thread::scope` joins the observer only after the
+    /// guard has dropped.
+    struct AdmissionGate<'a> {
+        core: &'a Core,
+        root: std::path::PathBuf,
+    }
+
+    impl<'a> AdmissionGate<'a> {
+        fn arm(core: &'a Core, root: &std::path::Path) -> Self {
+            crate::jobs::gate_admissions(root);
+            AdmissionGate {
+                core,
+                root: root.to_path_buf(),
+            }
+        }
+    }
+
+    impl Drop for AdmissionGate<'_> {
+        fn drop(&mut self) {
+            crate::jobs::release_admissions(&self.root);
+            self.core
+                .wake_export_worker(crate::jobs::WakeKind::Deliberate);
+        }
+    }
+
     /// Wait until the worker parks this root after a claim
-    /// failure. Bounded and condition-based: it polls the parked
-    /// signal the worker records, never a timing assumption.
-    /// Panics with the job's state on timeout.
+    /// failure. The wait synchronizes on the worker-state
+    /// progression — registered pending, admitted, attempted,
+    /// requeued, parked — instead of a blind total bound:
+    /// the single process-global worker serves every fixture
+    /// FIFO, and a fault root's 3 attempts are spread across
+    /// 2 requeue cycles behind whatever else is pending, so
+    /// total time-to-park grows with queue depth (measured:
+    /// ~187 ms per contending fault root on Linux). A
+    /// registered pending root never expires the 10 s stall
+    /// bound: the stall clock starts at the first transition
+    /// out of the pending phase (admission), and runs only
+    /// for roots that were never registered or that stop
+    /// progressing after admission. A 60 s overall safety
+    /// bound (mirroring `wait_for_terminal`) keeps the suite
+    /// from hanging, including for a root that stays pending
+    /// forever. On expiry the panic reports the worker state
+    /// and the state history, which distinguishes queueing
+    /// delay from a lost wake, a stalled worker, and a
+    /// parking defect. The wait observes only — it never
+    /// re-wakes.
     fn wait_for_parked(core: &Core, ws: &str, id: &str, root: &std::path::Path) {
         let start = std::time::Instant::now();
-        let bound = std::time::Duration::from_secs(10);
+        let admitted_at_entry = crate::jobs::claim_admissions(root);
+        let attempted_at_entry = crate::jobs::claim_attempts(root);
+        let mut wait = ParkingWait::new();
         loop {
             if crate::jobs::claim_parked(root) {
+                record_parking_wait_history(root, wait.history());
                 return;
             }
-            if start.elapsed() >= bound {
-                let job = read_job(core, ws, id);
-                panic!(
-                    "root {root:?} was never parked within {bound:?}; job state {:?} v{} log={:?}",
-                    job.state, job.version, job.log
+            let state = crate::jobs::worker_test_state(root);
+            let observation = ParkingObservation {
+                pending: state.pending,
+                active: state.active,
+                ever_registered: state.ever_registered,
+                admitted: crate::jobs::claim_admissions(root),
+                attempted: crate::jobs::claim_attempts(root),
+            };
+            if let ParkingDecision::Expired(expiry) = wait.poll(start.elapsed(), &observation) {
+                parked_timeout(
+                    core,
+                    ws,
+                    id,
+                    root,
+                    expiry,
+                    start,
+                    admitted_at_entry,
+                    attempted_at_entry,
+                    wait.history(),
                 );
             }
+            note_parking_observation(root, wait.history());
             std::thread::sleep(std::time::Duration::from_millis(25));
         }
+    }
+
+    /// Panic with the full parking-wait diagnostic: the bound
+    /// that expired, the job's state, the worker state, whether
+    /// the root was admitted and attempted while waiting, and
+    /// the state history.
+    #[allow(clippy::too_many_arguments)]
+    fn parked_timeout(
+        core: &Core,
+        ws: &str,
+        id: &str,
+        root: &std::path::Path,
+        expiry: ParkingExpiry,
+        start: std::time::Instant,
+        admitted_at_entry: u32,
+        attempted_at_entry: u32,
+        history: &[(u128, bool, bool, u32, u32)],
+    ) -> ! {
+        let job = read_job(core, ws, id);
+        let state = crate::jobs::worker_test_state(root);
+        panic!(
+            "root {root:?} was never parked: {} after {:?}; job state {:?} v{} log={:?}; worker state pending={} active={} ever_registered={}; admitted {} -> {}, attempted {} -> {}, remaining faults {}; progress history (elapsed_ms, pending, active, admitted, attempted): {history:?}",
+            expiry.message(),
+            start.elapsed(),
+            job.state,
+            job.version,
+            job.log,
+            state.pending,
+            state.active,
+            state.ever_registered,
+            admitted_at_entry,
+            crate::jobs::claim_admissions(root),
+            attempted_at_entry,
+            crate::jobs::claim_attempts(root),
+            crate::jobs::remaining_claim_faults(root),
+        );
     }
 
     fn create_project(core: &Core, ws: &str) -> String {
@@ -1984,6 +2281,267 @@ mod tests {
             wait_for_terminal(&core, &ws, &id2).state,
             crate::jobs::JobState::Completed
         );
+    }
+
+    #[test]
+    fn parking_completes_despite_queued_fault_roots_ahead() {
+        // Twelve fault roots queue ahead of the observed root.
+        // Each root's 3 attempts cycle through the shared FIFO
+        // worker, so the last root parks only after every root
+        // ahead has cycled — the wait must track admission /
+        // attempt progress across requeue cycles instead of
+        // expiring on total time. The assertions are on the
+        // mechanism (exact admissions, attempts, and fault
+        // consumption), never on wall-clock time.
+        let mut fixtures = Vec::new();
+        for i in 0..12 {
+            let (_temp, core, ws) = setup();
+            let bytes = b"Queued fault root.";
+            let sha = content::hash(bytes);
+            let opened = begin(
+                &core,
+                &ws,
+                &format!("queued-{i}.txt"),
+                bytes,
+                &sha,
+                "private",
+            );
+            let id = opened["id"].as_str().unwrap().to_string();
+            let root = root_of(&core);
+            crate::jobs::arm_claim_faults(&root, 1_000_000, crate::ErrorCode::StorageUnavailable);
+            part(&core, &ws, &id, 0, bytes, true).unwrap();
+            fixtures.push((_temp, core, ws, id, root));
+        }
+        let (_temp, core, ws, id, root) = fixtures.last().unwrap();
+        wait_for_parked(core, ws, id, root);
+        assert_eq!(crate::jobs::claim_admissions(root), 3);
+        assert_eq!(crate::jobs::claim_attempts(root), 3);
+        assert_eq!(crate::jobs::remaining_claim_faults(root), 1_000_000 - 3);
+        for (_, _, _, _, root) in &fixtures {
+            assert!(crate::jobs::claim_parked(root));
+            crate::jobs::clear_claim_faults(root);
+            crate::jobs::clear_claim_parked(root);
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "never registered with the worker")]
+    fn parking_wait_fails_fast_when_root_is_never_admitted() {
+        // The root is never queued: setup uses with_storage_root
+        // (no startup wake) and ingest-begin never wakes — only
+        // a finished part does. The wait must fail on the 10 s
+        // stall bound with zero admissions and zero attempts,
+        // not hang until the overall safety bound, and the
+        // diagnostic must name the never-registered state.
+        // This is the bounded-failure-detection half of the
+        // phase-aware wait: a genuinely stuck root still fails
+        // fast.
+        let (_temp, core, ws) = setup();
+        let bytes = b"Never woken.";
+        let sha = content::hash(bytes);
+        let opened = begin(&core, &ws, "stuck.txt", bytes, &sha, "private");
+        let id = opened["id"].as_str().unwrap().to_string();
+        let root = root_of(&core);
+        crate::jobs::arm_claim_faults(&root, 1_000_000, crate::ErrorCode::StorageUnavailable);
+        wait_for_parked(&core, &ws, &id, &root);
+    }
+
+    fn parking_observation(
+        pending: bool,
+        active: bool,
+        ever_registered: bool,
+        admitted: u32,
+        attempted: u32,
+    ) -> ParkingObservation {
+        ParkingObservation {
+            pending,
+            active,
+            ever_registered,
+            admitted,
+            attempted,
+        }
+    }
+
+    #[test]
+    fn parking_wait_pending_before_admission_does_not_expire() {
+        // Scripted observations, synthetic elapsed times: no
+        // threads, no sleeps. Fifteen seconds pending with
+        // zero admissions must not expire — the stall clock
+        // starts at admission, not at wait entry.
+        let mut wait = ParkingWait::new();
+        let pending = parking_observation(true, false, true, 0, 0);
+        for elapsed in [0, 5, 10, 12, 15] {
+            assert_eq!(
+                wait.poll(std::time::Duration::from_secs(elapsed), &pending),
+                ParkingDecision::KeepWaiting
+            );
+        }
+        // Admission, attempt, and requeue transitions keep
+        // the wait alive, and the history records the pending
+        // phase with zero admissions.
+        assert_eq!(
+            wait.poll(
+                std::time::Duration::from_secs(16),
+                &parking_observation(false, true, true, 1, 1)
+            ),
+            ParkingDecision::KeepWaiting
+        );
+        assert_eq!(
+            wait.poll(
+                std::time::Duration::from_secs(17),
+                &parking_observation(true, false, true, 1, 1)
+            ),
+            ParkingDecision::KeepWaiting
+        );
+        assert_eq!(
+            wait.poll(
+                std::time::Duration::from_secs(18),
+                &parking_observation(false, true, true, 2, 2)
+            ),
+            ParkingDecision::KeepWaiting
+        );
+        assert!(
+            wait.history()
+                .iter()
+                .any(|(_, pending, _, admitted, _)| *pending && *admitted == 0)
+        );
+    }
+
+    #[test]
+    fn parking_wait_never_registered_expires_on_stall_bound() {
+        let mut wait = ParkingWait::new();
+        let unregistered = parking_observation(false, false, false, 0, 0);
+        assert_eq!(
+            wait.poll(std::time::Duration::ZERO, &unregistered),
+            ParkingDecision::KeepWaiting
+        );
+        assert_eq!(
+            wait.poll(std::time::Duration::from_secs(9), &unregistered),
+            ParkingDecision::KeepWaiting
+        );
+        assert_eq!(
+            wait.poll(std::time::Duration::from_secs(10), &unregistered),
+            ParkingDecision::Expired(ParkingExpiry::NeverRegistered)
+        );
+        assert!(
+            ParkingExpiry::NeverRegistered
+                .message()
+                .contains("never registered")
+        );
+    }
+
+    #[test]
+    fn parking_wait_active_stall_expires_on_stall_bound() {
+        let mut wait = ParkingWait::new();
+        assert_eq!(
+            wait.poll(
+                std::time::Duration::ZERO,
+                &parking_observation(true, false, true, 0, 0)
+            ),
+            ParkingDecision::KeepWaiting
+        );
+        let admitted = parking_observation(false, true, true, 1, 1);
+        assert_eq!(
+            wait.poll(std::time::Duration::from_secs(1), &admitted),
+            ParkingDecision::KeepWaiting
+        );
+        assert_eq!(
+            wait.poll(std::time::Duration::from_secs(10), &admitted),
+            ParkingDecision::KeepWaiting
+        );
+        assert_eq!(
+            wait.poll(std::time::Duration::from_secs(11), &admitted),
+            ParkingDecision::Expired(ParkingExpiry::ActiveStall)
+        );
+    }
+
+    #[test]
+    fn parking_wait_requeue_cycles_count_as_progress() {
+        // Six-second gaps between transitions, spanning 30 s
+        // total: every requeue transition resets the stall
+        // clock, so a multi-cycle wait never expires.
+        let mut wait = ParkingWait::new();
+        let cycle = [
+            (0, parking_observation(true, false, true, 0, 0)),
+            (6, parking_observation(false, true, true, 1, 1)),
+            (12, parking_observation(true, false, true, 1, 1)),
+            (18, parking_observation(false, true, true, 2, 2)),
+            (24, parking_observation(true, false, true, 2, 2)),
+            (30, parking_observation(false, true, true, 3, 3)),
+        ];
+        for (elapsed, observation) in cycle {
+            assert_eq!(
+                wait.poll(std::time::Duration::from_secs(elapsed), &observation),
+                ParkingDecision::KeepWaiting
+            );
+        }
+    }
+
+    #[test]
+    fn parking_wait_overall_bound_expires_pending_forever() {
+        let mut wait = ParkingWait::new();
+        let pending = parking_observation(true, false, true, 0, 0);
+        assert_eq!(
+            wait.poll(std::time::Duration::ZERO, &pending),
+            ParkingDecision::KeepWaiting
+        );
+        assert_eq!(
+            wait.poll(std::time::Duration::from_secs(59), &pending),
+            ParkingDecision::KeepWaiting
+        );
+        assert_eq!(
+            wait.poll(std::time::Duration::from_secs(60), &pending),
+            ParkingDecision::Expired(ParkingExpiry::Overall)
+        );
+    }
+
+    #[test]
+    fn parking_wait_survives_pending_before_first_admission() {
+        // The admission gate holds the watched root pending
+        // while its observer starts, so the
+        // pending-before-admission observation is
+        // synchronized, not timed. The previous version
+        // queued thirty roots ahead and assumed setup takes
+        // milliseconds; on Windows the worker had already
+        // admitted the root twice before the wait's first
+        // poll (WR-REC-WITNESS-01). The handshake: gate,
+        // wake, start the observer, confirm it recorded
+        // pending with zero admissions, release, verify
+        // completion and exact counts. The witness assertion
+        // is unchanged in form.
+        let (_temp, core, ws) = setup();
+        let bytes = b"Gated pending root.";
+        let sha = content::hash(bytes);
+        let opened = begin(&core, &ws, "gated.txt", bytes, &sha, "private");
+        let id = opened["id"].as_str().unwrap().to_string();
+        let root = root_of(&core);
+        crate::jobs::arm_claim_faults(&root, 1_000_000, crate::ErrorCode::StorageUnavailable);
+        std::thread::scope(|scope| {
+            let gate = AdmissionGate::arm(&core, &root);
+            part(&core, &ws, &id, 0, bytes, true).unwrap();
+            // The wake registers the root synchronously and
+            // the gate holds admission: pending with zero
+            // admissions before the observer starts.
+            assert!(crate::jobs::worker_test_state(&root).pending);
+            assert_eq!(crate::jobs::claim_admissions(&root), 0);
+            let observer = scope.spawn(|| wait_for_parked(&core, &ws, &id, &root));
+            wait_for_parking_witness(&root);
+            drop(gate);
+            observer.join().expect("parking wait completed");
+        });
+        assert_eq!(crate::jobs::claim_admissions(&root), 3);
+        assert_eq!(crate::jobs::claim_attempts(&root), 3);
+        assert_eq!(crate::jobs::remaining_claim_faults(&root), 1_000_000 - 3);
+        let history = parking_wait_history(&root);
+        assert!(
+            history
+                .iter()
+                .any(|(_, pending, _, admitted, _)| *pending && *admitted == 0),
+            "wait observed pending before first admission: {history:?}"
+        );
+        assert!(crate::jobs::claim_parked(&root));
+        crate::jobs::clear_claim_faults(&root);
+        crate::jobs::clear_claim_parked(&root);
     }
 
     #[test]
