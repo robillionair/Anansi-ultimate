@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Client, Job, MemoryDetails, MemoryMetadata, Privacy } from '@anansi/contracts';
 import { renderMarkdown } from './markdown.ts';
+import { JobRecoveryNotice } from './JobRecovery';
 import {
   ingestionJobLabel,
   ingestionReceived,
@@ -393,21 +394,16 @@ export function Documents({
           <p>
             Checkpoint {activeJob.checkpointVersion}: {activeJob.checkpoint}. {activeJob.log}
           </p>
-          {activeJob.recoveryDiagnostic && (
-            <p role="alert" className="error">
-              {activeJob.recoveryDiagnostic.message} Attempts used:{' '}
-              {activeJob.recoveryDiagnostic.attempts}.
-            </p>
-          )}
+          <JobRecoveryNotice
+            diagnostic={activeJob.recoveryDiagnostic}
+            state={activeJob.state}
+            busy={busy}
+            onRecover={() => void recover(activeJob)}
+          />
           <div className="actions">
             {['Queued', 'Running', 'Paused'].includes(activeJob.state) && (
               <button disabled={busy} onClick={() => void cancel(activeJob)}>
                 Cancel import
-              </button>
-            )}
-            {activeJob.recoveryDiagnostic && activeJob.state === 'Queued' && (
-              <button disabled={busy} onClick={() => void recover(activeJob)}>
-                Retry recovery
               </button>
             )}
             <button disabled={busy} className="secondary" onClick={() => void refreshJobs()}>

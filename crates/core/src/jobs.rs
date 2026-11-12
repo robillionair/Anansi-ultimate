@@ -620,6 +620,13 @@ struct WorkerQueue {
     /// record; only a deliberate wake or a successful queueing
     /// control clears it. In-memory only: a restart recovers.
     exhausted: Vec<ExhaustedRoot>,
+    /// Roots the worker loop currently holds outside the pending
+    /// queue. A passive wake of an active root must not insert
+    /// a fresh zero-count entry: the in-flight entry's requeue
+    /// would drop its failure count in favor of the fresh one.
+    /// Marked by `take_next`, cleared by `finish`, `requeue`,
+    /// and parking — every exit from serving a root.
+    active: Vec<std::path::PathBuf>,
 }
 
 /// A parked root's production exhaustion record: the reason
@@ -655,9 +662,13 @@ impl WorkerQueue {
     /// Queue a storage root for the worker, deduplicated by root.
     /// A deliberate wake clears any exhaustion record and resets
     /// a pending root's failure count: a fresh user action earns
-    /// a fresh budget. A passive wake (status polling) never
-    /// touches an exhausted root and never resets a pending
-    /// root's count — observation must not re-arm recovery.
+    /// a fresh budget. A deliberate wake of an active root adds
+    /// a fresh entry, served after the current attempt; the
+    /// stale requeue/park guards protect that newer decision.
+    /// A passive wake (status polling) never touches an
+    /// exhausted or active root and never resets a pending
+    /// root's count — observation must not re-arm recovery or
+    /// discard an in-flight budget.
     /// Returns true when the caller must start the worker thread.
     fn wake(&mut self, storage: Storage, kind: WakeKind) -> bool {
         match kind {
@@ -681,6 +692,7 @@ impl WorkerQueue {
                     .exhausted
                     .iter()
                     .any(|entry| entry.root == storage.root)
+                    || self.active.iter().any(|root| *root == storage.root)
                 {
                     return false;
                 }
@@ -704,19 +716,29 @@ impl WorkerQueue {
     }
 
     /// Record that a root's claim recovery is exhausted. Replaces
-    /// any earlier record for the root.
+    /// any earlier record for the root. Returns false — marking
+    /// nothing — when a pending entry exists for the root: that
+    /// entry can only come from a deliberate wake that arrived
+    /// while the root was active, and the stale in-flight
+    /// failure must not override the newer deliberate recovery.
+    /// The fresh entry is then served with its own budget, and
+    /// its own attempt decides the outcome.
     fn mark_exhausted(
         &mut self,
         root: std::path::PathBuf,
         reason: JobRecoveryReason,
         attempts: u32,
-    ) {
+    ) -> bool {
+        if self.pending.iter().any(|entry| entry.storage.root == root) {
+            return false;
+        }
         self.exhausted.retain(|entry| entry.root != root);
         self.exhausted.push(ExhaustedRoot {
             root,
             reason,
             attempts,
         });
+        true
     }
 
     /// Clear a root's exhaustion record (deliberate re-arm).
@@ -733,14 +755,21 @@ impl WorkerQueue {
             .cloned()
     }
 
-    /// Take the next storage to serve. When the queue is empty the
-    /// worker is marked idle and None is returned, so the caller
-    /// stops the thread. Taking work and deciding to stop share the
-    /// caller's lock hold, so a wake-up committed during shutdown
-    /// cannot be lost.
+    /// Take the next storage to serve, marking it active so
+    /// passive wakes cannot insert a competing fresh entry while
+    /// the worker holds it. When the queue is empty the worker
+    /// is marked idle and None is returned, so the caller stops
+    /// the thread. Taking work and deciding to stop share the
+    /// caller's lock hold, so a wake-up committed during
+    /// shutdown cannot be lost.
     fn take_next(&mut self) -> Option<PendingRoot> {
         match self.pending.pop_front() {
-            Some(pending) => Some(pending),
+            Some(pending) => {
+                if !self.active.iter().any(|root| *root == pending.storage.root) {
+                    self.active.push(pending.storage.root.clone());
+                }
+                Some(pending)
+            }
             None => {
                 self.running = false;
                 None
@@ -748,11 +777,21 @@ impl WorkerQueue {
         }
     }
 
+    /// The worker stopped serving a root without requeueing it
+    /// (drained: no more jobs to claim). Clear its active mark
+    /// so later wakes see it as idle again.
+    fn finish(&mut self, root: &std::path::Path) {
+        self.active.retain(|entry| entry.as_path() != root);
+    }
+
     /// Re-queue a root whose claim failed, at the back, so other
-    /// roots are served before the retry. If a fresh wake already
-    /// re-pended the root while it was being served, the requeue
-    /// is dropped and the pending entry (fresh budget) wins.
+    /// roots are served before the retry. The root leaves the
+    /// active set: it is pending again (or dropped, when a fresh
+    /// wake already re-pended the root while it was being served
+    /// — the pending entry, fresh budget, wins and the stale
+    /// in-flight count is discarded by design).
     fn requeue(&mut self, pending: PendingRoot) {
+        self.finish(&pending.storage.root.clone());
         if !self
             .pending
             .iter()
@@ -767,6 +806,7 @@ static PROCESS_WORKER: std::sync::Mutex<WorkerQueue> = std::sync::Mutex::new(Wor
     running: false,
     pending: VecDeque::new(),
     exhausted: Vec::new(),
+    active: Vec::new(),
 });
 
 /// Forced claim failures for fault-injection tests, keyed by
@@ -853,18 +893,27 @@ fn record_claim_parked(storage: &Storage) {
 #[cfg(not(test))]
 fn record_claim_parked(_storage: &Storage) {}
 
-/// Park a root: record its production exhaustion (reason +
-/// attempts) under the queue lock, and record the test-only
-/// parked signal. The two records are deliberately separate:
-/// tests may clear the signal without re-arming the root.
+/// Park a root: clear its active mark and record its
+/// production exhaustion (reason + attempts) under the queue
+/// lock, and record the test-only parked signal — but only
+/// when exhaustion was actually marked. A deliberate wake that
+/// arrived while the root was active leaves a fresh pending
+/// entry, and the stale in-flight failure must not override
+/// that newer recovery decision: the root is not parked, no
+/// signal is recorded, and the fresh entry is served next.
+/// The two records are deliberately separate: tests may clear
+/// the signal without re-arming the root.
 fn park_root(storage: &Storage, reason: JobRecoveryReason, attempts: u32) {
-    {
+    let marked = {
         let mut queue = PROCESS_WORKER
             .lock()
             .unwrap_or_else(|error| error.into_inner());
-        queue.mark_exhausted(storage.root.clone(), reason, attempts);
+        queue.finish(&storage.root);
+        queue.mark_exhausted(storage.root.clone(), reason, attempts)
+    };
+    if marked {
+        record_claim_parked(storage);
     }
-    record_claim_parked(storage);
 }
 
 /// The worker loop's claim call. In test builds a fault table can
@@ -939,7 +988,16 @@ impl crate::Core {
                                 let _ = pending.storage.fail_export(&lease);
                             }
                         }
-                        Ok(None) => break,
+                        Ok(None) => {
+                            // Drained: no more jobs to claim for
+                            // this root. Clear the active mark so
+                            // later wakes see the root as idle.
+                            let mut queue = PROCESS_WORKER
+                                .lock()
+                                .unwrap_or_else(|error| error.into_inner());
+                            queue.finish(&pending.storage.root);
+                            break;
+                        }
                         Err(error) => {
                             // Only StorageUnavailable is retried, and
                             // only within the budget. Any other code
@@ -1224,6 +1282,123 @@ mod tests {
             retry.claim_failures, 2,
             "passive polling discarded the in-flight failure budget",
         );
+        assert!(queue.take_next().is_none());
+    }
+
+    #[test]
+    fn worker_queue_repeated_passive_wakes_of_active_root_add_nothing() {
+        let mut queue = WorkerQueue::default();
+        queue.wake(storage("a"), WakeKind::Deliberate);
+        let mut active = queue.take_next().unwrap();
+        active.claim_failures = 1;
+        // Documents polls every few seconds; several polls may land
+        // while one claim is in flight. None may insert an entry.
+        assert!(!queue.wake(storage("a"), WakeKind::Passive));
+        assert!(!queue.wake(storage("a"), WakeKind::Passive));
+        assert!(!queue.wake(storage("a"), WakeKind::Passive));
+        queue.requeue(active);
+        let retry = queue.take_next().unwrap();
+        assert_eq!(retry.claim_failures, 1);
+        assert!(queue.take_next().is_none());
+    }
+
+    #[test]
+    fn worker_queue_deliberate_wake_of_active_root_adds_fresh_entry() {
+        let mut queue = WorkerQueue::default();
+        queue.wake(storage("a"), WakeKind::Deliberate);
+        let mut active = queue.take_next().unwrap();
+        active.claim_failures = 2;
+        // A deliberate re-arm during the active attempt earns a
+        // fresh budget: the stale requeue drops and the fresh
+        // entry wins.
+        queue.wake(storage("a"), WakeKind::Deliberate);
+        queue.requeue(active);
+        let retry = queue.take_next().unwrap();
+        assert_eq!(retry.storage.root, PathBuf::from("a"));
+        assert_eq!(retry.claim_failures, 0);
+        assert!(queue.take_next().is_none());
+    }
+
+    #[test]
+    fn worker_queue_stale_park_suppressed_by_deliberate_fresh_entry() {
+        let mut queue = WorkerQueue::default();
+        queue.wake(storage("a"), WakeKind::Deliberate);
+        let _active = queue.take_next().unwrap();
+        queue.wake(storage("a"), WakeKind::Deliberate);
+        // The in-flight attempt exhausts its budget, but a newer
+        // deliberate recovery is already pending: the stale park
+        // must not mark the root exhausted.
+        assert!(!queue.mark_exhausted(
+            PathBuf::from("a"),
+            JobRecoveryReason::StorageUnavailable,
+            3,
+        ));
+        assert!(queue.exhaustion_for(&PathBuf::from("a")).is_none());
+        let retry = queue.take_next().unwrap();
+        assert_eq!(retry.storage.root, PathBuf::from("a"));
+        assert_eq!(retry.claim_failures, 0);
+        assert!(queue.take_next().is_none());
+    }
+
+    #[test]
+    fn worker_queue_mark_exhausted_without_pending_entry_marks() {
+        let mut queue = WorkerQueue::default();
+        queue.wake(storage("a"), WakeKind::Deliberate);
+        let _active = queue.take_next().unwrap();
+        // No deliberate re-arm arrived: the park proceeds.
+        assert!(
+            queue.mark_exhausted(PathBuf::from("a"), JobRecoveryReason::StorageUnavailable, 3,)
+        );
+        let record = queue.exhaustion_for(&PathBuf::from("a")).unwrap();
+        assert_eq!(record.attempts, 3);
+        assert_eq!(record.reason, JobRecoveryReason::StorageUnavailable);
+    }
+
+    #[test]
+    fn worker_queue_finish_clears_active_mark() {
+        let mut queue = WorkerQueue::default();
+        queue.wake(storage("a"), WakeKind::Deliberate);
+        let active = queue.take_next().unwrap();
+        assert!(!queue.wake(storage("a"), WakeKind::Passive));
+        queue.finish(&active.storage.root);
+        // Drained and finished: the root is idle again, so a
+        // passive wake queues it like any healthy root.
+        queue.wake(storage("a"), WakeKind::Passive);
+        let retry = queue.take_next().unwrap();
+        assert_eq!(retry.storage.root, PathBuf::from("a"));
+        assert_eq!(retry.claim_failures, 0);
+        assert!(queue.take_next().is_none());
+    }
+
+    #[test]
+    fn worker_queue_deliberate_fresh_entry_keeps_fifo_position() {
+        let mut queue = WorkerQueue::default();
+        queue.wake(storage("a"), WakeKind::Deliberate);
+        queue.wake(storage("b"), WakeKind::Deliberate);
+        let _active = queue.take_next().unwrap();
+        queue.wake(storage("a"), WakeKind::Deliberate);
+        // The fresh entry for the active root queues behind the
+        // already-pending root; it never jumps the queue.
+        assert_eq!(queue.take_next().unwrap().storage.root, PathBuf::from("b"));
+        let retry = queue.take_next().unwrap();
+        assert_eq!(retry.storage.root, PathBuf::from("a"));
+        assert_eq!(retry.claim_failures, 0);
+        assert!(queue.take_next().is_none());
+    }
+
+    #[test]
+    fn worker_queue_duplicate_wakes_never_duplicate_active_entries() {
+        let mut queue = WorkerQueue::default();
+        queue.wake(storage("a"), WakeKind::Deliberate);
+        let mut active = queue.take_next().unwrap();
+        active.claim_failures = 2;
+        queue.wake(storage("a"), WakeKind::Deliberate);
+        queue.wake(storage("a"), WakeKind::Deliberate);
+        queue.wake(storage("a"), WakeKind::Passive);
+        queue.requeue(active);
+        // Exactly one entry survives: the deliberate fresh one.
+        let retry = queue.take_next().unwrap();
+        assert_eq!(retry.claim_failures, 0);
         assert!(queue.take_next().is_none());
     }
 
