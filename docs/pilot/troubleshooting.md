@@ -72,7 +72,10 @@ What to do:
 2. In Ask ANANSI, check the Local inference
    endpoint. The usual Ollama endpoint is
    `http://127.0.0.1:11434`. The endpoint must be a
-   loopback address on this computer.
+   loopback address on this computer; anything else
+   is refused with "Inference endpoint must be a
+   valid loopback address (127.0.0.1 or
+   localhost)."
 3. Check the Installed Ollama model field: enter
    the full model tag exactly as the runtime
    lists it, including the `:tag` suffix. A bare

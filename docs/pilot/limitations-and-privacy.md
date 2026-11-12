@@ -22,9 +22,10 @@ execution are not available.
   history, and settings are stored as plaintext on
   this computer. On Windows the default storage
   root is `%LOCALAPPDATA%\ANANSI\workspaces`. A
-  different root can be selected only through the
-  app's own storage selection; never edit the files
-  inside the storage folder by hand.
+  different root applies only when the app was
+  launched with one (for example, an isolated test
+  root); never edit the files inside the storage
+  folder by hand.
 - Local file permissions are the only access
   protection. This is not an encrypted vault.
   Anyone who can read the files on the computer
