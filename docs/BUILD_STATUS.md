@@ -2099,3 +2099,7 @@ Harness `b02499277cf16224a227e96a6733e362385a7a12` against unchanged standalone 
 ## 2026-11-13 — isolated installed Windows workflow passed
 
 Existing unsigned installer from clean application source `6f216e3` (SHA-256 `2b0c1c7980b7cf8c62b1d9b621723276ef943208d988ea579a62494da5408d74`) installed to a fresh E: test root, payload hash matched. First UI run exposed stale cross-adapter harness selectors; repaired selectors only after committed criteria. Full rerun without SkipUi passed native/browser onboarding/settings/restart/parity and uninstall/catalog preservation; test registration cleaned. No app rebuild. Same host, not clean VM/SmartScreen/upgrade/credential/picker approval. Review: `docs/reviews/windows-v1-installer-workflow-qualification.md`; criteria/evidence: `docs/handoffs/installer-workspace-selector-repair.md`.
+
+## 2026-11-13 — actual Windows document picker observed
+
+Unchanged built application source `6f216e3`, standalone SHA-256 `47e1695d95325f574970331f89d514bb797669dc00021ded50646868901b2a7c`: actual Windows Open dialog exercised through desktop UI, eight representative cases PASS (cancel, Unicode TXT, Markdown, PDF, DOCX, oversized, empty, unsupported). Explicit imports completed; after app close, exactly four documents/four Completed jobs and all body hashes independently verified. This closes focused document-import picker observation, not hostile-format suites, save/export dialogs, credentials or whole-pilot approval. Review: `docs/reviews/windows-native-document-picker.md`.
