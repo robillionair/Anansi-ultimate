@@ -2,7 +2,7 @@
 
 ANANSI Ultimate is a local-first workspace for researching a product idea, building a prototype plan, testing assumptions, and preserving the evidence behind each decision. It has a Windows desktop application built with Tauri 2 and a React browser interface paired to a local API. Both interfaces use the same Rust domain logic and generated contracts.
 
-**Development status — 12 November 2026.** This repository includes the latest delivered application source at `8df1fcf3d69f6d1da532bb890234a7db0352efff`, its independent Windows review at `4ffdd4316`, and documentation updates. It is a development build approaching a controlled Windows pilot. The installed preview and older installer are separate checkpoints. The latest recovery fixes pass focused Windows checks, but two fault tests still time out in the broad Windows library run. See [current verification](#current-verification-and-remaining-work) and the [build status ledger](docs/BUILD_STATUS.md).
+**Development status — 13 November 2026.** An integrated unsigned Windows pilot installer has been built from clean application source `6f216e3224e2c855236aac5492f69b467cf8c5d5`. Recovery acceptance passed **416/416** in one Windows library run; the first-time browser journey, strengthened native smoke, isolated installed-app workflow, and actual Windows document-picker checks also passed in their recorded scopes. This branch includes the delivered source, qualification harness repairs and reviews through `8d7e72ed`. **This is not a production release or unrestricted customer-pilot approval.** Clean-VM/upgrade testing, real credential-store acceptance and other gates remain open. Publishing source does not replace an installed preview. See [current verification](#current-verification-and-remaining-work), the [pilot decision sheet](docs/pilot/release-decision-sheet.md), and the [build status ledger](docs/BUILD_STATUS.md).
 
 - [Who it’s for](#who-its-for)
 - [Screenshots](#screenshots)
@@ -26,6 +26,12 @@ Start with a project and add a few notes or documents. Use **Ask ANANSI** to get
 ## Screenshots
 
 Application captures from Windows review builds using synthetic workspaces. The captures come from several preview checkpoints.
+
+**Current Windows pilot candidate · Installed-app settings**
+
+Captured during the installed desktop/browser parity check using synthetic workspaces. This is the ordinary desktop interface; the LARP screenshots below show optional visualization scenes.
+
+![Installed Windows candidate showing workspace intent and reduced-motion settings](docs/screenshots/pilot-native-settings-2026-11-13.png)
 
 **ANANSI Entity · LARP scene 07**
 The holographic avatar and the grounded Ask ANANSI conversation panel.
@@ -76,20 +82,20 @@ A typical session starts with a workspace and project. Add source material, expl
 
 ## Current verification and remaining work
 
-These results belong to the exact source and workflows named below. They do not certify an installer or every product requirement.
+These results belong to the exact source and workflows named below. Passing one workflow does not certify every product requirement. The application binary remains the one built from `6f216e3`; subsequent harness and documentation changes did not rebuild or relabel it.
 
-| Latest focused Windows check at `8df1fcf3d` | Result |
+| Accepted Windows check | Result and scope |
 | --- | --- |
-| Original exhausted-root polling probe and in-flight retry-budget probe | 2/2 passed unchanged |
-| Worker queue tests | 19/19 passed |
-| Shared UI and contracts tests | 347/347 passed |
-| Synthetic ChatGPT token lifecycle | 32/32 passed |
-| Provider dispatch and authorization | 38/38 passed; the Unix-only case is excluded on Windows |
-| Browser workflows | 24/24 across recovery controls, Connect AI, DOCX, PDF, TXT/MD, and Ask |
-| TypeScript, generated-contract drift, API build, web build | Passed |
-| Broad Windows library acceptance | **Held: two fault-test parking timeouts remain in the quieter rerun** |
+| Broad workspace library acceptance | **416/416**, all four library binaries in one default-concurrency invocation at reviewer `8453f649`; core 348, API 4, desktop 1, providers 63. |
+| Queue/mirror/gate and independent recovery probes | 24/24 and 2/2 at the same review; witness also passed three additional runs. |
+| First-time browser pilot journey | **1/1 in 2.4 minutes** on `8931d34b`: setup, imports, search, cited Ask with a local fake model, cancellation, restart, backup/fresh restore and reopen. |
+| Installer-qualification tooling | Node 61/61 and release-tooling 54/54 on `7c3af5e`; separate tooling checks, not installation evidence. |
+| Isolated Windows release build | Web, API, desktop and NSIS all exit 0 on clean source `6f216e3`; seven artifact hashes/sizes verified. |
+| Strengthened native candidate smoke | **7/7** using harness `b0249927` and the unchanged built app: actual readiness, capability denial, artifact readback, cross-workspace refusal and restart persistence. Regression/docs/hygiene checks 36/36. |
+| Isolated installation and installed UI | Install, payload identity, native/browser onboarding/settings/restart parity, uninstall and byte-identical catalog preservation passed after a stale test-selector repair. Same host with clean ANANSI registration, **not a clean Windows VM**. |
+| Actual Windows document picker | **Eight observed cases passed:** cancel, Unicode TXT, Markdown, PDF, DOCX, oversized, empty and unsupported files. Four successful imports/four completed jobs persisted; every stored body hash verified after close. |
 
-The first broad run passed 331 core tests and failed four. After other builds and browser runs finished, the unchanged default-concurrency command passed 333 core tests and failed two: `deliberate_wake_rearms_exhausted_root` and `diagnostic_absent_for_other_states_and_roots`. Both expired in the 10-second parked-state helper and passed individually. The precise scheduling cause remains under investigation. **There is no clean 403-test Windows acceptance claim.** [Full Windows review](docs/reviews/windows-claim-recovery-cr01b-review.md) · [Raw verification logs](docs/evidence/windows-recovery-2026-11-12/index.md)
+The earlier broad-run parking timeouts and the later witness timing assumption are superseded by the accepted synchronized harness and the clean **416/416** aggregate. The older failures remain in their historical reports. [Recovery acceptance](docs/reviews/windows-wr-rec-witness-gate-review.md) · [Browser journey](docs/reviews/windows-v1-pilot-rc-review.md) · [Build identity](docs/reviews/windows-v1-pilot-release-build.md) · [Native smoke](docs/reviews/windows-nq01-native-harness-review.md) · [Installed workflow](docs/reviews/windows-v1-installer-workflow-qualification.md) · [Native picker](docs/reviews/windows-native-document-picker.md) · [Published evidence](docs/evidence/windows-pilot-2026-11-13/index.md)
 
 The preceding ingestion-reliability checkpoint `3e86af6b4` passed the complete Windows library suite, 370/370, plus 23 browser tests. Those historical results remain scoped to that checkpoint; they are not substituted for the latest run. [Accepted-checkpoint handoff](docs/handoffs/windows-ingestion-test-reliability.md)
 
@@ -100,9 +106,17 @@ Recent work now in source:
 - **SOMNIA target binding:** approval-bound requests pin the selected provider/model and relevant connection configuration; configuration changes cannot silently redirect an approved comparison. [Expected-target contract](docs/handoffs/expected-target-contract-repair.md)
 - **Connect AI:** additive provider setup, connection-bound verification status, and removable orphaned credential references. [Setup](docs/handoffs/connect-ai-api-key-setup.md) · [Verification repair](docs/handoffs/connect-ai-verification-repair.md)
 - **ChatGPT sign-in prototype:** synthetic OAuth and token-lifecycle coverage, typed credential-store failures, and guarded callback/refresh/disconnect races. The sign-in control remains disabled and dev-gated. Real account eligibility and native credential-store acceptance are open. [Prototype](docs/handoffs/connect-ai-chatgpt-signin.md) · [Lifecycle review](docs/handoffs/connect-ai-chatgpt-signin-lifecycle-repair-4.md)
-- **Background-job recovery:** FIFO scheduling, bounded retries for unavailable storage, non-retryable parking, sanitized recovery diagnostics, and explicit Retry recovery controls. Passive polling preserves retry budgets, including in-flight work. The new Jobs recovery interaction is browser-tested against a synthetic API; the remaining broad-test issue is described above. [Recovery handoff](docs/handoffs/claim-recovery-cr01b.md)
+- **Background-job recovery:** FIFO scheduling, bounded retries for unavailable storage, non-retryable parking, sanitized recovery diagnostics, and explicit Retry recovery controls. Passive polling preserves retry budgets, including in-flight work. The recovery test-reliability line now has clean focused Windows aggregate acceptance. [Recovery handoff](docs/handoffs/claim-recovery-cr01b.md) · [Accepted witness repair](docs/reviews/windows-wr-rec-witness-gate-review.md)
 
-Before a wider Windows pilot, finish the remaining test-reliability work, qualify one integrated installer on a clean machine, and complete native file-dialog and credential-store acceptance. Real ChatGPT eligibility, live-provider qualification, generated-code execution, and broader production gates are tracked separately. No new model or provider is installed automatically.
+Before a wider Windows pilot, complete clean-VM/upgrade and SmartScreen observations, actual credential-store acceptance, native fresh restore, concurrent-import observation and the remaining workflow gates. Representative document-import picker behavior is verified; save/export dialogs and every possible input are not. ChatGPT OAuth is **deferred and disabled for v1**. Generated-code execution, external audits and production qualification remain separate. No new model or provider is installed automatically.
+
+### Pilot documentation and privacy
+
+- [First-time-user guide](docs/pilot/user-guide.md), [tester checklist](docs/pilot/tester-checklist.md), [troubleshooting](docs/pilot/troubleshooting.md), and [sanitized bug-report template](docs/pilot/bug-report-template.md).
+- [Limitations and privacy](docs/pilot/limitations-and-privacy.md): ordinary workspace storage and backups are plaintext; privacy labels do not encrypt files. Use synthetic or non-critical data during qualification.
+- TXT/Markdown: at most **65,536 bytes / 8,000 text characters**. PDF/DOCX: at most **1 MiB / 32,000 extracted text characters**. OCR is not included.
+- The present Ask view accepts a local loopback model endpoint. Other provider workflows require their existing authorization and cost controls. Fake-model tests establish workflow behavior, not model-answer quality.
+- The installer is **unsigned**. Keep `packaging.json` with it: source commit, clean/dirty state and installer/application/config hashes identify the build; the generic `0.1.0` version does not.
 
 ### SwarmTank v2
 
@@ -154,6 +168,19 @@ Scene **08** presents the SwarmTank persona matrix and scenario controls. Scene 
 
 ## Windows preview
 
+### Current built pilot candidate — 13 November 2026
+
+| Identity | Recorded value |
+| --- | --- |
+| Application source | `6f216e3224e2c855236aac5492f69b467cf8c5d5` (clean build) |
+| Installer | `ANANSI Ultimate_0.1.0_x64-setup.exe` — unsigned development NSIS, Windows x64, per-user |
+| Installer SHA-256 | `2b0c1c7980b7cf8c62b1d9b621723276ef943208d988ea579a62494da5408d74` |
+| Qualification | Isolated same-host install/installed UI/uninstall passed; actual document picker observed. Clean-VM, upgrade, credentials and other pilot gates remain open. |
+
+The installer was built locally. **This repository update does not publish a downloadable binary release or approve general distribution.** Source and test-harness changes after the build preserve the recorded application identity. Use the [Windows handoff](docs/handoffs/v1-pilot-windows-handoff.md), [installer checklist](docs/handoffs/v1-pilot-installer-checklist.md), and dated review evidence when reproducing qualification. Installer verification refuses an existing registered ANANSI installation; use a disposable environment rather than overwriting a personal copy.
+
+### Historical previews
+
 The historical verified preview at `4e4e970af8ad0c406cfae35fc3da55f99662b174` combines SwarmTank v2, PDF text ingestion, LARP scenes 08 and 09, SOMNIA model comparison, and the OpenRouter reasoning fix. The table below records that older checkpoint, not the latest source. Signed production installers, updater qualification, and broader release certification remain separate. [Current source status](#current-verification-and-remaining-work) · [Build status](docs/BUILD_STATUS.md)
 
 | Recorded check at the verified preview | Result |
@@ -171,7 +198,7 @@ The native smoke test checked startup, Windows platform detection, the shell cap
 
 Antigravity's Windows acceptance checkpoint `20664e187` adds a native Forge source review and revision run, a browser backup and fresh-restore check, focused Collider picker and lineage coverage, and document/PDF and MCP regressions. WebView2 file-event injection covers the application's picker handling. Interactive Windows file-dialog acceptance and the owner-led credential and vault checks are tracked separately. [Acceptance ledger](docs/BUILD_STATUS.md) · [Manual security checklist](docs/reviews/owner-manual-security-checklist.md)
 
-A later unsigned development NSIS installer was built locally from candidate `9eec1c2f6` with DOCX and SQLite 3.54.1. Its [source and qualification report](https://github.com/robillionair/Anansi-ultimate/tree/codex/windows-preview-candidate) are preserved separately. Clean-machine installer execution and native manual checks remain pending. This candidate predates the latest Connect AI and recovery changes; publishing its source does not update an installed app or create a public binary release.
+An earlier unsigned development NSIS installer was built locally from candidate `9eec1c2f6` with DOCX and SQLite 3.54.1. Its [source and qualification report](https://github.com/robillionair/Anansi-ultimate/tree/codex/windows-preview-candidate) are preserved separately. This candidate predates the latest Connect AI and recovery changes and the current build above; publishing its source does not update an installed app or create a public binary release.
 
 ## SOMNIA compaction
 

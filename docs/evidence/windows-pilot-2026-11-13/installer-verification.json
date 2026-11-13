@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "gitCommit": "6f216e3224e2c855236aac5492f69b467cf8c5d5",
+  "dirtySource": false,
+  "version": "0.1.0",
+  "toolchain": {
+    "node": "v26.7.0",
+    "pnpm": "11.25.0",
+    "git": "git version 2.53.0.windows.2",
+    "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+    "rustcHost": "x86_64-pc-windows-msvc",
+    "rustcCommit": "58cf8f9c35b355199727627d07ae34a4e2846d67",
+    "cargo": "cargo 1.99.1 (5f94df478 2026-08-27)",
+    "windowsSdk": "10.0.26100.0",
+    "webviewVersions": [
+      "157.0.4341.42",
+      "157.0.4341.46"
+    ]
+  },
+  "unbundledApplicationSha256": "47e1695d95325f574970331f89d514bb797669dc00021ded50646868901b2a7c",
+  "testRoot": "E:\\Anansi\\qualification\\installer-test-fixed-2026-11-13",
+  "installerSha256": "2b0c1c7980b7cf8c62b1d9b621723276ef943208d988ea579a62494da5408d74",
+  "signature": "NotSigned",
+  "installPassed": true,
+  "installedBinaryMatches": true,
+  "uiWorkflowPassed": true,
+  "uninstallPassed": true,
+  "dataPreserved": true,
+  "uiSkipped": false
+}
