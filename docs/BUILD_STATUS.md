@@ -2095,3 +2095,7 @@ Clean source `6f216e3224e2c855236aac5492f69b467cf8c5d5`: preflight PASS (7.13 Gi
 ## 2026-11-13 — NQ-01 Windows native harness acceptance
 
 Harness `b02499277cf16224a227e96a6733e362385a7a12` against unchanged standalone app built from `6f216e3224e2c855236aac5492f69b467cf8c5d5` (SHA-256 `47e1695d95325f574970331f89d514bb797669dc00021ded50646868901b2a7c`): regressions/docs/hygiene **36/36**, strengthened native smoke **7/7**, including actual readiness, exact artifact native readback, cross-workspace refusal and post-restart artifact persistence. NQ-01 closed in focused Windows scope. No rebuild or installer/manual-native acceptance. Review: `docs/reviews/windows-nq01-native-harness-review.md`.
+
+## 2026-11-13 — isolated installed Windows workflow passed
+
+Existing unsigned installer from clean application source `6f216e3` (SHA-256 `2b0c1c7980b7cf8c62b1d9b621723276ef943208d988ea579a62494da5408d74`) installed to a fresh E: test root, payload hash matched. First UI run exposed stale cross-adapter harness selectors; repaired selectors only after committed criteria. Full rerun without SkipUi passed native/browser onboarding/settings/restart/parity and uninstall/catalog preservation; test registration cleaned. No app rebuild. Same host, not clean VM/SmartScreen/upgrade/credential/picker approval. Review: `docs/reviews/windows-v1-installer-workflow-qualification.md`; criteria/evidence: `docs/handoffs/installer-workspace-selector-repair.md`.

@@ -46,11 +46,13 @@ async function create(page,name){
   await page.getByLabel('I have reviewed these privacy limits').focus();await page.keyboard.press('Space');await expect(page.getByRole('button',{name:'Continue to AI setup'})).toBeEnabled({timeout:15000});await page.keyboard.press('Tab');await page.keyboard.press('Enter');
   await expect(page.getByRole('heading',{name:'Choose AI setup'})).toBeFocused();
   await page.getByRole('button',{name:'Skip AI setup and enter ANANSI'}).click();
-  await expect(page.getByRole('heading',{name,exact:true})).toBeVisible({timeout:15000});
-  return page.locator('.workspace-id code').innerText();
+  await expect(page.getByRole('heading',{name:'Dashboard',exact:true})).toBeVisible({timeout:15000});
+  const overview=page.getByRole('region',{name:'Workspace overview',exact:true});
+  await expect(overview.getByText(name,{exact:true})).toBeVisible({timeout:15000});
+  return overview.locator('.workspace-id code').innerText();
 }
 async function open(page,id){await page.getByRole('button',{name:'Refresh workspaces'}).click();await expect(page.getByRole('button',{name:'Refresh workspaces'})).toBeEnabled({timeout:15000});await page.getByLabel('Existing workspace').selectOption(id);await page.getByRole('button',{name:'Open workspace',exact:true}).click();await expect(page.locator('.workspace-id code')).toHaveText(id,{timeout:15000});}
-async function close(page){await page.getByRole('button',{name:'Workspace',exact:true}).click();await page.getByRole('button',{name:'Close workspace'}).click();await expect(page.getByRole('button',{name:'Refresh workspaces'})).toBeEnabled({timeout:15000});}
+async function close(page){await page.getByRole('button',{name:'Dashboard',exact:true}).click();await page.getByRole('button',{name:'Manage workspace',exact:true}).click();await page.getByRole('button',{name:'Close workspace'}).click();await expect(page.getByRole('button',{name:'Refresh workspaces'})).toBeEnabled({timeout:15000});}
 async function motion(page,on){await page.getByRole('button',{name:'Settings',exact:true}).click();await page.getByRole('button',{name:on?'Turn reduced motion on':'Turn reduced motion off'}).click();await expect(page.getByRole('button',{name:on?'Turn reduced motion off':'Turn reduced motion on'})).toBeEnabled({timeout:15000});}
 try{
   preview=spawn(process.execPath,[path.resolve('apps/web/node_modules/vite/bin/vite.js'),'preview','--host','127.0.0.1','--port','1420','--strictPort'],{cwd:path.resolve('apps/web'),windowsHide:true,stdio:'ignore'});
